@@ -479,7 +479,8 @@ describe("reencolar una finalizada", () => {
     expect(texto).toContain("## CRITICAL\n- falta la fila de totales");
     expect(texto).toContain("## Observaciones\n- el juez vio un warning");
     // Sin cierre ni veredicto rojo, se le pide que lo repase: no hay lista que inventar.
-    expect(textoParaReencolar({})).toMatch(/Repasa lo que hiciste/);
+    expect(textoParaReencolar({})).toMatch(/HAZ lo que falta: lo que dejaste pendiente en tu último resumen\./);
+    expect(texto).toMatch(/No te limites a resumir/);
     expect(textoParaReencolar({ veredicto: { veredicto: "rojo", resumen: "no compila" } })).toContain("- no compila");
   });
 

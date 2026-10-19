@@ -589,13 +589,16 @@ export function textoParaReencolar(tarea: Pick<Tarea, "cierre" | "veredicto">): 
   const lista = (titulo: string, cosas: readonly string[]): string[] =>
     cosas.length === 0 ? [] : [`${titulo}\n${cosas.map((c) => `- ${c}`).join("\n")}`];
   const partes = [...lista("## CRITICAL", criticos), ...lista("## Observaciones", observaciones)];
-  if (partes.length === 0) {
-    return "Repasa lo que hiciste contra el encargo y termina lo que quedó pendiente.";
-  }
-  return [
-    "La tarea se cerró dejando esto sin hacer. Termínalo, sin rehacer lo que ya está en el disco:",
-    ...partes,
-  ].join("\n\n");
+  /**
+   * Que HAGA, no que resuma: medido en Maset, con solo la lista del cierre (dos omisiones decididas) el agente volvió a
+   * escribir su resumen en 33 s y paró — y lo que él mismo había dejado «pendiente» en ese resumen no se lo pedía nadie.
+   */
+  const pedir =
+    "Sigue con esta tarea y HAZ lo que falta: lo que dejaste pendiente en tu último resumen" +
+    (partes.length === 0 ? "" : " y lo que anotó su cierre") +
+    ". No te limites a resumir otra vez: cambia el proyecto y compruébalo; si algo no se puede hacer, di por qué. " +
+    "No rehagas lo que ya está en el disco.";
+  return [pedir, ...partes].join("\n\n");
 }
 
 /**

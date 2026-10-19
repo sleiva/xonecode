@@ -534,37 +534,14 @@
 }
 
 /* «Qué hizo» / «Encargo»: texto con un triángulo que gira, el mismo gesto que un `<summary>`. */
-.plegable {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 3px 6px;
-  border: none;
-  border-radius: 6px;
-  background: none;
-  color: var(--dsw-alias-label-secondary);
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.plegable::before {
-  content: "▸";
-  transition: transform 120ms;
-}
-
-.plegable[aria-expanded="true"]::before {
-  transform: rotate(90deg);
-}
-
-.plegable:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
-  color: var(--dsw-alias-label-primary);
-}
-
-/* La puerta a su conversación y artefactos: el botón secundario de siempre. */
-.leer {
+/* Las acciones de una finalizada: el botón secundario de siempre, todas iguales. «Encargo» y «Reencolar» abren algo
+   debajo de la barra, y lo dicen con `aria-expanded`. */
+.accion {
   composes: secundario from "./Boton.module.css";
+}
+
+.accion[aria-expanded="true"] {
+  border-color: var(--xonecode-azul);
 }
 
 /* Reencolar lo pendiente: el texto editable y su «Encolar», el primario de siempre. */
@@ -640,21 +617,10 @@ a.ticket:hover {
 }
 
 /* Borrar una finalizada: discreto hasta pedir confirmación; entonces, el rojo de siempre. */
+/* Eliminar, a la derecha de la barra y en el rojo de peligro de siempre (el MISMO botón que su confirmación). */
 .botonBorrar {
+  composes: peligro from "./Boton.module.css";
   margin-left: auto;
-  padding: 3px 8px;
-  border: none;
-  border-radius: 6px;
-  background: none;
-  color: var(--dsw-alias-label-tertiary);
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.botonBorrar:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
-  color: var(--dsw-alias-state-error-primary);
 }
 
 .confirmarBorrado {

@@ -121,7 +121,13 @@ export function selloDeSesion(id: string): string | undefined {
  * comentario de cierre de una tarea — la MISMA lista que ya sostiene `cambiosDeSesion`, así
  * que no se recalcula con otro criterio.
  */
-export async function commitsDeSesion(raiz: string, id: string, ruta?: string): Promise<string[]> {
+export async function commitsDeSesion(
+  raiz: string,
+  id: string,
+  ruta?: string,
+  /** Solo los commiteados desde este instante (ISO), con la fecha del commit. Lo usa la continuación de una tarea. */
+  desde?: string
+): Promise<string[]> {
   const sello = selloDeSesion(id);
   if (sello === undefined) return [];
   // Un repo recién creado no tiene `HEAD`, y ahí `git log` FALLA en vez de no decir nada
@@ -138,7 +144,7 @@ export async function commitsDeSesion(raiz: string, id: string, ruta?: string): 
         "--no-merges",
         // La coma como separador porque el de omisión es un salto de línea, que partiría
         // las filas de esta salida. Un id no puede llevar comas (`idAceptable`).
-        `--format=%H%x09%(trailers:key=${CLAVE_DE_SELLO},valueonly,separator=%x2C)`,
+        `--format=%H%x09%ct%x09%(trailers:key=${CLAVE_DE_SELLO},valueonly,separator=%x2C)`,
         "--fixed-strings",
         `--grep=${sello}`,
         "HEAD",
@@ -149,10 +155,13 @@ export async function commitsDeSesion(raiz: string, id: string, ruta?: string): 
   } catch {
     return [];
   }
+  // La fecha de git va en SEGUNDOS: el instante se redondea hacia abajo, o un commit del mismo segundo se quedaría fuera.
+  const desdeS = desde === undefined ? undefined : Math.floor(Date.parse(desde) / 1000);
   const commits: string[] = [];
   for (const linea of stdout.split("\n")) {
-    const [sha, valores] = linea.split("\t");
+    const [sha, fecha, valores] = linea.split("\t");
     if (sha === undefined || sha === "" || valores === undefined) continue;
+    if (desdeS !== undefined && !(Number(fecha) >= desdeS)) continue;
     if (valores.split(",").some((v) => v.trim() === id)) commits.push(sha);
   }
   return commits;
@@ -346,9 +355,22 @@ async function filasDeDiff(raiz: string, args: readonly string[]): Promise<Fiche
  * sesión sin commitear. Es la misma honestidad que separa `Tarea.autorizadas` de
  * «aplicados»; el aislamiento de verdad es un árbol por sesión, que no está hecho.
  */
-export async function cambiosDeSesion(raiz: string, id: string): Promise<CambiosDeSesion> {
+export async function cambiosDeSesion(
+  raiz: string,
+  id: string,
+  /**
+   * Solo lo commiteado DESDE este instante (ISO). Para la CONTINUACIÓN de una tarea, que comparte la sesión con su
+   * finalizada: sin esto heredaba lo que escribió la otra y se cerraba como si hubiera trabajado (medido en Maset: 33 s,
+   * nada escrito, cerrada sin juez). Con sello pero nada desde ahí, es «git dice que no escribió», no el respaldo.
+   */
+  desde?: string
+): Promise<CambiosDeSesion> {
   try {
     const commits = await commitsDeSesion(raiz, id);
+    if (desde !== undefined && commits.length > 0) {
+      const suyos = await commitsDeSesion(raiz, id, undefined, desde);
+      return suyos.length > 0 ? await porCommits(raiz, suyos) : { via: "git", ficheros: [] };
+    }
     if (commits.length > 0) return await porCommits(raiz, commits);
   } catch {
     // Cae al respaldo, que se declara como lo que es.

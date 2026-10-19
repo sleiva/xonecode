@@ -441,6 +441,9 @@ describe("TareasDelProyecto: ver lo que hace una tarea en proceso", () => {
       expect(filaDe("Menú").textContent).toContain("1 crítico");
       fireEvent.click(filaDe("Menú"));
       expect(screen.getByText("## CRITICAL")).toBeTruthy();
+      // Las acciones van ARRIBA: la barra antes que lo crítico.
+      const barra = screen.getByRole("toolbar", { name: "Acciones de la tarea" });
+      expect(barra.compareDocumentPosition(screen.getByRole("region", { name: "Crítico" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
       // Dos veces: la frase de la fila plegada (entera: antes se cortaba en «pantalla:») y la lista de ## CRITICAL.
       expect(screen.getAllByText("pantalla: falta «Turno de Día»")).toHaveLength(2);
       expect(screen.getByText("el juez de QA dijo «rojo»")).toBeTruthy();

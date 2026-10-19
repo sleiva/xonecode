@@ -91,8 +91,9 @@ corre solo y escribe sin aprobación. Cuatro estados; `requiere-atencion` = **es
   gestor se relanza desde el ticket. Lo ofrece el SERVIDOR (`TareaDelCable.reencolable`, con `textoParaReencolar`, editable).
   Una con feedback no edita su encargo (`puedeEditarEncargo`). Una continuación sin acabar FRENA otra (`continuacionEnCurso`,
   por `continuaDe` o por el hilo). Mientras corre, su conversación vuelve a la barra (`App.tsx#sesionesDeFinalizadas`).
-  **Límites**: la original enseña la conversación ya continuada; `escribio` mide la SESIÓN entera, así que la
-  continuación hereda lo que escribió la original (`CRITICO_SIN_HACER` no salta aunque ella no escriba).
+  **Su entrega se mide DESDE que se creó** (`revisable(…, desde)`, `sesionGit.ts#cambiosDeSesion`): con la sesión
+  entera heredaba lo escrito por la original y se cerraba sin juez (medido en Maset). El texto propuesto pide HACER lo
+  pendiente de su último resumen, no resumir. **Límite**: la original enseña la conversación ya continuada.
 - **Sus artefactos salen de SU carpeta**: `p`/`s` resueltos por el SERVIDOR
   (`arranque.ts#sesionDelDisco`), contenido en la respuesta, nunca al store
   (`OrigenDeArtefactosContexto`). **Límite**: va por id de SESIÓN; tras `/nuevo` no coincide.

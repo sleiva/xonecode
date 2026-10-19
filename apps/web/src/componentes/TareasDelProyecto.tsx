@@ -385,6 +385,8 @@ function FilaFinalizada({
   const [abierta, setAbierta] = useState(false);
   const [confirmarBorrado, setConfirmarBorrado] = useState(false);
   const [verEncargo, setVerEncargo] = useState(false);
+  /** «Reencolar lo pendiente»: el texto abierto debajo de la barra, o ya encolada (entonces el botón se va). */
+  const [reencolar, setReencolar] = useState<"cerrado" | "abierto" | "hecho">("cerrado");
   /** Lo que contestó: ausente = sin pedir, `pidiendo` mientras llega. Se pide UNA vez, al desplegarla. */
   const [respuesta, setRespuesta] = useState<{ texto?: string; error?: string } | "pidiendo" | undefined>(undefined);
   const empezo = t.empezada === undefined ? undefined : selloDeFecha(t.empezada);
@@ -428,6 +430,62 @@ function FilaFinalizada({
       <AvisoDelTicket tarea={t} />
       {abierta ? (
         <div className={estilos.desplegado}>
+          {/* Las acciones ARRIBA, todas con el mismo botón (y Eliminar en el rojo de peligro): lo que abren sale justo
+              debajo, antes de lo que se lee. */}
+          <div className={estilos.accionesFinalizada} role="toolbar" aria-label="Acciones de la tarea">
+            {!conConversacion ? (
+              <span className={estilos.sinConversacion}>Sin conversación guardada</span>
+            ) : alLeer === undefined ? null : (
+              <button type="button" className={estilos.accion} onClick={() => alLeer(t)}>
+                Conversación y artefactos
+              </button>
+            )}
+            <button type="button" className={estilos.accion} aria-expanded={verEncargo} onClick={() => setVerEncargo(!verEncargo)}>
+              Encargo
+            </button>
+            {t.reencolable === undefined || alReencolar === undefined || reencolar === "hecho" ? null : (
+              <button
+                type="button"
+                className={estilos.accion}
+                aria-expanded={reencolar === "abierto"}
+                onClick={() => setReencolar(reencolar === "abierto" ? "cerrado" : "abierto")}
+              >
+                Reencolar lo pendiente
+              </button>
+            )}
+            <ClaveDelTicket tarea={t} />
+            {alBorrar === undefined ? null : confirmarBorrado ? (
+              <span className={estilos.confirmarBorrado}>
+                ¿Eliminarla del histórico? Su conversación se queda guardada.
+                <button type="button" className={estilos.borrar} onClick={() => alBorrar(t.id)}>
+                  Eliminar
+                </button>
+                <button type="button" className={estilos.accion} onClick={() => setConfirmarBorrado(false)}>
+                  Cancelar
+                </button>
+              </span>
+            ) : (
+              <button type="button" className={estilos.botonBorrar} onClick={() => setConfirmarBorrado(true)}>
+                Eliminar
+              </button>
+            )}
+          </div>
+          {reencolar === "hecho" ? <p className={estilos.aviso}>Encolada: la tienes en «En curso».</p> : null}
+          {reencolar === "abierto" && t.reencolable !== undefined && alReencolar !== undefined ? (
+            <Reencolar
+              id={t.id}
+              textoPropuesto={t.reencolable.texto}
+              conHilo={conConversacion}
+              alReencolar={alReencolar}
+              alCancelar={() => setReencolar("cerrado")}
+              alEncolar={() => setReencolar("hecho")}
+            />
+          ) : null}
+          {verEncargo ? (
+            <div>
+              <EncargoDeTarea tarea={t} />
+            </div>
+          ) : null}
           {criticos.length > 0 ? (
             <section className={estilos.critico} aria-label="Crítico">
               <h4 className={estilos.rotuloCritico}>## CRITICAL</h4>
@@ -466,42 +524,6 @@ function FilaFinalizada({
               )}
             </section>
           ) : null}
-          <div className={estilos.accionesFinalizada}>
-            {!conConversacion ? (
-              <span className={estilos.sinConversacion}>Sin conversación guardada</span>
-            ) : alLeer === undefined ? null : (
-              <button type="button" className={estilos.leer} onClick={() => alLeer(t)}>
-                Conversación y artefactos
-              </button>
-            )}
-            <button type="button" className={estilos.plegable} aria-expanded={verEncargo} onClick={() => setVerEncargo(!verEncargo)}>
-              Encargo
-            </button>
-            <ClaveDelTicket tarea={t} />
-            {alBorrar === undefined ? null : confirmarBorrado ? (
-              <span className={estilos.confirmarBorrado}>
-                ¿Eliminarla del histórico? Su conversación se queda guardada.
-                <button type="button" className={estilos.borrar} onClick={() => alBorrar(t.id)}>
-                  Eliminar
-                </button>
-                <button type="button" className={estilos.plegable} onClick={() => setConfirmarBorrado(false)}>
-                  Cancelar
-                </button>
-              </span>
-            ) : (
-              <button type="button" className={estilos.botonBorrar} onClick={() => setConfirmarBorrado(true)}>
-                Eliminar
-              </button>
-            )}
-          </div>
-          {t.reencolable === undefined || alReencolar === undefined ? null : (
-            <Reencolar id={t.id} textoPropuesto={t.reencolable.texto} conHilo={conConversacion} alReencolar={alReencolar} />
-          )}
-          {verEncargo ? (
-            <div>
-              <EncargoDeTarea tarea={t} />
-            </div>
-          ) : null}
         </div>
       ) : null}
     </li>
@@ -509,38 +531,28 @@ function FilaFinalizada({
 }
 
 /**
- * «Reencolar lo pendiente»: abre el texto que se le mandará (lo que el cierre dejó sin hacer, propuesto por el SERVIDOR)
- * para editarlo, y encola una tarea NUEVA en el hilo de esta. La original se queda en el histórico tal cual. El
- * formulario no se cierra si el servidor se niega: dice por qué.
+ * El texto de «Reencolar lo pendiente» (lo propone el SERVIDOR, editable) y su «Encolar»: una tarea NUEVA en el hilo de
+ * esta. No se cierra si el servidor se niega: dice por qué.
  */
 function Reencolar({
   id,
   textoPropuesto,
   conHilo,
   alReencolar,
+  alCancelar,
+  alEncolar,
 }: {
   id: string;
   textoPropuesto: string;
   conHilo: boolean;
   alReencolar: (id: string, texto: string) => Promise<string | undefined>;
+  alCancelar: () => void;
+  alEncolar: () => void;
 }) {
-  const [abierto, setAbierto] = useState(false);
   const [texto, setTexto] = useState(textoPropuesto);
   const [enviando, setEnviando] = useState(false);
-  const [resultado, setResultado] = useState<{ motivo?: string; hecho?: true } | undefined>(undefined);
+  const [motivo, setMotivo] = useState<string | undefined>(undefined);
   const limpio = texto.trim();
-  if (resultado?.hecho === true) {
-    return <p className={estilos.aviso}>Encolada: la tienes en «En curso».</p>;
-  }
-  if (!abierto) {
-    return (
-      <div className={estilos.accionesFinalizada}>
-        <button type="button" className={estilos.leer} onClick={() => setAbierto(true)}>
-          Reencolar lo pendiente
-        </button>
-      </div>
-    );
-  }
   return (
     <form
       className={estilos.reencolar}
@@ -549,13 +561,14 @@ function Reencolar({
         if (limpio === "" || enviando) return;
         setEnviando(true);
         void alReencolar(id, limpio).then(
-          (motivo) => {
+          (negado) => {
             setEnviando(false);
-            setResultado(motivo === undefined ? { hecho: true } : { motivo });
+            if (negado === undefined) alEncolar();
+            else setMotivo(negado);
           },
           () => {
             setEnviando(false);
-            setResultado({ motivo: "el envío falló" });
+            setMotivo("el envío falló");
           }
         );
       }}
@@ -573,12 +586,12 @@ function Reencolar({
         disabled={enviando}
         onChange={(evento) => setTexto(evento.target.value)}
       />
-      {resultado?.motivo === undefined ? null : <p className={estilos.motivo}>{`No se encoló: ${resultado.motivo}`}</p>}
+      {motivo === undefined ? null : <p className={estilos.motivo}>{`No se encoló: ${motivo}`}</p>}
       <div className={estilos.accionesFinalizada}>
         <button type="submit" className={estilos.encolar} disabled={limpio === "" || enviando}>
           Encolar
         </button>
-        <button type="button" className={estilos.plegable} disabled={enviando} onClick={() => setAbierto(false)}>
+        <button type="button" className={estilos.accion} disabled={enviando} onClick={alCancelar}>
           Cancelar
         </button>
       </div>

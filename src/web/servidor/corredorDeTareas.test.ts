@@ -29,7 +29,7 @@ import type { Acto } from "../../core/actos.js";
 import type { MensajeAlCliente } from "./transporte.js";
 import { motivoTrasReanudar, tareaReencolada, TEXTO_DE_REANUDACION, TOPE_DE_RONDAS_DE_TAREA, type Tarea } from "../../core/tareas.js";
 import { MAX_APPROVAL_ROUNDS } from "../../vendor/hitl.js";
-import { SALVEDAD_SIN_ESCRITURAS, type ResultadoDeTurno, type VeredictoDeTarea } from "../../core/entrega.js";
+import { CRITICO_SIN_HACER, SALVEDAD_SIN_ESCRITURAS, type ResultadoDeTurno, type VeredictoDeTarea } from "../../core/entrega.js";
 import type { CasoDeJuez, JuezDeTareaPort } from "../../core/ports.js";
 import { ErrorDelJuezDeTarea } from "../../agent/tareas/juezDeTarea.js";
 import { aplicarFeedback, type TareasEnDisco } from "../../agent/tareas/tareasEnDisco.js";
@@ -916,6 +916,41 @@ describe("el feedback reanuda una tarea, en su mismo hilo", () => {
     expect(pedidas).toEqual([undefined]);
     expect(recibidos).toEqual([peticionDeFeedback("haz el menú", "acaba los totales", false)]);
     await corredor2.parar();
+  });
+
+  /**
+   * MEDIDO en Maset: la continuación no escribió nada en 33 s y se cerró sin juez, porque git medía la sesión ENTERA
+   * —con lo que escribió la original— y la puerta exigía un verificador que no tenía nada que verificar.
+   */
+  it("una continuación se mide desde que se creó: si no escribe, va al juez y se cierra con «no hizo el trabajo»", async () => {
+    const original = TAREA({ id: "orig", estado: "terminada", sesion: "s-orig", acabada: "2026-09-08T11:00:00.000Z" });
+    const continuacion = tareaReencolada(original, { id: "t2", texto: "acaba", adjuntos: [], ahora: "2026-09-09T09:00:00.000Z" });
+    const desdes: (string | undefined)[] = [];
+    const d = discoDeMentira([original, continuacion]);
+    const corredor = crearCorredorDeTareas({
+      juez: juezQueDice({ veredicto: "rojo" as const, resumen: "no hizo nada" }),
+      // Lo que diría git: la sesión entera SÍ cambió (la original), desde la continuación no.
+      revisable: async (_raiz, _sesion, desde) => {
+        desdes.push(desde);
+        return desde === undefined ? { revisable: true, escribio: true, cambiados: ["EntryPoint.xne"] } : { revisable: true, escribio: false, cambiados: [] };
+      },
+      disco: d.disco,
+      abrirParaTarea: async (raiz, sesion) => ({
+        raiz,
+        idDeHilo: sesion ?? "x",
+        correrTarea: async () => ({ verificador: "no-corrio", pendientes: 0, motivoSinVerificar: "el turno no escribió ningún fichero del proyecto" }),
+        cerrar: async () => {},
+      }),
+      pid: 1,
+      concurrencia: () => 1,
+    });
+    await corredor.arrancar();
+    await corredor.asentar();
+    expect(desdes).toEqual(["2026-09-09T09:00:00.000Z"]);
+    const cerrada = d.estado().find((t) => t.id === "t2")!;
+    expect(cerrada.veredicto?.veredicto).toBe("rojo");
+    expect(cerrada.cierre?.criticos).toContain(CRITICO_SIN_HACER);
+    await corredor.parar();
   });
 
   it("dos feedbacks seguidos: el segundo no borra el primero, y no se REPROCESA el ya consumido", async () => {

@@ -9235,7 +9235,7 @@ export function construirCorredorDeTareasCableado(opciones: {
    * exista.
    */
   juez: JuezDeTareaPort;
-  revisable: (raiz: string, sesion: string) => Promise<RevisionDeSesion>;
+  revisable: (raiz: string, sesion: string, desde?: string) => Promise<RevisionDeSesion>;
   /**
    * El gestor de tareas de un conector (la MISMA fábrica memoizada del panel, `ajusteDeGestorCableado`). Con él, una
    * tarea con ticket se REFLEJA en su gestor al cambiar de estado (`agent/tareas/reflejoEnElGestor.ts`). Ausente = no

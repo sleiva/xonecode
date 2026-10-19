@@ -105,11 +105,12 @@ export interface RevisionDeSesion {
 export function revisionConGit(
   cambiosDeSesion: (
     raiz: string,
-    sesion: string
+    sesion: string,
+    desde?: string
   ) => Promise<{ via: string; ficheros: readonly { ruta: string; sinCommitear?: true }[] }>
-): (raiz: string, sesion: string) => Promise<RevisionDeSesion> {
-  return async (raiz, sesion) => {
-    const cambios = await cambiosDeSesion(raiz, sesion);
+): (raiz: string, sesion: string, desde?: string) => Promise<RevisionDeSesion> {
+  return async (raiz, sesion, desde) => {
+    const cambios = await cambiosDeSesion(raiz, sesion, desde);
     if (cambios.via !== "git" && cambios.via !== "desde-apertura") return { revisable: false };
     /**
      * Las DOS de la misma medida y en la misma expresión, para que `escribio` no pueda
@@ -515,7 +516,7 @@ export function crearCorredorDeTareas(opciones: {
    * depende que una tarea de solo lectura se pueda entregar, y tiene que salir de git y no
    * de `autorizadas` (ver `MedidaDeEntrega.escribio`).
    */
-  revisable: (raiz: string, sesion: string) => Promise<RevisionDeSesion>;
+  revisable: (raiz: string, sesion: string, desde?: string) => Promise<RevisionDeSesion>;
 }): Corredor {
   const pid = opciones.pid ?? process.pid;
   const informar = opciones.informar ?? (() => {});
@@ -794,7 +795,8 @@ export function crearCorredorDeTareas(opciones: {
     await esperarMarca?.().catch(() => undefined);
     let revision: RevisionDeSesion = { revisable: false };
     try {
-      revision = await opciones.revisable(tarea.proyecto.raiz, sesion);
+      // Una CONTINUACIÓN comparte la sesión con su finalizada: solo cuenta lo suyo, desde que se creó.
+      revision = await opciones.revisable(tarea.proyecto.raiz, sesion, tarea.continuaDe === undefined ? undefined : tarea.creada);
     } catch {
       // Ni preguntarlo se pudo (en producción es git). Entonces no se sabe, y no se
       // entrega: la única dirección posible aquí, y la misma que toma el resto del fichero.

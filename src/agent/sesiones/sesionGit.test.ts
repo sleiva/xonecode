@@ -300,6 +300,38 @@ describe("la atribución por COMMIT", () => {
     rmSync(raiz, { recursive: true, force: true });
   });
 
+  /**
+   * La CONTINUACIÓN de una tarea comparte la sesión con su finalizada. Medido en Maset: sin `desde`, heredaba lo que
+   * escribió la otra y se cerraba como si hubiera trabajado.
+   */
+  it("con `desde`, solo cuenta lo commiteado desde ese instante; nada desde ahí es «git dice que no escribió»", async () => {
+    const raiz = repo();
+    escribir(raiz, "app.xne", "<app/>");
+    execFileSync("git", ["add", "-A"], { cwd: raiz });
+    execFileSync("git", ["commit", "-qm", "base"], { cwd: raiz });
+    const fechaDe = (iso: string) => {
+      process.env["GIT_COMMITTER_DATE"] = iso;
+      process.env["GIT_AUTHOR_DATE"] = iso;
+    };
+    try {
+      fechaDe("2026-10-19T08:00:00Z");
+      await turno(raiz, "s1", "EntryPoint.xne", "<menu/>");
+      // Sin nada después de la continuación: git, y vacío — no el respaldo «desde la apertura».
+      const sinNada = await cambiosDeSesion(raiz, "s1", "2026-10-19T14:41:00.000Z");
+      expect(sinNada).toEqual({ via: "git", ficheros: [] });
+      fechaDe("2026-10-19T14:42:00Z");
+      await turno(raiz, "s1", "estilo.css", "a{}");
+      const suyo = await cambiosDeSesion(raiz, "s1", "2026-10-19T14:41:00.000Z");
+      expect(suyo.ficheros.map((f) => f.ruta)).toEqual(["estilo.css"]);
+      // Sin `desde`, la sesión entera, como siempre.
+      expect((await cambiosDeSesion(raiz, "s1")).ficheros.map((f) => f.ruta)).toEqual(["EntryPoint.xne", "estilo.css"]);
+    } finally {
+      delete process.env["GIT_COMMITTER_DATE"];
+      delete process.env["GIT_AUTHOR_DATE"];
+      rmSync(raiz, { recursive: true, force: true });
+    }
+  });
+
   it("un id que es PREFIJO de otro no se confunde: el sello se verifica entero", async () => {
     // `--grep` casa por subcadena, así que sin verificar el trailer la sesión `s1` se
     // quedaría también con los commits de `s10`. Es la misatribución silenciosa de siempre.

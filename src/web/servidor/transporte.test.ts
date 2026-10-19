@@ -141,7 +141,7 @@ describe("filaDeTarea", () => {
     // `reencolable` es la excepción: solo sale SIN ticket, y la completa lo lleva.
     expect(Object.keys(filaDeTarea(TAREA_COMPLETA)).sort()).toEqual(producidos.filter((c) => c !== "reencolable"));
     const { ticket: _t, ...sinTicket } = TAREA_COMPLETA;
-    expect(filaDeTarea(sinTicket).reencolable?.texto).toMatch(/termina|Termínalo/i);
+    expect(filaDeTarea(sinTicket).reencolable?.texto).toMatch(/HAZ lo que falta/);
   });
 
   it("del ticket NO viajan el sitio ni el proyecto del gestor", () => {
