@@ -20,6 +20,7 @@ import { abrirSesionReal } from "../../turno/turnoReal.js";
 import { pintarSesion, resumirTraza } from "../../turno/informeDeTraza.js";
 import { anotarPaso, ponerSumideroDeErrores } from "../../../core/trazaDeErrores.js";
 import type { HechosDelTurno } from "../../../core/juezDelTurno.js";
+import { olvidarAgotamientos } from "../../subagentes/agotamiento.js";
 
 /**
  * Un modelo de pega con el guion de una ESCRITURA delegada: el orquestador delega en
@@ -2214,6 +2215,47 @@ describe("Claude Code, Codex y OpenCode como hijos de TrueForge", () => {
     expect(pi.tokens.join("")).toBe("Listo.");
     // Su «llamada» no es una llamada de NUESTRO modelo: solo cuentan las dos del orquestador.
     expect(s.tracker.calls).toBe(2);
+  }, 30_000);
+
+  /**
+   * MEDIDO en soporte (19-10-2026): «You've hit your session limit · resets 4:30pm (Europe/Madrid)» dejaba a los
+   * especialistas de Claude Code sin arrancar, y tres tareas se cerraron sin escribir nada. Ahora el que se agota se
+   * apunta, y el siguiente encargo a ese especialista corre con NUESTRO modelo por defecto, con su mismo `.md`.
+   */
+  it("un externo SIN CUOTA: el orquestador lo sabe, y el siguiente encargo corre con el modelo por defecto", async () => {
+    olvidarAgotamientos();
+    try {
+      const f = fabrica(["claude-code"], async () => {
+        throw new Error("claude-code: You've hit your session limit · resets 4:30pm (Europe/Madrid)");
+      });
+      const otraVez = [
+        new AIMessageChunk({
+          content: "",
+          tool_call_chunks: [{ index: 0, id: "d2", name: "create_sub_agent", args: JSON.stringify({ name: "refactor-ext", input: "refactoriza el menú" }) }],
+        }),
+      ];
+      const { m, vistos } = modelosConGuion([
+        delegar(),
+        otraVez,
+        [new AIMessageChunk({ content: "hecho con el modelo por defecto" })],
+        [new AIMessageChunk({ content: "Listo." })],
+      ]);
+      const s = await abrirSesionTrueforge({ raiz: conExterno("claude-code"), modelos: m, entorno: ENTORNO, skills: CATALOGO, subagenteExterno: f.subagenteExterno });
+      const pi = piel();
+      await s.turno("refactoriza", pi.p);
+      // El producto se probó UNA vez: el segundo encargo ya no fue a él.
+      expect(f.peticiones).toHaveLength(1);
+      // El orquestador leyó que estaba sin cuota y que volviera a encargarlo.
+      expect(vistos[1]!.join("\n")).toMatch(/sin cuota hasta las .*vuelve a encargarle esto mismo a refactor-ext/s);
+      // El hijo de reserva es el especialista de SU `.md`, en nuestro modelo, y su respuesta llegó al orquestador.
+      expect(vistos[2]!.join("\n")).toContain("Trabaja solo dentro del proyecto");
+      expect(vistos[3]!.join("\n")).toContain("hecho con el modelo por defecto");
+      // Y se dijo en el chat, las dos cosas.
+      expect(pi.lineas.join("\n")).toMatch(/claude-code se ha quedado sin cuota hasta las .*refactor-ext no hizo su encargo/);
+      expect(pi.lineas.join("\n")).toMatch(/claude-code sin cuota hasta las .*refactor-ext trabaja con el modelo por defecto/);
+    } finally {
+      olvidarAgotamientos();
+    }
   }, 30_000);
 
   it("solo lectura en el `.md` es `permitirEscritura: false`", async () => {

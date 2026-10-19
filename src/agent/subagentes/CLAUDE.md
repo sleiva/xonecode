@@ -94,6 +94,13 @@ Un `.md` con frontmatter en `.xonecode/agentes/<nombre>.md` (`core/agentes.ts`,
   `/skills/`, `/adjuntos/` y un artefacto mal puesto sí. `Glob`/`Grep`: `path` OPCIONAL (raíz).
   **Límite**: un `Grep` sobre la raíz puede devolver líneas de un denegado.
 - `soloLectura: false` vale en los TRES motores; antes, `disponible()`.
+- **Un externo SIN CUOTA cae al modelo por defecto** (`core/agotamientoExterno.ts`, `agotamiento.ts`): su error
+  («You've hit your session limit · resets 4:30pm (Europe/Madrid)») se reconoce y se apunta hasta la hora que dice, en
+  SU zona (sin hora, `TOPE_DE_AGOTAMIENTO_MS`). Del PROCESO, no de la sesión: la cuota es de la cuenta. Mientras dure,
+  `crearHijo` crea ese especialista con NUESTRO motor y su MISMO `.md` sin `modelo` ni `esfuerzo`
+  (`conModeloPorDefecto`, papel por omisión). El encargo que se agotó NO se rehace solo: el orquestador lee que vuelva a
+  encargarlo (`textoDeExternoAgotado`). Las dos cosas se dicen en el chat. Otro fallo no es esto. **Límite**: solo
+  TrueForge; deepagents (legacy) no.
 
 ## Codex
 

@@ -45,6 +45,7 @@ import type {
   VerifierPort,
 } from "../../../core/ports.js";
 import { crearSubagenteExterno } from "../../subagentes/subagenteExterno.js";
+import { agotadoHastaAhora, apuntarSiSeAgoto, avisoDeAgotamiento, avisoDeFallback, conModeloPorDefecto, textoDeExternoAgotado } from "../../subagentes/agotamiento.js";
 import { inventarioDelProyecto, opcionesDeSubagenteExterno } from "../../subagentes/escrituraExterna.js";
 import { sumarConsumo, SIN_CONSUMO } from "../../subagentes/consumoExterno.js";
 import { sumarPorModelo, type ConsumoPorModelo } from "../../../core/actos.js";
@@ -1302,15 +1303,34 @@ export async function abrirSesionTrueforge(
      * shell (`fotoDeArtefactos`): por nuestra shell se anunciaba y por la suya no, y una captura
      * que no se anuncia no la mide nadie.
      */
+    /**
+     * Si el producto se queda SIN CUOTA, se apunta (`apuntarSiSeAgoto`) y el orquestador lee que vuelva a encargarlo: el
+     * siguiente hijo de ese motor ya nace con el modelo por defecto (`crearHijo`). Otro fallo sigue su camino de siempre.
+     */
+    const conAgotamiento: typeof externo = {
+      disponible: (m) => externo.disponible(m),
+      correr: async (peticion) => {
+        try {
+          return await externo.correr(peticion);
+        } catch (error) {
+          if (peticion.senal?.aborted === true) throw error;
+          const hasta = apuntarSiSeAgoto(motor, error);
+          if (hasta === undefined) throw error;
+          const modelo = idDelPapel(agente.soloLectura === true ? "rapido" : "trabajo");
+          eventosExternos.empujar({ tipo: "aviso", texto: avisoDeAgotamiento(motor, agente.nombre, hasta, modelo), severidad: "aviso" });
+          return textoDeExternoAgotado(motor, agente.nombre, hasta, modelo);
+        }
+      },
+    };
     const puertoDelHijo: typeof externo =
       ejecucion === undefined || carpeta === undefined
-        ? externo
+        ? conAgotamiento
         : {
-            disponible: (m) => externo.disponible(m),
+            disponible: (m) => conAgotamiento.disponible(m),
             correr: async (peticion) => {
               const antes = fotoDeArtefactos(carpeta);
               try {
-                return await externo.correr(peticion);
+                return await conAgotamiento.correr(peticion);
               } finally {
                 try {
                   for (const a of artefactosNuevos(antes, fotoDeArtefactos(carpeta))) anotarArtefacto(a);
@@ -1381,7 +1401,19 @@ export async function abrirSesionTrueforge(
     const permitidos = quienPide === undefined ? undefined : (especialistas().find((a) => a.nombre === quienPide)?.llama ?? []);
     const concedido = permitidos === undefined || (conBucleDelDesarrollador && permitidos.includes(params.request.name));
     if (!concedido) anotarPaso("trueforge.llamada", `${quienPide ?? "?"} pidió a ${params.request.name}: no está en su lista`)();
-    const agente = concedido ? especialistas().find((a) => a.nombre === params.request.name) : undefined;
+    const declarado = concedido ? especialistas().find((a) => a.nombre === params.request.name) : undefined;
+    /**
+     * **El FALLBACK de un motor externo sin cuota** (`agent/subagentes/agotamiento.ts`): mientras Claude Code o Codex
+     * estén agotados, su especialista corre con NUESTRO motor y el modelo por defecto de su papel —el mismo `.md`—, y se
+     * dice en el chat. Medido en soporte: sin esto, tres tareas se cerraron sin escribir nada hasta que se reiniciara la cuota.
+     */
+    const agotadoHasta = declarado !== undefined && declarado.motor !== "modelo" ? agotadoHastaAhora(declarado.motor) : undefined;
+    const agente = declarado !== undefined && agotadoHasta !== undefined ? conModeloPorDefecto(declarado) : declarado;
+    if (declarado !== undefined && agotadoHasta !== undefined) {
+      const modelo = idDelPapel(declarado.soloLectura === true ? "rapido" : "trabajo");
+      eventosExternos.empujar({ tipo: "aviso", texto: avisoDeFallback(declarado.motor, declarado.nombre, agotadoHasta, modelo), severidad: "aviso" });
+      anotarPaso("trueforge.fallback", `${declarado.nombre}: ${declarado.motor} sin cuota, con ${modelo}`)();
+    }
     // Cuenta una COMPROBACIÓN: quien lleva un lazo llamó a quien ejecuta. Es lo que dispara el aviso de vueltas.
     if (concedido && agente?.ejecucion === true && params.parent !== undefined) {
       const padre = (params.parent as { thread_id?: string }).thread_id ?? "";
