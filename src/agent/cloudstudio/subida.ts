@@ -34,6 +34,7 @@ import type { CloudStudioPort } from "../../core/ports.js";
 import type { EstadoDeSync, OperacionOmitida, PoliticaDeAprobacion } from "../../core/cloudstudio.js";
 import { planAutorizado } from "../../core/cloudstudio.js";
 import { planDeSubida } from "../../core/planDeSubida.js";
+import { decodificarComoTexto } from "../../core/codificacion.js";
 import { diferenciaDeTexto, motivoSinComprobar } from "../../core/verificacionDeSubida.js";
 import { NOMBRE_CARPETA } from "../config/configEnDisco.js";
 import { cambiosPendientes, marcarSubido, marcarSubidoParcial } from "../sesiones/gitSync.js";
@@ -307,7 +308,12 @@ export async function subir(opciones: OpcionesDeSubida): Promise<InformeDeSubida
         try {
           if (operacion.tipo === "borrado") await puerto.borrarTexto(operacion.ruta);
           else if (operacion.tipo === "texto") {
-            const contenido = readFileSync(join(raiz, operacion.ruta), "utf8");
+            // Los BYTES, decodificados con la regla del proyecto (la del editor y la del agente):
+            // UTF-8 si lo son, y si no su tabla de 8 bits por el prólogo. Medido contra Studio:
+            // leído como "utf8", cada tilde de un `.xne` ISO-8859-15 viajaba como «�», Studio lo
+            // guardaba así y la relectura, igual de rota, daba la subida por buena. Studio quiere
+            // el texto DECODIFICADO y lo guarda él en la codificación que declara su prólogo.
+            const contenido = decodificarComoTexto(readFileSync(join(raiz, operacion.ruta)));
             await puerto.escribirTexto(operacion.ruta, contenido);
             // Releer lo escrito: es la única prueba de que llegó entero. Una relectura que
             // falla NO es un «ok»: el fichero puede estar cortado y no lo sabríamos.

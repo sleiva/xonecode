@@ -812,3 +812,44 @@ describe("subir verifica lo que deja en Studio", () => {
     expect(informe.avisoDeRama).toBeUndefined();
   });
 });
+
+describe("subir lee cada texto con su codificación", () => {
+  const proyecto = { id: "1", nombre: "AppForTest" };
+
+  /** Un `.xne` modificado y commiteado sobre la ref de la bajada, con los BYTES que se le den. */
+  async function xneConBytes(bytes: Buffer) {
+    const raiz = mkdtempSync(join(tmpdir(), "xc-sub-cod-"));
+    writeFileSync(join(raiz, "a.xne"), "<a/>");
+    await prepararRepo(raiz, "master");
+    writeFileSync(join(raiz, "a.xne"), bytes);
+    execFileSync("git", ["add", "-A"], { cwd: raiz });
+    execFileSync("git", ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "cambio"], { cwd: raiz });
+    return raiz;
+  }
+
+  // Medido contra XOne Studio: leído como UTF-8, cada tilde de un `.xne` ISO-8859-15 viajaba como
+  // U+FFFD, Studio lo guardaba así y la relectura (igual de rota) daba la subida por buena.
+  it("un .xne ISO-8859-15 con tildes llega a Studio con sus caracteres, no con «�»", async () => {
+    const texto = `<?xml version="1.0" encoding="iso-8859-15"?>\n<coll name="Año" title="Canción"/>\n`;
+    const raiz = await xneConBytes(Buffer.from(texto, "latin1"));
+    const puerto = new CloudStudioEnMemoria({ rama: "master", textos: { "a.xne": "<a/>" } });
+
+    const informe = await subir({ puerto, raiz, ramaOrigen: "master", proyecto, politicaDeAprobacion: autorizaSiempre });
+
+    expect(informe.fallos).toEqual([]);
+    expect(informe.ok).toEqual(["a.xne"]);
+    expect(puerto.textos["a.xne"]).toBe(texto);
+    expect(puerto.textos["a.xne"]).not.toContain("�");
+  });
+
+  it("un .xne en UTF-8 sube tal cual", async () => {
+    const texto = `<?xml version="1.0" encoding="utf-8"?>\n<coll name="Año" title="Canción €"/>\n`;
+    const raiz = await xneConBytes(Buffer.from(texto, "utf8"));
+    const puerto = new CloudStudioEnMemoria({ rama: "master", textos: { "a.xne": "<a/>" } });
+
+    const informe = await subir({ puerto, raiz, ramaOrigen: "master", proyecto, politicaDeAprobacion: autorizaSiempre });
+
+    expect(informe.ok).toEqual(["a.xne"]);
+    expect(puerto.textos["a.xne"]).toBe(texto);
+  });
+});

@@ -56,7 +56,10 @@ Ante una discrepancia con el código, **el código manda**.
   y ANTES de tocar un fichero se lee la rama activa: otra rama es error estructural (no se sube
   nada); ilegible o vacía sube con AVISO (`avisoDeRama`), que viaja como dato
   (`ResultadoDeSubida.avisos`) porque el diálogo esconde el recorrido cuando todo subió. De un
-  error de Node en un fallo solo viaja su `code`.
+  error de Node en un fallo solo viaja su `code`. **Cada texto se lee con la regla de codificación del proyecto**
+  (`core/codificacion.ts#decodificarComoTexto`), no como UTF-8: leído así, un `.xne` ISO-8859-15 llegaba a Studio con
+  «�» en cada tilde y la relectura, igual de rota, lo daba por bueno; Studio recibe el texto decodificado y lo guarda en
+  la codificación que declara su prólogo.
 - Dos trampas: `core.quotePath` (omisión `true`) cita en octal rutas con bytes ≥ 0x80
   (`cambiosPendientes` fuerza `false`), y sin `--no-renames` un renombrado deja el origen huérfano
   en Studio.
