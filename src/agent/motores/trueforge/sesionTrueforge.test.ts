@@ -3153,6 +3153,15 @@ describe("las fuentes de Google Fonts en TrueForge: el diseñador las trae a fon
     expect(notaDeDelegacion(agentes, { conBucle: true })).toContain("las tipografías del diseño, el desenfoque");
   });
 
+  it("con analista y desarrollador, lo LARGO y lo que sale de un DISEÑO llevan plan primero (decisión suya); sin analista, no se dice", () => {
+    const de = (nombre: string) => ({ nombre, descripcion: "d", motor: "modelo", soloLectura: false, skills: [], instrucciones: "", origen: "semilla" });
+    const con = notaDeDelegacion([de("analyst-xone"), de("developer-xone"), de("designer-xone")] as never, { conBucle: true, conEsperas: true });
+    expect(con).toContain("PLAN PRIMERO");
+    expect(con).toContain("REDISEÑAR una pantalla a");
+    expect(con).toContain("después del plan y antes del desarrollador");
+    expect(notaDeDelegacion([de("developer-xone")] as never, { conBucle: true })).not.toContain("PLAN PRIMERO");
+  });
+
   it("sin el puerto, nadie la tiene ni la ficha la promete", async () => {
     const { m, toolsPorLlamada, vistos } = modelosConGuion(guion());
     const s = await abrirSesionTrueforge({ raiz: proyecto(), modelos: m, entorno: ENTORNO, skills: CATALOGO, sinAprobacion: () => true });

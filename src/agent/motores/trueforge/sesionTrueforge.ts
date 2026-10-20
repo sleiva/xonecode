@@ -177,6 +177,24 @@ const BUCLE_DE_CALIDAD = [
 ].join("\n");
 
 /**
+ * **El PLAN PRIMERO, con nombre, para lo largo y para lo que sale de un diseño.** Decisión suya (20-10-2026): «para
+ * tareas largas hay que hacer un plan, y para crear cosas con diseños también». Medido ese día en Maset: en todas las
+ * tareas con pantalla de Stitch el orquestador fue orquestador → designer → developer sin analista y sin plan; la regla
+ * abstracta de los «DOS pasos» (`xoneAgent.ts#promptOrquestador`) perdía contra la receta CONCRETA del diseño de esta
+ * nota («llama tú al diseñador… antes del desarrollador»), contra el «contéstala tú» y contra el «Cómo empezar» del
+ * encargo. Va en el prompt y no como guarda: quien reparte sigue siendo el orquestador (decisión suya, «no fuerces nada»).
+ */
+export const PLAN_PRIMERO = [
+  "PLAN PRIMERO: un desarrollo LARGO (varias pantallas o ficheros, una funcionalidad nueva) y CREAR o REDISEÑAR una pantalla a",
+  "partir de un DISEÑO (una pantalla de Stitch, una maqueta adjunta) empiezan por `analyst-xone` con el PLAN. Dile qué hay que",
+  "conseguir y dónde está el diseño, y que deje el plan en `/planes/<nombre>/`: qué pantalla del proyecto corresponde, qué piezas",
+  "son compartidas y cómo se sustituyen, cada pieza del diseño con su control de XOne, y los criterios en `TASKS.md`. Que hayas",
+  "leído tú los ficheros o que el encargo traiga un «Cómo empezar» NO lo sustituye: el plan es lo que el desarrollador marca y lo",
+  "que queda para la tarea siguiente. Después, el diseñador si faltan recursos, y el desarrollador con el NOMBRE del plan. Solo un",
+  "retoque (una línea, un color, un texto) va directo.",
+].join("\n");
+
+/**
  * Cuando quien MAQUETA es un hijo de Claude Code con ejecución, el bucle lo hace ÉL: despliega, captura, compara con la
  * maqueta y corrige (`textoDeTrabajoSinLlamar`). Medido en Maset: el orquestador, con `BUCLE_DE_CALIDAD`, volvía a pasar el
  * crítico y le encargaba otra vuelta —y otra al diseñador por un SVG—, y cada vuelta era un Claude Code NUEVO que releía
@@ -465,6 +483,7 @@ export function notaDeDelegacion(
     "especialista no ve esta conversación—. Donde estas instrucciones dicen `task` o `subagent_type`,",
     "entiende `create_sub_agent` y `name`. Las fichas de los especialistas:",
     ...agentes.map((a) => `- ${a.nombre}: ${fichaDeAgente(a, opciones)}`),
+    ...(agentes.some((a) => a.nombre === "analyst-xone") && agentes.some((a) => a.nombre === "developer-xone") ? ["", PLAN_PRIMERO] : []),
     ...(opciones.conComparacion === true ? ["", BUCLE_DE_CALIDAD] : []),
     // Si quien maqueta corre en Claude Code con su shell, el bucle es SUYO: el orquestador no lo repite encima.
     ...(opciones.conComparacion === true && externos.length > 0 ? ["", textoDeMaquetadorExterno(externos)] : []),
@@ -474,7 +493,7 @@ export function notaDeDelegacion(
           "ESPERAS ENTRE ESPECIALISTAS: developer-xone NO arranca mientras designer-xone esté trabajando (lo que el diseñador produce",
           "—los recursos de `icons/`— lo necesita el `.xne`). Si los lanzas a la vez, la llamada al desarrollador te vuelve AL INSTANTE",
           "diciendo que no ha arrancado; cuando el diseñador te devuelva su informe, llama de nuevo al desarrollador con ESE INFORME dentro",
-          "del encargo: su TABLA de recursos (fichero → control → atributo → tamaño) TAL CUAL, no un resumen, y no revises tú los SVG. Lo más simple es lanzar primero al diseñador y, con su informe, al desarrollador.",
+          "del encargo: su TABLA de recursos (fichero → control → atributo → tamaño) TAL CUAL, no un resumen, y no revises tú los SVG. Lo más simple es lanzar primero al diseñador (tras el plan, si toca) y, con su informe, al desarrollador.",
         ]
       : []),
     ...(opciones.conBucle === true
@@ -502,7 +521,7 @@ export function notaDeDelegacion(
           desarrolladorExterno
             ? "No le encargues a designer-xone lo visual de su pantalla (designer-xone no puede tocar un `.xne` ni el CSS): llama tú al diseñador"
             : "trabajo, ni a designer-xone lo visual de su pantalla (designer-xone no puede tocar un `.xne` ni el CSS): llama tú al diseñador",
-          "para los RECURSOS que la pantalla necesite, antes del desarrollador. Lo que developer-xone te devuelva es lo que él vio y midió, no un veredicto: el juicio final es tuyo y del arnés.",
+          "para los RECURSOS que la pantalla necesite, después del plan y antes del desarrollador. Lo que developer-xone te devuelva es lo que él vio y midió, no un veredicto: el juicio final es tuyo y del arnés.",
         ]
       : []),
     ...(opciones.conMemoria === true
