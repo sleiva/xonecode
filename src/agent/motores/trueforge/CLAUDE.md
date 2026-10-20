@@ -97,3 +97,7 @@ Ante una discrepancia con el código, **el código manda**.
 - **Detener NO es una nota** (`detencion.ts`): alcanza a los hijos de una llamada del raíz anterior y **corta su llamada
   en curso** (`AbortController`; `modeloLangchain.ts#corte`). Se filtra la SALIDA, no las tools. Tras Parar, lo no leído
   no arranca otro turno. Límites: no corta una shell en curso; un hijo externo ni recibe notas ni se detiene.
+- **El tope de un hijo DEVUELVE** (`presupuesto.ts`): al llegar a su presupuesto recibe, por el mismo procesador, la
+  orden de cerrar con lo medido y su modelo solo da texto, como al detener. El `iterationLimit` de la librería queda
+  por encima (`MARGEN_SOBRE_EL_PRESUPUESTO`) como red: el suyo corta MUDO. Con eso el conductor tiene el suyo más corto
+  (`TOPE_DE_LLAMADAS_DEL_CONDUCTOR`). Límite: no corta una shell en curso; un hijo externo no lo tiene.

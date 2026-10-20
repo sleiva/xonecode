@@ -284,8 +284,18 @@ export const TOPE_DE_LLAMADAS_DEL_ESPECIALISTA = 100;
 /*
  * Y a 150 cuando los especialistas pasaron a 100: el conductor tiene MÁS que ellos porque conducir
  * necesita más llamadas que leer, y con ellos en 100 su 60 le dejaba menos que a nadie.
+ *
+ * ## Y de vuelta a 60, porque ahora el corte DEVUELVE (20-10-2026, decisión suya)
+ *
+ * Lo de arriba era cierto con un corte MUDO: en TrueForge al padre le llegaba «iteration limit»
+ * y nada más, y re-delegar empezaba de cero. Desde `motores/trueforge/presupuesto.ts` el hijo que
+ * llega a su número cierra con un resumen de lo que midió, así que un tope corto ya no es amnesia.
+ * Medido con el tope alto (login de Maset): ocho toques encargados, 150 llamadas y 30 min, la
+ * mayoría investigando una medida que contradecía el encargo; con 60 se habría cortado hacia el
+ * minuto 3, ANTES de los dos comandos colgados, y con el dato. Las pruebas buenas de esa misma
+ * tarea usaron entre 15 y 40. En deepagents (legacy) `topeDeLlamadas` ya devolvía lo parcial.
  */
-export const TOPE_DE_LLAMADAS_DEL_CONDUCTOR = 150;
+export const TOPE_DE_LLAMADAS_DEL_CONDUCTOR = 60;
 
 /**
  * El tope, con `exitBehavior: "end"` y no `"error"`.

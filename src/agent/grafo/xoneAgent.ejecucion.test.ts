@@ -6,7 +6,6 @@ import { isSandboxBackend } from "deepagents";
 import type { Agente } from "../../core/agentes.js";
 import {
   TOPE_DE_LLAMADAS_DEL_CONDUCTOR,
-  TOPE_DE_LLAMADAS_DEL_ESPECIALISTA,
 } from "../turno/resumenDeContexto.js";
 
 /**
@@ -133,7 +132,8 @@ describe("el cableado de la ejecución", () => {
  *
  * No hace falta gastar sesenta llamadas para comprobarlo: el middleware decide en
  * `beforeModel` mirando el contador, así que se le pregunta con el contador puesto en el
- * tope corto. Quien conduce tiene que seguir; quien escribe, cortar.
+ * tope del CONDUCTOR, que desde que el corte devuelve lo medido es el más corto: quien conduce
+ * se corta ahí; quien escribe, sigue.
  */
 describe("el presupuesto de llamadas, cableado", () => {
   const hookDelTope = (nombre: string) => {
@@ -147,16 +147,16 @@ describe("el presupuesto de llamadas, cableado", () => {
     return m?.beforeModel?.hook;
   };
 
-  it("el conductor SIGUE donde el resto se corta", async () => {
+  it("el conductor se CORTA en su número, donde el resto sigue", async () => {
     await construirCon([
       agente({ nombre: "device-controller", ejecucion: true }),
       agente({ nombre: "developer-xone", soloLectura: false }),
     ]);
-    const estado = { llamadasDelEspecialista: TOPE_DE_LLAMADAS_DEL_ESPECIALISTA, messages: [] };
+    const estado = { llamadasDelEspecialista: TOPE_DE_LLAMADAS_DEL_CONDUCTOR, messages: [] };
 
     // `undefined` es «no cortes»; un objeto con `jumpTo` es el corte.
-    expect(hookDelTope("device-controller")!(estado)).toBeUndefined();
-    expect(hookDelTope("developer-xone")!(estado)).toMatchObject({ jumpTo: "end" });
+    expect(hookDelTope("device-controller")!(estado)).toMatchObject({ jumpTo: "end" });
+    expect(hookDelTope("developer-xone")!(estado)).toBeUndefined();
   });
 
   it("y el conductor también acaba cortándose: sigue habiendo freno, más arriba", async () => {

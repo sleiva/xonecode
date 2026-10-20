@@ -496,7 +496,9 @@ describe("el presupuesto de llamadas de un perfil", () => {
     ).toBe(TOPE_DE_LLAMADAS_DEL_ESPECIALISTA);
   });
 
-  it("el largo es MAYOR que el corto, o esto no arregla nada", () => {
-    expect(TOPE_DE_LLAMADAS_DEL_CONDUCTOR).toBeGreaterThan(TOPE_DE_LLAMADAS_DEL_ESPECIALISTA);
+  // Era «el largo es MAYOR que el corto»: con un corte mudo, el conductor necesitaba más. Desde que el corte
+  // DEVUELVE (`motores/trueforge/presupuesto.ts`) tiene el suyo, más CORTO (`TOPE_DE_LLAMADAS_DEL_CONDUCTOR`).
+  it("el del conductor es DISTINTO y más corto: el corte devuelve lo medido", () => {
+    expect(TOPE_DE_LLAMADAS_DEL_CONDUCTOR).toBeLessThan(TOPE_DE_LLAMADAS_DEL_ESPECIALISTA);
   });
 });

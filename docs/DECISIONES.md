@@ -9723,3 +9723,38 @@ El dato llegaba en `list_projects` y lo recortaba el propio harness (`camposFuer
 - `list_projects` sigue recortando `screenInstances` por tamaño: el nombre sale de `get_project`, una llamada por
   proyecto donde se busca.
 
+
+## El device-controller devuelve lo que contradice el encargo (20-10-2026)
+
+Lo medido, con el paquete de soporte de la tarea del login de Maset («Entrar» y «Salir» solo respondían sobre las
+letras): la tarea tardó 39 min y 30 de ellos fueron el PRIMER encargo al device-controller, cortado por el tope de 150
+llamadas sin devolver nada aprovechable. Se le pedían ocho toques. El developer había MOVIDO el manejador del `B` al
+frame, así que las letras —lo único que funcionaba— dejaron de responder; el encargo decía «ya está movido», y él lo
+leyó como un fallo suyo al tocar: 25 lecturas del proyecto, 25 `dumpsys` (foco, teclado, ventanas), 6 `getevent`
+(dos colgados hasta `TOPE_DE_COMANDO_S`), 5 redespliegues; solo 24 de las 150 llamadas fueron toques. Encargado de
+nuevo en corto («cuatro toques, dime qué sale»), contestó en 4 min: el `B` se come el toque.
+
+- Regla en `EJECUCION_EN_LA_MAQUINA` (`agentesEnDisco.ts`): si la medida contradice lo que el encargo da por hecho,
+  se repite UNA vez y se devuelve literal (qué hizo, qué esperaba, qué salió), sin buscar la causa. El porqué es de
+  quien encargó la prueba, que tiene el diff y puede cambiar el código.
+- Sin medir todavía con los evals.
+
+## El tope de un especialista devuelve lo hecho, y el del conductor baja (20-10-2026)
+
+Lo medido, con el mismo paquete del login de Maset: el `device-controller` llegó al `iterationLimit` de TrueForge
+(150) y al orquestador le llegó solo «You have reached iteration limit of 150, please request again». De 30 min de
+trabajo no cruzó ni una medida. Por eso el conductor tenía el tope ALTO: con uno corto y mudo, el orquestador re-delegaba
+y cada arranque empezaba de cero (siete delegaciones en MyAllXOne, ver `TOPE_DE_LLAMADAS_DEL_CONDUCTOR`).
+
+- `motores/trueforge/presupuesto.ts`: cada hijo nace con su presupuesto; antes de la llamada que lo agota recibe la
+  orden de contestar YA con lo medido (salida literal), lo que no cuadró y lo que quedaba, y su modelo tira las tool
+  calls (la misma costura que DETENER). Cierra con normalidad y su texto llega al padre.
+- El `iterationLimit` de la librería queda 5 por encima (`MARGEN_SOBRE_EL_PRESUPUESTO`) como red.
+- La traza anota el corte (`corte` en `DiagnosticoDeTools`) igual que el de la librería; no deja memoria del
+  especialista, como un hijo detenido (su historial lleva la orden de parar).
+- Con el corte devolviendo, el conductor baja de 150 a 60 (decisión suya). En esa tarea se habría cortado hacia el
+  minuto 3, antes de los dos `getevent` colgados; sus pruebas buenas usaron entre 15 y 40 llamadas. Los demás
+  especialistas siguen en 100, ahora con resumen en vez de corte mudo.
+- Afecta solo a quien tiene `ejecucion: true` (de serie, el `device-controller`); en deepagents (legacy)
+  `topeDeLlamadas` ya devolvía lo parcial y solo cambia el número.
+- Sin medir todavía en una tarea real.

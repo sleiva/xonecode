@@ -992,6 +992,13 @@ const HANDOFF_MOCKUP = [
  *
  * Este bloque vale para CUALQUIER agente con `ejecucion: true`, no solo para éste. Está
  * escrito así a propósito: el día que haya un segundo, lo hereda sin copiarse.
+ *
+ * **Lo que contradice el encargo se DEVUELVE, no se investiga** (último punto de «LO QUE CUENTAS»).
+ * Medido (20-10-2026, login de Maset): ocho toques encargados, 150 llamadas y 30 min hasta el tope.
+ * El developer había quitado el manejador del texto y las letras dejaron de responder; el encargo
+ * decía «ya está movido», así que lo leyó como un fallo SUYO al tocar y fue a por el porqué: 25
+ * lecturas del proyecto, 25 `dumpsys`, `getevent`, redespliegues. Encargado de nuevo en corto, dio
+ * la respuesta en 4 min. Ver `docs/DECISIONES.md`.
  */
 const EJECUCION_EN_LA_MAQUINA = [
   "CONDUCES UN APARATO Y EJECUTAS COMANDOS EN ESTA MÁQUINA (`execute`).",
@@ -1111,6 +1118,11 @@ const EJECUCION_EN_LA_MAQUINA = [
   "- Y no digas que hiciste un paso que no hiciste: si capturaste lo que ya había en pantalla",
   "  sin desplegar el proyecto, eso es lo que hay que contar.",
   "- Si no pudiste comprobar algo, dilo en vez de deducirlo.",
+  "- **Si lo que MIDES contradice lo que el encargo da por hecho** («ya está arreglado», «debe salir",
+  "  el aviso»), ESO es el resultado: repite la medida UNA vez para descartar un toque perdido y, si",
+  "  sale igual, PARA y devuelve qué hiciste, qué esperabas y qué salió, literal. No busques la causa",
+  "  —releer el proyecto, `dumpsys`, el teclado, eventos crudos, redesplegar—: eso es de quien te",
+  "  encargó la prueba, que tiene el diff delante y puede cambiar el código; tú no.",
 ].join("\n");
 
 /**

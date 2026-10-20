@@ -123,6 +123,7 @@ import { crearMemoriaDeEspecialistas } from "./memoriaDeEspecialistas.js";
 import { crearEsperas } from "./esperas.js";
 import { conResumenSeguro } from "./resumenSeguro.js";
 import { crearControlDeDetencion, RESUMEN_DE_RELLENO } from "./detencion.js";
+import { crearControlDePresupuesto, MARGEN_SOBRE_EL_PRESUPUESTO, RESUMEN_DE_RELLENO_DEL_PRESUPUESTO } from "./presupuesto.js";
 import type { ToolDeLangchain } from "./toolsPropias.js";
 import { crearNavegacionXone } from "../../grafo/navegacionXone.js";
 import { crearValidarFicheroXone } from "../../grafo/validarFicheroXone.js";
@@ -895,6 +896,8 @@ export async function abrirSesionTrueforge(
   const notas: Nota[] = [];
   /** DETENER y replanificar (`detencion.ts`): viaja por el mismo procesador que las notas. */
   const detencion = crearControlDeDetencion(HILO_RAIZ);
+  /** El presupuesto de llamadas de cada hijo (`presupuesto.ts`): al agotarse cierra con un resumen. */
+  const presupuesto = crearControlDePresupuesto();
   /** Tool calls tiradas por DETENER en la sesión: si se queda en cero, el filtro es solo red. */
   let llamadasTiradasPorDetener = 0;
   /**
@@ -922,6 +925,7 @@ export async function abrirSesionTrueforge(
   };
   const capacidadDeNotasDeLaSesion = capacidadDeNotas(notas, {
     detencion,
+    presupuesto,
     nombreDe: (h) => quienEs.get(h) ?? h,
     hiloRaiz: HILO_RAIZ,
   });
@@ -1430,6 +1434,9 @@ export async function abrirSesionTrueforge(
       return hiloQueNoArranca(agente.nombre, debeEsperar, params, llm, logger);
     }
     detencion.nacio(params.threadId);
+    // El conductor tiene el suyo, más corto: medido, sin él se fue a 150 llamadas investigando (`presupuesto.ts`).
+    const presupuestoDelHijo = agente?.ejecucion === true ? TOPE_DE_LLAMADAS_DEL_CONDUCTOR : TOPE_DE_LLAMADAS_DEL_ESPECIALISTA;
+    presupuesto.nacio(params.threadId, presupuestoDelHijo);
     esperas.nacio(agente?.nombre ?? params.request.name, params.threadId);
     const hiloDelPadre = (params.parent as { thread_id?: string } | undefined)?.thread_id;
     if (hiloDelPadre !== undefined && hiloDelPadre !== "") padreDeHilo.set(params.threadId, hiloDelPadre);
@@ -1529,7 +1536,12 @@ export async function abrirSesionTrueforge(
             : clienteDe(`modelo:${agente.modelo}:${agente.esfuerzo ?? ""}:${claseDeEsfuerzo ?? ""}:${agente.pensamiento ?? ""}`, () => modelos.paraModelo(agente.modelo!, agente.esfuerzo, claseDeEsfuerzo, agente.pensamiento)),
         senal: () => aborto?.signal,
         alRazonar,
-        soloTexto: () => (detencion.soloTexto(params.threadId) ? RESUMEN_DE_RELLENO : undefined),
+        soloTexto: () =>
+          detencion.soloTexto(params.threadId)
+            ? RESUMEN_DE_RELLENO
+            : presupuesto.soloTexto(params.threadId)
+              ? RESUMEN_DE_RELLENO_DEL_PRESUPUESTO
+              : undefined,
         corte: () => detencion.corte(params.threadId),
         alTirarLlamadas: (n) => {
           llamadasTiradasPorDetener += n;
@@ -1538,8 +1550,8 @@ export async function abrirSesionTrueforge(
         },
       }),
       messages: mensajesIniciales,
-      // Los topes MEDIDOS de deepagents: el conductor más, porque cada paso suyo es un comando.
-      iterationLimit: agente?.ejecucion === true ? TOPE_DE_LLAMADAS_DEL_CONDUCTOR : TOPE_DE_LLAMADAS_DEL_ESPECIALISTA,
+      // El de la librería, POR ENCIMA del presupuesto: el hilo cierra antes con su resumen, y esto es la red.
+      iterationLimit: presupuestoDelHijo + MARGEN_SOBRE_EL_PRESUPUESTO,
     };
     const hijo = new AgentThread({
       definition: definicionDelHijo as never,
@@ -1862,11 +1874,12 @@ export async function abrirSesionTrueforge(
           const tokens = (foto.current_context_usage?.prompt_tokens ?? 0) + (foto.current_context_usage?.completion_tokens ?? 0);
           const destino = memoriaDeEspecialistas.cerrar(deHilo, { // Un hijo CORTADO por «Detener» lleva en su historial la orden de parar: heredarla lo pararía
           // sin que nadie se lo haya pedido, así que no deja memoria (como uno que falló).
-          bien: (evento as { status?: string }).status !== "error" && !detencion.soloTexto(deHilo), mensajes: [...h.iniciales, ...foto.context], tokens });
+          bien: (evento as { status?: string }).status !== "error" && !detencion.soloTexto(deHilo) && !presupuesto.soloTexto(deHilo), mensajes: [...h.iniciales, ...foto.context], tokens });
           diagnostico?.memoria?.(h.nombre, "cierra", destino, tokens);
         }
       }
-      const tope = topeAgotadoDe(evento);
+      // El corte por PRESUPUESTO cierra bien (con su resumen), así que la librería no lo dice: se dice aquí.
+      const tope = topeAgotadoDe(evento) ?? (evento.type === "internal.agent.done" ? presupuesto.agotado(deHilo) : undefined);
       if (tope !== undefined) diagnostico?.corte?.(quienEs.get(deHilo) ?? deHilo, tope);
       const { eventos, uso } = traducirEvento(evento, (h) => especialistaDeHilo.get(h), pensamientos);
       // La «llamada» de un hijo externo es el producto entero: su consumo llega por su propio
@@ -1933,6 +1946,7 @@ export async function abrirSesionTrueforge(
       recordatoriosEnElTurno = 0;
       recordatorioDeIdioma = undefined;
       detencion.reiniciar();
+      presupuesto.reiniciar();
       const instantanea = await tomarInstantanea(raiz, opciones.entorno.git);
       const tope = opciones.topeDeRondas ?? MAX_APPROVAL_ROUNDS;
       const aplicadasSinPreguntar: string[] = [];
@@ -2461,6 +2475,7 @@ export async function abrirSesionTrueforge(
       // siguiente — justo lo que este campo existe para impedir.
       const notasSobrantes = cancelado ? undefined : sinLeerDelTurno();
       detencion.reiniciar();
+      presupuesto.reiniciar();
       notas.length = 0; // Se sirvieron o se reportan aquí: no siguen vivas para el próximo turno.
       return {
         bitacora,

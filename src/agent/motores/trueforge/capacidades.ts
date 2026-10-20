@@ -31,6 +31,7 @@ import type { ClaseDeTool, ConectoresDeSesion } from "./toolsDeConectores.js";
 import { presupuestoDelPaso, type EscritorDeDesalojo } from "./recortes.js";
 import { entregarNotas, type Nota } from "./notas.js";
 import type { ControlDeDetencion } from "./detencion.js";
+import type { ControlDePresupuesto } from "./presupuesto.js";
 
 /** Una pieza: la `AgentCapability` que se le da a TrueForge y las tools que añade. */
 export interface Capacidad {
@@ -156,6 +157,8 @@ export function capacidadDeNotas(
   notas: Nota[],
   opciones: {
     detencion?: ControlDeDetencion;
+    /** El presupuesto de llamadas de cada hijo (`presupuesto.ts`): viaja por el mismo procesador. */
+    presupuesto?: ControlDePresupuesto;
     /** El nombre con que el raíz conoce a un hijo, para decirle a QUIÉN se le pasó una nota. */
     nombreDe?: (threadId: string) => string;
     hiloRaiz?: string;
@@ -178,6 +181,9 @@ export function capacidadDeNotas(
             });
             const orden = detencion?.antesDeLlamar(execution.threadId);
             if (orden !== undefined) textos.push(orden);
+            // Con DETENER ya dada, la del presupuesto sobra: el hilo cierra igual, y con un resumen.
+            const agotado = orden === undefined ? opciones.presupuesto?.antesDeLlamar(execution.threadId) : undefined;
+            if (agotado !== undefined) textos.push(agotado);
             if (textos.length === 0) return;
             yield {
               type: "internal.agent.context.append",
