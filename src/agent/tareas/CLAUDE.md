@@ -40,9 +40,13 @@ corre solo y escribe sin aprobación. Cuatro estados; `requiere-atencion` = **es
 
 - **Un solo corredor por máquina**: lo hace verdad `sigoSiendoDueño()` antes de cada despacho, no
   el cerrojo; su cuarentena lleva el **pid**.
-- **Gana la persona**: no arranca con la consola humana ABIERTA, **salvo que la CEDA**
-  (`vestibulo.cederProyecto`, `arrancarAhora`); negativa con motivo si hay turno o espera a su
-  anterior (`puedeArrancarYa`). Se sigue con «Continuar» (`TEXTO_DE_CONTINUAR`).
+- **Gana la persona, solo donde CHOCA** (`core/tareas.ts#esperasPorPersonas`, IXCODE-61): no arranca
+  con una consola humana OCUPADA (turno o su commit, `ConsolaDeProyecto.ocupada`) ni con la
+  conversación de ESA tarea abierta, ni con una OBRA fuera de turno (`/sync subir|bajar`, la descarga
+  del Resumen: `vestibulo.ts#enObra`, que también se NIEGA con una tarea dentro). Abrir el proyecto ya
+  NO frena: el choque posterior lo niega IXCODE-36, con la raíz RESERVADA desde que el corredor elige
+  (`vestibulo.ts#reservadas`, fuera de `enCola`). El porqué viaja (`TareaDelCable.esperaPorTi`); «Arrancar ahora» (`cederProyecto`) solo
+  cuando ceder desbloquea. Se sigue con «Continuar» (`TEXTO_DE_CONTINUAR`).
 - **En el chat de una tarea que espera, su tarjeta ocupa la caja**
   (`MensajeATarea.tsx#TareaEnEsperaEnElChat`, la MISMA `AccionesDeTarea`); lo que la devuelve a la
   cola cede el proyecto. Una PREGUNTA ahí sigue dejando elegir destino.

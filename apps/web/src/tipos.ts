@@ -1293,6 +1293,8 @@ export interface TareaDelCable {
   sesion?: string;
   /** El id de la tarea ANTERIOR de su cadena (`Tarea.tras`): esta no arranca hasta que aquella termine. */
   tras?: string;
+  /** Por qué una `nuevo` espera a una persona de esta consola, y si «Arrancar ahora» lo resuelve. Lo decide el servidor (IXCODE-61). */
+  esperaPorTi?: { motivo: string; ceder: boolean };
   creada: string;
   empezada?: string;
   acabada?: string;

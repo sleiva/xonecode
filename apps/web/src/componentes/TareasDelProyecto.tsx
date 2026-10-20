@@ -76,7 +76,6 @@ export function TareasDelProyecto({
   alEditarEncargo,
   alRegenerarEncargo,
   alParar,
-  consolaAbierta,
   sesionAbierta,
   trabajandoEnElChat,
   alMirar,
@@ -126,8 +125,6 @@ export function TareasDelProyecto({
   alRegenerarEncargo?: (id: string, peticion: string) => Promise<{ encargo: string } | { motivo: string }>;
   /** Parar una en marcha sin borrarla (IXCODE-50): devuelve el motivo si el servidor se negó. */
   alParar?: (id: string) => Promise<string | undefined>;
-  /** La consola de la persona de ESTE proyecto está abierta: es lo que frena sus tareas nuevas, y se dice. */
-  consolaAbierta?: boolean;
   /**
    * La conversación abierta en el chat y si tiene un turno en marcha. Una aparcada cuya conversación es ESA la estás
    * atendiendo tú: la fila lo dice, porque su estado en la cola («Esperando feedback») no cambia mientras trabajas en el
@@ -329,7 +326,6 @@ export function TareasDelProyecto({
               {...(alRegenerarEncargo === undefined ? {} : { alRegenerarEncargo })}
               {...(alParar === undefined ? {} : { alParar })}
               puedeArrancar={puedeArrancarYa(t, tareas)}
-              esperaPorTuConsola={consolaAbierta === true}
               {...(t.sesion !== undefined && t.sesion === sesionAbierta ? { enTuChat: trabajandoEnElChat === true ? "trabajando" : "abierta" } : {})}
               {...(alMirar === undefined ? {} : { alMirar })}
               {...(alIrAlChat === undefined ? {} : { alIrAlChat })}
@@ -809,7 +805,6 @@ function Fila({
   alRegenerarEncargo,
   alParar,
   puedeArrancar,
-  esperaPorTuConsola,
   conectado,
   corriendoAqui,
   alMirar,
@@ -837,7 +832,6 @@ function Fila({
   /** Parar una en marcha sin borrarla (IXCODE-50): devuelve el motivo si el servidor se negó. */
   alParar?: (id: string) => Promise<string | undefined>;
   puedeArrancar?: boolean;
-  esperaPorTuConsola?: boolean;
   conectado?: boolean;
   /** Si ESTE proceso ejecuta las tareas: de la pestaña entera, no de la fila —se le pasa
    *  tal cual a `MirarTarea`, que es quien decide con esto si ofrece el despliegue. */
@@ -920,7 +914,6 @@ function Fila({
           {...(alRegenerarEncargo === undefined ? {} : { alRegenerarEncargo })}
           {...(alParar === undefined ? {} : { alParar })}
           {...(puedeArrancar === undefined ? {} : { puedeArrancar })}
-          {...(esperaPorTuConsola === undefined ? {} : { esperaPorTuConsola })}
         />
       </div>
     </li>

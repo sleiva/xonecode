@@ -606,6 +606,15 @@ export interface ConsolaDeProyecto {
    * ejecutor, que es el único sitio que ve los dos flancos.
    */
   readonly turnoEnVuelo: boolean;
+  /**
+   * El turno en vuelo O su cierre sin terminar: volcado, commit del turno y mantenimiento.
+   *
+   * Es lo que bloquea su proyecto para las tareas (`core/tareas.ts#esperasPorPersonas`), y no
+   * `turnoEnVuelo`, porque este baja ANTES del commit: una tarea que arrancara en ese hueco
+   * escribiría mientras el `add -A` del turno barre el árbol, y su trabajo saldría firmado por
+   * la persona. Al bajar se avisa (`alLiberar`), que es lo que vuelve a mirar la cola.
+   */
+  readonly ocupada: boolean;
   /** Hay turno en vuelo Y la sesión sabe DETENER y replanificar: lo que pinta el botón. */
   readonly turnoDetenible: boolean;
   /**
@@ -880,6 +889,12 @@ export interface Vestibulo {
    * Una consola por RAÍZ: nunca dos sobre la misma copia de trabajo. Ver `abrirDeVerdad`.
    */
   proyectosAbiertos(): readonly ConsolaDeProyecto[];
+  /**
+   * Las raíces con una OBRA en curso fuera de turno: `/sync subir|bajar` de una persona o la
+   * descarga del Resumen. Escriben en la copia sin pasar por `ejecutarTurno`, así que ni marcan
+   * `ocupada` ni ven la guarda de IXCODE-36: bloquean las tareas por aquí (IXCODE-61).
+   */
+  obrasEnCurso(): readonly string[];
 
   /**
    * Por qué no se puede guardar a mano en esa raíz ahora mismo (`core/settings.ts
@@ -1322,6 +1337,7 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
     tarea,
     enElCable,
     alFlancoDeTurno,
+    alLiberar,
     alCambiarParaElPanel,
     conModoPorDefecto,
   }: {
@@ -1370,6 +1386,8 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
      * NO se pasa: un turno de tarea no puede emitir nada al cable.
      */
     alFlancoDeTurno?: (activo: boolean) => void;
+    /** `ocupada` acaba de bajar: el turno y su cierre han terminado. Ver `ConsolaDeProyecto.ocupada`. */
+    alLiberar?: () => void;
     /**
      * Nace o termina una aprobación o una pregunta de texto en ESTA consola, o un volcado dejó
      * actos nuevos en el índice. Como `alFlancoDeTurno`, solo la puerta de las PERSONAS lo pasa:
@@ -1465,6 +1483,13 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
     // `Partial<Consola>` sobre el objeto recién creado: lo que depende de la raíz (`/sync`,
     // los escritores del proyecto) no lo puede saber `consolaWeb`, que no conoce ninguna.
     Object.assign(consolaWeb.consola, opciones.dependenciasDeProyecto?.(raiz) ?? {});
+    // `/sync subir|bajar` de una PERSONA es una obra fuera de turno (IXCODE-61): ver `enObra`.
+    // Solo esta puerta: la de una tarea no sincroniza, y si lo hiciera no se negaría a sí misma.
+    const sincronizarSinObra = consolaWeb.consola.sincronizar;
+    if (conModoPorDefecto === true && sincronizarSinObra !== undefined) {
+      consolaWeb.consola.sincronizar = (accion, ...resto) =>
+        accion === "estado" ? sincronizarSinObra(accion, ...resto) : enObra(raiz, () => sincronizarSinObra(accion, ...resto));
+    }
     // Una aprobación o una pregunta que nace o termina AQUÍ, en foco o no: el panel remoto la
     // enseña. Solo si la puerta lo pide (la de las personas); la consola vive lo que vive este
     // objeto, así que la baja no hace falta.
@@ -1531,6 +1556,8 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
     /** Ver `ConsolaDeProyecto.turnoEnVuelo`: lo pone y lo quita el envoltorio de abajo, que
      *  es el único sitio que ve los dos flancos. */
     let turnoEnVuelo = false;
+    /** Ver `ConsolaDeProyecto.ocupada`: sube con `turnoEnVuelo` y baja al final del `finally`. */
+    let ocupada = false;
     let volcados = 0;
     /**
      * Marcado desde que empieza el cierre. Hace falta porque `crearEjecutorReal` avisa de
@@ -1685,7 +1712,7 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       // Una PERSONA no envía nada mientras una tarea escribe en este proyecto (IXCODE-36). El
       // cliente ya apaga la caja; esto es la guarda que manda si llega igual. Se dice en el chat
       // y no corre nada: ni turno, ni volcado, ni commit.
-      if (conModoPorDefecto === true && [...deTareas].some((c) => c.raiz === raiz && !c.cerrada)) {
+      if (conModoPorDefecto === true && hayTareaEn(raiz)) {
         consola.escribir(`No se ha enviado: ${MOTIVO_PROYECTO_CON_TAREA}\n`);
         return undefined;
       }
@@ -1698,6 +1725,7 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       // `correrConsola` solo lo espera y la piel solo ve eventos. De aquí sale lo que apaga
       // el compositor, saca el botón de parar y enciende el borde vivo.
       turnoEnVuelo = true;
+      ocupada = true;
       consolaWeb.turno(true, sesionReal?.detener !== undefined);
       alFlancoDeTurno?.(true);
       // El chat, a disco también A MITAD (`INTERVALO_DE_VOLCADO_MS`): un proceso que muere no pasa
@@ -1788,11 +1816,16 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
          * espere es un rechazo sin manejar que tumba el PROCESO entero, no solo esta
          * consola — no basta con que el `try/finally` de dentro limpie su estado.
          */
+        // Se baja ANTES de lanzar el sobrante: su `ejecutarTurno` la vuelve a subir en la misma
+        // pasada síncrona —antes de su primer `await`—, así que ninguna tarea cabe en medio, y un
+        // sobrante que no llegue a correr no deja el proyecto bloqueado para siempre.
+        ocupada = false;
         if (resultado?.notasSobrantes !== undefined) {
           void ejecutarTurno(resultado.notasSobrantes, estado, consola).catch((error: unknown) => {
             informar(`el turno del sobrante terminó con un error: ${error instanceof Error ? error.message : String(error)}`);
           });
         }
+        if (!ocupada) alLiberar?.();
       }
     };
 
@@ -1967,6 +2000,9 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       },
       get turnoEnVuelo() {
         return turnoEnVuelo;
+      },
+      get ocupada() {
+        return ocupada;
       },
       get turnoDetenible() {
         return turnoEnVuelo && sesionReal?.detener !== undefined;
@@ -2147,6 +2183,10 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
         // Y al terminar, si ya no la mira nadie, se cierra. Ver `cerrarSiSobra`.
         if (!activo) cerrarSiSobra(raiz);
       },
+      // El turno Y su commit han terminado: la raíz queda libre para las tareas, y quien lo
+      // escucha (`alCambiarTurno`) vuelve a mirar la cola. El flanco de arriba llega antes del
+      // commit, y con él la tarea seguiría bloqueada hasta el siguiente evento.
+      alLiberar: () => avisarDeLasAbiertas(),
       alCambiarParaElPanel: avisarDeLasEsperas,
     });
     abiertas.set(raiz, consolaDeProyecto);
@@ -2166,6 +2206,39 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
    * ya cerradas se PODAN al abrir la siguiente, que es cuando puede empezar a crecer.
    */
   const deTareas = new Set<ConsolaDeProyecto>();
+  /**
+   * Las raíces de las tareas que se están ABRIENDO: desde que el corredor decide hasta que su
+   * consola entra en `deTareas`. Abrir lee git y disco, y en ese hueco la guarda de IXCODE-36 no
+   * veía nada: una persona podía empezar un turno en el proyecto donde la tarea iba a escribir.
+   * Se reserva en la pasada SÍNCRONA en que el corredor eligió la tarea —FUERA de `enCola`, que
+   * la dejaría para después—, que es la misma en que miró que la raíz estaba libre (IXCODE-61).
+   * Sobre la raíz tal como llega: la traducción de una mudanza va dentro de la cola.
+   */
+  const reservadas = new Map<string, number>();
+  /** Ver `Vestibulo.obrasEnCurso`. Un contador por raíz: dos obras no se pisan la marca. */
+  const obras = new Map<string, number>();
+  /**
+   * Corre una obra fuera de turno sobre `raiz`: la NIEGA si una tarea escribe —o está a punto— ahí,
+   * y mientras dura bloquea esa raíz para las tareas. Comprobar y marcar van en la misma pasada
+   * síncrona, la misma disciplina que `reservadas`. Avisa al empezar y al acabar: de esos flancos
+   * cuelgan revisar la cola y reemitir el porqué de la espera.
+   */
+  const enObra = async <T>(raiz: string, hacer: () => Promise<T>): Promise<T> => {
+    if (hayTareaEn(raiz)) throw new Error(`no se ha sincronizado: ${MOTIVO_PROYECTO_CON_TAREA}`);
+    obras.set(raiz, (obras.get(raiz) ?? 0) + 1);
+    avisarDeLasAbiertas();
+    try {
+      return await hacer();
+    } finally {
+      const quedan = (obras.get(raiz) ?? 1) - 1;
+      if (quedan > 0) obras.set(raiz, quedan);
+      else obras.delete(raiz);
+      avisarDeLasAbiertas();
+    }
+  };
+  /** ¿Una tarea escribe —o está a punto— en esa raíz? Lo que niega enviar a una persona. */
+  const hayTareaEn = (raiz: string): boolean =>
+    (reservadas.get(raiz) ?? 0) > 0 || [...deTareas].some((c) => c.raiz === raiz && !c.cerrada);
 
   /**
    * ¿Esa conversación la está escribiendo una tarea de fondo AHORA?
@@ -2274,7 +2347,8 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
     informar(`proyecto dado de alta en ${ruta}`);
 
     try {
-      await opciones.descargar({ ...datos, raiz });
+      // Bajar sobre una copia que ya existe la SOBRESCRIBE: es una obra (ver `enObra`).
+      await enObra(raiz, () => opciones.descargar({ ...datos, raiz }));
     } catch (error) {
       const detalle = error instanceof Error ? error.message : String(error);
       // Se APUNTA en el registro de fallos del proyecto, con qué se bajaba y la cadena de
@@ -2685,8 +2759,16 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
      * todavía vive. El precio, dicho: una tarea que llega mientras se cierra un turno
      * humano de minutos espera a que acabe. Para trabajo de fondo es el lado correcto.
      */
-    abrirParaTarea: (raiz, sesion, adjuntos, tarea) =>
-      enCola(() => abrirParaTarea(trasLaMudanza(raiz), sesion, adjuntos, tarea)),
+    abrirParaTarea: (raiz, sesion, adjuntos, tarea) => {
+      reservadas.set(raiz, (reservadas.get(raiz) ?? 0) + 1);
+      // Se suelta DESPUÉS de entrar en `deTareas` (o de fallar): la guarda pasa de una marca a
+      // la otra sin hueco.
+      return enCola(() => abrirParaTarea(trasLaMudanza(raiz), sesion, adjuntos, tarea)).finally(() => {
+        const quedan = (reservadas.get(raiz) ?? 1) - 1;
+        if (quedan > 0) reservadas.set(raiz, quedan);
+        else reservadas.delete(raiz);
+      });
+    },
     proyectoAbierto: () => consolaEnFoco(),
     // La del foco INCLUIDA, y las cerradas fuera: una consola cuyo lazo ya terminó no ocupa
     // su raíz, y de esta lista cuelga la guarda de «gana la persona».
@@ -2694,8 +2776,14 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
     // Sin filtrar `cerrada` en las de persona: lo que importa es el turno, y un turno que sigue
     // vivo escribe aunque su lazo haya terminado — mientras la consola siga en `abiertas`, que la
     // poda de `cerrarLasOciosasSalvo` al abrir otro proyecto la saca. Las de tarea, vivas o con turno.
+    obrasEnCurso: () => [...obras.keys()],
+    // Las RESERVADAS cuentan como tareas: una que se está abriendo va a escribir ahí (IXCODE-61).
     motivoParaNoEditar: (raiz) =>
-      motivoParaNoEditarFichero({ raiz, personas: [...abiertas.values()], tareas: [...deTareas] }),
+      motivoParaNoEditarFichero({
+        raiz,
+        personas: [...abiertas.values()],
+        tareas: [...deTareas, ...[...reservadas.keys()].map((r) => ({ raiz: r, cerrada: false, turnoEnVuelo: false }))],
+      }),
 
     cancelar: () => enCola(async () => {
       await cerrarLasDeProyecto();

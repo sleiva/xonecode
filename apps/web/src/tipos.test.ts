@@ -457,6 +457,7 @@ const FILA_COMPLETA = {
   motivo: "el juez de QA dijo «rojo»: falta el campo",
   sesion: "s1",
   tras: "t0",
+  esperaPorTi: { motivo: "tienes abierta su conversación; arranca cuando la cierres", ceder: true },
   creada: "2026-09-08T10:00:00.000Z",
   empezada: "2026-09-08T10:01:00.000Z",
   acabada: "2026-09-08T10:09:00.000Z",

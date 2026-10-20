@@ -70,7 +70,9 @@ const DECISIONES: Readonly<Record<string, readonly string[]>> = {
   encargo: ["encargo"],
   adjuntos: ["adjuntos"],
   // `reencolable` sale del estado (y de que no tenga ticket): lo DECIDE el servidor, y la pantalla solo lo ofrece.
-  estado: ["estado", "reencolable"],
+  // Y `esperaPorTi`: por qué una `nuevo` espera a una persona (IXCODE-61). No sale de la tarea
+  // sola sino de las consolas abiertas, así que lo pasa quien la compone.
+  estado: ["estado", "reencolable", "esperaPorTi"],
   motivo: ["motivo"],
   sesion: ["sesion"],
   // Viaja: la pestaña Tareas dice «espera a: <título de la anterior>» de una encadenada.
@@ -138,8 +140,13 @@ describe("filaDeTarea", () => {
     expect(camposDeInterfaz(RUTA_TRANSPORTE, "TareaDelCable")).toEqual(producidos);
     // Y de verdad los produce, no solo los declara: con una tarea que trae TODOS los campos
     // puestos, la fila no puede quedarse ninguno por el camino.
-    // `reencolable` es la excepción: solo sale SIN ticket, y la completa lo lleva.
-    expect(Object.keys(filaDeTarea(TAREA_COMPLETA)).sort()).toEqual(producidos.filter((c) => c !== "reencolable"));
+    // `reencolable` es la excepción: solo sale SIN ticket, y la completa lo lleva. Y `esperaPorTi`
+    // solo si quien compone la fila lo pasa.
+    expect(Object.keys(filaDeTarea(TAREA_COMPLETA)).sort()).toEqual(
+      producidos.filter((c) => c !== "reencolable" && c !== "esperaPorTi")
+    );
+    const espera = { motivo: "tu conversación en este proyecto está trabajando", ceder: false };
+    expect(filaDeTarea(TAREA_COMPLETA, espera).esperaPorTi).toEqual(espera);
     const { ticket: _t, ...sinTicket } = TAREA_COMPLETA;
     expect(filaDeTarea(sinTicket).reencolable?.texto).toMatch(/HAZ lo que falta/);
   });

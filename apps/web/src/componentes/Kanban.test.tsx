@@ -264,55 +264,20 @@ describe("Kanban", () => {
   });
 
   /**
-   * Una tarea `nuevo` del proyecto que tienes abierto no arranca: «gana la persona»
-   * (`core/tareas.ts#siguientesAEjecutar`, `bloqueados`). Sin decirlo se queda quieta en la
-   * primera columna sin que nada lo explique — se lee como un cuelgue.
+   * Una tarea `nuevo` que espera a una persona lo DICE, con el motivo del servidor
+   * (`TareaDelCable.esperaPorTi`, IXCODE-61). Sin decirlo se queda quieta en la primera columna
+   * sin que nada lo explique — se lee como un cuelgue. Y ya no se deduce de «tienes el proyecto
+   * abierto»: abrirlo dejó de bloquear.
    */
-  it("una «nuevo» del proyecto que tienes abierto lo dice: no arranca mientras siga abierto", () => {
-    render(
-      <Kanban
-        cola={{ lista: [tarea({ proyecto: "p1" })], concurrencia: 2, corriendoAqui: true }}
-        proyectoActivo="p1"
-      />
-    );
-    expect(screen.getByText(/cierre el proyecto/i)).toBeTruthy();
+  it("una «nuevo» que espera a una persona lo dice, con el motivo que manda el servidor", () => {
+    const esperaPorTi = { motivo: "tu conversación en este proyecto está trabajando; arranca cuando termine", ceder: false };
+    render(<Kanban cola={{ lista: [tarea({ proyecto: "p1", esperaPorTi })], concurrencia: 2, corriendoAqui: true }} />);
+    expect(screen.getByText(/Esperando: tu conversación en este proyecto está trabajando/)).toBeTruthy();
   });
 
-  it("no lo dice de OTRO proyecto: ese no es el que la bloquea", () => {
-    render(
-      <Kanban
-        cola={{ lista: [tarea({ proyecto: "p1" })], concurrencia: 2, corriendoAqui: true }}
-        proyectoActivo="p2"
-      />
-    );
-    expect(screen.queryByText(/cierre el proyecto/i)).toBeNull();
-  });
-
-  it("no lo dice si este kanban no ejecuta: el aviso global ya cubre por qué nada avanza", () => {
-    render(
-      <Kanban
-        cola={{ lista: [tarea({ proyecto: "p1" })], concurrencia: 2, corriendoAqui: false }}
-        proyectoActivo="p1"
-      />
-    );
-    expect(screen.queryByText(/cierre el proyecto/i)).toBeNull();
-  });
-
-  it("no lo dice de una que ya está en proceso o terminada: eso ya no espera nada", () => {
-    render(
-      <Kanban
-        cola={{
-          lista: [
-            tarea({ id: "a", proyecto: "p1", estado: "en-proceso", empezada: "2026-09-08T10:00:00.000Z" }),
-            tarea({ id: "b", proyecto: "p1", estado: "terminada" }),
-          ],
-          concurrencia: 2,
-          corriendoAqui: true,
-        }}
-        proyectoActivo="p1"
-      />
-    );
-    expect(screen.queryByText(/cierre el proyecto/i)).toBeNull();
+  it("sin motivo del servidor no dice que espera, aunque sea del proyecto que tienes abierto", () => {
+    render(<Kanban cola={{ lista: [tarea({ proyecto: "p1" })], concurrencia: 2, corriendoAqui: true }} />);
+    expect(screen.queryByText(/Esperando:/)).toBeNull();
   });
 
   it("sin `alEnviarFeedback` no se ofrece el campo: un control sin dato detrás es la misma mentira que una lista vacía rellenada", () => {

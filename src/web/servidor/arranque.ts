@@ -249,6 +249,7 @@ import {
   conEstado,
   darPorBuenaAMano,
   puedeArrancarYa,
+  esperasPorPersonas,
   puedeEditarEncargo,
   tareaReencolada,
   continuacionEnCurso,
@@ -2380,11 +2381,16 @@ export function montarRutas(
   const mensajeDeTareas = (): MensajeAlCliente | undefined => {
     if (opciones.colaDeTareas === undefined) return undefined;
     const otro = opciones.corredorDeTareas?.ejecutaOtroProceso?.();
+    const corriendoAqui = opciones.corredorDeTareas?.corriendoAqui() ?? false;
+    const lista = opciones.colaDeTareas.listar();
+    // Por qué espera a una persona, con la MISMA regla que `bloqueados` del corredor. Solo si
+    // ESTE proceso las ejecuta: las consolas de aquí no frenan al corredor de otro.
+    const esperas = corriendoAqui ? esperasPorPersonas(vestibulo.proyectosAbiertos(), lista, vestibulo.obrasEnCurso()) : new Map();
     return {
       clase: "tareas",
-      lista: opciones.colaDeTareas.listar().map(filaDeTarea),
+      lista: lista.map((t) => filaDeTarea(t, t.estado === "nuevo" ? esperas.get(t.proyecto.raiz) : undefined)),
       concurrencia: opciones.concurrenciaDeTareas?.() ?? CONCURRENCIA_POR_OMISION,
-      corriendoAqui: opciones.corredorDeTareas?.corriendoAqui() ?? false,
+      corriendoAqui,
       // Ausente = no se sabe, y no se sintetiza: con `false` a la mínima, la pantalla diría
       // «nadie las ejecuta» de una máquina donde sí las ejecuta otro proceso.
       ...(otro === undefined ? {} : { ejecutaOtroProceso: otro }),
@@ -5928,6 +5934,9 @@ export function montarRutas(
     // de aplicar ahí). Sin este empujón la tarea que esperaba ese proyecto se quedaría
     // quieta hasta que alguien tocara la cola por su cuenta: no hay temporizador.
     opciones.revisarTareas?.();
+    // Y se reemite: lo que DICE una tarea que espera a la persona (`esperaPorTi`) cambia en
+    // estos mismos flancos —empieza o acaba un turno, o su commit—.
+    emitirTareas();
     // El alta se reanuncia en los DOS flancos, y DIFERIDO. Medido: una sesión nueva no
     // aparecía en la barra hasta recargar la página, porque su id nace en `volcar()` —al
     // final del turno— y nadie volvía a anunciar. Y `historica` deja de ser cierto al
@@ -9321,7 +9330,7 @@ export function prepararDisenoDeTarea(
 }
 
 export function construirCorredorDeTareasCableado(opciones: {
-  vestibulo: Pick<Vestibulo, "abrirParaTarea" | "proyectosAbiertos" | "sesionesDe">;
+  vestibulo: Pick<Vestibulo, "abrirParaTarea" | "proyectosAbiertos" | "obrasEnCurso" | "sesionesDe">;
   /** La fábrica de `OpcionesDeArranque.tareas`. Ausente = esta ejecución no ejecuta tareas. */
   tareasFabrica?: (informar: (texto: string) => void) => TareasEnDisco;
   informar: (texto: string) => void;
@@ -9421,11 +9430,10 @@ export function construirCorredorDeTareasCableado(opciones: {
           // reiniciar nada, en la siguiente ronda de planificación.
           concurrencia: concurrenciaDeTareas,
           /**
-           * GANA LA PERSONA: en el proyecto que alguien tiene abierto no arranca ninguna
-           * tarea. Una tarea y una persona sobre el mismo árbol no tienen aislamiento de
-           * ninguna clase, y el cerrojo del corredor no protege de eso — protege de dos
-           * corredores. Se pregunta en cada pasada, no al arrancar: abrir un proyecto no
-           * reinicia nada.
+           * GANA LA PERSONA (`core/tareas.ts#esperasPorPersonas`): no arranca ninguna tarea en el
+           * proyecto donde una consola humana está OCUPADA —turno o su commit— ni donde alguien
+           * tiene abierta la conversación de esa tarea. Abrir el proyecto ya no basta (IXCODE-61):
+           * el choque posterior lo niega la guarda de IXCODE-36. Se pregunta en cada pasada.
            *
            * **TODAS las abiertas, no la que está en foco.** Desde que cambiar de sesión no
            * mata el turno anterior, una consola humana puede seguir viva en segundo plano
@@ -9434,7 +9442,9 @@ export function construirCorredorDeTareasCableado(opciones: {
            * arrancado a escribir en la misma copia: el fallo ABIERTO de ese cambio, y el
            * síntoma no es un error sino un diff corrompido que nadie atribuye.
            */
-          bloqueados: () => opciones.vestibulo.proyectosAbiertos().map((c) => c.raiz),
+          bloqueados: () => [
+            ...esperasPorPersonas(opciones.vestibulo.proyectosAbiertos(), disco.listar(), opciones.vestibulo.obrasEnCurso()).keys(),
+          ],
           /**
            * `sesion` sobrevive si y solo si hay algo que una persona pueda ABRIR, y esto es
            * lo que lo decide: la sesión está en el índice del proyecto —o sea que su

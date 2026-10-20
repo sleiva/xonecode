@@ -76,7 +76,6 @@ export function Kanban({
   alDejarDeMirar,
   mirando,
   mirada,
-  proyectoActivo,
   conectado,
 }: {
   cola: {
@@ -127,14 +126,6 @@ export function Kanban({
   /** El transcript que el servidor está mandando de la tarea que se mira. Ausente o de otra
    *  tarea = todavía no ha pintado nada de la que se mira aquí. */
   mirada?: { tarea: string; actos: readonly Acto[] };
-  /**
-   * El proyecto cuya consola HUMANA está abierta ahora mismo (`estado.alta.proyectoActivo`,
-   * la misma raíz que `bloqueados()` mira en `arranque.ts#construirCorredorDeTareasCableado`
-   * para decidir qué NO arranca). Una tarea `nuevo` de ESTE proyecto no gasta hueco de
-   * concurrencia y no avanza mientras dure — «gana la persona» — y sin decirlo se lee como
-   * un cuelgue: se queda quieta en la primera columna sin que nada lo explique.
-   */
-  proyectoActivo?: string;
   /** Si el cable está vivo: apaga en `AccionesDeTarea` lo que manda algo al servidor
    *  (reintentar, descartar, terminar, feedback) y dice por qué. Ausente = se asume
    *  conectado. */
@@ -203,14 +194,10 @@ export function Kanban({
                       {...(alDejarDeMirar === undefined ? {} : { alDejarDeMirar })}
                       {...(mirando === undefined ? {} : { mirando })}
                       {...(mirada === undefined ? {} : { mirada })}
-                      // Solo tiene sentido decirlo de una `nuevo` —«en-proceso» ya corre y
-                      // «terminada» ya acabó— y solo si ESTE kanban es el que ejecuta: en el
-                      // segundo proceso el aviso global de arriba ya cubre por qué nada
-                      // avanza, y el proyecto abierto de ESTA ventana no es lo que bloquea al
-                      // corredor de la otra.
-                      bloqueadaPorProyectoAbierto={
-                        cola.corriendoAqui && t.estado === "nuevo" && proyectoActivo !== undefined && t.proyecto === proyectoActivo
-                      }
+                      // El motivo lo decide el SERVIDOR (`esperaPorTi`, IXCODE-61), y solo viaja si
+                      // ESTE proceso ejecuta las tareas: las consolas de esta ventana no frenan
+                      // al corredor de otra.
+                      {...(t.esperaPorTi === undefined ? {} : { esperaPorTi: t.esperaPorTi.motivo })}
                     />
                   )
                 )}
@@ -242,7 +229,7 @@ function TarjetaSimple({
   alDejarDeMirar,
   mirando,
   mirada,
-  bloqueadaPorProyectoAbierto,
+  esperaPorTi,
 }: {
   tarea: TareaDelCable;
   alAbrirSesion?: (proyecto: string, sesion: string) => void;
@@ -257,7 +244,8 @@ function TarjetaSimple({
   alDejarDeMirar?: (id: string) => void;
   mirando?: string;
   mirada?: { tarea: string; actos: readonly Acto[] };
-  bloqueadaPorProyectoAbierto?: boolean;
+  /** Por qué espera a una persona de esta consola (`TareaDelCable.esperaPorTi`). Ausente = no espera a nadie. */
+  esperaPorTi?: string;
 }) {
   return (
     <li>
@@ -280,11 +268,7 @@ function TarjetaSimple({
             (una `terminada` que se estaba mirando cuando acabó), `MirarTarea` ya lo enseña
             dentro del detalle, y pintarlo dos veces sería la misma información repetida. */}
         {mirando === t.id ? null : <EntregaDeTarea tarea={t} />}
-        {bloqueadaPorProyectoAbierto === true ? (
-          <span className={estilos.bloqueada}>
-            Esperando a que se cierre el proyecto: mientras alguien lo tenga abierto, gana la persona.
-          </span>
-        ) : null}
+        {esperaPorTi === undefined ? null : <span className={estilos.bloqueada}>Esperando: {esperaPorTi}.</span>}
         {/* Ver lo que hace, en vivo, desplegando ESTA tarjeta (Task 17): la MISMA pieza que
             monta `TareasDelProyecto.tsx`, con sus condiciones dentro y no aquí. */}
         <MirarTarea

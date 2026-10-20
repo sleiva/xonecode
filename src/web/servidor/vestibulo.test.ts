@@ -486,7 +486,9 @@ describe("vestíbulo", () => {
     v.alCambiarTurno((activo) => avisos.push(activo));
     const abierto = await v.abrirProyecto({ raiz: "/w/a" });
     await abierto.terminada;
-    expect(avisos).toEqual([true, false]);
+    // Empieza, acaba, y se LIBERA tras su commit (IXCODE-61): el tercero es el que vuelve a
+    // mirar la cola de tareas, y también llega si el turno revienta.
+    expect(avisos).toEqual([true, false, false]);
     await v.cerrar();
   });
 
@@ -1806,7 +1808,8 @@ describe("abrirParaTarea — la segunda puerta", () => {
     // Y por la puerta de siempre SÍ se avisa: si no, este test pasaría con las dos mudas.
     const humana = await v.abrirProyecto({ raiz: proyectoEnDisco(base, "B") });
     await humana.ejecutarTurno("arregla el login", humana.estadoDeSesion, consolaAjena());
-    expect(turnos).toEqual([true, false]);
+    // El tercero es la liberación tras el commit (IXCODE-61), también solo de la humana.
+    expect(turnos).toEqual([true, false, false]);
     humana.consola.consola.alEstado?.({ ...humana.estadoDeSesion, hilo: "otro" });
     expect(estados).toBe(1);
 
@@ -2486,6 +2489,122 @@ describe("abrirParaTarea — la segunda puerta", () => {
     await deTarea.cerrar();
     await humana.ejecutarTurno("ahora sí", humana.estadoDeSesion, humana.consola.consola);
     expect(turnos).toBe(2);
+    await v.cerrar();
+    rmSync(base, { recursive: true, force: true });
+  });
+
+  /**
+   * IXCODE-61: la tarea ya no espera a que la persona cierre el proyecto, así que la guarda de
+   * arriba tiene que valer DESDE que el corredor la elige. Abrir su consola lee git y disco, y en
+   * ese hueco `deTareas` todavía no la tiene: sin la reserva, una persona empezaba un turno sobre
+   * la copia donde la tarea estaba a punto de escribir.
+   */
+  it("mientras se ABRE la consola de una tarea, el turno de una persona en ese proyecto ya no corre", async () => {
+    const base = baseTemporal();
+    let turnos = 0;
+    const v = crearVestibulo({
+      ...dobles(),
+      origenDeTrabajo: "global",
+      baseDeWorkspace: () => base,
+      crearEjecutor: () => async (_peticion, _estado, consola) => {
+        turnos += 1;
+        consola.escribir("hecho\n");
+      },
+    });
+    const raiz = proyectoEnDisco(base, "B");
+    const humana = await v.abrirProyecto({ raiz });
+    // Sin esperar: es el instante en que el corredor la acaba de elegir.
+    const abriendo = v.abrirParaTarea(raiz);
+    await humana.ejecutarTurno("hazme otra cosa", humana.estadoDeSesion, humana.consola.consola);
+    expect(turnos).toBe(0);
+    const deTarea = await abriendo;
+    await deTarea.cerrar();
+    // Y la reserva no se queda puesta: cerrada la tarea, la persona ya puede.
+    await humana.ejecutarTurno("ahora sí", humana.estadoDeSesion, humana.consola.consola);
+    expect(turnos).toBe(1);
+    await v.cerrar();
+    rmSync(base, { recursive: true, force: true });
+  });
+
+  /**
+   * IXCODE-61: lo que bloquea su proyecto para las tareas es `ocupada`, no `turnoEnVuelo`. El
+   * segundo baja ANTES del commit del turno, y una tarea que arrancara en ese hueco escribiría
+   * mientras el `add -A` barre el árbol: su trabajo saldría firmado por la persona. Y el aviso
+   * que vuelve a mirar la cola llega al LIBERARSE, no en el flanco.
+   */
+  it("la consola sigue OCUPADA hasta que acaba el commit del turno, y avisa al liberarse", async () => {
+    const base = baseTemporal();
+    let soltarCommit: () => void = () => {};
+    let enElCommit: { turnoEnVuelo: boolean; ocupada: boolean } | undefined;
+    const avisos: boolean[] = [];
+    let humana: Awaited<ReturnType<ReturnType<typeof crearVestibulo>["abrirProyecto"]>> | undefined;
+    const v = crearVestibulo({
+      ...dobles(),
+      origenDeTrabajo: "global",
+      baseDeWorkspace: () => base,
+      crearEjecutor: () => async () => {},
+      commitearTurno: async () => {
+        enElCommit = { turnoEnVuelo: humana!.turnoEnVuelo, ocupada: humana!.ocupada };
+        avisos.push(humana!.ocupada);
+        await new Promise<void>((r) => (soltarCommit = r));
+        return undefined;
+      },
+    });
+    humana = await v.abrirProyecto({ raiz: proyectoEnDisco(base, "A") });
+    v.alCambiarTurno(() => avisos.push(humana!.ocupada));
+    const turno = humana.ejecutarTurno("arregla el login", humana.estadoDeSesion, humana.consola.consola);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(enElCommit).toEqual({ turnoEnVuelo: false, ocupada: true });
+    soltarCommit();
+    await turno;
+    expect(humana.ocupada).toBe(false);
+    // Empieza (ocupada), acaba el turno (aún ocupada), en el commit (ocupada), y se libera.
+    expect(avisos).toEqual([true, true, true, false]);
+    await v.cerrar();
+    rmSync(base, { recursive: true, force: true });
+  });
+
+  /**
+   * IXCODE-61: `/sync subir|bajar` no es un turno —es un comando del lazo—, así que ni marca
+   * `ocupada` ni pasaba por la guarda de IXCODE-36. Con el proyecto abierto ya sin bloquear
+   * las tareas, es una OBRA: se niega si una tarea escribe ahí, y mientras dura bloquea la raíz.
+   */
+  it("sincronizar desde una persona es una OBRA: se niega con una tarea dentro, y mientras dura bloquea", async () => {
+    const base = baseTemporal();
+    const llamadas: string[] = [];
+    let soltar: () => void = () => {};
+    const v = crearVestibulo({
+      ...dobles(),
+      origenDeTrabajo: "global",
+      baseDeWorkspace: () => base,
+      crearEjecutor: () => async () => {},
+      dependenciasDeProyecto: () => ({
+        sincronizar: async (accion) => {
+          llamadas.push(accion);
+          if (accion === "bajar") await new Promise<void>((r) => (soltar = r));
+          return { tipo: "texto", texto: "hecho\n" };
+        },
+      }),
+    });
+    const raiz = proyectoEnDisco(base, "B");
+    const humana = await v.abrirProyecto({ raiz });
+    const sincronizar = humana.consola.consola.sincronizar!;
+
+    // Mientras baja, la raíz está en obras; al acabar, ya no.
+    const bajando = sincronizar("bajar", raiz);
+    expect(v.obrasEnCurso()).toEqual([raiz]);
+    soltar();
+    await bajando;
+    expect(v.obrasEnCurso()).toEqual([]);
+    // `estado` solo lee: no es obra.
+    await sincronizar("estado", raiz);
+    expect(v.obrasEnCurso()).toEqual([]);
+
+    // Con una tarea dentro, se NIEGA sin llegar a sincronizar.
+    const deTarea = await v.abrirParaTarea(raiz);
+    await expect(sincronizar("subir", raiz)).rejects.toThrow(/tarea está trabajando/);
+    expect(llamadas).toEqual(["bajar", "estado"]);
+    await deTarea.cerrar();
     await v.cerrar();
     rmSync(base, { recursive: true, force: true });
   });

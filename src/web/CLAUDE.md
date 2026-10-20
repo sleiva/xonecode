@@ -35,7 +35,9 @@ Ante una discrepancia con el código, **el código manda**.
 ## Lo que no se puede escribir se puede leer (IXCODE-36)
 
 - Con una tarea escribiendo en un proyecto, una persona no ENVÍA nada en él
-  (`vestibulo.ts#MOTIVO_PROYECTO_CON_TAREA`, solo la puerta de personas); el cliente apaga caja y «+».
+  (`vestibulo.ts#MOTIVO_PROYECTO_CON_TAREA`, `hayTareaEn`, solo la puerta de personas); vale desde
+  que el corredor ELIGE la tarea (`reservadas`), porque una tarea ya arranca con el proyecto abierto
+  (IXCODE-61). El cliente apaga caja y «+».
   Sus conversaciones SÍ se abren. **Límite**: que no nazca una conversación lo sostiene el CLIENTE;
   un mensaje que llegue igual no corre turno pero su acto se vuelca.
 - Lo que no se puede ABRIR se LEE sin consola (`{clase:"leerSesion"}`, índice del DISCO; `mirar` en

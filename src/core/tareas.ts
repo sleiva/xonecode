@@ -306,10 +306,8 @@ export function siguientesAEjecutar(
      * `instantanea.ts` metería las escrituras de la tarea en el diff de la persona,
      * atribuyéndoselas. Gana la persona: la tarea espera.
      *
-     * La condición que se le pasa es «la consola está ABIERTA» y no «hay un turno en
-     * vuelo», porque solo la primera es estable en el instante de despachar: con la
-     * segunda, una tarea arrancaría y chocaría después, que es justo el fallo que se
-     * quiere evitar.
+     * Qué raíces son las decide `esperasPorPersonas`: una consola OCUPADA o con la
+     * conversación de una tarea abierta, no una consola abierta a secas (IXCODE-61).
      *
      * **No gasta hueco de concurrencia** —no está corriendo nada— y **no para la cola**:
      * el hueco se lo lleva la siguiente de otro proyecto. Ausente y vacía significan lo
@@ -663,4 +661,62 @@ export function puedeArrancarYa(tarea: Pick<Tarea, "estado" | "tras">, lista: re
   if (tarea.tras === undefined) return true;
   const anterior = lista.find((x) => x.id === tarea.tras);
   return anterior === undefined || anterior.estado === "terminada";
+}
+
+/** Lo que de una consola de PERSONA decide si una tarea puede arrancar en su proyecto. */
+export interface ConsolaDePersona {
+  raiz: string;
+  /** Turno en vuelo, o su cierre (volcado y commit) sin terminar. */
+  ocupada: boolean;
+  sesion?: string;
+  idDeHilo: string;
+}
+
+/** Por qué una tarea espera a una persona, y si «Arrancar ahora» (ceder el proyecto) lo resuelve. */
+export interface EsperaPorPersona {
+  motivo: string;
+  ceder: boolean;
+}
+
+export const MOTIVO_ESPERA_AL_TURNO = "tu conversación en este proyecto está trabajando; arranca cuando termine";
+export const MOTIVO_ESPERA_A_SU_CONVERSACION = "tienes abierta su conversación; arranca cuando la cierres";
+export const MOTIVO_ESPERA_A_LA_SINCRONIZACION = "se está sincronizando este proyecto con CloudStudio; arranca cuando termine";
+
+/**
+ * GANA LA PERSONA (IXCODE-61): las raíces donde ninguna tarea puede arrancar ahora, con el porqué.
+ *
+ * Dos causas, y abrir el proyecto ya NO es una. Antes bastaba con tener la consola abierta,
+ * aunque estuviera quieta, porque «abierta» era lo único estable al despachar. Desde IXCODE-36
+ * el servidor niega a la persona enviar nada mientras una tarea escribe en su proyecto, así
+ * que una consola quieta no puede chocar después: lo que queda por proteger es
+ * - una consola OCUPADA: su turno escribe, y su commit (`add -A`) se llevaría lo de la tarea;
+ * - la conversación de una tarea `nuevo` ABIERTA por la persona: serían dos consolas sobre el
+ *   mismo hilo. Esta sí se cede con «Arrancar ahora», que la cierra;
+ * - una OBRA en curso fuera de turno (`obras`: `/sync subir|bajar`, la descarga del Resumen), que
+ *   escribe en la copia sin pasar por ningún turno.
+ * `sesion` Y `idDeHilo` porque son dos momentos de la misma conversación (ver `esDeUnaTareaEnCurso`).
+ */
+export function esperasPorPersonas(
+  consolas: readonly ConsolaDePersona[],
+  tareas: readonly Pick<Tarea, "estado" | "sesion" | "proyecto">[],
+  obras: readonly string[] = []
+): Map<string, EsperaPorPersona> {
+  const esperas = new Map<string, EsperaPorPersona>();
+  for (const raiz of obras) esperas.set(raiz, { motivo: MOTIVO_ESPERA_A_LA_SINCRONIZACION, ceder: false });
+  for (const c of consolas) {
+    if (esperas.has(c.raiz)) continue;
+    if (c.ocupada) {
+      esperas.set(c.raiz, { motivo: MOTIVO_ESPERA_AL_TURNO, ceder: false });
+      continue;
+    }
+    const suya = tareas.some(
+      (t) =>
+        t.estado === "nuevo" &&
+        t.sesion !== undefined &&
+        t.proyecto.raiz === c.raiz &&
+        (t.sesion === c.sesion || t.sesion === c.idDeHilo)
+    );
+    if (suya && !esperas.has(c.raiz)) esperas.set(c.raiz, { motivo: MOTIVO_ESPERA_A_SU_CONVERSACION, ceder: true });
+  }
+  return esperas;
 }

@@ -80,7 +80,6 @@ export function AccionesDeTarea({
   alRegenerarEncargo,
   alParar,
   puedeArrancar,
-  esperaPorTuConsola,
   sinFeedback,
 }: {
   tarea: TareaDelCable;
@@ -114,8 +113,6 @@ export function AccionesDeTarea({
   alParar?: (id: string) => Promise<string | undefined>;
   /** Es la primera de su cadena (`puedeArrancarYa`): las encadenadas esperan a la anterior y no ofrecen arrancar. */
   puedeArrancar?: boolean;
-  /** Lo que la frena es que la consola de su proyecto está ABIERTA (la tuya): se dice, en vez de quedarse muda en «Nuevo». */
-  esperaPorTuConsola?: boolean;
   /**
    * Sin campo de feedback ni su pista: escribir se hace en el CHAT de la tarea («Ir al chat para
    * responder»), y repetirlo en la lista era el mismo campo dos veces. Los botones rápidos siguen.
@@ -147,8 +144,10 @@ export function AccionesDeTarea({
   const pistaDeFeedback = aparcada && destinos.includes("nuevo") && alEnviarFeedback === undefined && sinFeedback !== true;
   const ofrecerDescartar = alDescartar !== undefined;
   const ofrecerContinuar = aparcada && destinos.includes("nuevo") && alContinuar !== undefined;
-  const ofrecerArrancar = t.estado === "nuevo" && puedeArrancar === true && alArrancarAhora !== undefined;
-  const avisoDeEspera = t.estado === "nuevo" && puedeArrancar === true && esperaPorTuConsola === true;
+  // Lo que la frena es una persona de esta consola (`esperaPorTi`, del servidor): se dice, en vez de quedarse muda en
+  // «Nuevo», y «Arrancar ahora» solo cuando ceder el proyecto la desbloquea — con un turno en marcha se negaría.
+  const avisoDeEspera = t.estado === "nuevo" && puedeArrancar === true ? t.esperaPorTi : undefined;
+  const ofrecerArrancar = avisoDeEspera?.ceder === true && alArrancarAhora !== undefined;
   const ofrecerEditar = puedeEditarEncargo(t) && alEditarEncargo !== undefined;
   const ofrecerParar = t.estado === "en-proceso" && alParar !== undefined;
 
@@ -160,6 +159,8 @@ export function AccionesDeTarea({
     !ofrecerDescartar &&
     !ofrecerContinuar &&
     !ofrecerArrancar &&
+    // Sin botón, el porqué de la espera se sigue diciendo: es justo el caso del turno en marcha.
+    avisoDeEspera === undefined &&
     !ofrecerEditar &&
     !ofrecerParar
   ) {
@@ -171,9 +172,7 @@ export function AccionesDeTarea({
       {apagado ? (
         <p className={estilos.avisoConexion}>Sin conexión: no se puede mandar nada hasta reconectar.</p>
       ) : null}
-      {avisoDeEspera ? (
-        <p className={estilos.pista}>Esperando: no arranca mientras tengas abierta la consola de este proyecto.</p>
-      ) : null}
+      {avisoDeEspera === undefined ? null : <p className={estilos.pista}>Esperando: {avisoDeEspera.motivo}.</p>}
       {ofrecerArrancar ? (
         <button
           type="button"

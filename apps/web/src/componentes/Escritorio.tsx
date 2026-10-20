@@ -59,7 +59,6 @@ export function Escritorio({
   alIrAlChatDeTarea,
   mirandoTarea,
   mirada,
-  proyectoActivo,
 }: {
   /** El saludo (`agent/persona.ts`). Ausente = se saluda igual, sin inventarse un nombre. */
   nombre?: string;
@@ -162,14 +161,6 @@ export function Escritorio({
    * pintado nada en vez de afirmar un turno vacío.
    */
   mirada?: { tarea: string; actos: readonly Acto[] };
-  /**
-   * El proyecto cuya consola HUMANA está abierta ahora (`estado.alta.proyectoActivo`). El
-   * escritorio se puede ver con una sesión de otro proyecto ya abierta detrás —volver a él
-   * es solo estado de vista, no cierra nada—, así que esto puede estar definido aquí; se le
-   * pasa al kanban para que una tarea `nuevo` de ESE proyecto diga que espera, en vez de
-   * quedarse quieta sin explicación.
-   */
-  proyectoActivo?: string;
 }) {
   const apagado = conectado === false;
   // Los FIJADOS van primero, y cuentan como enseñados: la misma cuenta que la barra, que los
@@ -323,7 +314,6 @@ export function Escritorio({
             {...(alIrAlChatDeTarea === undefined ? {} : { alIrAlChat: alIrAlChatDeTarea })}
             {...(mirandoTarea === undefined ? {} : { mirando: mirandoTarea })}
             {...(mirada === undefined ? {} : { mirada })}
-            {...(proyectoActivo === undefined ? {} : { proyectoActivo })}
             conectado={conectado}
           />
         )}

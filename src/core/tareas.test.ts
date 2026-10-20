@@ -8,6 +8,10 @@ import {
   darPorBuenaAMano,
   motivoTrasReanudar,
   puedeArrancarYa,
+  esperasPorPersonas,
+  MOTIVO_ESPERA_AL_TURNO,
+  MOTIVO_ESPERA_A_SU_CONVERSACION,
+  MOTIVO_ESPERA_A_LA_SINCRONIZACION,
   puedeEditarEncargo,
   puedeReencolar,
   reanudadaTrasCorte,
@@ -461,6 +465,54 @@ describe("puedeArrancarYa", () => {
     expect(puedeArrancarYa({ estado: "nuevo", tras: "a" }, [{ id: "a", estado: "terminada" }])).toBe(true);
     expect(puedeArrancarYa({ estado: "nuevo", tras: "a" }, [])).toBe(true);
     expect(puedeArrancarYa({ estado: "requiere-atencion" }, [])).toBe(false);
+  });
+});
+
+/**
+ * GANA LA PERSONA, IXCODE-61: abrir el proyecto ya no frena sus tareas. Lo que queda es lo que
+ * de verdad choca: una consola OCUPADA (su turno o su commit) y la conversación de una tarea
+ * abierta por la persona (dos consolas sobre un hilo).
+ */
+describe("esperasPorPersonas", () => {
+  const consola = (extra: Partial<{ raiz: string; ocupada: boolean; sesion: string; idDeHilo: string }> = {}) => ({
+    raiz: "/w/AppDemo",
+    ocupada: false,
+    idDeHilo: "h-persona",
+    ...extra,
+  });
+
+  it("una consola abierta y QUIETA no bloquea nada", () => {
+    expect(esperasPorPersonas([consola({ sesion: "s-persona" })], [tarea()]).size).toBe(0);
+  });
+
+  it("una OCUPADA bloquea su raíz, y ceder no la arregla: con un turno en marcha se negaría", () => {
+    const esperas = esperasPorPersonas([consola({ ocupada: true })], [tarea()]);
+    expect(esperas.get("/w/AppDemo")).toEqual({ motivo: MOTIVO_ESPERA_AL_TURNO, ceder: false });
+  });
+
+  it("la conversación de una tarea NUEVO abierta la bloquea —por la sesión o por el hilo—, y esa sí se cede", () => {
+    const porSesion = esperasPorPersonas([consola({ sesion: "s-t1" })], [tarea({ sesion: "s-t1" })]);
+    expect(porSesion.get("/w/AppDemo")).toEqual({ motivo: MOTIVO_ESPERA_A_SU_CONVERSACION, ceder: true });
+    // Antes del primer volcado la conversación solo tiene el id del hilo.
+    expect(esperasPorPersonas([consola({ idDeHilo: "s-t1" })], [tarea({ sesion: "s-t1" })]).size).toBe(1);
+  });
+
+  it("no la bloquea la conversación de una tarea que no espera a arrancar, ni la de otro proyecto", () => {
+    expect(esperasPorPersonas([consola({ sesion: "s-t1" })], [tarea({ sesion: "s-t1", estado: "requiere-atencion", motivo: "m" })]).size).toBe(0);
+    const deOtro = tarea({ sesion: "s-t1", proyecto: { id: "p2", raiz: "/w/Otra", nombre: "Otra" } });
+    expect(esperasPorPersonas([consola({ sesion: "s-t1" })], [deOtro]).size).toBe(0);
+  });
+
+  it("una OBRA fuera de turno (sincronizar, descargar) bloquea su raíz con su propio motivo, y gana", () => {
+    const esperas = esperasPorPersonas([consola({ ocupada: true })], [tarea()], ["/w/AppDemo"]);
+    expect(esperas.get("/w/AppDemo")).toEqual({ motivo: MOTIVO_ESPERA_A_LA_SINCRONIZACION, ceder: false });
+    // Sin ninguna consola abierta también: la descarga del Resumen no pasa por ninguna.
+    expect(esperasPorPersonas([], [tarea()], ["/w/AppDemo"]).size).toBe(1);
+  });
+
+  it("ocupada GANA a su conversación: el motivo es el turno, que es lo que hay que esperar", () => {
+    const esperas = esperasPorPersonas([consola({ ocupada: true, sesion: "s-t1" })], [tarea({ sesion: "s-t1" })]);
+    expect(esperas.get("/w/AppDemo")?.ceder).toBe(false);
   });
 });
 

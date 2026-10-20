@@ -77,7 +77,7 @@ import type { AjustesDeDispositivos, Entorno } from "../../core/settings.js";
 import { cargarSettings, rutaSettings } from "../../agent/config/settingsEnDisco.js";
 import { MOTIVOS_DEL_TUNEL } from "../../core/tunel.js";
 import type { Dispositivo } from "../../core/dispositivos.js";
-import type { AdjuntoDeTarea, Tarea } from "../../core/tareas.js";
+import { MOTIVO_ESPERA_AL_TURNO, type AdjuntoDeTarea, type Tarea } from "../../core/tareas.js";
 import { crearTareasEnDisco, TOPE_DE_ADJUNTO } from "../../agent/tareas/tareasEnDisco.js";
 import { carpetaDeAdjuntosDeSesion } from "../../core/adjuntos.js";
 import { TOPE_DE_ADJUNTO_DE_SESION } from "../../agent/sesiones/adjuntosDeSesion.js";
@@ -6045,6 +6045,53 @@ describe("las tareas en background, por el cable", () => {
     expect(JSON.stringify(mensaje)).not.toContain("/w/AppDemo");
   });
 
+  /**
+   * IXCODE-61, la COMPOSICIÓN: el porqué de una tarea que espera a la persona lo compone
+   * `mensajeDeTareas` con la misma regla que `bloqueados`, y se reemite en cada flanco de turno.
+   * Sin esto el kanban diría «Nuevo» sin explicación, o el motivo del turno se quedaría pintado
+   * después de que acabara.
+   */
+  it("una tarea que espera a una persona OCUPADA lo dice por el cable, y deja de decirlo al liberarse", async () => {
+    const servidor = servidorDeMentira();
+    const cola = colaDeMentira([
+      {
+        id: "t1",
+        proyecto: { id: "p1", raiz: "/w/AppDemo", nombre: "AppDemo" },
+        titulo: "Arregla el login",
+        peticion: "Arregla el login",
+        encargo: "Arregla el login",
+        adjuntos: [],
+        estado: "nuevo" as const,
+        creada: "2026-09-08T10:00:00.000Z",
+      },
+    ]);
+    const real = vestibuloDePrueba();
+    let ocupada = true;
+    let alTurno: ((activo: boolean) => void) | undefined;
+    const vestibulo: Vestibulo = {
+      ...real,
+      proyectosAbiertos: () =>
+        [{ raiz: "/w/AppDemo", ocupada, idDeHilo: "h-persona" }] as unknown as ReturnType<Vestibulo["proyectosAbiertos"]>,
+      alCambiarTurno: (escucha) => {
+        alTurno = escucha;
+        real.alCambiarTurno(escucha);
+      },
+    };
+    montarRutas(servidor, vestibulo, {
+      colaDeTareas: cola,
+      corredorDeTareas: { corriendoAqui: () => true, ejecutaOtroProceso: () => false, cortar: async () => true },
+      concurrenciaDeTareas: () => 2,
+    });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+    expect(ultimo(cliente).lista[0]!.esperaPorTi).toEqual({ motivo: MOTIVO_ESPERA_AL_TURNO, ceder: false });
+    ocupada = false;
+    alTurno!(false);
+    await asentar();
+    expect(ultimo(cliente).lista[0]!.esperaPorTi).toBeUndefined();
+  });
+
   it("lo que la tarea AUTORIZÓ viaja, con ruta relativa; ausente cuando no consta", async () => {
     const servidor = servidorDeMentira();
     const cola = colaDeMentira([
@@ -8877,6 +8924,7 @@ describe("las tareas en background, el cableado del corredor con el cable — no
     },
     proyectosAbiertos: () => [],
     sesionesDe: () => [],
+    obrasEnCurso: () => [],
   };
 
   /**
@@ -9040,8 +9088,92 @@ describe("las tareas en background, el cableado del corredor con el cable — no
         // En FOCO hay otro proyecto —o ninguno—; el de la tarea sigue abierto detrás con su
         // turno corriendo. Es exactamente el caso que este cambio introduce.
         proyectosAbiertos: () =>
-          [{ raiz: "/w/AppDemo" }] as unknown as ReturnType<Vestibulo["proyectosAbiertos"]>,
+          [{ raiz: "/w/AppDemo", ocupada: true, idDeHilo: "h-persona" }] as unknown as ReturnType<Vestibulo["proyectosAbiertos"]>,
         sesionesDe: () => [],
+        obrasEnCurso: () => [],
+      },
+      tareasFabrica: () => cola,
+      informar: () => {},
+      olvidarHiloDeSesion: async () => {},
+      ...ENTREGA_DE_TAREAS,
+    });
+    await arrancarConectado({ emitirTareas: () => {} });
+    await corredor!.asentar();
+    expect(aperturas).toEqual([]);
+    await corredor!.parar();
+  });
+
+  /**
+   * IXCODE-61: tener el proyecto ABIERTO ya no frena sus tareas. Una consola humana QUIETA deja
+   * arrancar —el choque posterior lo niega la guarda de IXCODE-36—; frena la OCUPADA (arriba) y
+   * la que tiene abierta la conversación de esa misma tarea (abajo): dos consolas, un hilo.
+   */
+  it("una consola humana QUIETA en el proyecto no bloquea sus tareas (IXCODE-61)", async () => {
+    const aperturas: string[] = [];
+    const cola = colaDeMentira([{ ...tareaEnProceso("t1"), estado: "nuevo" }]);
+    const { corredor, arrancarConectado } = construirCorredorDeTareasCableado({
+      vestibulo: {
+        abrirParaTarea: async (raiz) => {
+          aperturas.push(raiz);
+          throw new Error("basta con haber llegado");
+        },
+        proyectosAbiertos: () =>
+          [{ raiz: "/w/AppDemo", ocupada: false, sesion: "s-persona", idDeHilo: "s-persona" }] as unknown as ReturnType<
+            Vestibulo["proyectosAbiertos"]
+          >,
+        sesionesDe: () => [],
+        obrasEnCurso: () => [],
+      },
+      tareasFabrica: () => cola,
+      informar: () => {},
+      olvidarHiloDeSesion: async () => {},
+      ...ENTREGA_DE_TAREAS,
+    });
+    await arrancarConectado({ emitirTareas: () => {} });
+    await corredor!.asentar();
+    expect(aperturas).toEqual(["/w/AppDemo"]);
+    await corredor!.parar();
+  });
+
+  it("una OBRA en curso (sincronizar o descargar) bloquea su proyecto para las tareas", async () => {
+    const aperturas: string[] = [];
+    const cola = colaDeMentira([{ ...tareaEnProceso("t1"), estado: "nuevo" }]);
+    const { corredor, arrancarConectado } = construirCorredorDeTareasCableado({
+      vestibulo: {
+        abrirParaTarea: async (raiz) => {
+          aperturas.push(raiz);
+          throw new Error("no debería llegar aquí: la copia se está sincronizando");
+        },
+        proyectosAbiertos: () => [],
+        obrasEnCurso: () => ["/w/AppDemo"],
+        sesionesDe: () => [],
+      },
+      tareasFabrica: () => cola,
+      informar: () => {},
+      olvidarHiloDeSesion: async () => {},
+      ...ENTREGA_DE_TAREAS,
+    });
+    await arrancarConectado({ emitirTareas: () => {} });
+    await corredor!.asentar();
+    expect(aperturas).toEqual([]);
+    await corredor!.parar();
+  });
+
+  it("una consola quieta con la conversación de ESA tarea abierta sí la bloquea: serían dos consolas en un hilo", async () => {
+    const aperturas: string[] = [];
+    const cola = colaDeMentira([{ ...tareaEnProceso("t1"), estado: "nuevo", sesion: "s-tarea" }]);
+    const { corredor, arrancarConectado } = construirCorredorDeTareasCableado({
+      vestibulo: {
+        abrirParaTarea: async (raiz) => {
+          aperturas.push(raiz);
+          throw new Error("no debería llegar aquí: su conversación está abierta");
+        },
+        proyectosAbiertos: () =>
+          [{ raiz: "/w/AppDemo", ocupada: false, sesion: "s-tarea", idDeHilo: "s-tarea" }] as unknown as ReturnType<
+            Vestibulo["proyectosAbiertos"]
+          >,
+        sesionesDe: () => [],
+        obrasEnCurso: () => [],
       },
       tareasFabrica: () => cola,
       informar: () => {},
@@ -9102,6 +9234,7 @@ describe("las tareas en background, el cableado del corredor con el cable — no
         },
         proyectosAbiertos: () => [],
         sesionesDe: () => [],
+        obrasEnCurso: () => [],
       },
       tareasFabrica: () => cola,
       informar: () => {},
@@ -9132,6 +9265,7 @@ describe("las tareas en background, el cableado del corredor con el cable — no
         },
         proyectosAbiertos: () => [],
         sesionesDe: () => [],
+        obrasEnCurso: () => [],
       },
       tareasFabrica: () => cola,
       informar: () => {},

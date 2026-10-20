@@ -1561,7 +1561,9 @@ limpieza de un proceso se llevaba por delante el cerrojo vivo de otro.
 
 **Gana la persona.** Una tarea NO arranca en un proyecto cuya consola humana está abierta. La
 condición es «abierta» y no «hay turno en vuelo» porque solo la primera es estable en el instante de
-despachar: con la segunda, una tarea arrancaría y chocaría después. El precio se dice en la pantalla
+despachar: con la segunda, una tarea arrancaría y chocaría después. *(Relajado el 20-10-2026 por
+IXCODE-61: ver «Gana la persona, solo donde choca» al final. El choque de después ya lo niega otra
+guarda.)* El precio se dice en la pantalla
 —una tarea puede esperar a que alguien cierre un proyecto— en vez de corromper un diff en silencio;
 sin decirlo, una tarea parada se lee como un cuelgue.
 
@@ -9540,3 +9542,66 @@ si
   (`PastillaDeDispositivo.tsx`), mira solo las consolas de persona y no se refresca al abrir o cerrar
   una; va por `basename(raiz)`, así que el mismo nombre de proyecto en dos entornos se confunde; las
   negativas del servidor no llegan al navegador, así que el cliente valida con las mismas reglas.
+
+## Gana la persona, solo donde choca (IXCODE-61, 20-10-2026)
+
+Lo reportado: «cuando te quedas detenido encima del proyecto, las tareas no se ejecutan; tienes que
+quitar el foco del proyecto para que continúe». No era un fallo: era la regla de «gana la persona»
+haciendo lo que decía. Bastaba tener la consola del proyecto ABIERTA, aunque estuviera quieta, y la
+pestaña desde donde se lanzan las tareas está dentro del proyecto. Con una cadena era peor: la
+segunda esperaba mientras siguieras mirando. Al mudar el foco, la consola ociosa se cierra
+(`cerrarLasOciosasSalvo`) y la tarea arrancaba: el síntoma exacto.
+
+Por qué se podía relajar: el motivo escrito de «abierta» era que con «turno en vuelo» una tarea
+arrancaría y la persona chocaría DESPUÉS. Desde IXCODE-36 el servidor niega a una persona enviar
+nada en un proyecto donde una tarea escribe, así que ese choque ya tiene su guarda. Y la atribución
+sale de commits sellados por turno: una consola quieta no commitea nada.
+
+Lo que sigue bloqueando (`core/tareas.ts#esperasPorPersonas`, la MISMA regla para el corredor y
+para el cable):
+- **Una consola OCUPADA**, que no es lo mismo que `turnoEnVuelo`. Medido leyendo el `finally` del
+  turno: `turnoEnVuelo` baja, se avisa el flanco —que ya revisaba la cola— y DESPUÉS se espera el
+  commit (`add -A` + commit). Con la regla nueva, una tarea despachada en ese hueco escribiría
+  mientras el `add -A` barre el árbol y su trabajo saldría firmado por la persona. `ocupada` cubre
+  el turno y su cierre, y al bajar avisa (`alLiberar`). Se baja ANTES de lanzar una nota sobrante,
+  que la vuelve a subir en la misma pasada síncrona: así un sobrante que no llega a correr no deja
+  el proyecto bloqueado para siempre.
+- **La conversación de ESA tarea abierta** por la persona (el flujo de «Continuar» o del feedback
+  desde su chat): serían dos consolas sobre el mismo hilo. Esta sí se cede con «Arrancar ahora».
+
+El hueco de la apertura: entre que el corredor elige y la consola de la tarea entra en `deTareas`
+pasa un `await` largo (git y disco), y en él la guarda de IXCODE-36 no veía nada. Se RESERVA la raíz
+(`vestibulo.ts#reservadas`) en la misma pasada síncrona en que el corredor miró que estaba libre.
+Primera versión, mal: la reserva iba dentro de `abrirParaTarea`, que corre envuelta en `enCola`, o
+sea DESPUÉS. El test lo pilló en rojo; la reserva vive en el envoltorio, sobre la raíz tal como
+llega (la traducción de una mudanza sigue dentro de la cola).
+
+El cable dice el porqué (`TareaDelCable.esperaPorTi`, motivo + si ceder sirve) y lo reemite en cada
+flanco y al liberarse: el cliente ya no lo deduce de «tienes el proyecto abierto». «Arrancar ahora»
+solo se ofrece cuando ceder desbloquea: con un turno en marcha `cederProyecto` se negaría.
+
+**Los escritores que NO son turnos** (lo encontró la revisión, no un test): «abierta» también
+protegía todo lo que una persona hace sobre la copia fuera de un turno. `/sync subir|bajar` es un
+comando del lazo, no pasa por `ejecutarTurno`, así que ni marcaba `ocupada` ni veía la guarda de
+IXCODE-36; y la descarga del Resumen («Actualizar repo local») baja SOBRE la copia sin ninguna
+consola (ese hueco ya existía con el proyecto sin abrir). Son OBRAS (`vestibulo.ts#enObra`,
+`obrasEnCurso`): se NIEGAN si una tarea escribe —o está a punto— en la copia, y mientras duran
+bloquean la raíz con su propio motivo (`MOTIVO_ESPERA_A_LA_SINCRONIZACION`). La aprobación de una
+subida va DENTRO de la obra: la raíz sigue bloqueada mientras la persona lee el plan. El guardado a
+mano del editor (`motivoParaNoEditar`) cuenta también las reservadas.
+
+Los tests nuevos que sostienen las piezas caras se comprobaron QUITANDO la pieza: sin la reserva,
+sin `ocupada` (bajándola con `turnoEnVuelo`), sin la reemisión en el flanco y sin el envoltorio de
+`sincronizar`, cada uno se pone rojo.
+
+Lo que se miró y NO bloquea: una consola humana `cerrada` no puede estar commiteando —`cerrada` se
+pone al acabar el LAZO, que espera al turno y a su commit—. Y la Revisión de una conversación sin
+commits sellados cae en `via: "desde-apertura"`, que ya se declara NO atribución («lo que haya
+escrito cualquiera desde que te sentaste»): una tarea que escribe con el proyecto abierto sale ahí,
+dicho con esas palabras, como ya salía antes con una tarea de otra conversación.
+
+**Límites**: lo que la consola de la persona tenga en memoria del proyecto (hechos precargados,
+ficheros leídos) puede quedar viejo tras una tarea que escribió mientras estaba abierta; su
+siguiente turno parte del disco de verdad para escribir, pero el agente puede razonar con lo que
+leyó antes. Un comando del lazo que escriba y no sea `/sync` no es obra: hoy no hay otro que toque
+la copia (`/plan` y `/config` escriben bajo `.xonecode/`).

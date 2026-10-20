@@ -2789,7 +2789,6 @@ export function App({
         return {};
       }}
       // Esta lista es la del proyecto ABIERTO: su consola es la tuya, y es lo que frena sus tareas nuevas.
-      consolaAbierta={proyectoActivoId !== undefined}
       {...(estado.alta?.sesionActiva === undefined ? {} : { sesionAbierta: estado.alta.sesionActiva })}
       trabajandoEnElChat={estado.turnoEnVuelo === true}
       conectado={estado.conectado}
@@ -3600,7 +3599,6 @@ export function App({
               // cómo se aplica (`{clase:"tarea", accion:"feedback"}`, el mismo patrón que
               // `/modelo` desde la pastilla) — el cliente no manda comandos, manda intención.
               alEnviarFeedback={alEnviarFeedbackTarea}
-              {...(estado.alta?.proyectoActivo === undefined ? {} : { proyectoActivo: estado.alta.proyectoActivo })}
             />
           </>
         )

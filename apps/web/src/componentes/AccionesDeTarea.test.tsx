@@ -242,8 +242,9 @@ describe("AccionesDeTarea: continuar y arrancar ahora", () => {
     });
     expect(alContinuar).toHaveBeenCalledWith("t1");
     expect(screen.queryByRole("button", { name: "Arrancar ahora" })).toBeNull();
-    rerender(<AccionesDeTarea tarea={{ ...base, estado: "nuevo" }} alContinuar={alContinuar} alArrancarAhora={alArrancarAhora} puedeArrancar esperaPorTuConsola />);
-    expect(screen.getByText(/no arranca mientras tengas abierta la consola/)).toBeTruthy();
+    const esperaPorTi = { motivo: "tienes abierta su conversación; arranca cuando la cierres", ceder: true };
+    rerender(<AccionesDeTarea tarea={{ ...base, estado: "nuevo", esperaPorTi }} alContinuar={alContinuar} alArrancarAhora={alArrancarAhora} puedeArrancar />);
+    expect(screen.getByText(/Esperando: tienes abierta su conversación/)).toBeTruthy();
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Arrancar ahora" }));
     });
@@ -251,10 +252,25 @@ describe("AccionesDeTarea: continuar y arrancar ahora", () => {
     expect(screen.getByRole("alert").textContent).toContain("está trabajando");
   });
 
-  it("una encadenada que espera a la anterior no ofrece arrancar ni dice que espera a tu consola", () => {
-    render(<AccionesDeTarea tarea={{ ...base, estado: "nuevo", tras: "t0" }} alArrancarAhora={vi.fn()} puedeArrancar={false} esperaPorTuConsola />);
+  it("una encadenada que espera a la anterior no ofrece arrancar ni dice que espera a ti", () => {
+    const esperaPorTi = { motivo: "tienes abierta su conversación; arranca cuando la cierres", ceder: true };
+    render(<AccionesDeTarea tarea={{ ...base, estado: "nuevo", tras: "t0", esperaPorTi }} alArrancarAhora={vi.fn()} puedeArrancar={false} />);
     expect(screen.queryByRole("button", { name: "Arrancar ahora" })).toBeNull();
-    expect(screen.queryByText(/consola/)).toBeNull();
+    expect(screen.queryByText(/Esperando:/)).toBeNull();
+  });
+
+  /**
+   * IXCODE-61: con un TURNO en marcha ceder el proyecto se negaría, así que el botón no se
+   * ofrece — se dice por qué espera y ya. Y sin motivo del servidor (espera por concurrencia, o
+   * no espera) tampoco: cerrar tu conversación no la adelantaría.
+   */
+  it("«Arrancar ahora» solo cuando ceder la desbloquea", () => {
+    const turno = { motivo: "tu conversación en este proyecto está trabajando; arranca cuando termine", ceder: false };
+    const { rerender } = render(<AccionesDeTarea tarea={{ ...base, estado: "nuevo", esperaPorTi: turno }} alArrancarAhora={vi.fn()} puedeArrancar />);
+    expect(screen.getByText(/Esperando: tu conversación en este proyecto está trabajando/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Arrancar ahora" })).toBeNull();
+    rerender(<AccionesDeTarea tarea={{ ...base, estado: "nuevo" }} alArrancarAhora={vi.fn()} puedeArrancar />);
+    expect(screen.queryByRole("button", { name: "Arrancar ahora" })).toBeNull();
   });
 });
 

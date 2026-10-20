@@ -18,7 +18,7 @@ import type { FotoDeColecciones } from "../../core/fotoDeColecciones.js";
 import type { InformeDeDispositivos, NombreDeHerramienta, Receta } from "../../core/dispositivos.js";
 import type { AjustesDeDispositivos } from "../../core/settings.js";
 import type { Acto, ConsumoDeTurno, ConsumoPorModelo } from "../../core/actos.js";
-import { puedeReencolar, textoParaReencolar, type Tarea } from "../../core/tareas.js";
+import { puedeReencolar, textoParaReencolar, type EsperaPorPersona, type Tarea } from "../../core/tareas.js";
 import type { PendienteDeAprobacion } from "../../core/events.js";
 import type { LineaDeDiff } from "../../core/diff.js";
 import type { SelectorDeConsola } from "../../cli/consola.js";
@@ -1246,6 +1246,12 @@ export interface TareaDelCable {
   sesion?: string;
   /** El id de la tarea ANTERIOR de su cadena (`Tarea.tras`): esta no arranca hasta que aquella termine. */
   tras?: string;
+  /**
+   * Por qué una `nuevo` espera a una PERSONA de esta consola, y si «Arrancar ahora» lo resuelve
+   * (`core/tareas.ts#esperasPorPersonas`, IXCODE-61). Lo decide el servidor: el cliente lo pinta.
+   * Ausente = no espera a nadie de aquí.
+   */
+  esperaPorTi?: EsperaPorPersona;
   creada: string;
   empezada?: string;
   acabada?: string;
@@ -1329,8 +1335,9 @@ export interface TareaDelCable {
  * Campo a campo, y también DENTRO del veredicto: un `...tarea.veredicto` dejaría pasar sin
  * nombrar el campo que alguien le añada mañana a `VeredictoDeTarea`.
  */
-export function filaDeTarea(t: Tarea): TareaDelCable {
+export function filaDeTarea(t: Tarea, esperaPorTi?: EsperaPorPersona): TareaDelCable {
   return {
+    ...(esperaPorTi === undefined ? {} : { esperaPorTi }),
     id: t.id,
     // El ID, que es con lo que la interfaz filtra; el nombre va aparte, para leer. La RAÍZ
     // no viaja: es una ruta de la máquina.
