@@ -517,10 +517,18 @@ describe("shell con `escribeEn`: un límite que la shell no respeta", () => {
 });
 
 describe("un hijo externo que no puede llamar a quien llamaría", () => {
-  it("recibe también las skills de los agentes de su `llama`, sin repetidos y las suyas primero", () => {
-    const todos = [{ nombre: "device-controller", skills: ["xone-hotswap"] }, { nombre: "designer-xone", skills: ["xone-development"] }];
+  it("recibe también las skills de los agentes de su `llama` que EJECUTAN, sin repetidos y las suyas primero", () => {
+    const todos = [
+      { nombre: "device-controller", skills: ["xone-hotswap", "xone-development"], ejecucion: true },
+      { nombre: "designer-xone", skills: ["xone-development", "archify"] },
+    ];
     expect(skillsConLasDeQuienLlama({ skills: ["xone-development"], llama: ["device-controller", "designer-xone", "no-existe"] }, todos)).toEqual(["xone-development", "xone-hotswap"]);
     expect(skillsConLasDeQuienLlama({ skills: ["a"] }, todos)).toEqual(["a"]);
+  });
+
+  it("de un llamado SIN shell no hereda nada (medido: `archify` del diseñador le llegaba al developer)", () => {
+    const todos = [{ nombre: "designer-xone", skills: ["archify"] }, { nombre: "otro", skills: ["x"], ejecucion: false }];
+    expect(skillsConLasDeQuienLlama({ skills: ["xone-development"], llama: ["designer-xone", "otro"] }, todos)).toEqual(["xone-development"]);
   });
 
   it("se le dice que lo haga él y dónde están la captura y la maqueta", () => {

@@ -342,13 +342,23 @@ export function promptDeAgente(agente: Agente, skills?: EstadoDeSkills): string 
 }
 
 /**
- * Las skills de un agente MÁS las de los agentes a los que llama (`llama`). Para un hijo de Claude Code con ejecución:
- * corre en otro proceso y no puede llamar a nuestros especialistas, así que lo que haría el de pruebas —desplegar,
- * recargar, capturar— lo hace él, con las skills y los scripts de ese agente (medido en una tarea de Maset: el
+ * Las skills de un agente MÁS las de los agentes a los que llama (`llama`) que EJECUTAN. Para un hijo de Claude Code con
+ * ejecución: corre en otro proceso y no puede llamar a nuestros especialistas, así que lo que haría el de pruebas
+ * —desplegar, recargar, capturar— lo hace él, con las skills y los scripts de ese agente (medido en una tarea de Maset: el
  * desarrollador en Claude Code no tenía ningún script y no pudo probar nada). Sin repetidos, las suyas primero.
+ *
+ * **Solo de quien ejecuta**, porque eso es lo que viene a suplir: de un llamado sin shell llegaban skills que no son su
+ * trabajo (medido en Maset: el developer recibía `archify` del diseñador, intentó su `check-render-output.mjs` como si
+ * fuera un validador de XOne y gastó la vuelta).
  */
-export function skillsConLasDeQuienLlama(agente: Pick<Agente, "skills" | "llama">, todos: readonly Pick<Agente, "nombre" | "skills">[]): string[] {
-  const deLlamados = (agente.llama ?? []).flatMap((n) => todos.find((a) => a.nombre === n)?.skills ?? []);
+export function skillsConLasDeQuienLlama(
+  agente: Pick<Agente, "skills" | "llama">,
+  todos: readonly Pick<Agente, "nombre" | "skills" | "ejecucion">[]
+): string[] {
+  const deLlamados = (agente.llama ?? []).flatMap((n) => {
+    const llamado = todos.find((a) => a.nombre === n);
+    return llamado?.ejecucion === true ? llamado.skills : [];
+  });
   return [...new Set([...agente.skills, ...deLlamados])];
 }
 
