@@ -26,7 +26,10 @@ export const METODO_DE_COMPARACION_VISUAL = [
   "3. SOBRANTES. Recorre después la CAPTURA y di lo que está en ella y NO en la maqueta.",
   "",
   "Los números de la maqueta (un 12, un 0…) pueden ser datos de ejemplo y su valor no importa; pero que su SITIO esté",
-  "vacío, o que en su lugar haya otra cosa, sí es una diferencia. Ignora la barra de estado del teléfono (hora, batería).",
+  "vacío, o que en su lugar haya otra cosa, sí es una diferencia. Ignora la barra de estado del teléfono (hora, batería),",
+  // Medido en Maset (Entradas/Salidas): «junto a Volver no aparece el 09:41 de la maqueta», y era el reloj de la barra
+  // que Stitch dibuja arriba de cada maqueta.
+  "también la que la MAQUETA dibuja arriba: su hora («09:41») no es un dato de la pantalla y no falta.",
 ].join("\n");
 
 /** Cuántas pasadas del modelo por crítica con maqueta: una sola variaba mucho (medido: de 4 a 8 diferencias). */

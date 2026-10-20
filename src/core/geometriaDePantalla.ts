@@ -115,6 +115,14 @@ const FACTOR_DE_TAMAÑO_DE_IMAGEN = 1.5;
 /** Cuánto (en fracción del ancho de la maqueta) puede separarse una cifra de su etiqueta para ser su CONTADOR. */
 const VECINDAD_DE_CONTADOR = 0.12;
 /**
+ * La franja de arriba de la maqueta (en fracción de su alto) donde Stitch dibuja la BARRA DE ESTADO simulada de un móvil.
+ * Una hora ahí («09:41») es su reloj, no un dato de la pantalla: medido en Maset (Entradas/Salidas), «09:41» junto a
+ * «Volver» salía como «su etiqueta está y el número no» y el juez dio la tarea en rojo por él.
+ */
+const FRANJA_DE_LA_BARRA_DE_ESTADO = 0.06;
+const HORA = /^\d{1,2}:\d{2}$/;
+
+/**
  * Una LISTA de ejemplo: textos sin pareja alineados en una COLUMNA (el borde izquierdo a menos de esta fracción del
  * ancho) en al menos `FILAS_DE_UNA_LISTA` filas. Medido en Maset (Resumen día): los clientes de la maqueta («COTS
  * REGUA», «COMA MUNNE»…) salían como BLOQUEANTES uno por fila con los clientes reales pintados en su columna, y el juez
@@ -523,10 +531,14 @@ export function compararConMaqueta(m: MaquetaMedida, g: GeometriaDelAparato, mod
   }
   const dentroDeUnaLista = (e: ElementoDeMaqueta): boolean =>
     franjasDeLista.some((f) => e.caja.y >= f.desde && e.caja.y <= f.hasta);
+  const relojDeLaBarra = (e: ElementoDeMaqueta): boolean =>
+    HORA.test(textoParaEmparejar(e.texto)) && e.caja.y + e.caja.alto <= FRANJA_DE_LA_BARRA_DE_ESTADO * m.alto;
   for (const e of sinPareja) {
     if (deLista.has(e)) continue;
     const candidata =
-      !aproximada && e.boton !== true && textoParaEmparejar(e.texto) !== "" && !tieneLetras(textoParaEmparejar(e.texto)) ? etiquetaVecina(e) : undefined;
+      !aproximada && e.boton !== true && textoParaEmparejar(e.texto) !== "" && !tieneLetras(textoParaEmparejar(e.texto)) && !relojDeLaBarra(e)
+        ? etiquetaVecina(e)
+        : undefined;
     const vecina = candidata !== undefined && !cifraJuntoA(candidata) ? candidata : undefined;
     if (vecina !== undefined) {
       diferencias.push(

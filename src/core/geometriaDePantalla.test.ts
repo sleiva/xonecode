@@ -455,3 +455,34 @@ describe("una lista de la maqueta: sus filas son datos de ejemplo", () => {
     expect(h.bloqueantes).toContain("«COTS REGUA» de la maqueta NO está en el aparato (ningún control con ese texto).");
   });
 });
+
+/** La barra de estado SIMULADA de la maqueta (Maset, Entradas/Salidas): su «09:41» junto a «Volver» no es un contador. */
+describe("la hora de la barra de estado de la maqueta", () => {
+  const maqueta = (yHora: number): MaquetaMedida => ({
+    ancho: 400,
+    alto: 800,
+    elementos: [
+      { texto: "09:41", caja: { x: 20, y: yHora, ancho: 40, alto: 14 } },
+      { texto: "Volver", caja: { x: 20, y: yHora + 28, ancho: 60, alto: 16 } },
+      { texto: "ENTRADAS", caja: { x: 150, y: 200, ancho: 100, alto: 20 } },
+    ],
+  });
+  const aparato: GeometriaDelAparato = {
+    pantalla: { ancho: 1000, alto: 2000 },
+    controles: [
+      { nombre: "MAP_VOLVER", texto: "Volver", tipo: "prop", clase: "B", caja: { x: 50, y: 170, ancho: 150, alto: 40 } },
+      { nombre: "MAP_TIT", texto: "ENTRADAS", tipo: "prop", clase: "L", caja: { x: 375, y: 500, ancho: 250, alto: 50 } },
+    ],
+  };
+
+  it("arriba del todo es el reloj de la barra simulada: dato de ejemplo, no «su etiqueta está y el número no»", () => {
+    const h = compararConMaqueta(maqueta(10), aparato);
+    expect(h.diferencias.join("\n")).not.toContain("09:41");
+    expect(h.notas.some((n) => n.startsWith("datos de ejemplo") && n.includes("«09:41»"))).toBe(true);
+  });
+
+  it("una hora más abajo, junto a su etiqueta, sigue siendo un dato cuyo sitio no puede quedar vacío", () => {
+    const h = compararConMaqueta(maqueta(150), aparato);
+    expect(h.diferencias.some((d) => d.startsWith("«09:41» de la maqueta, junto a «Volver»"))).toBe(true);
+  });
+});
