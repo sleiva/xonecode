@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  pantallasElegidasValidas,
+  textoDePantallasElegidas,
+  TOPE_DE_PANTALLAS_ELEGIDAS,
   designMdDeProyecto, esDeLaMaqueta, leerPantalla, motivoDeDescargaInaceptable, motivoDePantallaInaceptable, proyectoDePantalla, RUTA_DE_DISENO, urlDeImagenCompleta,
 } from "./stitch.js";
 
@@ -126,3 +129,34 @@ describe("el diseño vinculado y la pantalla ELEGIDA", () => {
     expect(sinTraer).toContain('pantalla: "projects/9/screens/aa"');
   });
 });
+
+/** IXCODE-63: varias pantallas por tarea, cada una una pantalla a construir. */
+describe("varias pantallas elegidas", () => {
+  const vinculo = { proyecto: "projects/9", nombre: "Maset" };
+  const una = (id: string, titulo = id) => ({ name: `projects/9/screens/${id}`, titulo });
+
+  it("valen si TODAS valen, sin repetir y como mucho el tope; un objeto suelto cuenta como una", () => {
+    expect(pantallasElegidasValidas([una("aa"), una("bb")], vinculo)?.map((p) => p.name)).toEqual(["projects/9/screens/aa", "projects/9/screens/bb"]);
+    expect(pantallasElegidasValidas(una("aa"), vinculo)).toHaveLength(1);
+    expect(pantallasElegidasValidas([], vinculo)).toBeUndefined();
+    expect(pantallasElegidasValidas([una("aa"), una("aa")], vinculo)).toBeUndefined();
+    expect(pantallasElegidasValidas([una("aa"), { name: "projects/8/screens/bb", titulo: "ajena" }], vinculo)).toBeUndefined();
+    const demasiadas = Array.from({ length: TOPE_DE_PANTALLAS_ELEGIDAS + 1 }, (_, i) => una(`a${i}`));
+    expect(pantallasElegidasValidas(demasiadas, vinculo)).toBeUndefined();
+    expect(pantallasElegidasValidas(demasiadas.slice(0, TOPE_DE_PANTALLAS_ELEGIDAS), vinculo)).toHaveLength(TOPE_DE_PANTALLAS_ELEGIDAS);
+  });
+
+  it("el texto de varias dice que cada una es una pantalla a construir, con su id y su carpeta", () => {
+    const texto = textoDePantallasElegidas([
+      { pantalla: { ...una("aa", "Listado"), proyecto: "Maset" }, traida: { ok: true } },
+      { pantalla: { ...una("bb", "Detalle"), proyecto: "Maset" }, traida: { ok: true } },
+    ]);
+    expect(texto).toContain("MAQUETAS ELEGIDAS (2), del proyecto de Stitch «Maset» (id `projects/9`)");
+    expect(texto).toContain("cada una es una PANTALLA distinta");
+    expect(texto).toContain("1. «Listado», id `projects/9/screens/aa`: ya traída en /artefactos/diseno/");
+    expect(texto).toContain("2. «Detalle», id `projects/9/screens/bb`: ya traída en /artefactos/diseno/2/");
+    // Con una sola, el texto de siempre.
+    expect(textoDePantallasElegidas([{ pantalla: una("aa", "Listado"), traida: { ok: true } }])).toContain("MAQUETA ELEGIDA: la pantalla «Listado»");
+  });
+});
+

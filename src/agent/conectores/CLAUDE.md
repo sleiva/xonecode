@@ -19,14 +19,18 @@ conector es un servidor MCP REMOTO: catálogo cerrado por código, o uno escrito
   `fueraDelAgente`, `camposFueraDelResultado`.
 - **Stitch: `traer_pantalla_de_stitch`** (`motores/trueforge/traerDeStitch.ts`, puro en `core/stitch.ts`):
   el modelo da la pantalla, nunca la URL; solo los hosts medidos, con tope y tipo comprobado, a
-  tamaño real (`=s0`). Destino FIJO `/artefactos/diseno/`, que `buscarMaqueta` prefiere y que
-  `ultimaCaptura`/el crítico NO toman por capturas. Dice BYTES, no las medidas de Stitch. Busca por
+  tamaño real (`=s0`). Destino FIJO `/artefactos/diseno/` —y `diseno/2/`… para la segunda y
+  siguientes elegidas (`carpetaDeMaqueta`)—, que `buscarMaquetas` prefiere y que `ultimaCaptura`/el
+  crítico NO toman por capturas. Dice BYTES, no las medidas de Stitch. Busca por
   TÍTULO (`casanConTitulo`, `entradasDeStitch`), propios y compartidos, sin tildes; si no casa, lista CORTA con `name`.
 - **El DISEÑO de una tarea se ELIGE** (`core/disenoVinculado.ts`, `DisenoDelProyecto.tsx`, mensaje
-  `diseno`): proyecto vinculado (`config.json#disenoVinculado`), una pantalla en `Tarea.pantallaDeStitch`,
-  comprobada por el SERVIDOR (`pantallaElegidaValida`); `prepararDisenoDeTarea` la trae ANTES del
-  primer turno y deja SIEMPRE la marca `diseno/.elegida.json`; con ella la tool solo trae ESA.
-  El encargo lleva pantalla y proyecto con ids (`textoDePantallaElegida`); el aumentador no propone
+  `diseno`): proyecto vinculado (`config.json#disenoVinculado`), de 1 a `TOPE_DE_PANTALLAS_ELEGIDAS`
+  pantallas en `Tarea.pantallasDeStitch` (IXCODE-63; cada una, una PANTALLA a construir), comprobadas
+  por el SERVIDOR (`pantallasElegidasValidas`; una tarea vieja con `pantallaDeStitch` se lee como lista
+  de una); `prepararDisenoDeTarea` las trae ANTES del primer turno y deja SIEMPRE la marca
+  `diseno/.elegida.json`; con ella la tool solo trae ELLAS, cada una a su carpeta. La medida
+  automática compara cada captura con la MÁS PARECIDA (`medirContraLaMasParecida`).
+  El encargo lleva pantallas y proyecto con ids (`textoDePantallasElegidas`); el aumentador no propone
   otra ni AÑADE lo no pedido. Sin elegida: búsqueda por PALABRAS y lo no hallado va a `## CRITICAL`
   (`pantallasNoEncontradas`), nunca se sustituye. Pestaña Diseño solo con vínculo; al editar,
   `disenoContexto.ts`, y `null` la quita.

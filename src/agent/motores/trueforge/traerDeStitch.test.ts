@@ -5,7 +5,7 @@ import { join } from "node:path";
 import type { Artefacto } from "../../../core/artefactos.js";
 import type { ConectoresPort } from "../../../core/ports.js";
 import { TOPE_DE_LLAMADA_MS } from "../../../core/conectores.js";
-import { marcarPantallaElegida, crearTraerDeStitch, type Descargar } from "./traerDeStitch.js";
+import { marcarPantallasElegidas, crearTraerDeStitch, type Descargar } from "./traerDeStitch.js";
 import { buscarMaqueta, ultimaCaptura } from "./medidaAutomatica.js";
 
 const PANTALLA = "projects/142/screens/67c6ab";
@@ -177,13 +177,37 @@ describe("traer_pantalla_de_stitch por título", () => {
     // por título apuntaba un CRITICAL falso, decía «no construyas» y podía sobrescribir la elegida con otra.
     const faltan: string[] = [];
     const { t, llamadas, carpeta } = montarBusqueda({ sinPersona: true, alNoEncontrar: (x) => faltan.push(x) });
-    marcarPantallaElegida(carpeta, { name: "projects/8393/screens/cc", titulo: "image.png" });
+    marcarPantallasElegidas(carpeta, [{ name: "projects/8393/screens/cc", titulo: "image.png" }]);
     const porTitulo = String(await t.invoke({ titulo: "Menu Listado Entregas" }));
     expect(porTitulo).toContain("ya tiene su maqueta ELEGIDA: «image.png» (id `projects/8393/screens/cc`)");
     expect(String(await t.invoke({ pantalla: "projects/8393/screens/bb" }))).toContain("ya tiene su maqueta ELEGIDA");
     expect(llamadas).toEqual([]);
     expect(faltan).toEqual([]);
     expect(String(await t.invoke({ pantalla: "projects/8393/screens/cc" }))).toContain("Traída");
+  });
+
+  /** IXCODE-63: con VARIAS elegidas, la tool trae cualquiera de ELLAS a SU carpeta, y ninguna otra. */
+  it("con varias elegidas trae cualquiera de ellas a su carpeta (`diseno/2/`…) y ninguna otra", async () => {
+    const { t, carpeta } = montarBusqueda();
+    marcarPantallasElegidas(carpeta, [
+      { name: "projects/8393/screens/cc", titulo: "Listado" },
+      { name: "projects/8393/screens/dd", titulo: "Detalle" },
+    ]);
+    const segunda = String(await t.invoke({ pantalla: "projects/8393/screens/dd" }));
+    expect(segunda).toContain("/artefactos/diseno/2/screen.png");
+    expect(existsSync(join(carpeta, "diseno", "2", "screen.png"))).toBe(true);
+    // La primera no se toca al traer la segunda.
+    expect(existsSync(join(carpeta, "diseno", "screen.png"))).toBe(false);
+    const otra = String(await t.invoke({ pantalla: "projects/8393/screens/zz" }));
+    expect(otra).toContain("ya tiene sus maquetas ELEGIDAS");
+    expect(otra).toContain("«Detalle» (id `projects/8393/screens/dd`, en /artefactos/diseno/2/)");
+  });
+
+  it("la marca de antes (una sola, sin lista) se sigue leyendo", async () => {
+    const { t, carpeta } = montarBusqueda();
+    mkdirSync(join(carpeta, "diseno"), { recursive: true });
+    writeFileSync(join(carpeta, "diseno", ".elegida.json"), JSON.stringify({ name: "projects/8393/screens/cc", titulo: "image.png" }));
+    expect(String(await t.invoke({ titulo: "Otra" }))).toContain("ya tiene su maqueta ELEGIDA: «image.png»");
   });
 
   it("un proyecto que no existe lo dice con los que hay; sin título ni name, pide uno", async () => {

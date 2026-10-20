@@ -20,6 +20,25 @@ export { motivoDeProyectoDeStitchInaceptable, type DisenoVinculado } from "./dis
 export const CARPETA_DE_DISENO = "diseno";
 export const RUTA_DE_DISENO = `${RUTA_ARTEFACTOS}${CARPETA_DE_DISENO}/`;
 
+/**
+ * Cuántas pantallas de Stitch se pueden elegir para UNA tarea (IXCODE-63). Cada una es una pantalla distinta a construir,
+ * y cada captura suya pesa en el contexto de cada turno: seis bastan para un flujo (listado, detalle, alta…).
+ */
+export const TOPE_DE_PANTALLAS_ELEGIDAS = 6;
+
+/**
+ * Dónde vive la maqueta `indice` (desde 0) de la sesión, dentro de la carpeta de artefactos. La PRIMERA, donde siempre
+ * (`diseno/`): todo lo que ya la busca ahí sigue igual con una sola. Las demás, en `diseno/2/`, `diseno/3/`…: dentro de
+ * `diseno/`, así que siguen sin contarse como capturas del aparato (`ultimaCaptura`).
+ */
+export function carpetaDeMaqueta(indice: number): string {
+  return indice === 0 ? CARPETA_DE_DISENO : `${CARPETA_DE_DISENO}/${indice + 1}`;
+}
+/** La misma, como ruta virtual (con barra al final). */
+export function rutaDeMaqueta(indice: number): string {
+  return `${RUTA_ARTEFACTOS}${carpetaDeMaqueta(indice)}/`;
+}
+
 /** ¿Es esta ruta virtual algo de la maqueta traída (y no una captura del aparato)? */
 export function esDeLaMaqueta(ruta: string): boolean {
   return ruta.startsWith(RUTA_DE_DISENO);
@@ -269,6 +288,47 @@ export function pantallaElegidaValida(
   if (typeof titulo !== "string" || titulo.trim() === "" || titulo.length > 200) return undefined;
   // El nombre del proyecto lo pone el VÍNCULO, no el cable: va en el contexto de la tarea con su id.
   return { name, titulo: titulo.trim(), proyecto: vinculo.nombre };
+}
+
+/**
+ * Las pantallas elegidas para una tarea, si valen TODAS (IXCODE-63): una lista de 1 a `TOPE_DE_PANTALLAS_ELEGIDAS`, cada
+ * una con `pantallaElegidaValida` y sin repetir. Una sola mal, o de más, y no vale ninguna: lo que llega del cable no se
+ * arregla a medias, se niega con motivo. Un objeto suelto (el cable de antes) cuenta como una lista de uno.
+ */
+export function pantallasElegidasValidas(
+  valor: unknown,
+  vinculo: DisenoVinculado | undefined
+): { name: string; titulo: string; proyecto: string }[] | undefined {
+  const lista = Array.isArray(valor) ? valor : [valor];
+  if (lista.length === 0 || lista.length > TOPE_DE_PANTALLAS_ELEGIDAS) return undefined;
+  const validas = lista.map((v) => pantallaElegidaValida(v, vinculo));
+  if (validas.some((v) => v === undefined)) return undefined;
+  const nombres = new Set(validas.map((v) => v!.name));
+  if (nombres.size !== validas.length) return undefined;
+  return validas as { name: string; titulo: string; proyecto: string }[];
+}
+
+/**
+ * Las líneas del encargo para VARIAS pantallas elegidas (IXCODE-63): cada una es una PANTALLA distinta a construir en esta
+ * tarea, con su id y dónde está (o con qué traerla). Con una sola, el texto de siempre (`textoDePantallaElegida`).
+ */
+export function textoDePantallasElegidas(
+  traidas: readonly { pantalla: { name: string; titulo: string; proyecto?: string }; traida: { ok: true } | { ok: false; motivo: string } }[]
+): string {
+  if (traidas.length === 1) return textoDePantallaElegida(traidas[0]!.pantalla, traidas[0]!.traida);
+  const lineas = traidas.map(({ pantalla, traida }, i) =>
+    traida.ok
+      ? `${i + 1}. «${pantalla.titulo}», id \`${pantalla.name}\`: ya traída en ${rutaDeMaqueta(i)} (screen, code.html y DESIGN.md).`
+      : `${i + 1}. «${pantalla.titulo}», id \`${pantalla.name}\`: no se pudo traer antes de empezar (${traida.motivo}); tráela con traer_pantalla_de_stitch pasándole \`pantalla: "${pantalla.name}"\`.`
+  );
+  const proyecto = traidas[0]!.pantalla;
+  const deProyecto = `del proyecto de Stitch ${proyecto.proyecto === undefined ? "" : `«${proyecto.proyecto}» `}(id \`${proyectoDePantalla(proyecto.name)}\`)`;
+  return [
+    `MAQUETAS ELEGIDAS (${traidas.length}), ${deProyecto}: cada una es una PANTALLA distinta que esta tarea tiene que construir.`,
+    ...lineas,
+    "Son LAS referencias de diseño de esta tarea: no busques otras pantallas en Stitch por su título ni las sustituyas por parecidas. " +
+      "Al medir cada prueba, el harness compara la captura con la maqueta más parecida de las elegidas.",
+  ].join("\n");
 }
 
 /**

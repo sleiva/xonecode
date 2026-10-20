@@ -108,7 +108,7 @@ import { leerTareasDelPlan, RUTA_DE_TASKS } from "../../../core/tareasDelPlan.js
 import { casanConTitulo, esDeLaMaqueta } from "../../../core/stitch.js";
 import { recibeConectores } from "../../../core/conectores.js";
 import { crearConvertirAP, NOMBRE_CONVERTIR_A_P, recibeConvertirAP } from "./convertirAP.js";
-import { buscarMaqueta, medirContraMaqueta, RONDAS_VISUALES, resumenDeMedida, textoDeMedidaAutomatica, ultimaCaptura } from "./medidaAutomatica.js";
+import { buscarMaquetas, medirContraLaMasParecida, RONDAS_VISUALES, resumenDeMedida, textoDeMedidaAutomatica, ultimaCaptura } from "./medidaAutomatica.js";
 import { anotarEscritura, capacidadDeInformesDeHijos, esEscrituraBinaria, escrituraConExito, textoDelInforme, type CambioDeFichero } from "./informesDeHijos.js";
 import { crearDiagnosticoDeTools, type DiagnosticoDeTools } from "../../turno/diagnosticoDeTools.js";
 import { encenderTrazaDeErrores } from "../../trazaDeErroresEnDisco.js";
@@ -1725,11 +1725,12 @@ export async function abrirSesionTrueforge(
    */
   function medidaTrasProbar(deHilo: string, hiloPadre: string, quien: Agente | undefined): string | undefined {
     if (carpeta === undefined || quien?.ejecucion !== true) return undefined;
-    const maqueta = buscarMaqueta(raiz, opciones.adjuntos, carpeta);
+    // TODAS las maquetas de la sesión (IXCODE-63: varias pantallas elegidas), y la captura contra la más parecida.
+    const maquetas = buscarMaquetas(raiz, opciones.adjuntos, carpeta);
     const captura = ultimaCaptura(carpeta, nacimientoDeHilo.get(deHilo) ?? Date.now());
-    if (maqueta === undefined || captura === undefined) return undefined;
+    if (maquetas.length === 0 || captura === undefined) return undefined;
     try {
-      const comparacion = medirContraMaqueta(join(carpeta, captura), maqueta.disco);
+      const { maqueta, comparacion } = medirContraLaMasParecida(join(carpeta, captura), maquetas);
       ultimaMedidaDeHilo.set(hiloPadre, resumenDeMedida(comparacion, captura));
       const ronda = (rondasVisualesDeHilo.get(hiloPadre) ?? 0) + 1;
       rondasVisualesDeHilo.set(hiloPadre, ronda);

@@ -979,11 +979,16 @@ function cierreDeTarea(valor: unknown): { cierre?: { criticos: string[]; observa
   return criticos.length === 0 && observaciones.length === 0 ? {} : { cierre: { criticos, observaciones } };
 }
 
-function pantallaDeTarea(valor: unknown): { pantallaDeStitch?: { name: string; titulo: string; proyecto?: string } } {
-  if (typeof valor !== "object" || valor === null) return {};
-  const v = valor as Record<string, unknown>;
-  if (typeof v["name"] !== "string" || typeof v["titulo"] !== "string") return {};
-  return { pantallaDeStitch: { name: v["name"], titulo: v["titulo"], ...(typeof v["proyecto"] === "string" ? { proyecto: v["proyecto"] } : {}) } };
+/** Las pantallas de Stitch de una tarea, campo a campo; la que no tiene la forma se queda fuera, y sin ninguna, ausente. */
+function pantallasDeTarea(valor: unknown): { pantallasDeStitch?: { name: string; titulo: string; proyecto?: string }[] } {
+  if (!Array.isArray(valor)) return {};
+  const pantallas = valor.flatMap((p) => {
+    if (typeof p !== "object" || p === null) return [];
+    const v = p as Record<string, unknown>;
+    if (typeof v["name"] !== "string" || typeof v["titulo"] !== "string") return [];
+    return [{ name: v["name"], titulo: v["titulo"], ...(typeof v["proyecto"] === "string" ? { proyecto: v["proyecto"] } : {}) }];
+  });
+  return pantallas.length === 0 ? {} : { pantallasDeStitch: pantallas };
 }
 
 function reencolableDeTarea(valor: unknown): { reencolable?: { texto: string } } {
@@ -1821,7 +1826,7 @@ export function crearStoreDelCliente(): {
                   // nombrar). Un `url` se queda solo si es http(s): va a un `href`.
                   ...ticketDeTarea(t["ticket"]),
                   // La pantalla de Stitch elegida, por la lista blanca y con su forma: sin ella «Editar» no la traería marcada.
-                  ...pantallaDeTarea(t["pantallaDeStitch"]),
+                  ...pantallasDeTarea(t["pantallasDeStitch"]),
                   // Si se puede reencolar (lo decide el servidor), con su texto propuesto: solo con un texto de verdad.
                   ...reencolableDeTarea(t["reencolable"]),
                   // De qué tarea es continuación: un id de texto, o nada.

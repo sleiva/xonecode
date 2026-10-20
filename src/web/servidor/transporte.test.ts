@@ -94,7 +94,7 @@ const DECISIONES: Readonly<Record<string, readonly string[]>> = {
   // Viaja RECORTADO: clave, conector, enlace y aviso; el `sitio` y el `proyecto` del gestor se quedan en el host.
   ticket: ["ticket"],
   // Viaja: la fila la enseña y «Editar la tarea» la trae marcada. Es un id de Stitch y un título, no una ruta.
-  pantallaDeStitch: ["pantallaDeStitch"],
+  pantallasDeStitch: ["pantallasDeStitch"],
   // De qué finalizada es continuación: frena un segundo «Reencolar» y Finalizadas la cuelga de ella (un id, no una ruta).
   continuaDe: ["continuaDe"],
 };
@@ -126,7 +126,7 @@ const TAREA_COMPLETA: Required<Tarea> = {
   cierre: { criticos: ["se cortó al agotar el tope"], observaciones: ["el juez de QA dijo «rojo»"] },
   terminadaAMano: true,
   ticket: { conector: "jira", sitio: "cloud-1", proyecto: "KAN", clave: "KAN-7", url: "https://x.atlassian.net/browse/KAN-7", aviso: "no se pudo pasar a PROBAR" },
-  pantallaDeStitch: { name: "projects/1/screens/ab", titulo: "Listado de Entregas", proyecto: "Maset" },
+  pantallasDeStitch: [{ name: "projects/1/screens/ab", titulo: "Listado de Entregas", proyecto: "Maset" }],
   continuaDe: "t0",
 };
 

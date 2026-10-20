@@ -1314,8 +1314,8 @@ export interface TareaDelCable {
    * `proyecto` del gestor se quedan en el host, como los de una sesión ligada a un ticket.
    */
   ticket?: { clave: string; conector: string; url?: string; aviso?: string };
-  /** La pantalla de Stitch elegida para la tarea: su `name` y su título (no es una ruta de la máquina). */
-  pantallaDeStitch?: { name: string; titulo: string; proyecto?: string };
+  /** Las pantallas de Stitch elegidas para la tarea, en su orden: `name` y título de cada una (no son rutas de la máquina). */
+  pantallasDeStitch?: { name: string; titulo: string; proyecto?: string }[];
   /**
    * Si se puede REENCOLAR para acabar lo que no hizo, con el texto que se propone mandarle (editable). Lo decide el
    * SERVIDOR (`core/tareas.ts#puedeReencolar`, `textoParaReencolar`): ausente = no se ofrece.
@@ -1383,7 +1383,15 @@ export function filaDeTarea(t: Tarea, esperaPorTi?: EsperaPorPersona): TareaDelC
             ...(t.ticket.aviso === undefined ? {} : { aviso: t.ticket.aviso }),
           },
         }),
-    ...(t.pantallaDeStitch === undefined ? {} : { pantallaDeStitch: { name: t.pantallaDeStitch.name, titulo: t.pantallaDeStitch.titulo, ...(t.pantallaDeStitch.proyecto === undefined ? {} : { proyecto: t.pantallaDeStitch.proyecto }) } }),
+    ...(t.pantallasDeStitch === undefined
+      ? {}
+      : {
+          pantallasDeStitch: t.pantallasDeStitch.map((p) => ({
+            name: p.name,
+            titulo: p.titulo,
+            ...(p.proyecto === undefined ? {} : { proyecto: p.proyecto }),
+          })),
+        }),
     ...(puedeReencolar(t) ? { reencolable: { texto: textoParaReencolar(t) } } : {}),
     ...(t.continuaDe === undefined ? {} : { continuaDe: t.continuaDe }),
   };
@@ -1910,8 +1918,8 @@ export type MensajeDelCliente =
    * id de la tarea si es un segmento llano y no es ya una tarea; los adjuntos los lee del
    * disco, nunca de lo que diga el cliente.
    */
-  | { clase: "tarea"; accion: "crear"; proyecto: string; peticion: string; /** Vacío o ausente = lo prepara el servidor al encolar. */ encargo?: string; borrador?: string; pantallaDeStitch?: { name: string; titulo: string } }
-  | { clase: "tarea"; accion: "augmentar"; proyecto: string; peticion: string; borrador?: string; pantallaDeStitch?: { name: string; titulo: string } }
+  | { clase: "tarea"; accion: "crear"; proyecto: string; peticion: string; /** Vacío o ausente = lo prepara el servidor al encolar. */ encargo?: string; borrador?: string; pantallasDeStitch?: { name: string; titulo: string }[] }
+  | { clase: "tarea"; accion: "augmentar"; proyecto: string; peticion: string; borrador?: string; pantallasDeStitch?: { name: string; titulo: string }[] }
   /**
    * Una PROPUESTA de tareas encadenadas (el acto `propuesta-de-tareas`): encolarla en orden o
    * descartarla. Viaja el id de la propuesta y, al encolar, los encargos que la persona revisó (la
@@ -1944,7 +1952,7 @@ export type MensajeDelCliente =
   | { clase: "tarea"; accion: "continuar"; id: string }
   | { clase: "tarea"; accion: "arrancarAhora"; id: string }
   /** Editar el encargo de una tarea que todavía no ha arrancado (IXCODE-52). 204, o 409 con `{motivo}`. */
-  | { clase: "tarea"; accion: "encargo"; id: string; encargo: string; peticion?: string; pantallaDeStitch?: { name: string; titulo: string } | null }
+  | { clase: "tarea"; accion: "encargo"; id: string; encargo: string; peticion?: string; pantallasDeStitch?: { name: string; titulo: string }[] | null }
   /** Volver a preparar el encargo desde la petición editada, SIN guardarlo (IXCODE-53). 200 con `{encargo}`, o 409 con `{motivo}`. */
   | { clase: "tarea"; accion: "regenerarEncargo"; id: string; peticion: string }
   /** Con qué gestor vivirá una tarea nueva de ese proyecto: contestado en la propia respuesta, `{gestor?: {conector, proyecto}}`. */

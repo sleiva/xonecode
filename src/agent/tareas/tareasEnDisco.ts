@@ -240,7 +240,7 @@ export function crearTareasEnDisco(opciones: {
     try {
       const leido = JSON.parse(readFileSync(indice, "utf8")) as unknown;
       if (!Array.isArray(leido)) return { tareas: [], legible: false };
-      return { tareas: leido as Tarea[], legible: true };
+      return { tareas: (leido as Tarea[]).map(conPantallasEnLista), legible: true };
     } catch {
       // No se sobrescribe: perder la cola de alguien por no saber leerla sería peor que
       // no enseñarla. Misma postura que una línea corrupta del `.jsonl` de una sesión.
@@ -586,6 +586,18 @@ export function aplicarFeedback(
 }
 
 /**
+ * Una tarea guardada ANTES de IXCODE-63 tiene `pantallaDeStitch` (una); desde entonces es `pantallasDeStitch` (lista). Se
+ * convierte al LEER y no al escribir: la próxima vez que se guarde el índice ya va en la forma nueva, y una tarea que
+ * nadie toca no obliga a reescribir el fichero de nadie.
+ */
+function conPantallasEnLista(tarea: Tarea): Tarea {
+  const vieja = (tarea as Tarea & { pantallaDeStitch?: PantallaElegida }).pantallaDeStitch;
+  if (vieja === undefined) return tarea;
+  const { pantallaDeStitch: _vieja, ...resto } = tarea as Tarea & { pantallaDeStitch?: PantallaElegida };
+  return resto.pantallasDeStitch === undefined ? { ...resto, pantallasDeStitch: [vieja] } : resto;
+}
+
+/**
  * Cambia el encargo de una tarea que todavía no ha arrancado (IXCODE-52). La regla es la de
  * `core/tareas.ts#conEncargo`; aquí solo se relee, se aplica y se guarda, y una negativa se
  * DEVUELVE con su motivo, igual que el feedback.
@@ -596,15 +608,15 @@ export function aplicarEncargo(
   encargo: string,
   /** También la petición, de la que sale el título (IXCODE-53). Ausente = no se toca. */
   peticion?: string,
-  /** La pantalla de Stitch (ya comprobada): nueva, `null` para quitarla, ausente = no se toca. */
-  pantalla?: PantallaElegida | null
+  /** Las pantallas de Stitch (ya comprobadas): nuevas, `null` para quitarlas, ausente = no se tocan. */
+  pantallas?: PantallaElegida[] | null
 ): ResultadoDeFeedback {
   const tareas = disco.listar();
   const actual = tareas.find((t) => t.id === id);
   if (actual === undefined) return { hecho: false, motivo: "la tarea ya no está en la cola" };
   let siguiente: Tarea;
   try {
-    siguiente = conEncargo(actual, encargo, peticion, pantalla);
+    siguiente = conEncargo(actual, encargo, peticion, pantallas);
   } catch (error) {
     return { hecho: false, motivo: error instanceof Error ? error.message : String(error) };
   }

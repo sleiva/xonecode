@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PNG } from "pngjs";
-import { buscarMaqueta, cumpleElCriterio, medirContraMaqueta, RONDAS_VISUALES, resumenDeMedida, textoDeMedidaAutomatica, ultimaCaptura } from "./medidaAutomatica.js";
+import { buscarMaqueta, buscarMaquetas, cumpleElCriterio, medirContraLaMasParecida, medirContraMaqueta, RONDAS_VISUALES, resumenDeMedida, textoDeMedidaAutomatica, ultimaCaptura } from "./medidaAutomatica.js";
 
 /** Un PNG oscuro con un bloque claro entre `desde` y `hasta` (fracciones del alto). */
 function pngConBloque(desde: number, hasta: number, ancho = 108, alto = 240, derecha = 0.9): Buffer {
@@ -89,6 +89,42 @@ describe("la medida automática tras probar en el aparato", () => {
     expect(texto(RONDAS_VISUALES - 1)).not.toContain("No pidas otra captura");
     expect(texto(RONDAS_VISUALES)).toContain(`Es tu ronda visual ${String(RONDAS_VISUALES)} de ${String(RONDAS_VISUALES)}`);
     expect(texto(RONDAS_VISUALES)).toContain("No pidas otra captura para retocar");
+  });
+});
+
+/** IXCODE-63: varias pantallas elegidas, cada una en su carpeta, y cada captura contra la más parecida. */
+describe("varias maquetas", () => {
+  it("buscarMaquetas da las traídas en orden (`diseno/`, `diseno/2/`…), y la de siempre sin traídas", () => {
+    const raiz = mkdtempSync(join(tmpdir(), "xc-maquetas-"));
+    const artefactos = join(raiz, "artefactos");
+    mkdirSync(join(artefactos, "diseno", "2"), { recursive: true });
+    writeFileSync(join(artefactos, "diseno", "screen.png"), pngConBloque(0.1, 0.3));
+    writeFileSync(join(artefactos, "diseno", "2", "screen.jpg"), pngConBloque(0.6, 0.9));
+    expect(buscarMaquetas(raiz, undefined, artefactos).map((m) => m.virtual)).toEqual([
+      "/artefactos/diseno/screen.png",
+      "/artefactos/diseno/2/screen.jpg",
+    ]);
+    // `buscarMaqueta` sigue dando la primera, para quien solo quiere una (el ancho de `convertir_a_p`).
+    expect(buscarMaqueta(raiz, undefined, artefactos)?.virtual).toBe("/artefactos/diseno/screen.png");
+    expect(buscarMaquetas(raiz, undefined, join(raiz, "no-hay"))).toEqual([]);
+  });
+
+  it("la captura se mide contra la MÁS PARECIDA, y lo dice", () => {
+    const dir = mkdtempSync(join(tmpdir(), "xc-parecida-"));
+    const arriba = join(dir, "arriba.png");
+    const abajo = join(dir, "abajo.png");
+    const captura = join(dir, "captura.png");
+    writeFileSync(arriba, pngConBloque(0.1, 0.3));
+    writeFileSync(abajo, pngConBloque(0.6, 0.9));
+    writeFileSync(captura, pngConBloque(0.6, 0.9));
+    const { maqueta } = medirContraLaMasParecida(captura, [
+      { virtual: "/artefactos/diseno/screen.png", disco: arriba },
+      { virtual: "/artefactos/diseno/2/screen.png", disco: abajo },
+    ]);
+    expect(maqueta.virtual).toBe("/artefactos/diseno/2/screen.png");
+    // Una que no se puede abrir se salta; sin ninguna, lanza.
+    expect(medirContraLaMasParecida(captura, [{ virtual: "x", disco: join(dir, "nada.png") }, { virtual: "y", disco: abajo }]).maqueta.virtual).toBe("y");
+    expect(() => medirContraLaMasParecida(captura, [{ virtual: "x", disco: join(dir, "nada.png") }])).toThrow();
   });
 });
 

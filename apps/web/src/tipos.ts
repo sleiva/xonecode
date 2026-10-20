@@ -1341,8 +1341,8 @@ export interface TareaDelCable {
   cierre?: { criticos: string[]; observaciones: string[] };
   /** El ticket del gestor en el que vive (redeclarado de `transporte.ts`): clave, conector, enlace y el último aviso. */
   ticket?: { clave: string; conector: string; url?: string; aviso?: string };
-  /** La pantalla de Stitch elegida para la tarea (su `name` y su título). */
-  pantallaDeStitch?: { name: string; titulo: string; proyecto?: string };
+  /** Las pantallas de Stitch elegidas para la tarea, en su orden (`name` y título de cada una). IXCODE-63: eran una. */
+  pantallasDeStitch?: { name: string; titulo: string; proyecto?: string }[];
   /** Si se puede reencolar para acabar lo que no hizo, con el texto propuesto. Lo decide el SERVIDOR; ausente = no se ofrece. */
   reencolable?: { texto: string };
   /** La finalizada de la que es continuación: Finalizadas la pinta colgando de ella (`arbolDeTareas.ts`). */
@@ -1742,8 +1742,8 @@ export type MensajeDelCliente =
    * id de la tarea si es un segmento llano y no es ya una tarea; los adjuntos los lee del
    * disco, nunca de lo que diga el cliente.
    */
-  | { clase: "tarea"; accion: "crear"; proyecto: string; peticion: string; /** Vacío o ausente = lo prepara el servidor al encolar. */ encargo?: string; borrador?: string; pantallaDeStitch?: { name: string; titulo: string } }
-  | { clase: "tarea"; accion: "augmentar"; proyecto: string; peticion: string; borrador?: string; pantallaDeStitch?: { name: string; titulo: string } }
+  | { clase: "tarea"; accion: "crear"; proyecto: string; peticion: string; /** Vacío o ausente = lo prepara el servidor al encolar. */ encargo?: string; borrador?: string; pantallasDeStitch?: { name: string; titulo: string }[] }
+  | { clase: "tarea"; accion: "augmentar"; proyecto: string; peticion: string; borrador?: string; pantallasDeStitch?: { name: string; titulo: string }[] }
   /**
    * Una PROPUESTA de tareas encadenadas (el acto `propuesta-de-tareas`): encolarla en orden o
    * descartarla. Viaja el id de la propuesta y, al encolar, los encargos que la persona revisó (la
@@ -1770,7 +1770,7 @@ export type MensajeDelCliente =
   | { clase: "tarea"; accion: "continuar"; id: string }
   | { clase: "tarea"; accion: "arrancarAhora"; id: string }
   /** Editar el encargo de una tarea que todavía no ha arrancado (IXCODE-52). 204, o 409 con `{motivo}`. */
-  | { clase: "tarea"; accion: "encargo"; id: string; encargo: string; peticion?: string; pantallaDeStitch?: { name: string; titulo: string } | null }
+  | { clase: "tarea"; accion: "encargo"; id: string; encargo: string; peticion?: string; pantallasDeStitch?: { name: string; titulo: string }[] | null }
   /** Volver a preparar el encargo desde la petición editada, SIN guardarlo (IXCODE-53). 200 con `{encargo}`, o 409 con `{motivo}`. */
   | { clase: "tarea"; accion: "regenerarEncargo"; id: string; peticion: string }
   /** Con qué gestor vivirá una tarea nueva de ese proyecto: contestado en la propia respuesta, `{gestor?: {conector, proyecto}}`. */

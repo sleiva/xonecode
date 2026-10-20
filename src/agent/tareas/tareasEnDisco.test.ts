@@ -56,6 +56,16 @@ describe("tareasEnDisco", () => {
     expect(crearTareasEnDisco({ base }).listar()).toEqual([TAREA]);
   });
 
+  /** IXCODE-63: una tarea guardada con UNA pantalla (`pantallaDeStitch`) se lee como lista de una. */
+  it("una tarea guardada con la pantalla de antes se lee con la lista nueva", () => {
+    mkdirSync(join(base, "tareas"), { recursive: true });
+    const vieja = { ...TAREA, pantallaDeStitch: { name: "projects/9/screens/aa", titulo: "Listado", proyecto: "Maset" } };
+    writeFileSync(join(base, "tareas", "indice.json"), JSON.stringify([vieja]));
+    const [leida] = crearTareasEnDisco({ base }).listar();
+    expect(leida!.pantallasDeStitch).toEqual([{ name: "projects/9/screens/aa", titulo: "Listado", proyecto: "Maset" }]);
+    expect(leida).not.toHaveProperty("pantallaDeStitch");
+  });
+
   it("sin índice todavía, la lista es VACÍA y no un error", () => {
     expect(crearTareasEnDisco({ base }).listar()).toEqual([]);
   });

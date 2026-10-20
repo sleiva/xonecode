@@ -9682,3 +9682,27 @@ y un tercero que se pidió prevenir:
 **Límites**: el camino `sinNavegador` de `abrirCliente` no tiene test (necesita OAuth real); la reconexión pierde el
 proyecto abierto y la reapertura depende de que la capa de encima vea «no project is open».
 
+## Varias pantallas de Stitch por tarea (IXCODE-63, 20-10-2026)
+
+Lo pedido: poder elegir varias imágenes de Stitch para una tarea; solo dejaba una. Deshace a medias una decisión suya
+del 16-10 («una pantalla por tarea», por Maset), y la parte que importaba se conserva: el diseño se ELIGE, se trae por
+su id antes del primer turno y la tool no busca ni trae otras. Decisiones suyas: tope de 6, y cada imagen es una
+PANTALLA distinta a construir (no estados de la misma).
+
+- **Una lista** (`Tarea.pantallasDeStitch`) en el orden en que se eligen. Una tarea guardada con `pantallaDeStitch`
+  se lee como lista de una al LEER el índice, sin reescribir el fichero de nadie.
+- **Cada maqueta en SU carpeta**: la primera donde siempre (`diseno/`), las demás en `diseno/2/`… Era el punto
+  delicado: `traerPantalla` dejaba siempre `screen.*`/`code.html`/`DESIGN.md` en el mismo sitio y borraba lo de
+  antes, así que con varias la última habría pisado a las demás. Dentro de `diseno/`, siguen sin contarse como
+  capturas del aparato.
+- **La medida automática compara cada captura con la MÁS PARECIDA** de las elegidas (menor suma de distancias), y lo
+  dice. Con una sola, todo como antes.
+- **El servidor valida la lista ENTERA** (`pantallasElegidasValidas`: del vínculo, sin repetir, como mucho el tope);
+  una sola mal y es 409 con motivo. El cliente repite el tope solo para apagar lo que no cabe.
+- La trampa de siempre, vista aquí: el puerto del aumentador seguía tipado con `pantallaDeStitch` y `arranque.ts` le
+  pasaba la lista con un spread condicional, que TypeScript no comprueba: las pantallas se habrían perdido camino del
+  prompt sin un solo error. Se vio leyendo, no compilando.
+
+**Límites**: `convertir_a_p` toma el ancho de la PRIMERA maqueta; sin probar en el navegador con un proyecto de Stitch
+vinculado.
+

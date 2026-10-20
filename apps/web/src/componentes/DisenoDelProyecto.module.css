@@ -38,6 +38,21 @@
   composes: secundario from "./Boton.module.css";
 }
 
+/* Las elegidas: la cabecera con «Quitar» y debajo la lista numerada, una por línea. */
+.elegidas {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.listaDePantallas {
+  margin: 0;
+  padding-left: 22px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--dsw-alias-label-primary);
+}
+
 /* El selector: una rejilla de miniaturas, cada una un botón que se marca. */
 .rejilla {
   display: grid;

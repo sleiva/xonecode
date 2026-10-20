@@ -90,9 +90,37 @@ describe("NuevaTarea", () => {
     expect(screen.getByText(/Diseño: «Listado de Entregas»/)).toBeTruthy();
     const elegida = { name: "projects/9/screens/aa", titulo: "Listado de Entregas" };
     fireEvent.click(screen.getByRole("button", { name: /preparar el encargo/i }));
-    expect(alAugmentar).toHaveBeenCalledWith("Haz el listado", elegida);
+    expect(alAugmentar).toHaveBeenCalledWith("Haz el listado", [elegida]);
     fireEvent.click(screen.getByRole("button", { name: /encolar/i }));
-    expect(alEncolar).toHaveBeenCalledWith({ peticion: "Haz el listado", pantallaDeStitch: elegida });
+    expect(alEncolar).toHaveBeenCalledWith({ peticion: "Haz el listado", pantallasDeStitch: [elegida] });
+  });
+
+  /** IXCODE-63: varias pantallas, cada una una pantalla a construir, en el orden en que se eligen. */
+  it("con VARIAS pantallas elegidas viajan todas, en su orden", () => {
+    const alEncolar = vi.fn();
+    const diseno = {
+      proyecto: "p1",
+      vinculo: { proyecto: "projects/9", nombre: "Maset" },
+      pantallas: [
+        { name: "projects/9/screens/aa", title: "Listado" },
+        { name: "projects/9/screens/bb", title: "Detalle" },
+      ],
+    };
+    render(<NuevaTarea {...base} alEncolar={alEncolar} diseno={diseno} alPedirPantallas={() => {}} />);
+    fireEvent.change(screen.getByLabelText(/qué hay que hacer/i), { target: { value: "Haz las dos" } });
+    fireEvent.click(screen.getByRole("tab", { name: "Diseño (Stitch)" }));
+    fireEvent.click(screen.getByRole("button", { name: /Detalle/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Listado/ }));
+    expect(screen.getByRole("tab", { name: "Diseño · 2 pantallas" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("tab", { name: "Tarea" }));
+    fireEvent.click(screen.getByRole("button", { name: /encolar/i }));
+    expect(alEncolar).toHaveBeenCalledWith({
+      peticion: "Haz las dos",
+      pantallasDeStitch: [
+        { name: "projects/9/screens/bb", titulo: "Detalle" },
+        { name: "projects/9/screens/aa", titulo: "Listado" },
+      ],
+    });
   });
 
   it("sin proyecto de Stitch vinculado NO hay pestañas: la ventana de siempre", () => {

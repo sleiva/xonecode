@@ -2292,14 +2292,14 @@ export function App({
         {...(estado.encargoPropuesto === undefined ? {} : { encargoPropuesto: estado.encargoPropuesto })}
         // El borrador viaja con la augmentación para que el servidor pueda LISTAR los
         // adjuntos ya subidos y decirle al modelo para qué sirve cada uno.
-        alAugmentar={(peticion, pantalla) =>
+        alAugmentar={(peticion, pantallas) =>
           void enviar({
             clase: "tarea",
             accion: "augmentar",
             proyecto: tareaNueva.proyecto,
             peticion,
             borrador: tareaNueva.borrador,
-            ...(pantalla === undefined ? {} : { pantallaDeStitch: pantalla }),
+            ...(pantallas === undefined ? {} : { pantallasDeStitch: pantallas }),
           })
         }
         // El selector de pantalla de Stitch: las del proyecto vinculado, con miniatura. Solo lo de ESTE proyecto.
@@ -2317,7 +2317,7 @@ export function App({
           : { alQuitarAdjunto: (nombre: string) => quitarAdjunto(tareaNueva.borrador, nombre) })}
         // Se ESPERA la respuesta: con gestor, crear el ticket puede negarse (409 con motivo) y la ventana no puede
         // perder lo escrito. Con 200 (creada en el gestor) o 204 (en local) se cierra.
-        alEncolar={async ({ peticion, encargo, pantallaDeStitch }) => {
+        alEncolar={async ({ peticion, encargo, pantallasDeStitch }) => {
           const { proyecto, borrador } = tareaNueva;
           const r = await enviar({
             clase: "tarea",
@@ -2326,7 +2326,7 @@ export function App({
             peticion,
             ...(encargo === undefined ? {} : { encargo }),
             ...(conAdjuntos ? { borrador } : {}),
-            ...(pantallaDeStitch === undefined ? {} : { pantallaDeStitch }),
+            ...(pantallasDeStitch === undefined ? {} : { pantallasDeStitch }),
           });
           const motivo = await negativaOFalloDe(r);
           if (motivo !== undefined) return motivo;
@@ -2711,8 +2711,8 @@ export function App({
       alContinuar={async (id: string) => negativaOFalloDe(await enviar({ clase: "tarea", accion: "continuar", id }))}
       alArrancarAhora={async (id: string) => negativaOFalloDe(await enviar({ clase: "tarea", accion: "arrancarAhora", id }))}
       // Editar el encargo de una que todavía no ha arrancado (IXCODE-52): la ventana no se cierra si el servidor se niega.
-      alEditarEncargo={async (id: string, encargo: string, peticion: string, pantalla?: { name: string; titulo: string } | null) =>
-        negativaOFalloDe(await enviar({ clase: "tarea", accion: "encargo", id, encargo, peticion, ...(pantalla === undefined ? {} : { pantallaDeStitch: pantalla }) }))
+      alEditarEncargo={async (id: string, encargo: string, peticion: string, pantallas?: { name: string; titulo: string }[] | null) =>
+        negativaOFalloDe(await enviar({ clase: "tarea", accion: "encargo", id, encargo, peticion, ...(pantallas === undefined ? {} : { pantallasDeStitch: pantallas }) }))
       }
       // Volver a preparar el encargo desde la petición editada (IXCODE-53): contesta en la propia
       // respuesta y no guarda nada; lo guarda «Guardar».

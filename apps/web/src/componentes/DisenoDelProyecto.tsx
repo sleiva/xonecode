@@ -110,16 +110,23 @@ export function DisenoDelProyecto({
  * El selector de UNA pantalla del proyecto de Stitch vinculado, con su miniatura (Nueva tarea / Editar la tarea). Pide
  * las pantallas al montarse. Sin vínculo lo DICE con el camino a Conectores; nunca una lista vacía muda.
  */
+/**
+ * Cuántas pantallas se pueden elegir para una tarea (IXCODE-63). COPIA de `core/stitch.ts#TOPE_DE_PANTALLAS_ELEGIDAS` —la
+ * frontera no deja importarla—: el servidor la vuelve a aplicar y niega con motivo, que es quien manda.
+ */
+export const TOPE_DE_PANTALLAS = 6;
+
 export function SelectorDePantalla({
   diseno,
   alPedir,
-  elegida,
-  alElegir,
+  elegidas,
+  alCambiar,
 }: {
   diseno?: EstadoDeDiseno;
   alPedir: () => void;
-  elegida?: { name: string; titulo: string };
-  alElegir: (p: { name: string; titulo: string } | undefined) => void;
+  /** Las elegidas, en el orden en que se eligieron (IXCODE-63: varias; cada una, una pantalla a construir). */
+  elegidas: readonly { name: string; titulo: string }[];
+  alCambiar: (lista: { name: string; titulo: string }[]) => void;
 }) {
   useEffect(() => {
     alPedir();
@@ -130,7 +137,7 @@ export function SelectorDePantalla({
   const visibles = pantallas?.filter((p) => casaConElFiltro(p.title, filtro));
   return (
     <section className={estilos.seccion} aria-label="Diseño de la tarea">
-      <h3 className={estilos.titulo}>Diseño (pantalla de Stitch)</h3>
+      <h3 className={estilos.titulo}>Diseño (pantallas de Stitch)</h3>
       {diseno?.error !== undefined ? (
         <p className={estilos.error}>{`No se pudieron pedir las pantallas: ${diseno.error}`}</p>
       ) : diseno?.vinculo === null ? (
@@ -139,14 +146,24 @@ export function SelectorDePantalla({
         <p className={estilos.aviso}>Pidiendo las pantallas…</p>
       ) : (
         <>
-          <p className={estilos.aviso}>
-            {elegida === undefined ? "Ninguna elegida: la tarea irá sin maqueta." : `Elegida: «${elegida.titulo}».`}{" "}
-            {elegida === undefined ? null : (
-              <button type="button" className={estilos.boton} onClick={() => alElegir(undefined)}>
-                Quitar
-              </button>
-            )}
-          </p>
+          {elegidas.length === 0 ? (
+            <p className={estilos.aviso}>
+              {`Ninguna elegida: la tarea irá sin maqueta. Puedes elegir hasta ${TOPE_DE_PANTALLAS}; cada una es una pantalla a construir.`}
+            </p>
+          ) : (
+            // Numeradas y una por línea (petición suya): el número es el mismo de la miniatura y el orden en que se traen.
+            <div className={estilos.elegidas}>
+              <div className={estilos.fila}>
+                <span className={estilos.aviso}>
+                  {elegidas.length === 1 ? "Elegida:" : `Elegidas (${elegidas.length} de ${TOPE_DE_PANTALLAS}):`}
+                </span>
+                <button type="button" className={estilos.boton} onClick={() => alCambiar([])}>
+                  {elegidas.length === 1 ? "Quitar" : "Quitar todas"}
+                </button>
+              </div>
+              <ListaDePantallas pantallas={elegidas} />
+            </div>
+          )}
           {/* Con muchas pantallas, se filtran por el título (petición suya). */}
           <div className={estilos.fila}>
             <input
@@ -161,27 +178,53 @@ export function SelectorDePantalla({
           </div>
           {visibles!.length === 0 ? <p className={estilos.aviso}>Ninguna pantalla lleva esas palabras.</p> : null}
           <div className={estilos.rejilla}>
-            {visibles!.map((p) => (
+            {visibles!.map((p) => {
+              const marcada = elegidas.some((e) => e.name === p.name);
+              // Al llegar al tope, las que NO están elegidas no se pueden añadir, y se dice por qué en el `title`.
+              const lleno = !marcada && elegidas.length >= TOPE_DE_PANTALLAS;
+              return (
               <button
                 key={p.name}
                 type="button"
                 className={estilos.pantalla}
-                aria-pressed={elegida?.name === p.name}
-                title={p.title}
-                onClick={() => alElegir(elegida?.name === p.name ? undefined : { name: p.name, titulo: p.title })}
+                aria-pressed={marcada}
+                disabled={lleno}
+                title={lleno ? `como mucho ${TOPE_DE_PANTALLAS} pantallas por tarea` : p.title}
+                onClick={() =>
+                  alCambiar(marcada ? elegidas.filter((e) => e.name !== p.name) : [...elegidas, { name: p.name, titulo: p.title }])
+                }
               >
                 {p.miniatura === undefined ? (
                   <span className={estilos.sinImagen} aria-hidden="true" />
                 ) : (
                   <img src={p.miniatura} alt="" loading="lazy" referrerPolicy="no-referrer" />
                 )}
-                <span className={estilos.nombre}>{p.title}</span>
+                <span className={estilos.nombre}>
+                  {/* El orden de elección: la primera es la que va a `diseno/`, las demás a `diseno/2/`… */}
+                  {marcada ? `${elegidas.findIndex((e) => e.name === p.name) + 1}. ` : ""}
+                  {p.title}
+                </span>
               </button>
-            ))}
+              );
+            })}
           </div>
         </>
       )}
     </section>
+  );
+}
+
+/**
+ * Las pantallas elegidas, NUMERADAS y una por línea (petición suya: seguidas con comas no se leían). Un `<ol>`, así que el
+ * número lo dice también un lector de pantalla. La usan el selector, la tarjeta de la tarea y las notas de las ventanas.
+ */
+export function ListaDePantallas({ pantallas }: { pantallas: readonly { titulo: string }[] }) {
+  return (
+    <ol className={estilos.listaDePantallas}>
+      {pantallas.map((p, i) => (
+        <li key={`${i}:${p.titulo}`}>{`«${p.titulo}»`}</li>
+      ))}
+    </ol>
   );
 }
 

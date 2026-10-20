@@ -197,11 +197,14 @@ export interface Tarea {
    */
   ticket?: TicketDeTarea;
   /**
-   * La pantalla de Stitch ELEGIDA para la tarea (una), del proyecto de Stitch vinculado. El corredor la trae a
-   * `/artefactos/diseno/` antes del primer turno y el encargo lo dice: no se busca por nombre (decisión suya; medido en
-   * Maset, «Menu Listado Entregas» no era el título de ninguna y la tarea construyó con otra maqueta).
+   * Las pantallas de Stitch ELEGIDAS para la tarea, en el orden en que se eligieron, del proyecto de Stitch vinculado: de
+   * 1 a `core/stitch.ts#TOPE_DE_PANTALLAS_ELEGIDAS`, cada una una PANTALLA distinta a construir (IXCODE-63; era una sola).
+   * El corredor las trae antes del primer turno (la primera a `/artefactos/diseno/`, las demás a `diseno/2/`…) y el
+   * encargo lo dice: no se busca por nombre (decisión suya; medido en Maset, «Menu Listado Entregas» no era el título de
+   * ninguna y la tarea construyó con otra maqueta). Nunca vacía: sin ninguna, ausente. Una tarea guardada antes, con
+   * `pantallaDeStitch` (una), se lee como una lista de una (`tareasEnDisco.ts`).
    */
-  pantallaDeStitch?: PantallaElegida;
+  pantallasDeStitch?: PantallaElegida[];
   /**
    * La finalizada de la que es CONTINUACIÓN (`tareaReencolada`). Es lo que impide reencolar dos veces la misma mientras
    * la primera no acaba —también sin hilo, donde la `sesion` compartida no la delata—. No viaja.
@@ -463,16 +466,16 @@ export function conEncargo(
   tarea: Tarea,
   encargo: string,
   peticion?: string,
-  /** La pantalla de Stitch: una nueva la sustituye, `null` la QUITA, ausente no la toca. Ya comprobada por quien llama. */
-  pantalla?: PantallaElegida | null
+  /** Las pantallas de Stitch: una lista las sustituye, `null` (o vacía) las QUITA, ausente no las toca. Ya comprobadas. */
+  pantallas?: PantallaElegida[] | null
 ): Tarea {
   const editada = conEncargoYPeticion(tarea, encargo, peticion);
-  if (pantalla === undefined) return editada;
-  if (pantalla === null) {
-    const { pantallaDeStitch: _quitada, ...sinPantalla } = editada;
-    return sinPantalla;
+  if (pantallas === undefined) return editada;
+  if (pantallas === null || pantallas.length === 0) {
+    const { pantallasDeStitch: _quitadas, ...sinPantallas } = editada;
+    return sinPantallas;
   }
-  return { ...editada, pantallaDeStitch: pantalla };
+  return { ...editada, pantallasDeStitch: pantallas };
 }
 
 function conEncargoYPeticion(tarea: Tarea, encargo: string, peticion?: string): Tarea {
@@ -645,7 +648,7 @@ export function tareaReencolada(
     creada: ahora,
     continuaDe: original.id,
     ...(original.sesion === undefined ? {} : { sesion: original.sesion }),
-    ...(original.pantallaDeStitch === undefined ? {} : { pantallaDeStitch: original.pantallaDeStitch }),
+    ...(original.pantallasDeStitch === undefined ? {} : { pantallasDeStitch: original.pantallasDeStitch }),
   };
   const limpio = nueva.texto.trim();
   if (limpio === "") throw new Error("dile qué tiene que acabar: el texto está vacío");

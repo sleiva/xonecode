@@ -12,7 +12,7 @@
  * Lo cualitativo —texto cortado, formas, colores— sigue siendo del crítico, que cuesta una llamada de visión: aquí
  * solo se le RECUERDA pasarlo si la medida no llega y no lo ha pasado desde su última escritura.
  */
-import { CARPETA_DE_DISENO, RUTA_DE_DISENO } from "../../../core/stitch.js";
+import { CARPETA_DE_DISENO, carpetaDeMaqueta, rutaDeMaqueta, TOPE_DE_PANTALLAS_ELEGIDAS } from "../../../core/stitch.js";
 import { readdirSync, readFileSync, statSync, existsSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { compararPantallas, desajusteDeEncaje, informeDeComparacion, TOLERANCIA_DE_ENCAJE, type Comparacion } from "../../../core/compararCapturas.js";
@@ -37,12 +37,33 @@ const ES_IMAGEN = /\.(png|jpe?g)$/i;
  * encargo. Después `/diseno/screen.png`, la primera imagen de `/diseno/` y la de los adjuntos.
  */
 export function buscarMaqueta(raiz: string, adjuntos?: string, artefactos?: string): { virtual: string; disco: string } | undefined {
+  return buscarMaquetas(raiz, adjuntos, artefactos)[0];
+}
+
+/**
+ * TODAS las maquetas de la sesión, en el orden de las elegidas (IXCODE-63): las traídas de Stitch —`diseno/`, `diseno/2/`…
+ * hasta el tope (`core/stitch.ts#carpetaDeMaqueta`)—; sin ninguna traída, la ÚNICA de siempre (`/diseno/screen.png`, la
+ * primera imagen de `/diseno/` o la de los adjuntos), o ninguna. Cada captura se mide contra la más parecida.
+ */
+export function buscarMaquetas(raiz: string, adjuntos?: string, artefactos?: string): { virtual: string; disco: string }[] {
   if (artefactos !== undefined) {
-    for (const extension of ["png", "jpg", "webp"]) {
-      const traida = join(artefactos, CARPETA_DE_DISENO, `screen.${extension}`);
-      if (existsSync(traida)) return { virtual: `${RUTA_DE_DISENO}screen.${extension}`, disco: traida };
+    const traidas: { virtual: string; disco: string }[] = [];
+    for (let indice = 0; indice < TOPE_DE_PANTALLAS_ELEGIDAS; indice++) {
+      for (const extension of ["png", "jpg", "webp"]) {
+        const traida = join(artefactos, ...carpetaDeMaqueta(indice).split("/"), `screen.${extension}`);
+        if (existsSync(traida)) {
+          traidas.push({ virtual: `${rutaDeMaqueta(indice)}screen.${extension}`, disco: traida });
+          break;
+        }
+      }
     }
+    if (traidas.length > 0) return traidas;
   }
+  const una = maquetaDelProyecto(raiz, adjuntos);
+  return una === undefined ? [] : [una];
+}
+
+function maquetaDelProyecto(raiz: string, adjuntos?: string): { virtual: string; disco: string } | undefined {
   const diseno = join(raiz, "diseno");
   const preferida = join(diseno, "screen.png");
   if (existsSync(preferida)) return { virtual: "/diseno/screen.png", disco: preferida };
@@ -88,6 +109,32 @@ export function ultimaCaptura(carpeta: string, desdeMs: number): string | undefi
   };
   mirar(carpeta, 0);
   return mejor?.nombre;
+}
+
+/**
+ * Mide una captura contra VARIAS maquetas y se queda con la más parecida (IXCODE-63: con varias pantallas elegidas, la
+ * captura de la pantalla 2 se mide contra la 2). «Parecida» = menor suma de las dos distancias. Una que no se puede abrir
+ * se salta; si no se puede ninguna, LANZA, como `medirContraMaqueta`.
+ */
+export function medirContraLaMasParecida(
+  captura: string,
+  maquetas: readonly { virtual: string; disco: string }[]
+): { maqueta: { virtual: string; disco: string }; comparacion: Comparacion } {
+  let mejor: { maqueta: { virtual: string; disco: string }; comparacion: Comparacion } | undefined;
+  let ultimoError: unknown;
+  for (const maqueta of maquetas) {
+    try {
+      const comparacion = medirContraMaqueta(captura, maqueta.disco);
+      const distancia = comparacion.distanciaVertical + comparacion.distanciaHorizontal;
+      if (mejor === undefined || distancia < mejor.comparacion.distanciaVertical + mejor.comparacion.distanciaHorizontal) {
+        mejor = { maqueta, comparacion };
+      }
+    } catch (e) {
+      ultimoError = e;
+    }
+  }
+  if (mejor === undefined) throw ultimoError ?? new Error("no hay maquetas que medir");
+  return mejor;
 }
 
 /** Mide una captura contra la maqueta. Lanza si alguna no se puede abrir o decodificar: quien llama lo traga. */

@@ -6717,6 +6717,29 @@ describe("las tareas en background, por el cable", () => {
       rmSync(base, { recursive: true, force: true });
     });
 
+    /**
+     * IXCODE-63, la COMPOSICIÓN: la lista llega por la ruta hasta el aumentador. El tipo del puerto llegó a seguir con el
+     * campo de una sola pantalla mientras la ruta mandaba la lista con un spread condicional, que TypeScript no mira:
+     * se habrían perdido camino del prompt sin un error.
+     */
+    it("«Preparar el encargo» con VARIAS pantallas las lleva todas al aumentador, comprobadas contra el vínculo", async () => {
+      const vistas: unknown[] = [];
+      const { base, accion, vestibulo } = await conPropuesta({
+        augmentar: async (p) => {
+          vistas.push(p.pantallasDeStitch);
+          return "E";
+        },
+      });
+      const raiz = vestibulo.raizDeProyecto("webstudio", "Tienda");
+      writeFileSync(join(raiz, ".xonecode", "config.json"), JSON.stringify({ modo: "offline", disenoVinculado: { proyecto: "projects/9", nombre: "Maset" } }));
+      const dos = [{ name: "projects/9/screens/aa", titulo: "Listado" }, { name: "projects/9/screens/bb", titulo: "Detalle" }];
+      await enviarMensaje(accion, { clase: "tarea", accion: "augmentar", proyecto: "p1", peticion: "Haz las dos", pantallasDeStitch: dos });
+      await asentar();
+      expect(vistas.at(-1)).toEqual(dos.map((p) => ({ ...p, proyecto: "Maset" })));
+      await vestibulo.cerrar();
+      rmSync(base, { recursive: true, force: true });
+    });
+
     it("«Editar» cambia también la pantalla, comprobada contra el vínculo; null la quita y una de otro proyecto es 409", async () => {
       const { base, cola, accion, vestibulo } = await conPropuesta();
       const raiz = vestibulo.raizDeProyecto("webstudio", "Tienda");
@@ -6724,13 +6747,22 @@ describe("las tareas en background, por el cable", () => {
       cola.guardar([
         { id: "a", proyecto: { id: "p1", raiz, nombre: "Tienda" }, titulo: "a", peticion: "p", encargo: "e", adjuntos: [], estado: "nuevo", creada: "2026-10-07T10:00:00.000Z" },
       ]);
-      expect(await enviarMensaje(accion, { clase: "tarea", accion: "encargo", id: "a", encargo: "e", pantallaDeStitch: { name: "projects/9/screens/aa", titulo: "Listado" } })).toBe(204);
-      expect(cola.listar()[0]!.pantallaDeStitch).toEqual({ name: "projects/9/screens/aa", titulo: "Listado", proyecto: "Maset" });
-      const ajena = await postearConCuerpo(accion, JSON.stringify({ clase: "tarea", accion: "encargo", id: "a", encargo: "e", pantallaDeStitch: { name: "projects/8/screens/aa", titulo: "X" } }));
+      expect(await enviarMensaje(accion, { clase: "tarea", accion: "encargo", id: "a", encargo: "e", pantallasDeStitch: [{ name: "projects/9/screens/aa", titulo: "Listado" }] })).toBe(204);
+      expect(cola.listar()[0]!.pantallasDeStitch).toEqual([{ name: "projects/9/screens/aa", titulo: "Listado", proyecto: "Maset" }]);
+      const ajena = await postearConCuerpo(accion, JSON.stringify({ clase: "tarea", accion: "encargo", id: "a", encargo: "e", pantallasDeStitch: [{ name: "projects/8/screens/aa", titulo: "X" }] }));
       expect(ajena.estado).toBe(409);
-      expect(cola.listar()[0]!.pantallaDeStitch?.name).toBe("projects/9/screens/aa");
-      expect(await enviarMensaje(accion, { clase: "tarea", accion: "encargo", id: "a", encargo: "e", pantallaDeStitch: null })).toBe(204);
-      expect(cola.listar()[0]).not.toHaveProperty("pantallaDeStitch");
+      expect(cola.listar()[0]!.pantallasDeStitch?.[0]?.name).toBe("projects/9/screens/aa");
+      // Varias, en su orden (IXCODE-63); y más del tope, o repetidas, es 409 sin tocar nada.
+      const dos = [{ name: "projects/9/screens/bb", titulo: "Detalle" }, { name: "projects/9/screens/aa", titulo: "Listado" }];
+      expect(await enviarMensaje(accion, { clase: "tarea", accion: "encargo", id: "a", encargo: "e", pantallasDeStitch: dos })).toBe(204);
+      expect(cola.listar()[0]!.pantallasDeStitch?.map((p) => p.name)).toEqual(["projects/9/screens/bb", "projects/9/screens/aa"]);
+      const siete = Array.from({ length: 7 }, (_, i) => ({ name: `projects/9/screens/a${i}`, titulo: `P${i}` }));
+      expect((await postearConCuerpo(accion, JSON.stringify({ clase: "tarea", accion: "encargo", id: "a", encargo: "e", pantallasDeStitch: siete }))).estado).toBe(409);
+      const repetidas = [{ name: "projects/9/screens/aa", titulo: "A" }, { name: "projects/9/screens/aa", titulo: "A" }];
+      expect((await postearConCuerpo(accion, JSON.stringify({ clase: "tarea", accion: "encargo", id: "a", encargo: "e", pantallasDeStitch: repetidas }))).estado).toBe(409);
+      expect(cola.listar()[0]!.pantallasDeStitch).toHaveLength(2);
+      expect(await enviarMensaje(accion, { clase: "tarea", accion: "encargo", id: "a", encargo: "e", pantallasDeStitch: null })).toBe(204);
+      expect(cola.listar()[0]).not.toHaveProperty("pantallasDeStitch");
       await vestibulo.cerrar();
       rmSync(base, { recursive: true, force: true });
     });
@@ -8512,12 +8544,15 @@ describe("augmentacionCableada", () => {
     expect(Object.keys(vistas[0]!.proyecto).sort()).toEqual(["nombre", "raiz"]);
   });
 
-  it("la pantalla de Stitch ELEGIDA llega al aumentador con su id y su proyecto", async () => {
+  it("las pantallas de Stitch ELEGIDAS llegan al aumentador con sus ids y su proyecto", async () => {
     const vistas: PeticionDeTarea[] = [];
     const augmentar = augmentacionCableada({ aumentador: { augmentar: async (p) => (vistas.push(p), "E") }, contexto: () => ({}) });
-    const pantalla = { name: "projects/9/screens/ab", titulo: "Listado de Entregas", proyecto: "Maset" };
-    await augmentar({ texto: "x", proyecto: { id: "p", raiz: "/w/A", nombre: "A" }, adjuntos: [], pantallaDeStitch: pantalla });
-    expect(vistas[0]!.pantallaDeStitch).toEqual(pantalla);
+    const pantallas = [
+      { name: "projects/9/screens/ab", titulo: "Listado de Entregas", proyecto: "Maset" },
+      { name: "projects/9/screens/cd", titulo: "Detalle de Entrega", proyecto: "Maset" },
+    ];
+    await augmentar({ texto: "x", proyecto: { id: "p", raiz: "/w/A", nombre: "A" }, adjuntos: [], pantallasDeStitch: pantallas });
+    expect(vistas[0]!.pantallasDeStitch).toEqual(pantallas);
   });
 
   it("sin `contexto` no se lee el disco: la composición sigue funcionando sin él", async () => {
@@ -14345,11 +14380,11 @@ describe("prepararDisenoDeTarea — la pantalla elegida, traída a la carpeta de
       vistas.push({ carpeta: deps.carpeta, nombre });
       return "Traída «Listado»:\n- /artefactos/diseno/screen.png (10 bytes)";
     });
-    const linea = await preparar(raiz, "s1", pantalla);
+    const linea = await preparar(raiz, "s1", [pantalla]);
     const carpeta = join(raiz, ".xonecode", "sesiones", "s1", "artefactos");
     expect(vistas).toEqual([{ carpeta, nombre: "projects/9/screens/aa" }]);
     // La marca: con ella la tool no busca por título ni trae otra.
-    expect(JSON.parse(readFileSync(join(carpeta, "diseno", ".elegida.json"), "utf8"))).toEqual({ name: "projects/9/screens/aa", titulo: "Listado" });
+    expect(JSON.parse(readFileSync(join(carpeta, "diseno", ".elegida.json"), "utf8"))).toEqual({ pantallas: [{ name: "projects/9/screens/aa", titulo: "Listado" }] });
     rmSync(raiz, { recursive: true, force: true });
     expect(linea).toContain("ya está traída");
     expect(linea).toContain("`projects/9/screens/aa`");
@@ -14358,14 +14393,38 @@ describe("prepararDisenoDeTarea — la pantalla elegida, traída a la carpeta de
   it("si no se pudo traer lo dice, con el id para traerla, y nunca lanza", async () => {
     const raiz = mkdtempSync(join(tmpdir(), "xonecode-preparar-"));
     const fallo = prepararDisenoDeTarea(conectores, async () => "Stitch no dio la pantalla: falta autorizar");
-    expect(await fallo(raiz, "s1", pantalla)).toContain("No se pudo traer antes de empezar (Stitch no dio la pantalla: falta autorizar)");
+    expect(await fallo(raiz, "s1", [pantalla])).toContain("No se pudo traer antes de empezar (Stitch no dio la pantalla: falta autorizar)");
     const revienta = prepararDisenoDeTarea(conectores, async () => {
       throw new Error("/Users/x");
     });
-    const linea = await revienta(raiz, "s1", pantalla);
+    const linea = await revienta(raiz, "s1", [pantalla]);
     rmSync(raiz, { recursive: true, force: true });
     expect(linea).toContain("falló al traerla");
     expect(linea).not.toContain("/Users/x");
+  });
+
+  /** IXCODE-63: varias, cada una a SU carpeta (la primera a `diseno/`, las demás a `diseno/2/`…), en su orden. */
+  it("con varias, trae cada una con su índice, deja la marca con todas y la línea las nombra en orden", async () => {
+    const raiz = mkdtempSync(join(tmpdir(), "xonecode-preparar-"));
+    const vistas: { nombre: string; indice: number | undefined }[] = [];
+    const otra = { name: "projects/9/screens/bb", titulo: "Detalle", proyecto: "Maset" };
+    const preparar = prepararDisenoDeTarea(conectores, async (_deps, nombre, indice) => {
+      vistas.push({ nombre, indice });
+      return nombre.endsWith("bb") ? "Stitch no dio la pantalla: no existe" : "Traída «Listado»:";
+    });
+    const linea = await preparar(raiz, "s1", [pantalla, otra]);
+    const carpeta = join(raiz, ".xonecode", "sesiones", "s1", "artefactos");
+    expect(vistas).toEqual([
+      { nombre: "projects/9/screens/aa", indice: 0 },
+      { nombre: "projects/9/screens/bb", indice: 1 },
+    ]);
+    expect(JSON.parse(readFileSync(join(carpeta, "diseno", ".elegida.json"), "utf8")).pantallas).toHaveLength(2);
+    rmSync(raiz, { recursive: true, force: true });
+    expect(linea).toContain("MAQUETAS ELEGIDAS (2)");
+    expect(linea).toContain("cada una es una PANTALLA distinta");
+    expect(linea).toContain("1. «Listado», id `projects/9/screens/aa`: ya traída en /artefactos/diseno/");
+    // Una que falla no tumba a la otra, y dice con qué traerla.
+    expect(linea).toContain("2. «Detalle», id `projects/9/screens/bb`: no se pudo traer antes de empezar (Stitch no dio la pantalla: no existe)");
   });
 });
 

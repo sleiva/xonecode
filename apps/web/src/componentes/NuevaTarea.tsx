@@ -1,4 +1,4 @@
-import { SelectorDePantalla } from "./DisenoDelProyecto.js";
+import { ListaDePantallas, SelectorDePantalla } from "./DisenoDelProyecto.js";
 import type { EstadoDeDiseno } from "../disenoDelCable.js";
 import { useEffect, useRef, useState, type ClipboardEvent } from "react";
 import { Modal, Button } from "@deepseek-ai/dsh-client-ui-primitives";
@@ -49,7 +49,7 @@ export function NuevaTarea({
   alPedirPantallas,
   alCerrar,
 }: {
-  /** El diseño vinculado (Stitch) de este proyecto. Con `alPedirPantallas`, se elige UNA pantalla para la tarea. */
+  /** El diseño vinculado (Stitch) de este proyecto. Con `alPedirPantallas`, se eligen pantallas para la tarea (hasta el tope). */
   diseno?: EstadoDeDiseno;
   /** Pide las pantallas del proyecto de Stitch vinculado. Ausente = sin selector (no hay conectores). */
   alPedirPantallas?: () => void;
@@ -99,7 +99,7 @@ export function NuevaTarea({
    * haya escrito ya**: ese mensaje va a todas las pestañas.
    */
   encargoPropuesto?: { encargo?: string; error?: string };
-  alAugmentar: (peticion: string, pantalla?: { name: string; titulo: string }) => void;
+  alAugmentar: (peticion: string, pantallas?: { name: string; titulo: string }[]) => void;
   /**
    * Sube los bytes de un adjunto. El `nombre` ya viene convertido a segmento llano por
    * `nombreDeAdjuntoSeguro`; quien decide si vale es el servidor, dos veces.
@@ -116,7 +116,7 @@ export function NuevaTarea({
    * que no deja crear el ticket no puede perder lo escrito). Sin promesa, el camino de antes.
    */
   /** `encargo` ausente = no se preparó: lo prepara el SERVIDOR al encolar (petición suya). */
-  alEncolar: (tarea: { peticion: string; encargo?: string; pantallaDeStitch?: { name: string; titulo: string } }) => void | Promise<string | undefined>;
+  alEncolar: (tarea: { peticion: string; encargo?: string; pantallasDeStitch?: { name: string; titulo: string }[] }) => void | Promise<string | undefined>;
   /**
    * Dónde vivirá la tarea, preguntado al servidor al abrir (`{clase:"tarea", accion:"destino"}`): `"consultando"`
    * mientras llega; `{gestor}` si el proyecto la crea en su gestor (Jira, Notion…), y entonces la ventana DICE antes del
@@ -126,8 +126,8 @@ export function NuevaTarea({
   alCerrar: () => void;
 }) {
   const [peticion, setPeticion] = useState("");
-  /** La pantalla de Stitch ELEGIDA (una): viaja al preparar el encargo y al encolar, con su id. */
-  const [pantalla, setPantalla] = useState<{ name: string; titulo: string } | undefined>(undefined);
+  /** Las pantallas de Stitch ELEGIDAS, en su orden (IXCODE-63): viajan al preparar el encargo y al encolar, con sus ids. */
+  const [pantallas, setPantallas] = useState<{ name: string; titulo: string }[]>([]);
   const [pestana, setPestana] = useState<"tarea" | "diseno">("tarea");
   /**
    * La pestaña Diseño solo EXISTE con un proyecto de Stitch vinculado (petición suya): sin vínculo la ventana es la de
@@ -241,7 +241,11 @@ export function NuevaTarea({
                 Tarea
               </button>
               <button type="button" role="tab" className={estilos.pestana} aria-selected={pestana === "diseno"} {...(pestana === "diseno" ? { "data-actual": "" } : {})} onClick={() => setPestana("diseno")}>
-                {pantalla === undefined ? "Diseño (Stitch)" : `Diseño · «${pantalla.titulo}»`}
+                {pantallas.length === 0
+                  ? "Diseño (Stitch)"
+                  : pantallas.length === 1
+                    ? `Diseño · «${pantallas[0]!.titulo}»`
+                    : `Diseño · ${pantallas.length} pantallas`}
               </button>
             </div>
           )}
@@ -250,8 +254,8 @@ export function NuevaTarea({
             <SelectorDePantalla
               {...(diseno === undefined ? {} : { diseno })}
               alPedir={alPedirPantallas!}
-              {...(pantalla === undefined ? {} : { elegida: pantalla })}
-              alElegir={setPantalla}
+              elegidas={pantallas}
+              alCambiar={setPantallas}
             />
           ) : (
             <>
@@ -280,8 +284,8 @@ export function NuevaTarea({
                 aria-busy={preparando.esperando}
                 onClick={() => {
                   preparando.empezar();
-                  if (pantalla === undefined) alAugmentar(peticion);
-                  else alAugmentar(peticion, pantalla);
+                  if (pantallas.length === 0) alAugmentar(peticion);
+                  else alAugmentar(peticion, pantallas);
                 }}
               >
                 {preparando.esperando ? <GiroDeCarga /> : null}
@@ -343,11 +347,19 @@ export function NuevaTarea({
           </p>
           <ListaDeAdjuntos adjuntos={adjuntos} quitar={quitar} puedeQuitar={puedeQuitar} />
               {!conDiseno ? null : (
+                pantallas.length > 1 ? (
+                  // Varias: numeradas y una por línea, como en la pestaña Diseño.
+                  <div className={estilos.nota} data-diseno="">
+                    Diseño, una pantalla cada una (se traen por su id antes de empezar):
+                    <ListaDePantallas pantallas={pantallas} />
+                  </div>
+                ) : (
                 <p className={estilos.nota} data-diseno="">
-                  {pantalla === undefined
+                  {pantallas.length === 0
                     ? "Sin diseño de Stitch: elígelo en la pestaña Diseño si la tarea tiene maqueta."
-                    : `Diseño: «${pantalla.titulo}» (se trae por su id antes de empezar).`}
+                    : `Diseño: «${pantallas[0]!.titulo}» (se trae por su id antes de empezar).`}
                 </p>
+                )
               )}
             </>
           )}
@@ -379,7 +391,7 @@ export function NuevaTarea({
                 const enviado = alEncolar({
                   peticion: peticion.trim(),
                   ...(encargo.trim() === "" ? {} : { encargo }),
-                  ...(pantalla === undefined ? {} : { pantallaDeStitch: pantalla }),
+                  ...(pantallas.length === 0 ? {} : { pantallasDeStitch: pantallas }),
                 });
                 if (enviado === undefined) return;
                 setCreando(true);

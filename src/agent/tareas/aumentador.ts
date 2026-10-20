@@ -129,17 +129,28 @@ export function promptDelAumentador(peticion: PeticionDeTarea): string {
     "LO QUE HA PEDIDO, tal cual:",
     peticion.texto,
     "",
-    ...(peticion.pantallaDeStitch === undefined
+    ...(peticion.pantallasDeStitch === undefined || peticion.pantallasDeStitch.length === 0
       ? []
-      : [
-          // Decisión suya: el diseño se ELIGE y va en el contexto de la tarea con sus ids. Medido en Maset: con solo el
-          // nombre, «Menu Listado Entregas» no era el título de ninguna y la tarea construyó con otra maqueta.
-          `MAQUETA ELEGIDA por el desarrollador: la pantalla de Stitch «${peticion.pantallaDeStitch.titulo}», id \`${peticion.pantallaDeStitch.name}\`, ` +
-            `del proyecto de Stitch ${peticion.pantallaDeStitch.proyecto === undefined ? "" : `«${peticion.pantallaDeStitch.proyecto}» `}(id \`${proyectoDePantalla(peticion.pantallaDeStitch.name)}\`).`,
-          "El encargo la nombra así, CON esos dos ids, como LA referencia de diseño: el harness la deja en /artefactos/diseno/",
-          "antes de empezar. No digas que se busque por su título ni propongas otra pantalla.",
-          "",
-        ]),
+      : peticion.pantallasDeStitch.length === 1
+        ? [
+            // Decisión suya: el diseño se ELIGE y va en el contexto de la tarea con sus ids. Medido en Maset: con solo el
+            // nombre, «Menu Listado Entregas» no era el título de ninguna y la tarea construyó con otra maqueta.
+            `MAQUETA ELEGIDA por el desarrollador: la pantalla de Stitch «${peticion.pantallasDeStitch[0]!.titulo}», id \`${peticion.pantallasDeStitch[0]!.name}\`, ` +
+              `del proyecto de Stitch ${peticion.pantallasDeStitch[0]!.proyecto === undefined ? "" : `«${peticion.pantallasDeStitch[0]!.proyecto}» `}(id \`${proyectoDePantalla(peticion.pantallasDeStitch[0]!.name)}\`).`,
+            "El encargo la nombra así, CON esos dos ids, como LA referencia de diseño: el harness la deja en /artefactos/diseno/",
+            "antes de empezar. No digas que se busque por su título ni propongas otra pantalla.",
+            "",
+          ]
+        : [
+            // IXCODE-63: varias, cada una una PANTALLA distinta a construir (decisión suya).
+            `MAQUETAS ELEGIDAS por el desarrollador (${peticion.pantallasDeStitch.length}), del proyecto de Stitch ` +
+              `${peticion.pantallasDeStitch[0]!.proyecto === undefined ? "" : `«${peticion.pantallasDeStitch[0]!.proyecto}» `}(id \`${proyectoDePantalla(peticion.pantallasDeStitch[0]!.name)}\`):`,
+            ...peticion.pantallasDeStitch.map((p, i) => `${i + 1}. «${p.titulo}», id \`${p.name}\``),
+            "Cada una es una PANTALLA distinta que esta tarea tiene que construir. El encargo las nombra así, CON sus ids, como",
+            "LAS referencias de diseño: el harness las deja en /artefactos/diseno/ (la primera) y /artefactos/diseno/2/… antes",
+            "de empezar. No digas que se busquen por su título ni propongas otras pantallas.",
+            "",
+          ]),
     ...(peticion.conectores === undefined || peticion.conectores.length === 0
       ? []
       : [

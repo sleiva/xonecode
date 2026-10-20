@@ -112,10 +112,10 @@ import { agotadoHastaAhora, alCambiarAgotamiento, restablecer } from "../../agen
 import { planDeReversion, revertirSesion } from "../../agent/sesiones/sesionGit.js";
 import { guardarRespaldoDeSesion, hayRespaldoDeSesion, restaurarRespaldoDeSesion } from "./respaldoDeSesion.js";
 import { medirDiagnosticoDeNode } from "../../agent/config/diagnosticoDeNodeEnMaquina.js";
-import { CONECTOR_STITCH, marcarPantallaElegida, traerPantalla } from "../../agent/motores/trueforge/traerDeStitch.js";
+import { CONECTOR_STITCH, marcarPantallasElegidas, traerPantalla } from "../../agent/motores/trueforge/traerDeStitch.js";
 import { guardarDisenoDeProyecto } from "../../agent/config/configEnDisco.js";
 import type { DiagnosticoDeNode } from "../../core/diagnosticoDeNode.js";
-import { pantallaElegidaValida, pantallasConMiniatura, motivoDeProyectoDeStitchInaceptable, entradasDeStitch, textoDePantallaElegida, type DisenoVinculado } from "../../core/stitch.js";
+import { pantallasElegidasValidas, pantallasConMiniatura, motivoDeProyectoDeStitchInaceptable, entradasDeStitch, textoDePantallasElegidas, TOPE_DE_PANTALLAS_ELEGIDAS, type DisenoVinculado } from "../../core/stitch.js";
 import { esMotorLocal } from "../../core/motoresLocales.js";
 import {
   parsear,
@@ -898,8 +898,8 @@ export interface OpcionesDeMontaje {
     proyecto: { id: string; raiz: string; nombre: string };
     /** Nombres y tipos, nunca contenido: salen del DISCO, de la carpeta del borrador. */
     adjuntos: readonly { nombre: string; mime?: string }[];
-    /** La pantalla de Stitch elegida, ya comprobada contra el vínculo del proyecto. */
-    pantallaDeStitch?: { name: string; titulo: string; proyecto?: string };
+    /** Las pantallas de Stitch elegidas, ya comprobadas contra el vínculo del proyecto. */
+    pantallasDeStitch?: { name: string; titulo: string; proyecto?: string }[];
   }) => Promise<string>;
   /**
    * Los conectores MCP de esta consola: una FÁBRICA, y no el servicio ya construido. El
@@ -2459,7 +2459,7 @@ export function montarRutas(
      *  guardar dispara al corredor y el reflejo de «empezar» tiene que encontrarlo. */
     ticket?: TicketDeTarea,
     /** La pantalla de Stitch elegida en «Nueva tarea», tal como llega del cable: se comprueba aquí (`pantallaElegidaValida`). */
-    pantallaDeStitch?: unknown
+    pantallasDeStitch?: unknown
   ): { id: string } | undefined => {
     if (opciones.colaDeTareas === undefined) return undefined;
     const proyecto = proyectoParaTarea(proyectoId);
@@ -2467,9 +2467,9 @@ export function montarRutas(
       informar(`no se pudo crear la tarea: el proyecto «${proyectoId}» no se pudo resolver`);
       return undefined;
     }
-    const pantalla = pantallaDeStitch === undefined ? undefined : pantallaElegidaValida(pantallaDeStitch, disenoVinculadoDe(proyecto.raiz));
-    if (pantallaDeStitch !== undefined && pantalla === undefined) {
-      informar("no se pudo crear la tarea: esa pantalla no es del proyecto de Stitch vinculado");
+    const pantallas = pantallasDeStitch === undefined ? undefined : pantallasElegidasValidas(pantallasDeStitch, disenoVinculadoDe(proyecto.raiz));
+    if (pantallasDeStitch !== undefined && pantallas === undefined) {
+      informar(`no se pudo crear la tarea: ${MOTIVO_PANTALLAS_INVALIDAS}`);
       return undefined;
     }
     const lista = opciones.colaDeTareas.listar();
@@ -2493,7 +2493,7 @@ export function montarRutas(
       estado: "nuevo",
       creada: new Date().toISOString(),
       ...(ticket === undefined ? {} : { ticket }),
-      ...(pantalla === undefined ? {} : { pantallaDeStitch: pantalla }),
+      ...(pantallas === undefined ? {} : { pantallasDeStitch: pantallas }),
     };
     opciones.colaDeTareas.guardar([...lista, nueva]);
     return { id: nueva.id };
@@ -2543,7 +2543,7 @@ export function montarRutas(
     peticion: string,
     encargo: string,
     borrador?: string,
-    pantallaDeStitch?: unknown
+    pantallasDeStitch?: unknown
   ): Promise<{ estado: number; cuerpo: Record<string, unknown> }> => {
     if (opciones.colaDeTareas === undefined) return { estado: 409, cuerpo: { motivo: "esta ejecución no tiene cola de tareas" } };
     // El borrador se comprueba ANTES de tocar el gestor: un ticket creado para una tarea que luego no se guarda quedaría huérfano.
@@ -2576,7 +2576,7 @@ export function montarRutas(
       ...((vinculo as VinculoGuardado).estados === undefined ? {} : { estados: (vinculo as VinculoGuardado).estados! }),
     };
     // Con la línea del ticket delante (`encargoConTicket`): en Jira el comentario lleva el encargo SIN ella —ya está en el ticket—.
-    const nueva = atenderCrearTarea(destino.proyecto.id, peticion, encargoConTicket(encargo, ticket), borrador, ticket, pantallaDeStitch);
+    const nueva = atenderCrearTarea(destino.proyecto.id, peticion, encargoConTicket(encargo, ticket), borrador, ticket, pantallasDeStitch);
     if (nueva === undefined) {
       return { estado: 409, cuerpo: { motivo: `se creó ${creada.clave} en el gestor, pero no la tarea local: créala de nuevo o bórrala allí` } };
     }
@@ -2616,7 +2616,7 @@ export function montarRutas(
     proyectoId: string,
     texto: string,
     borrador?: string,
-    pantallaDeStitch?: unknown
+    pantallasDeStitch?: unknown
   ): Promise<string> => {
     const proyecto = proyectoParaTarea(proyectoId);
     if (proyecto === undefined) throw new Error(`el proyecto «${proyectoId}» no se pudo resolver`);
@@ -2627,8 +2627,8 @@ export function montarRutas(
         : opciones.colaDeTareas
             .listarAdjuntos(borrador)
             .map((a) => ({ nombre: a.nombre, ...(a.mime === undefined ? {} : { mime: a.mime }) }));
-    const pantalla = pantallaDeStitch === undefined ? undefined : pantallaElegidaValida(pantallaDeStitch, disenoVinculadoDe(proyecto.raiz));
-    return augmentar({ texto, proyecto, adjuntos, ...(pantalla === undefined ? {} : { pantallaDeStitch: pantalla }) });
+    const pantallas = pantallasDeStitch === undefined ? undefined : pantallasElegidasValidas(pantallasDeStitch, disenoVinculadoDe(proyecto.raiz));
+    return augmentar({ texto, proyecto, adjuntos, ...(pantallas === undefined ? {} : { pantallasDeStitch: pantallas }) });
   };
 
   const atenderAugmentar = async (
@@ -2637,10 +2637,10 @@ export function montarRutas(
     texto: string,
     borrador?: string,
     /** La pantalla de Stitch elegida en «Nueva tarea», tal como llega: se comprueba contra el vínculo del proyecto. */
-    pantallaDeStitch?: unknown
+    pantallasDeStitch?: unknown
   ): Promise<void> => {
     try {
-      const encargo = await prepararEncargo(augmentar, proyectoId, texto, borrador, pantallaDeStitch);
+      const encargo = await prepararEncargo(augmentar, proyectoId, texto, borrador, pantallasDeStitch);
       emitir({ clase: "tarea", accion: "augmentado", encargo });
     } catch (error) {
       // **El MENSAJE si lo escribimos nosotros, el CÓDIGO si lo escribió el sistema**, que
@@ -2658,11 +2658,11 @@ export function montarRutas(
    * «Preparar»— el que prepara el aumentador AHORA. Sin aumentador, o si falla, va la petición tal cual y se DICE (la
    * regla de siempre: su fallo encola el texto original).
    */
-  const encargoAlEncolar = async (proyectoId: string, peticion: string, encargo: unknown, borrador?: string, pantallaDeStitch?: unknown): Promise<string> => {
+  const encargoAlEncolar = async (proyectoId: string, peticion: string, encargo: unknown, borrador?: string, pantallasDeStitch?: unknown): Promise<string> => {
     if (typeof encargo === "string" && encargo.trim() !== "") return encargo;
     if (opciones.augmentar === undefined) return peticion;
     try {
-      return await prepararEncargo(opciones.augmentar, proyectoId, peticion, borrador, pantallaDeStitch);
+      return await prepararEncargo(opciones.augmentar, proyectoId, peticion, borrador, pantallasDeStitch);
     } catch (error) {
       informar(`no se pudo preparar el encargo al encolar (${motivoLegible(error)}): la tarea va con tu texto tal cual`);
       return peticion;
@@ -7880,18 +7880,19 @@ export function montarRutas(
         // nunca arrancó, y no vacío— es de `core/tareas.ts#conEncargo`; la negativa vuelve con motivo.
         const peticion = (mensaje as { peticion?: unknown }).peticion;
         /**
-         * La pantalla de Stitch: `null` la quita; una nueva se COMPRUEBA contra el vínculo del proyecto de ESA tarea
-         * (`pantallaElegidaValida`, la misma regla que al crearla). Una que no vale es un 409 con motivo, sin tocar nada.
+         * Las pantallas de Stitch: `null` (o una lista vacía) las quita; una lista se COMPRUEBA entera contra el vínculo
+         * del proyecto de ESA tarea (`pantallasElegidasValidas`, la misma regla que al crearla). Una que no vale es un
+         * 409 con motivo, sin tocar nada.
          */
-        const crudo = (mensaje as { pantallaDeStitch?: unknown }).pantallaDeStitch;
-        let pantalla: PantallaElegida | null | undefined;
-        if (crudo === null) pantalla = null;
+        const crudo = (mensaje as { pantallasDeStitch?: unknown }).pantallasDeStitch;
+        let pantallas: PantallaElegida[] | null | undefined;
+        if (crudo === null || (Array.isArray(crudo) && crudo.length === 0)) pantallas = null;
         else if (crudo !== undefined) {
           const tarea = opciones.colaDeTareas.listar().find((x) => x.id === mensaje.id);
-          pantalla = tarea === undefined ? undefined : pantallaElegidaValida(crudo, disenoVinculadoDe(tarea.proyecto.raiz));
-          if (pantalla === undefined) {
+          pantallas = tarea === undefined ? undefined : pantallasElegidasValidas(crudo, disenoVinculadoDe(tarea.proyecto.raiz));
+          if (pantallas === undefined) {
             respuesta.writeHead(409, { "content-type": "application/json" });
-            respuesta.end(JSON.stringify({ motivo: "esa pantalla no es del proyecto de Stitch vinculado" }));
+            respuesta.end(JSON.stringify({ motivo: MOTIVO_PANTALLAS_INVALIDAS }));
             return;
           }
         }
@@ -7900,7 +7901,7 @@ export function montarRutas(
           mensaje.id,
           typeof mensaje.encargo === "string" ? mensaje.encargo : "",
           typeof peticion === "string" ? peticion : undefined,
-          pantalla
+          pantallas
         );
         if (!resultado.hecho) {
           respuesta.writeHead(409, { "content-type": "application/json" });
@@ -7978,21 +7979,21 @@ export function montarRutas(
       const enGestor = mensaje.accion === "crear" ? gestorParaTareaNueva(mensaje.proyecto) : undefined;
       // Sin encargo (nadie pulsó «Preparar»), se prepara aquí antes de crear la tarea (`encargoAlEncolar`).
       const encargoDeCrear =
-        mensaje.accion === "crear" ? await encargoAlEncolar(mensaje.proyecto, mensaje.peticion, mensaje.encargo, mensaje.borrador, mensaje.pantallaDeStitch) : "";
+        mensaje.accion === "crear" ? await encargoAlEncolar(mensaje.proyecto, mensaje.peticion, mensaje.encargo, mensaje.borrador, mensaje.pantallasDeStitch) : "";
       if (mensaje.accion === "crear" && enGestor !== undefined) {
-        const r = await atenderCrearTareaEnGestor(enGestor, mensaje.peticion, encargoDeCrear, mensaje.borrador, mensaje.pantallaDeStitch);
+        const r = await atenderCrearTareaEnGestor(enGestor, mensaje.peticion, encargoDeCrear, mensaje.borrador, mensaje.pantallasDeStitch);
         respuesta.writeHead(r.estado, { "content-type": "application/json" });
         respuesta.end(JSON.stringify(r.cuerpo));
         return;
       }
       if (mensaje.accion === "crear" && opciones.colaDeTareas !== undefined) {
-        const creada = atenderCrearTarea(mensaje.proyecto, mensaje.peticion, encargoDeCrear, mensaje.borrador, undefined, mensaje.pantallaDeStitch);
+        const creada = atenderCrearTarea(mensaje.proyecto, mensaje.peticion, encargoDeCrear, mensaje.borrador, undefined, mensaje.pantallasDeStitch);
         if (creada !== undefined) {
           opciones.revisarTareas?.();
           emitirTareas();
         }
       } else if (mensaje.accion === "augmentar" && opciones.augmentar !== undefined) {
-        void atenderAugmentar(opciones.augmentar, mensaje.proyecto, mensaje.peticion, mensaje.borrador, mensaje.pantallaDeStitch);
+        void atenderAugmentar(opciones.augmentar, mensaje.proyecto, mensaje.peticion, mensaje.borrador, mensaje.pantallasDeStitch);
       } else if (mensaje.accion === "feedback" && opciones.colaDeTareas !== undefined) {
         darFeedbackATarea(mensaje.id, mensaje.texto);
       } else if (
@@ -8993,7 +8994,7 @@ export function augmentacionCableada(opciones: {
    *  `contextoDelProyecto`; ausente del todo = sin rama ni memoria. */
   contexto?: (raiz: string) => { rama?: string; memoria?: string; conectores?: string[] };
 }): NonNullable<OpcionesDeMontaje["augmentar"]> {
-  return async ({ texto, proyecto, adjuntos, pantallaDeStitch }) => {
+  return async ({ texto, proyecto, adjuntos, pantallasDeStitch }) => {
     const extra = opciones.contexto?.(proyecto.raiz) ?? {};
     return opciones.aumentador.augmentar({
       texto,
@@ -9003,8 +9004,8 @@ export function augmentacionCableada(opciones: {
       adjuntos,
       ...(extra.memoria === undefined ? {} : { memoria: extra.memoria }),
       ...(extra.conectores === undefined ? {} : { conectores: extra.conectores }),
-      // La pantalla elegida llega al prompt con sus ids: sin esta línea se perdía aquí, con todo en verde.
-      ...(pantallaDeStitch === undefined ? {} : { pantallaDeStitch }),
+      // Las pantallas elegidas llegan al prompt con sus ids: sin esta línea se perdían aquí, con todo en verde.
+      ...(pantallasDeStitch === undefined ? {} : { pantallasDeStitch }),
     });
   };
 }
@@ -9380,24 +9381,39 @@ export function ajusteDeGestorCableado(ajuste: { conectores: (alCambiar: () => v
   };
 }
 
+/** Lo que se contesta cuando las pantallas elegidas no valen (IXCODE-63). */
+const MOTIVO_PANTALLAS_INVALIDAS =
+  `esas pantallas no valen: tienen que ser del proyecto de Stitch vinculado, sin repetir y como mucho ${TOPE_DE_PANTALLAS_ELEGIDAS}`;
+
 /**
- * Trae la pantalla de Stitch ELEGIDA a la carpeta de artefactos de la sesión de la tarea, con la MISMA función que la tool
- * (`traerDeStitch.ts#traerPantalla`), y compone la línea del encargo con la pantalla y el proyecto y sus ids. Nunca lanza.
+ * Trae las pantallas de Stitch ELEGIDAS a la carpeta de artefactos de la sesión de la tarea —la primera a `diseno/`, las
+ * demás a `diseno/2/`… (IXCODE-63)—, con la MISMA función que la tool (`traerDeStitch.ts#traerPantalla`), y compone las
+ * líneas del encargo con cada pantalla, el proyecto y sus ids. Una que falla no tumba a las demás. Nunca lanza.
  */
 export function prepararDisenoDeTarea(
   conectores: ConectoresPort,
   traer: typeof traerPantalla = traerPantalla
-): (raiz: string, sesion: string, pantalla: PantallaElegida) => Promise<string> {
-  return async (raiz, sesion, pantalla) => {
+): (raiz: string, sesion: string, pantallas: readonly PantallaElegida[]) => Promise<string> {
+  return async (raiz, sesion, pantallas) => {
+    const traidas: { pantalla: PantallaElegida; traida: { ok: true } | { ok: false; motivo: string } }[] = [];
+    let carpeta: string | undefined;
     try {
-      const carpeta = carpetaDeArtefactosDeSesion(raiz, sesion);
-      // La marca va SIEMPRE, antes de traerla: con ella la tool no busca por título ni trae otra (`traerDeStitch.ts`).
-      marcarPantallaElegida(carpeta, pantalla);
-      const texto = await traer({ conectores, carpeta }, pantalla.name);
-      return textoDePantallaElegida(pantalla, texto.startsWith("Traída") ? { ok: true } : { ok: false, motivo: texto.split("\n")[0]!.slice(0, 160) });
+      carpeta = carpetaDeArtefactosDeSesion(raiz, sesion);
+      // La marca va SIEMPRE, antes de traerlas: con ella la tool no busca por título ni trae otra (`traerDeStitch.ts`).
+      marcarPantallasElegidas(carpeta, pantallas);
     } catch {
-      return textoDePantallaElegida(pantalla, { ok: false, motivo: "falló al traerla" });
+      carpeta = undefined;
     }
+    for (const [indice, pantalla] of pantallas.entries()) {
+      try {
+        if (carpeta === undefined) throw new Error("sin carpeta");
+        const texto = await traer({ conectores, carpeta }, pantalla.name, indice);
+        traidas.push({ pantalla, traida: texto.startsWith("Traída") ? { ok: true } : { ok: false, motivo: texto.split("\n")[0]!.slice(0, 160) } });
+      } catch {
+        traidas.push({ pantalla, traida: { ok: false, motivo: "falló al traerla" } });
+      }
+    }
+    return textoDePantallasElegidas(traidas);
   };
 }
 

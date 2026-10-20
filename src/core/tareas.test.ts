@@ -324,11 +324,16 @@ describe("conEncargo", () => {
     expect(() => conEncargo(tarea({ estado: "nuevo" }), "el encargo", "   ")).toThrow(/petición/);
   });
 
-  it("y la PANTALLA de Stitch: una nueva la sustituye, null la quita, ausente no la toca", () => {
-    const con = tarea({ estado: "nuevo", pantallaDeStitch: { name: "projects/9/screens/aa", titulo: "A", proyecto: "Maset" } });
-    expect(conEncargo(con, "e").pantallaDeStitch).toEqual({ name: "projects/9/screens/aa", titulo: "A", proyecto: "Maset" });
-    expect(conEncargo(con, "e", undefined, { name: "projects/9/screens/bb", titulo: "B", proyecto: "Maset" }).pantallaDeStitch?.name).toBe("projects/9/screens/bb");
-    expect(conEncargo(con, "e", undefined, null)).not.toHaveProperty("pantallaDeStitch");
+  it("y las PANTALLAS de Stitch: una lista las sustituye, null o vacía las quita, ausente no las toca", () => {
+    const con = tarea({ estado: "nuevo", pantallasDeStitch: [{ name: "projects/9/screens/aa", titulo: "A", proyecto: "Maset" }] });
+    expect(conEncargo(con, "e").pantallasDeStitch).toEqual([{ name: "projects/9/screens/aa", titulo: "A", proyecto: "Maset" }]);
+    const dos = [
+      { name: "projects/9/screens/bb", titulo: "B", proyecto: "Maset" },
+      { name: "projects/9/screens/cc", titulo: "C", proyecto: "Maset" },
+    ];
+    expect(conEncargo(con, "e", undefined, dos).pantallasDeStitch?.map((p) => p.name)).toEqual(["projects/9/screens/bb", "projects/9/screens/cc"]);
+    expect(conEncargo(con, "e", undefined, null)).not.toHaveProperty("pantallasDeStitch");
+    expect(conEncargo(con, "e", undefined, [])).not.toHaveProperty("pantallasDeStitch");
   });
 
   it("una que ya arrancó alguna vez no se edita, aunque haya vuelto a «nuevo»", () => {

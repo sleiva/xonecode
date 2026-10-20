@@ -562,10 +562,10 @@ export interface PeticionDeTarea {
   /** Lo que escribió la persona, tal cual. */
   texto: string;
   /**
-   * La pantalla de Stitch ELEGIDA para la tarea (con el proyecto de Stitch): el encargo la nombra con sus ids y no busca
-   * otra. Ausente = no se eligió ninguna.
+   * Las pantallas de Stitch ELEGIDAS para la tarea (con el proyecto de Stitch), en su orden: el encargo las nombra con
+   * sus ids y no busca otras (IXCODE-63: eran una). Ausente = no se eligió ninguna.
    */
-  pantallaDeStitch?: { name: string; titulo: string; proyecto?: string };
+  pantallasDeStitch?: { name: string; titulo: string; proyecto?: string }[];
   /**
    * El proyecto para el que es la tarea. La `raiz` está aquí por lo MISMO que en
    * `CasoDeJuez`: el papel `trabajo` se resuelve con la precedencia de siempre —proyecto

@@ -21,6 +21,8 @@ import { TOPE_DE_LLAMADA_MS } from "../../../core/conectores.js";
 import {
   CARPETA_DE_DISENO, casanConTitulo, designMdDeProyecto, entradasDeStitch, idDeProyecto, type EntradaDeStitch, leerPantalla, motivoDeDescargaInaceptable, motivoDePantallaInaceptable, proyectoDePantalla,
   RUTA_DE_DISENO, TIPOS_DE_IMAGEN, TOPE_DE_HTML, TOPE_DE_IMAGEN, urlDeImagenCompleta,
+  carpetaDeMaqueta,
+  rutaDeMaqueta,
 } from "../../../core/stitch.js";
 
 export const NOMBRE_TRAER_DE_STITCH = "traer_pantalla_de_stitch";
@@ -139,13 +141,24 @@ async function buscarPantalla(
 export function crearTraerDeStitch(deps: DependenciasDeTraerDeStitch) {
   return tool(
     async ({ pantalla, titulo, proyecto }: z.infer<typeof Entrada>) => {
-      // Con la maqueta ELEGIDA por la persona (la marca la deja el corredor): ni se busca por título ni se trae otra —se
-      // sobrescribiría la elegida, y un «no existe» sería un CRITICAL falso—. Solo vale volver a traer ESA, por su id.
-      const elegida = pantallaElegidaDeLaSesion(deps.carpeta);
-      if (elegida !== undefined && (pantalla?.trim() ?? "") !== elegida.name) {
+      // Con las maquetas ELEGIDAS por la persona (la marca la deja el corredor): ni se busca por título ni se trae otra
+      // —se sobrescribiría una elegida, y un «no existe» sería un CRITICAL falso—. Solo vale volver a traer UNA DE ELLAS,
+      // por su id, y a SU carpeta (IXCODE-63: pueden ser varias).
+      const elegidas = pantallasElegidasDeLaSesion(deps.carpeta);
+      if (elegidas !== undefined) {
+        const indice = elegidas.findIndex((e) => e.name === (pantalla?.trim() ?? ""));
+        if (indice >= 0) return traerPantalla(deps, elegidas[indice]!.name, indice);
+        if (elegidas.length === 1) {
+          const [elegida] = elegidas as [{ name: string; titulo: string }];
+          return (
+            `Esta tarea ya tiene su maqueta ELEGIDA: «${elegida.titulo}» (id \`${elegida.name}\`), en ${RUTA_DE_DISENO}. Úsala: ` +
+            `no se busca ni se trae otra pantalla. Si no estuviera ahí, tráela con \`pantalla: "${elegida.name}"\`.`
+          );
+        }
+        const cuales = elegidas.map((e, i) => `«${e.titulo}» (id \`${e.name}\`, en ${rutaDeMaqueta(i)})`).join("; ");
         return (
-          `Esta tarea ya tiene su maqueta ELEGIDA: «${elegida.titulo}» (id \`${elegida.name}\`), en ${RUTA_DE_DISENO}. Úsala: ` +
-          `no se busca ni se trae otra pantalla. Si no estuviera ahí, tráela con \`pantalla: "${elegida.name}"\`.`
+          `Esta tarea ya tiene sus maquetas ELEGIDAS: ${cuales}. Úsalas: no se busca ni se trae otra pantalla. ` +
+          `Si una no estuviera en su carpeta, tráela con \`pantalla: "<su id>"\`.`
         );
       }
       let nombre = pantalla?.trim() ?? "";
@@ -178,7 +191,12 @@ export function crearTraerDeStitch(deps: DependenciasDeTraerDeStitch) {
  * ANTES del primer turno, la pantalla que la persona ELIGIÓ para la tarea (`Tarea.pantallaDeStitch`). Devuelve el texto
  * para el agente; nunca lanza.
  */
-export async function traerPantalla(deps: DependenciasDeTraerDeStitch, nombre: string): Promise<string> {
+export async function traerPantalla(
+  deps: DependenciasDeTraerDeStitch,
+  nombre: string,
+  /** Qué maqueta de la sesión es (desde 0): la primera va a `diseno/`, las demás a `diseno/2/`… (`core/stitch.ts#carpetaDeMaqueta`). */
+  indice = 0
+): Promise<string> {
   const descargar = deps.descargar ?? descargarEnRed;
   const motivo = motivoDePantallaInaceptable(nombre);
   if (motivo !== undefined) return motivo;
@@ -224,7 +242,8 @@ export async function traerPantalla(deps: DependenciasDeTraerDeStitch, nombre: s
     avisos.push("no pude leer el DESIGN.md del proyecto");
   }
 
-  const carpeta = join(deps.carpeta, CARPETA_DE_DISENO);
+  const carpeta = join(deps.carpeta, ...carpetaDeMaqueta(indice).split("/"));
+  const ruta = rutaDeMaqueta(indice);
   const escritos: Artefacto[] = [];
   try {
     mkdirSync(carpeta, { recursive: true });
@@ -233,7 +252,7 @@ export async function traerPantalla(deps: DependenciasDeTraerDeStitch, nombre: s
     for (const n of readdirSync(carpeta)) if (/^(screen\.(png|jpg|webp)|code\.html|DESIGN\.md)$/.test(n)) rmSync(join(carpeta, n));
     const escribir = (fichero: string, contenido: Buffer | string, mime: string): void => {
       writeFileSync(join(carpeta, fichero), contenido);
-      escritos.push({ ruta: `${RUTA_DE_DISENO}${fichero}`, nombre: fichero, mime, bytes: Buffer.byteLength(contenido) });
+      escritos.push({ ruta: `${ruta}${fichero}`, nombre: fichero, mime, bytes: Buffer.byteLength(contenido) });
     };
     escribir(`screen.${extension}`, imagen.bytes, imagen.tipo);
     if (html !== undefined) escribir("code.html", html, "text/html");
@@ -251,25 +270,36 @@ export async function traerPantalla(deps: DependenciasDeTraerDeStitch, nombre: s
     `Traída «${datos.titulo}»:`,
     ...escritos.map((a) => `- ${a.ruta} (${a.bytes} bytes)`),
     ...(avisos.length === 0 ? [] : [`(${avisos.join("; ")})`]),
-    `Es la MAQUETA de la sesión: pásala como \`referencia\` (${RUTA_DE_DISENO}screen.${extension}) a comparar_capturas y a xone_critica_visual; el harness ya la usa al medir cada prueba. Para verla, describe_image.`,
+    `Es ${indice === 0 ? "la" : "una"} MAQUETA de la sesión: pásala como \`referencia\` (${ruta}screen.${extension}) a comparar_capturas y a xone_critica_visual; el harness ya la usa al medir cada prueba. Para verla, describe_image.`,
   ].join("\n");
 }
 
 /** La marca de la pantalla ELEGIDA para la tarea, dentro de la carpeta de diseño de la sesión (la escribe el corredor). */
 export const MARCA_DE_PANTALLA_ELEGIDA = ".elegida.json";
 
-/** La pantalla elegida de esta sesión, o `undefined` (sin marca, o ilegible: entonces la tool busca como siempre). */
-export function pantallaElegidaDeLaSesion(carpeta: string): { name: string; titulo: string } | undefined {
+/**
+ * Las pantallas elegidas de esta sesión, en su orden, o `undefined` (sin marca, o ilegible: entonces la tool busca como
+ * siempre). Lee las DOS formas: `{pantallas: [...]}` (IXCODE-63) y `{name, titulo}`, la de una sola que dejaba antes.
+ */
+export function pantallasElegidasDeLaSesion(carpeta: string): { name: string; titulo: string }[] | undefined {
   try {
     const v = JSON.parse(readFileSync(join(carpeta, CARPETA_DE_DISENO, MARCA_DE_PANTALLA_ELEGIDA), "utf8")) as Record<string, unknown>;
-    return typeof v["name"] === "string" && typeof v["titulo"] === "string" ? { name: v["name"], titulo: v["titulo"] } : undefined;
+    const lista = Array.isArray(v["pantallas"]) ? (v["pantallas"] as unknown[]) : [v];
+    const pantallas = lista.flatMap((p) => {
+      const e = p as Record<string, unknown> | null;
+      return typeof e?.["name"] === "string" && typeof e["titulo"] === "string" ? [{ name: e["name"], titulo: e["titulo"] }] : [];
+    });
+    return pantallas.length === 0 ? undefined : pantallas;
   } catch {
     return undefined;
   }
 }
 
-/** Deja la marca: SIEMPRE, también si traerla falla (la tool la traerá por su id, y no buscará otra). */
-export function marcarPantallaElegida(carpeta: string, pantalla: { name: string; titulo: string }): void {
+/** Deja la marca: SIEMPRE, también si traer alguna falla (la tool la traerá por su id, y no buscará otra). */
+export function marcarPantallasElegidas(carpeta: string, pantallas: readonly { name: string; titulo: string }[]): void {
   mkdirSync(join(carpeta, CARPETA_DE_DISENO), { recursive: true });
-  writeFileSync(join(carpeta, CARPETA_DE_DISENO, MARCA_DE_PANTALLA_ELEGIDA), JSON.stringify({ name: pantalla.name, titulo: pantalla.titulo }));
+  writeFileSync(
+    join(carpeta, CARPETA_DE_DISENO, MARCA_DE_PANTALLA_ELEGIDA),
+    JSON.stringify({ pantallas: pantallas.map((p) => ({ name: p.name, titulo: p.titulo })) })
+  );
 }
