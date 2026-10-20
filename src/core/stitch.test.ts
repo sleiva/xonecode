@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  casanConNombre,
+  conNombreDelLienzo,
+  nombresDelLienzo,
   pantallasElegidasValidas,
   textoDePantallasElegidas,
   TOPE_DE_PANTALLAS_ELEGIDAS,
@@ -157,6 +160,44 @@ describe("varias pantallas elegidas", () => {
     expect(texto).toContain("2. «Detalle», id `projects/9/screens/bb`: ya traída en /artefactos/diseno/2/");
     // Con una sola, el texto de siempre.
     expect(textoDePantallasElegidas([{ pantalla: una("aa", "Listado"), traida: { ok: true } }])).toContain("MAQUETA ELEGIDA: la pantalla «Listado»");
+  });
+});
+
+/** El nombre del LIENZO de Stitch (`screenInstances[].label`), medido en Maset: no es el `title` de la API. */
+describe("nombres del lienzo", () => {
+  const proyecto = JSON.stringify({
+    title: "Maset",
+    screenInstances: [
+      { id: "a", label: "Entregas viejas", sourceScreen: "projects/9/screens/aa", hidden: true },
+      { id: "b", label: "Entrega Albaran 1", sourceScreen: "projects/9/screens/aa" },
+      { id: "c", label: "Menu Listado Entregas", sourceScreen: "projects/9/screens/bb" },
+      { id: "d", label: "  ", sourceScreen: "projects/9/screens/cc" },
+    ],
+  });
+  const pantallas = [
+    { name: "projects/9/screens/aa", title: "Entrega - Datos Cliente (Maset)" },
+    { name: "projects/9/screens/bb", title: "Liquidaciones - Maset Logística" },
+    { name: "projects/9/screens/cc", title: "Login" },
+  ];
+
+  it("lee las instancias VISIBLES por pantalla; una oculta o sin nombre no cuenta", () => {
+    const nombres = nombresDelLienzo(proyecto);
+    expect([...nombres]).toEqual([
+      ["projects/9/screens/aa", "Entrega Albaran 1"],
+      ["projects/9/screens/bb", "Menu Listado Entregas"],
+    ]);
+    expect(nombresDelLienzo("no es json").size).toBe(0);
+  });
+
+  it("pone el nombre del lienzo como título y guarda el de la API; busca primero por el del lienzo y luego por el otro", () => {
+    const con = conNombreDelLienzo(pantallas, nombresDelLienzo(proyecto));
+    expect(con[0]).toEqual({ name: "projects/9/screens/aa", title: "Entrega Albaran 1", tituloEnStitch: "Entrega - Datos Cliente (Maset)" });
+    expect(con[2]).toEqual({ name: "projects/9/screens/cc", title: "Login" });
+    expect(casanConNombre(con, "Entrega Albaran 1").map((p) => p.name)).toEqual(["projects/9/screens/aa"]);
+    expect(casanConNombre(con, "Menu Listado Entregas").map((p) => p.name)).toEqual(["projects/9/screens/bb"]);
+    // Por el título de la API, si el del lienzo no casa.
+    expect(casanConNombre(con, "Liquidaciones - Maset Logística").map((p) => p.name)).toEqual(["projects/9/screens/bb"]);
+    expect(casanConNombre(con, "Entrega Albaran 7")).toEqual([]);
   });
 });
 

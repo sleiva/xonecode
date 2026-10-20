@@ -115,7 +115,7 @@ import { medirDiagnosticoDeNode } from "../../agent/config/diagnosticoDeNodeEnMa
 import { CONECTOR_STITCH, marcarPantallasElegidas, traerPantalla } from "../../agent/motores/trueforge/traerDeStitch.js";
 import { guardarDisenoDeProyecto } from "../../agent/config/configEnDisco.js";
 import type { DiagnosticoDeNode } from "../../core/diagnosticoDeNode.js";
-import { pantallasElegidasValidas, pantallasConMiniatura, motivoDeProyectoDeStitchInaceptable, entradasDeStitch, textoDePantallasElegidas, TOPE_DE_PANTALLAS_ELEGIDAS, type DisenoVinculado } from "../../core/stitch.js";
+import { conNombreDelLienzo, nombresDelLienzo, pantallasElegidasValidas, pantallasConMiniatura, motivoDeProyectoDeStitchInaceptable, entradasDeStitch, textoDePantallasElegidas, TOPE_DE_PANTALLAS_ELEGIDAS, type DisenoVinculado } from "../../core/stitch.js";
 import { esMotorLocal } from "../../core/motoresLocales.js";
 import {
   parsear,
@@ -5713,7 +5713,16 @@ export function montarRutas(
       }
       const v = disenoVinculadoDe(raiz);
       if (v === undefined) return responder({ vinculo: null, pantallas: [] });
-      const pantallas = pantallasConMiniatura(await llamar("list_screens", { projectId: v.proyecto.replace(/^projects\//, "") }));
+      const deLaApi = pantallasConMiniatura(await llamar("list_screens", { projectId: v.proyecto.replace(/^projects\//, "") }));
+      // Con el nombre del LIENZO, que es el que la persona ve en Stitch (`core/stitch.ts#nombresDelLienzo`); si
+      // `get_project` falla, con el título de la API, como antes.
+      let nombres = new Map<string, string>();
+      try {
+        nombres = nombresDelLienzo(await llamar("get_project", { name: v.proyecto }));
+      } catch {
+        // Sin nombres del lienzo, los títulos de siempre.
+      }
+      const pantallas = conNombreDelLienzo(deLaApi, nombres).map(({ tituloEnStitch: _api, ...p }) => p);
       return responder({ vinculo: v, pantallas });
     } catch (e) {
       return responder({ error: sinCorreos(e instanceof Error ? e.message : String(e)).slice(0, 200) });

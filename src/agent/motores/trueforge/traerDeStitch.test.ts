@@ -105,6 +105,15 @@ describe("traer_pantalla_de_stitch por título", () => {
   const PROYECTOS_PROPIOS = JSON.stringify({ projects: [{ name: "projects/1", title: "Otro" }] });
   // Maset es de otra cuenta: solo sale con `view=shared` (medido).
   const COMPARTIDOS = JSON.stringify({ projects: [{ name: "projects/8393", title: "Maset" }] }) + "\n(recortado por el harness: sin metadata)";
+  /** El lienzo de Maset: el nombre que ve la persona no es el `title` de la API (medido en Maset, 20-10-2026). */
+  const LIENZO: Record<string, string> = {
+    "projects/8393": JSON.stringify({
+      screenInstances: [
+        { id: "i1", label: "Entrega Albaran 1", sourceScreen: "projects/8393/screens/cc" },
+        { id: "i2", label: "Entrega Albaran 9", sourceScreen: "projects/8393/screens/bb", hidden: true },
+      ],
+    }),
+  };
   const PANTALLAS: Record<string, string> = {
     "1": JSON.stringify({ screens: [{ name: "projects/1/screens/aa", title: "Menú Principal" }] }),
     "8393": JSON.stringify({
@@ -124,6 +133,7 @@ describe("traer_pantalla_de_stitch por título", () => {
         llamadas.push({ nombre, args });
         if (nombre === "list_projects") return args["filter"] === "view=shared" ? COMPARTIDOS : PROYECTOS_PROPIOS;
         if (nombre === "list_screens") return PANTALLAS[String(args["projectId"])] ?? "{}";
+        if (nombre === "get_project") return LIENZO[String(args["name"])] ?? "{}";
         if (nombre === "get_screen") return JSON.stringify({ title: "Menú", screenshot: { downloadUrl: IMG } });
         return "{}";
       },
@@ -208,6 +218,19 @@ describe("traer_pantalla_de_stitch por título", () => {
     mkdirSync(join(carpeta, "diseno"), { recursive: true });
     writeFileSync(join(carpeta, "diseno", ".elegida.json"), JSON.stringify({ name: "projects/8393/screens/cc", titulo: "image.png" }));
     expect(String(await t.invoke({ titulo: "Otra" }))).toContain("ya tiene su maqueta ELEGIDA: «image.png»");
+  });
+
+  /** IXCODE: el nombre del LIENZO («Entrega Albaran 1») casa aunque el `title` de la API sea otro. */
+  it("encuentra la pantalla por su nombre en el LIENZO de Stitch, y una oculta no presta el suyo", async () => {
+    const faltan: string[] = [];
+    const { t, llamadas } = montarBusqueda({ sinPersona: true, alNoEncontrar: (x) => faltan.push(x) });
+    expect(String(await t.invoke({ titulo: "Entrega Albaran 1", proyecto: "Maset" }))).toContain("Traída");
+    expect(llamadas.find((l) => l.nombre === "get_screen")?.args).toEqual({ name: "projects/8393/screens/cc" });
+    expect(faltan).toEqual([]);
+    // La del título de la API sigue encontrándose por él.
+    expect(String(await t.invoke({ titulo: "Menú Principal - Maset Logística (Rediseño Profesional)", proyecto: "Maset" }))).toContain("Traída");
+    // Una instancia OCULTA no cuenta: «Entrega Albaran 9» no existe para la búsqueda.
+    expect(String(await t.invoke({ titulo: "Entrega Albaran 9", proyecto: "Maset" }))).toContain("Ninguna pantalla");
   });
 
   it("un proyecto que no existe lo dice con los que hay; sin título ni name, pide uno", async () => {

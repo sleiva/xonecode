@@ -19,7 +19,7 @@ import type { Artefacto } from "../../../core/artefactos.js";
 import type { ConectoresPort } from "../../../core/ports.js";
 import { TOPE_DE_LLAMADA_MS } from "../../../core/conectores.js";
 import {
-  CARPETA_DE_DISENO, casanConTitulo, designMdDeProyecto, entradasDeStitch, idDeProyecto, type EntradaDeStitch, leerPantalla, motivoDeDescargaInaceptable, motivoDePantallaInaceptable, proyectoDePantalla,
+  CARPETA_DE_DISENO, casanConNombre, casanConTitulo, conNombreDelLienzo, nombresDelLienzo, designMdDeProyecto, entradasDeStitch, idDeProyecto, type EntradaDeStitch, leerPantalla, motivoDeDescargaInaceptable, motivoDePantallaInaceptable, proyectoDePantalla,
   RUTA_DE_DISENO, TIPOS_DE_IMAGEN, TOPE_DE_HTML, TOPE_DE_IMAGEN, urlDeImagenCompleta,
   carpetaDeMaqueta,
   rutaDeMaqueta,
@@ -60,6 +60,10 @@ const Entrada = z.object({
     .describe("El TÍTULO de la pantalla tal como lo nombra la persona («Menú Principal - Maset Logística»). La tool la busca: no listes antes."),
   proyecto: z.string().optional().describe("El título del proyecto de Stitch que la contiene («Maset»), si se sabe: acota la búsqueda."),
 });
+
+/** Cómo se nombra una pantalla al agente: la del lienzo y, si es otro, el título de la API (los dos los puede ver alguien). */
+const nombreParaDecir = (s: { title: string; tituloEnStitch?: string }): string =>
+  s.tituloEnStitch === undefined ? `«${s.title}»` : `«${s.title}» (en la API, «${s.tituloEnStitch}»)`;
 
 /** Cuántas candidatas se enseñan cuando la búsqueda no da UNA. */
 const CANDIDATAS_A_LA_VISTA = 12;
@@ -107,18 +111,27 @@ async function buscarPantalla(
   if (donde.length === 0) {
     return { texto: `Ningún proyecto de Stitch se llama «${proyecto}». Hay: ${proyectos.slice(0, CANDIDATAS_A_LA_VISTA).map((p) => `«${p.title}»`).join(", ")}.` };
   }
-  const pantallas: (EntradaDeStitch & { deProyecto: string })[] = [];
+  const pantallas: (EntradaDeStitch & { deProyecto: string; tituloEnStitch?: string })[] = [];
   for (const p of donde) {
+    // Los nombres del LIENZO, que son los que nombra la persona (`core/stitch.ts#nombresDelLienzo`). Si `get_project`
+    // falla, se busca solo por el título de la API, como antes.
+    let nombres = new Map<string, string>();
     try {
-      for (const s of entradasDeStitch(await llamar("list_screens", { projectId: idDeProyecto(p.name) }), "screens")) pantallas.push({ ...s, deProyecto: p.title });
+      nombres = nombresDelLienzo(await llamar("get_project", { name: p.name }));
+    } catch {
+      // Sin nombres del lienzo, la búsqueda sigue por el título.
+    }
+    try {
+      const deEste = entradasDeStitch(await llamar("list_screens", { projectId: idDeProyecto(p.name) }), "screens");
+      for (const s of conNombreDelLienzo(deEste, nombres)) pantallas.push({ ...s, deProyecto: p.title });
     } catch {
       // Un proyecto que no se deja listar no tumba la búsqueda en los demás.
     }
   }
-  const casan = casanConTitulo(pantallas, titulo);
+  const casan = casanConNombre(pantallas, titulo);
   if (casan.length === 1) return casan[0]!.name;
   if (casan.length === 0 && sinPersona) {
-    const hay = pantallas.slice(0, CANDIDATAS_A_LA_VISTA).map((s) => `«${s.title}»`).join(", ");
+    const hay = pantallas.slice(0, CANDIDATAS_A_LA_VISTA).map(nombreParaDecir).join(", ");
     return {
       ninguna: true,
       texto:
@@ -128,7 +141,7 @@ async function buscarPantalla(
         `Las que hay: ${hay}.`,
     };
   }
-  const lista = (casan.length === 0 ? pantallas : casan).slice(0, CANDIDATAS_A_LA_VISTA).map((s) => `- «${s.title}» (${s.deProyecto}): ${s.name}`);
+  const lista = (casan.length === 0 ? pantallas : casan).slice(0, CANDIDATAS_A_LA_VISTA).map((s) => `- ${nombreParaDecir(s)} (${s.deProyecto}): ${s.name}`);
   return {
     ...(casan.length === 0 ? { ninguna: true } : {}),
     texto:

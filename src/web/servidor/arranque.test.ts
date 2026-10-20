@@ -14592,6 +14592,8 @@ describe("el diseño vinculado (Stitch), por el cable", () => {
   const PANTALLAS = JSON.stringify({
     screens: [{ name: "projects/839/screens/aa", title: "Listado de Entregas", screenshot: { downloadUrl: "https://lh3.googleusercontent.com/x" } }],
   });
+  /** Lo que contesta `get_project`: con nombres del LIENZO para el test que los mira; sin ellos, `{}`. */
+  let conLienzo: string | undefined;
   const abrir = async () => {
     const base = mkdtempSync(join(tmpdir(), "xonecode-diseno-"));
     const servidor = servidorDeMentira();
@@ -14614,6 +14616,7 @@ describe("el diseño vinculado (Stitch), por el cable", () => {
         llamadas.push({ tool, args });
         if (tool === "list_projects") return JSON.stringify({ projects: args["filter"] === "view=shared" ? [{ name: "projects/839", title: "Maset" }] : [] });
         if (tool === "list_screens") return PANTALLAS;
+        if (tool === "get_project") return conLienzo ?? "{}";
         return "{}";
       },
       tools: async () => [],
@@ -14641,6 +14644,28 @@ describe("el diseño vinculado (Stitch), por el cable", () => {
     return { pedir, config, llamadas, limpiar };
   };
 
+  /**
+   * El selector enseña el nombre del LIENZO, que es el que la persona ve en Stitch (medido en Maset: «Entrega Albaran 1»
+   * en el lienzo, «Entrega - Datos Cliente (Maset)» en la API). Una instancia OCULTA no presta su nombre.
+   */
+  it("las pantallas llevan el nombre del LIENZO de Stitch, no el título de la API", async () => {
+    conLienzo = JSON.stringify({
+      screenInstances: [
+        { id: "x1", label: "Entregas Viejas", sourceScreen: "projects/839/screens/aa", hidden: true },
+        { id: "x2", label: "Entrega Albaran 1", sourceScreen: "projects/839/screens/aa" },
+      ],
+    });
+    try {
+      const t = await abrir();
+      await t.pedir({ accion: "vincular", vinculo: { proyecto: "projects/839", nombre: "Maset" } });
+      const conPantallas = await t.pedir({ accion: "pantallas" });
+      expect(conPantallas?.pantallas).toEqual([{ name: "projects/839/screens/aa", title: "Entrega Albaran 1", miniatura: "https://lh3.googleusercontent.com/x" }]);
+      await t.limpiar();
+    } finally {
+      conLienzo = undefined;
+    }
+  });
+
   it("lista los proyectos (propios y compartidos), vincula en el config.json, da las pantallas con miniatura y desvincula", async () => {
     const t = await abrir();
     expect(await t.pedir({ accion: "estado" })).toEqual({ clase: "diseno", vinculo: null });
@@ -14649,7 +14674,10 @@ describe("el diseño vinculado (Stitch), por el cable", () => {
     expect(t.config()["disenoVinculado"]).toEqual({ proyecto: "projects/839", nombre: "Maset" });
     const conPantallas = await t.pedir({ accion: "pantallas" });
     expect(conPantallas?.pantallas).toEqual([{ name: "projects/839/screens/aa", title: "Listado de Entregas", miniatura: "https://lh3.googleusercontent.com/x" }]);
-    expect(t.llamadas.at(-1)).toEqual({ tool: "list_screens", args: { projectId: "839" } });
+    expect(t.llamadas.slice(-2)).toEqual([
+      { tool: "list_screens", args: { projectId: "839" } },
+      { tool: "get_project", args: { name: "projects/839" } },
+    ]);
     // Y por el id del proyecto, que es como lo piden el panel y «Nueva tarea»: la MISMA raíz, y la respuesta lo lleva.
     expect(await t.pedir({ accion: "estado", proyecto: "p1" })).toEqual({ clase: "diseno", proyecto: "p1", vinculo: { proyecto: "projects/839", nombre: "Maset" } });
     expect((await t.pedir({ accion: "desvincular" }))?.vinculo).toBeNull();

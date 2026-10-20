@@ -472,7 +472,7 @@ export function decisionDeEntrega(
 /** El crítico de una tarea que no hizo el trabajo (`decisionDeEntrega`). */
 /** El crítico de una pantalla de Stitch pedida que no existe: la persona tiene que elegir el diseño. */
 export const criticoDePantallaNoEncontrada = (titulo: string): string =>
-  `diseño: la pantalla «${titulo}» no está en Stitch (ni por su título ni por sus palabras); no se construye con otra: elige su diseño y relánzala`;
+  `diseño: la pantalla «${titulo}» no está en Stitch (ni por su nombre en el lienzo, ni por su título, ni por sus palabras); no se construye con otra: elige su diseño y relánzala`;
 
 export const CRITICO_SIN_HACER = "no hizo el trabajo: no cambió ningún fichero del proyecto y el juez no la da por cumplida";
 

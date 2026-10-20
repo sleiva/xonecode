@@ -9706,3 +9706,20 @@ PANTALLA distinta a construir (no estados de la misma).
 **Límites**: `convertir_a_p` toma el ancho de la PRIMERA maqueta; sin probar en el navegador con un proyecto de Stitch
 vinculado.
 
+## El nombre de una pantalla de Stitch es el del LIENZO (20-10-2026)
+
+Lo medido, con el paquete de soporte de la tarea de entrega de albarán en Maset y llamando al MCP de Stitch con su
+autorización: la persona nombraba «Entrega Albaran 1…4», que es lo que ve en el lienzo de Stitch, y la tarea cerraba
+en CRITICAL «no está en Stitch». La API las da con otro `title` («Entrega - Datos Cliente (Maset)»…). El nombre del
+lienzo vive en `get_project` → `screenInstances[]` (`id`, `label`, `sourceScreen`, `x`, `y`, `width`, `height`,
+`hidden`): 41 instancias para 33 pantallas, algunas OCULTAS con nombres casi iguales («Entrega Albaranes 1…4»).
+Explica también el fallo del 16-10: «Menu Listado Entregas» era el `label` de «Liquidaciones - Maset Logística».
+El dato llegaba en `list_projects` y lo recortaba el propio harness (`camposFueraDelResultado`).
+
+- La búsqueda por nombre de `traer_pantalla_de_stitch` casa primero contra el nombre del lienzo (solo instancias
+  visibles, la primera por pantalla) y después contra el `title`, con la misma regla de igual / contiene / palabras.
+- El selector de Diseño enseña el del lienzo; las listas al agente, los dos cuando difieren.
+- El CRITICAL de «no está en Stitch» solo sale si no casa ninguno de los dos.
+- `list_projects` sigue recortando `screenInstances` por tamaño: el nombre sale de `get_project`, una llamada por
+  proyecto donde se busca.
+

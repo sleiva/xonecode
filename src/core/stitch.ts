@@ -207,6 +207,52 @@ export function casanConTitulo<T extends EntradaDeStitch>(entradas: readonly T[]
   });
 }
 
+/**
+ * Los nombres que la persona VE en el lienzo de Stitch, por pantalla: `get_project` → `screenInstances[]`, `label` por
+ * `sourceScreen`. Medido en Maset (20-10-2026): «Entrega Albaran 1» era el `label` de la instancia y el `title` de la
+ * pantalla decía «Entrega - Datos Cliente (Maset)»; «Menu Listado Entregas» —el fallo del 16-10— era el `label` de
+ * «Liquidaciones - Maset Logística». Buscando solo en el `title`, lo que la persona nombraba no existía. Solo las
+ * instancias VISIBLES (`hidden` las hay, con nombres casi iguales: versiones viejas), y la primera de cada pantalla.
+ */
+export function nombresDelLienzo(texto: string): Map<string, string> {
+  const nombres = new Map<string, string>();
+  const instancias = (jsonDe(texto) as Record<string, unknown> | undefined)?.["screenInstances"];
+  if (!Array.isArray(instancias)) return nombres;
+  for (const i of instancias) {
+    if (typeof i !== "object" || i === null) continue;
+    const v = i as Record<string, unknown>;
+    if (v["hidden"] === true || typeof v["label"] !== "string" || typeof v["sourceScreen"] !== "string") continue;
+    const etiqueta = v["label"].trim();
+    if (etiqueta !== "" && !nombres.has(v["sourceScreen"])) nombres.set(v["sourceScreen"], etiqueta);
+  }
+  return nombres;
+}
+
+/**
+ * Las pantallas con el nombre del LIENZO como `title`, que es el que ve la persona; el de la API se guarda en
+ * `tituloEnStitch` cuando es otro. Sin nombre en el lienzo, la pantalla queda como venía.
+ */
+export function conNombreDelLienzo<T extends EntradaDeStitch>(
+  entradas: readonly T[],
+  nombres: ReadonlyMap<string, string>
+): (T & { tituloEnStitch?: string })[] {
+  return entradas.map((e) => {
+    const etiqueta = nombres.get(e.name);
+    return etiqueta === undefined || etiqueta === e.title ? e : { ...e, title: etiqueta, tituloEnStitch: e.title };
+  });
+}
+
+/**
+ * Las que casan con el NOMBRE que dio la persona: primero contra el del lienzo (el `title` tras `conNombreDelLienzo`),
+ * y si no casa ninguna, contra el título de la API, como hasta ahora.
+ */
+export function casanConNombre<T extends EntradaDeStitch & { tituloEnStitch?: string }>(entradas: readonly T[], nombre: string | undefined): T[] {
+  const porLienzo = casanConTitulo(entradas, nombre);
+  if (porLienzo.length > 0) return porLienzo;
+  const conTituloDeApi = entradas.map((e) => ({ entrada: e, name: e.name, title: e.tituloEnStitch ?? e.title }));
+  return casanConTitulo(conTituloDeApi, nombre).map((x) => x.entrada);
+}
+
 /** Palabras de relleno de un título de pantalla: no distinguen una de otra. */
 const PALABRAS_VACIAS = new Set([
   "de", "del", "la", "el", "los", "las", "y", "e", "a", "en", "con", "para", "por", "un", "una", "al",

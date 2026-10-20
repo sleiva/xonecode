@@ -21,8 +21,11 @@ conector es un servidor MCP REMOTO: catálogo cerrado por código, o uno escrito
   el modelo da la pantalla, nunca la URL; solo los hosts medidos, con tope y tipo comprobado, a
   tamaño real (`=s0`). Destino FIJO `/artefactos/diseno/` —y `diseno/2/`… para la segunda y
   siguientes elegidas (`carpetaDeMaqueta`)—, que `buscarMaquetas` prefiere y que `ultimaCaptura`/el
-  crítico NO toman por capturas. Dice BYTES, no las medidas de Stitch. Busca por
-  TÍTULO (`casanConTitulo`, `entradasDeStitch`), propios y compartidos, sin tildes; si no casa, lista CORTA con `name`.
+  crítico NO toman por capturas. Dice BYTES, no las medidas de Stitch. Busca por NOMBRE, propios y
+  compartidos, sin tildes: primero el del LIENZO (`get_project` → `screenInstances[].label`, solo las
+  visibles: `nombresDelLienzo`, `casanConNombre`) y luego el `title` de la API, que NO es el que la persona ve
+  en Stitch; si no casa, lista CORTA con los dos nombres y el `name`. El selector de Diseño enseña también el
+  del lienzo. `list_projects` sigue recortando `screenInstances` (tamaño): se pide `get_project`.
 - **El DISEÑO de una tarea se ELIGE** (`core/disenoVinculado.ts`, `DisenoDelProyecto.tsx`, mensaje
   `diseno`): proyecto vinculado (`config.json#disenoVinculado`), de 1 a `TOPE_DE_PANTALLAS_ELEGIDAS`
   pantallas en `Tarea.pantallasDeStitch` (IXCODE-63; cada una, una PANTALLA a construir), comprobadas
