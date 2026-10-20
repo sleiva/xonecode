@@ -29,14 +29,14 @@
  */
 
 import { hayMemoriaDeHilo, olvidarMemoriaDeHilo } from "../../agent/sesiones/memoriaDeHilo.js";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { lineaDeVersion, type VersionEnMarcha } from "../../core/version.js";
 import { esperarInterrupcion } from "./interrupcion.js";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { homedir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import type { Acto } from "../../core/actos.js";
 import { conLoQueLaVentanaNoEdita, escribirAgente, leerAgente, motivoDeNombreInaceptable, type Agente } from "../../core/agentes.js";
 import {
@@ -190,7 +190,7 @@ import { elegirCarpetaEnMaquina, haySelectorDeCarpeta } from "../../agent/config
 import { cloudstudioDelProyecto, guardarModoDeEscrituraDeProyecto, modoDeEscrituraDelProyecto } from "../../agent/config/configEnDisco.js";
 import { abrirEnSistema, olvidarEntorno as olvidarCredencialesDeEntorno, rutaAuthPorDefecto } from "../../agent/cloudstudio/cloudstudioMcp.js";
 import { nombreDePersona } from "../../agent/config/persona.js";
-import { cambiosDeSesion, fotoDeApertura, olvidarSesion, parcheDeSesion } from "../../agent/sesiones/sesionGit.js";
+import { cambiosDeSesion, exportarLoTerminado, fotoDeApertura, olvidarSesion, parcheDeSesion } from "../../agent/sesiones/sesionGit.js";
 import {
   commitDeTurno,
   cambiosPendientes,
@@ -2406,6 +2406,9 @@ export function montarRutas(
   const emitirTareas = (): void => {
     const m = mensajeDeTareas();
     if (m !== undefined) emitir(m);
+    // Una tarea que empieza o acaba cambia qué aparato está ocupado (`dispositivosEnUso`): con la foto que ya hay, sin
+    // volver a medir.
+    if (informeDeDispositivos !== undefined) emitir(mensajeDeDispositivos(informeDeDispositivos));
     programarPanorama();
   };
 
@@ -3052,10 +3055,20 @@ export function montarRutas(
    * **Límite declarado**: va por `basename(raiz)`, así que el mismo nombre de proyecto en dos
    * entornos (`<entorno>/<proyecto>`) se confunde.
    */
-  const dispositivosEnUso = (): { id: string; proyecto: string }[] =>
-    vestibulo
+  const dispositivosEnUso = (): { id: string; proyecto: string; tarea?: string }[] => [
+    ...vestibulo
       .proyectosAbiertos()
-      .flatMap((c) => (c.dispositivo === undefined ? [] : [{ id: c.dispositivo.id, proyecto: basename(c.raiz) }]));
+      .flatMap((c) => (c.dispositivo === undefined ? [] : [{ id: c.dispositivo.id, proyecto: basename(c.raiz) }])),
+    // Y el de cada TAREA en marcha, con su título (IXCODE-58): mientras una tarea prueba en un teléfono, lanzar ahí
+    // la app desde el proyecto le pisaría las capturas. El título sale de la cola; sin él, no se inventa.
+    ...vestibulo.tareasAbiertas().flatMap((c) => {
+      if (c.dispositivo === undefined) return [];
+      const titulo = opciones.colaDeTareas
+        ?.listar()
+        .find((t) => t.estado === "en-proceso" && mismaRuta(t.proyecto.raiz, c.raiz))?.titulo;
+      return [{ id: c.dispositivo.id, proyecto: basename(c.raiz), ...(titulo === undefined ? {} : { tarea: titulo }) }];
+    }),
+  ];
   /**
    * El mensaje `dispositivos` entero, compuesto en UN sitio: la foto, los ajustes leídos AHORA y
    * quién usa qué. Con cada emisor montando el suyo, uno se quedaba sin el campo nuevo —una
@@ -4348,6 +4361,22 @@ export function montarRutas(
   };
 
   /**
+   * La tarea que está TRABAJANDO ahora en esa copia, si la hay: de qué sesión es y desde cuándo corre. Lanzar la app en
+   * otro teléfono mientras tanto sube LO TERMINADO (`sesionGit.ts#exportarLoTerminado`), no sus cambios a medias
+   * (IXCODE-58). La sesión, la de la tarea en la cola o la de su consola viva —en la primera vuelta la cola aún no la
+   * tiene—; sin ninguna, `HEAD`, que ya deja fuera lo que el turno en curso no ha commiteado.
+   */
+  const tareaTrabajandoEn = (raiz: string): { titulo: string; sesion?: string; desde: string } | undefined => {
+    const tarea = opciones.colaDeTareas?.listar().find((t) => t.estado === "en-proceso" && mismaRuta(t.proyecto.raiz, raiz));
+    if (tarea === undefined) return undefined;
+    const sesion = tarea.sesion ?? vestibulo.tareasAbiertas().find((c) => mismaRuta(c.raiz, raiz))?.idDeHilo;
+    return { titulo: tarea.titulo, ...(sesion === undefined ? {} : { sesion }), desde: tarea.empezada ?? tarea.creada };
+  };
+  /** Lo que se le dice a quien va a lanzar con una tarea trabajando: qué se sube y qué no. */
+  const origenConTarea = (titulo: string): string =>
+    `Hay una tarea trabajando en este proyecto («${titulo}»): se sube lo terminado, el estado de antes de que empezara. Sus cambios a medias no van.`;
+
+  /**
    * Contesta el veredicto de «¿se puede lanzar?», pedido desde la pestaña.
    *
    * **Sin proyecto abierto no se contesta nada**, y es deliberado: el mensaje lleva `proyecto`,
@@ -4374,6 +4403,10 @@ export function montarRutas(
       // quedarse viejo— sale de esa foto, y es la que se enseña. Un veredicto sin fecha es una
       // promesa sin fecha.
       medido: informeDeDispositivos?.medido ?? new Date().toISOString(),
+      ...((): { origen?: string } => {
+        const trabajando = tareaTrabajandoEn(medida.abierto.raiz);
+        return trabajando === undefined ? {} : { origen: origenConTarea(trabajando.titulo) };
+      })(),
     });
   };
 
@@ -4472,6 +4505,26 @@ export function montarRutas(
       t0: Date.now(),
     };
     lanzamiento = trabajo;
+    /**
+     * Con una tarea trabajando en la copia, LO TERMINADO a una carpeta aparte y se sube de ahí (IXCODE-58). Antes de
+     * emitir nada: si no se puede separar, se dice y no se sube el disco a medias en su lugar.
+     */
+    const trabajando = tareaTrabajandoEn(medida.abierto.raiz);
+    let raizDelPaquete = medida.abierto.raiz;
+    let carpetaTemporal: string | undefined;
+    if (trabajando !== undefined) {
+      carpetaTemporal = mkdtempSync(join(tmpdir(), "xonecode-terminado-"));
+      try {
+        const commit = await exportarLoTerminado(medida.abierto.raiz, trabajando, carpetaTemporal);
+        raizDelPaquete = carpetaTemporal;
+        trabajo.lineas.push(`${origenConTarea(trabajando.titulo)} (commit ${commit.slice(0, 7)})`);
+      } catch (error) {
+        rmSync(carpetaTemporal, { recursive: true, force: true });
+        lanzamiento = undefined;
+        fallar(`no se pudo separar lo terminado de la tarea en curso («${trabajando.titulo}»): ${motivoLegible(error)}`);
+        return;
+      }
+    }
     // El primer mensaje dice `corriendo`, y su fase es `comprobando`: el recorrido EMPIEZA
     // ahí, así que la primera `alFase("comprobando", …)` no cambia nada y no vuelve a emitir.
     // Los seis tramos se ven igual —el primero ya viene en este mensaje— y el cliente no
@@ -4485,7 +4538,7 @@ export function montarRutas(
       const enCurso: LanzamientoEnCurso = lanzar(
         {
           dispositivo: medida.dispositivo,
-          raiz: medida.abierto.raiz,
+          raiz: raizDelPaquete,
           app: medida.app,
           // El puerto LOCAL del túnel es el de SU aparato: con dos aparatos y el mismo puerto,
           // el `adb forward` del segundo le quita el túnel al primero sin error. Un físico
@@ -4514,6 +4567,7 @@ export function montarRutas(
       alAcabar?.("fallo", motivoLegible(error));
     } finally {
       lanzamiento = undefined;
+      if (carpetaTemporal !== undefined) rmSync(carpetaTemporal, { recursive: true, force: true });
     }
   };
 

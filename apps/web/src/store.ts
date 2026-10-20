@@ -119,7 +119,7 @@ export interface EstadoDelCliente {
    * servidor no lo dice. Se asigna con CADA foto, también `undefined`: una foto sin él no
    * puede dejar el reparto de la anterior.
    */
-  enUsoDeDispositivos?: { id: string; proyecto: string }[];
+  enUsoDeDispositivos?: { id: string; proyecto: string; tarea?: string }[];
   proyectosPorEntorno?: Record<
     string,
     { proyectos?: { id: string; nombre: string; compartido?: boolean }[]; error?: string }
@@ -435,6 +435,8 @@ export interface EstadoDelCliente {
     app?: string;
     dispositivo?: DispositivoElegido;
     medido: string;
+    /** Ver `tipos.ts`: qué se sube con una tarea trabajando (IXCODE-58). Ausente = la copia tal cual. */
+    origen?: string;
   };
   /**
    * El recorrido del lanzamiento, o cómo acabó el último.
@@ -1509,12 +1511,12 @@ export function crearStoreDelCliente(): {
             // de quién es qué.
             enUsoDeDispositivos: Array.isArray((m as { enUso?: unknown }).enUso)
               ? ((m as { enUso: unknown[] }).enUso.filter(
-                  (x): x is { id: string; proyecto: string } =>
+                  (x): x is { id: string; proyecto: string; tarea?: unknown } =>
                     typeof x === "object" &&
                     x !== null &&
                     typeof (x as { id?: unknown }).id === "string" &&
                     typeof (x as { proyecto?: unknown }).proyecto === "string",
-                ).map((x) => ({ id: x.id, proyecto: x.proyecto })))
+                ).map((x) => ({ id: x.id, proyecto: x.proyecto, ...(typeof x.tarea === "string" ? { tarea: x.tarea } : {}) })))
               : undefined,
           });
           return;
@@ -2182,6 +2184,7 @@ export function crearStoreDelCliente(): {
               faltas: faltas as string[],
               medido: m["medido"],
               ...(typeof m["app"] === "string" ? { app: m["app"] } : {}),
+              ...(typeof m["origen"] === "string" ? { origen: m["origen"] } : {}),
               // La foto del dispositivo se copia por sus CAMPOS y no entera: lo que llega por
               // el cable no entra en el estado sin nombre. Una a medias —un id sin nombre—
               // se queda fuera sola, como en el `alta`: el veredicto sigue siendo cierto sin

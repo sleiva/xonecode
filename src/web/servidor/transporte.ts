@@ -572,7 +572,7 @@ export type MensajeAlCliente =
        * `proyecto` es el nombre de su carpeta —el que enseña la barra—, nunca una ruta. Una
        * consola sin dispositivo elegido no aparece.
        */
-      enUso?: { id: string; proyecto: string }[];
+      enUso?: { id: string; proyecto: string; tarea?: string }[];
       /**
        * Qué destinos se miran (`core/settings.ts#AjustesDeDispositivos`). Viaja CON la
        * foto porque las dos cosas se leen juntas: una herramienta «desactivada» solo se
@@ -794,6 +794,11 @@ export type MensajeAlCliente =
        * esta pestaña existe para no pintar.
        */
       medido: string;
+      /**
+       * QUÉ se va a subir, cuando no es el disco tal cual (IXCODE-58): con una tarea trabajando en la copia, lo
+       * terminado de antes de que empezara. Una frase del servidor. Ausente = se sube la copia como está.
+       */
+      origen?: string;
     }
   /**
    * Cómo va el lanzamiento de la app, o cómo acabó. Va a la consola que lo pidió, por lo mismo

@@ -9634,3 +9634,28 @@ Tres comprobaciones, las que pidió:
 conservar lo local exige bajar CloudStudio aparte como base). Una tarea que llega del SONDEO del
 gestor no pasa por la ruta de crear y no se comprueba.
 
+## Ejecutar desde el proyecto, en otro teléfono, con lo terminado (IXCODE-58, 20-10-2026)
+
+Lo pedido (Rafa): «Ejecutar» en las opciones del proyecto y poder llevar el desarrollo a otro teléfono que no esté
+haciendo tareas, para revisar lo ya terminado mientras otra tarea programa y captura en el suyo.
+
+- **La pestaña es la MISMA** (`App.tsx#pestanaDeEjecutar`), montada también en el panel del proyecto. El lanzamiento
+  ya colgaba del proyecto ABIERTO y del aparato de la SESIÓN de la persona; las tareas tienen el suyo, así que elegir
+  el teléfono B en la pestaña no toca el A de la tarea.
+- **Qué teléfono ocupa una tarea** viaja en `enUso` con su título (`tarea`), compuesto en el servidor, y se reemite
+  cuando cambian las tareas. Avisa, no prohíbe: decidir dónde lanzar es de la persona.
+- **Lo terminado, no el disco.** Con una tarea en marcha en la copia, se sube el árbol del commit anterior al PRIMERO
+  que ha sellado desde que empezó (o `HEAD` si aún no selló ninguno), exportado con un índice privado a una carpeta
+  temporal. No la foto de apertura de su sesión: una tarea REANUDADA reabre la sesión y esa foto podría ser de antes
+  de otras tareas cerradas entre medias. No el disco: el turno en curso ya ha escrito ahí. Lo de la persona va
+  commiteado por turno y no puede enviar mientras la tarea escribe (IXCODE-36), así que lo de antes es lo que había.
+  La decisión de dejar fuera también los turnos YA commiteados de la tarea en curso es suya («últimas tareas
+  completadas»). El veredicto lo dice antes de pulsar (`lanzable.origen`).
+
+Los tests de las dos composiciones (la carpeta exportada llega al lanzador y la reemisión de `enUso`) se comprobaron
+QUITANDO cada pieza.
+
+**Límites**: el veredicto («¿se puede lanzar?») se mide sobre el disco, no sobre lo exportado. Sin git no hay nada que
+exportar y el lanzamiento falla diciéndolo (desde IXCODE-60 no se crean tareas en una copia sin git). Toca el mismo
+recorrido que IXCODE-38 (Alejandro): coordinar al fusionar.
+

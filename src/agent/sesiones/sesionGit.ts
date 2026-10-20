@@ -168,6 +168,40 @@ export async function commitsDeSesion(
 }
 
 /**
+ * Exporta a `destino` LO TERMINADO de una copia con una tarea en marcha (IXCODE-58): el árbol del commit anterior al
+ * PRIMERO que esa tarea ha sellado desde `desde`, o `HEAD` si todavía no ha sellado ninguno. Lo que se quiere ver en un
+ * segundo teléfono es lo de las tareas ya cerradas, no los cambios a medias de la que está trabajando.
+ *
+ * **Por los commits y no por la foto de apertura de la sesión**: una tarea que se REANUDA reabre su sesión, y su foto
+ * podría ser de antes de otras tareas terminadas entre medias. Y nunca el DISCO: aunque el turno en curso no haya
+ * commiteado, sus escrituras ya están ahí. Lo de la persona va commiteado por turno, y mientras una tarea escribe la
+ * persona no envía nada (IXCODE-36), así que lo de antes de la tarea es lo que había.
+ *
+ * Con un índice PRIVADO y `checkout-index --prefix`: no toca ni el índice ni el árbol de la copia. LANZA si git no puede;
+ * quien llama lo dice. Devuelve el commit exportado.
+ */
+export async function exportarLoTerminado(
+  raiz: string,
+  tarea: { sesion?: string; desde: string },
+  destino: string
+): Promise<string> {
+  const suyos = tarea.sesion === undefined ? [] : await commitsDeSesion(raiz, tarea.sesion, undefined, tarea.desde);
+  const base = suyos.length > 0 ? `${suyos[0]}^` : "HEAD";
+  const { stdout } = await ejecutar("git", ["rev-parse", "--verify", `${base}^{commit}`], { cwd: raiz });
+  const commit = stdout.trim();
+  const indice = indicePrivado("terminado");
+  try {
+    const env = { ...process.env, GIT_INDEX_FILE: indice.ruta };
+    await ejecutar("git", ["read-tree", commit], { cwd: raiz, env });
+    // La barra final de `--prefix` es lo que lo hace una CARPETA y no un prefijo de nombre.
+    await ejecutar("git", ["checkout-index", "-a", "-f", `--prefix=${destino.replace(/[\\/]*$/, "")}/`], { cwd: raiz, env });
+  } finally {
+    indice.limpiar();
+  }
+  return commit;
+}
+
+/**
  * La clase NETA de un fichero al que la sesión tocó en varios commits, de la primera vez a
  * la última. Pura y aparte porque es una decisión, no un detalle del bucle:
  *

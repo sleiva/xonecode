@@ -63,7 +63,7 @@ export function PastillaDeDispositivo({
    * no un bloqueo: dos sesiones pueden querer el mismo aparato y decidirlo es de la persona.
    * Ausente = no se sabe, y todo se pinta como siempre.
    */
-  enUso?: { id: string; proyecto: string }[];
+  enUso?: { id: string; proyecto: string; tarea?: string }[];
   /** El proyecto de ESTA consola, con la forma que usa el servidor en `enUso`: la propia no cuenta como «otra». */
   proyectoActual?: string;
   /** De qué pregunta habla el menú. En Ajustes es el aparato de las sesiones NUEVAS (IXCODE-51), no el de ésta. */
@@ -98,9 +98,13 @@ export function PastillaDeDispositivo({
   // no hay medida contra la que comprobarlo, y decir «no está» sería inventarlo.
   const presente = informe === undefined || todos.some((d) => d.id === elegido?.id);
 
-  // Las entradas de esta misma consola no avisan de nada: el aparato es suyo.
-  const otros = (enUso ?? []).filter((u) => u.proyecto !== proyectoActual);
-  const usoDe = (id: string): string | undefined => otros.find((u) => u.id === id)?.proyecto;
+  // Las entradas de esta misma consola no avisan de nada: el aparato es suyo. Una TAREA sí, aunque sea del mismo
+  // proyecto: es otra consola probando en ese teléfono (IXCODE-58).
+  const otros = (enUso ?? []).filter((u) => u.proyecto !== proyectoActual || u.tarea !== undefined);
+  const usoDe = (id: string): string | undefined => {
+    const uso = otros.find((u) => u.id === id);
+    return uso === undefined ? undefined : uso.tarea === undefined ? uso.proyecto : `la tarea «${uso.tarea}»`;
+  };
   const usoDelElegido = elegido === undefined ? undefined : usoDe(elegido.id);
 
   const elegir = (id: string | undefined): void => {

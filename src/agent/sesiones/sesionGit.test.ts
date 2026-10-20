@@ -6,6 +6,7 @@ import { dirname, join } from "node:path";
 import {
   cambiosDeSesion,
   claseNeta,
+  exportarLoTerminado,
   fotoDeApertura,
   marcarSesion,
   olvidarSesion,
@@ -507,3 +508,53 @@ describe("revertir una sesión", () => {
     rmSync(raiz, { recursive: true, force: true });
   });
 });
+
+/**
+ * IXCODE-58: con una tarea trabajando, lanzar la app en OTRO teléfono sube lo terminado —lo de antes de que empezara—,
+ * ni sus commits ni lo que su turno tenga a medias en el disco. Con git de verdad.
+ */
+describe("exportarLoTerminado", () => {
+  const leer = (raiz: string, ruta: string): string | undefined =>
+    existsSync(join(raiz, ruta)) ? readFileSync(join(raiz, ruta), "utf8") : undefined;
+
+  it("exporta el commit anterior al primero de la tarea: sin sus commits ni lo que tiene a medias", async () => {
+    const raiz = repo();
+    escribir(raiz, "app.xml", "<app/>");
+    escribir(raiz, "login.js", "terminado");
+    execFileSync("git", ["add", "-A"], { cwd: raiz });
+    execFileSync("git", ["commit", "-q", "-m", "base"], { cwd: raiz });
+    const desde = new Date(Date.now() - 1000).toISOString();
+    // La tarea: un turno commiteado y otro a medias en el disco.
+    escribir(raiz, "login.js", "a medias, turno 1");
+    escribir(raiz, "nuevo.js", "de la tarea");
+    await commitDeTurno(raiz, "turno 1", "tarea-1");
+    escribir(raiz, "login.js", "a medias, turno 2");
+    const destino = mkdtempSync(join(tmpdir(), "xonecode-destino-"));
+
+    const commit = await exportarLoTerminado(raiz, { sesion: "tarea-1", desde }, destino);
+
+    expect(commit).toBe(execFileSync("git", ["rev-parse", "HEAD^"], { cwd: raiz, encoding: "utf8" }).trim());
+    expect(leer(destino, "login.js")).toBe("terminado");
+    expect(leer(destino, "app.xml")).toBe("<app/>");
+    expect(leer(destino, "nuevo.js")).toBeUndefined();
+    // Y la copia no se toca: ni su disco ni su índice.
+    expect(leer(raiz, "login.js")).toBe("a medias, turno 2");
+    expect(execFileSync("git", ["status", "--porcelain"], { cwd: raiz, encoding: "utf8" })).toContain("login.js");
+    rmSync(raiz, { recursive: true, force: true });
+    rmSync(destino, { recursive: true, force: true });
+  });
+
+  it("si la tarea aún no ha commiteado nada, HEAD: lo de su turno en curso se queda fuera igual", async () => {
+    const raiz = repo();
+    escribir(raiz, "login.js", "terminado");
+    execFileSync("git", ["add", "-A"], { cwd: raiz });
+    execFileSync("git", ["commit", "-q", "-m", "base"], { cwd: raiz });
+    escribir(raiz, "login.js", "a medias");
+    const destino = mkdtempSync(join(tmpdir(), "xonecode-destino-"));
+    await exportarLoTerminado(raiz, { desde: new Date().toISOString() }, destino);
+    expect(leer(destino, "login.js")).toBe("terminado");
+    rmSync(raiz, { recursive: true, force: true });
+    rmSync(destino, { recursive: true, force: true });
+  });
+});
+

@@ -70,6 +70,15 @@ describe("PanelDelProyecto", () => {
     expect(alGestor).toHaveBeenCalledTimes(1);
   });
 
+  /** IXCODE-58: «Ejecutar» en el proyecto, la MISMA pestaña de la conversación, cuando `App` la monta. */
+  it("con la ranura de Ejecutar hay pestaña «Ejecutar» y enseña lo que se le pasa", () => {
+    montar({ ejecutar: <p>la pestaña de ejecutar</p> });
+    const tabs = within(screen.getByRole("tablist")).getAllByRole("tab");
+    expect(tabs.map((t) => t.textContent)).toEqual(["Resumen", "Ejecutar", "Tareas", "Conectores"]);
+    pestana("Ejecutar");
+    expect(screen.getByText("la pestaña de ejecutar")).toBeTruthy();
+  });
+
   /**
    * Revisión final (IXCODE-11), hallazgo 3: al caerse el cable el store tira `gestor` entero,
    * pero el panel sigue MONTADO. Si solo pidiera el estado al montar, tras reconectar se quedaría

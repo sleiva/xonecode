@@ -2820,6 +2820,38 @@ export function App({
     />
   );
 
+  /**
+   * La pestaña Ejecutar, UNA para dos sitios: el panel lateral de la conversación y el panel del proyecto (IXCODE-58).
+   * Las dos hablan con el MISMO proyecto abierto y el mismo aparato de la sesión.
+   */
+  const pestanaDeEjecutar = (
+    <Ejecutar
+      // El veredicto y el recorrido salen del STORE, no del cable: `estado.lanzable`
+      // no lleva el discriminante del sobre (`clase: "lanzable"`, que es del mensaje
+      // y no un dato), así que van directos y sin adaptador — el tipo de la pestaña
+      // se declara sobre el estado justo para esto.
+      veredicto={estado.lanzable}
+      lanzamiento={estado.lanzamiento}
+      // El inventario TAL CUAL lo manda el servidor, apagados incluidos: distinguir
+      // «no hay ninguno enchufado» de «hay tres y ninguno arrancado» necesita la
+      // lista entera, y la pestaña decide qué hacer con ella.
+      dispositivos={estado.dispositivos?.dispositivos}
+      // Y que vuelva a medir al entrar: la foto puede ser de hace rato, y esta
+      // pestaña decide con ella en qué aparato se lanza la app.
+      alActualizarDispositivos={actualizarDispositivos}
+      // El dispositivo de la sesión: la MISMA fuente que la pastilla del compositor,
+      // que es donde se elige y donde este botón va a caer.
+      elegido={estado.alta?.dispositivoActivo}
+      conectado={estado.conectado}
+      alRevisar={revisarLanzamiento}
+      alLanzar={lanzarApp}
+      alCancelar={cancelarLanzamiento}
+      alElegirDispositivo={elegirDispositivoDeEjecutar}
+      // Qué teléfono está usando una tarea (IXCODE-58): lanzar encima le pisaría las capturas.
+      {...(estado.enUsoDeDispositivos === undefined ? {} : { enUso: estado.enUsoDeDispositivos })}
+    />
+  );
+
   const elPanel =
     !panelAbierto || vistaDelPanel === undefined ? undefined : (
       <Panel
@@ -2903,31 +2935,7 @@ export function App({
         medida vive en el servidor y habla con `adb`, así que no se hereda de ninguna
         foto, se PIDE. Abrir la pestaña ES entrar a mirarlo.
       */
-      ejecutar={
-        <Ejecutar
-          // El veredicto y el recorrido salen del STORE, no del cable: `estado.lanzable`
-          // no lleva el discriminante del sobre (`clase: "lanzable"`, que es del mensaje
-          // y no un dato), así que van directos y sin adaptador — el tipo de la pestaña
-          // se declara sobre el estado justo para esto.
-          veredicto={estado.lanzable}
-          lanzamiento={estado.lanzamiento}
-          // El inventario TAL CUAL lo manda el servidor, apagados incluidos: distinguir
-          // «no hay ninguno enchufado» de «hay tres y ninguno arrancado» necesita la
-          // lista entera, y la pestaña decide qué hacer con ella.
-          dispositivos={estado.dispositivos?.dispositivos}
-          // Y que vuelva a medir al entrar: la foto puede ser de hace rato, y esta
-          // pestaña decide con ella en qué aparato se lanza la app.
-          alActualizarDispositivos={actualizarDispositivos}
-          // El dispositivo de la sesión: la MISMA fuente que la pastilla del compositor,
-          // que es donde se elige y donde este botón va a caer.
-          elegido={estado.alta?.dispositivoActivo}
-          conectado={estado.conectado}
-          alRevisar={revisarLanzamiento}
-          alLanzar={lanzarApp}
-          alCancelar={cancelarLanzamiento}
-          alElegirDispositivo={elegirDispositivoDeEjecutar}
-        />
-      }
+      ejecutar={pestanaDeEjecutar}
       // La tarjeta del chat abre el artefacto: cambia de pestaña y lo elige.
       />
     );
@@ -3532,6 +3540,7 @@ export function App({
               }}
               // La pestaña Sincronización: solo con copia, que es el proyecto que sincroniza.
               {...(identidadDelActivo === undefined ? {} : { sincronizacion: pestanaDeSincronizacion })}
+              {...(identidadDelActivo === undefined ? {} : { ejecutar: pestanaDeEjecutar })}
               {...(estado.gestor === undefined ? {} : { gestor: estado.gestor })}
               {...(estado.conectores === undefined ? {} : { conectores: estado.conectores })}
               conectado={estado.conectado}

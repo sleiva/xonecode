@@ -54,8 +54,8 @@ Ante una discrepancia con el código, **el código manda**.
 - **Los FIJADOS son otra lista del entorno** (`Entorno.fijados`, `accion: "fijados"`), arriba y sin
   repetirse. Se escriben por separado desde el entorno ENTERO; el store del cliente es lista BLANCA
   por campo: un campo sin nombrar ahí no se pinta.
-- **Pulsar un proyecto abre su PANEL** (`PanelDelProyecto.tsx`, `App.tsx`): Resumen, Tareas, Soporte,
-  Conectores. El proyecto YA abierto enseña el panel SIN mandar `sesion`; «+» y una sesión de la
+- **Pulsar un proyecto abre su PANEL** (`PanelDelProyecto.tsx`, `App.tsx`): Resumen, Sincronización, Ejecutar
+  (la MISMA pestaña de la conversación, `App.tsx#pestanaDeEjecutar`, IXCODE-58), Tareas, Soporte, Conectores. El proyecto YA abierto enseña el panel SIN mandar `sesion`; «+» y una sesión de la
   barra llevan al chat. **Una sola fila marcada** (`proyectoEnResumen` manda); con panel delante
   ningún chat va marcado.
 - **Resumen** (`ResumenDeProyecto.tsx`): la COPIA (pastillas, Descargar, «Abrir carpeta», «Borrar

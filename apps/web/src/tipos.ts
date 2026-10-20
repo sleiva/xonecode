@@ -880,7 +880,7 @@ export type MensajeAlCliente =
       arranque?: { avd: string; ok: boolean; detalle: string };
       /** Qué dispositivo tiene elegido cada consola abierta, y de qué proyecto (el nombre de su
        *  carpeta, nunca una ruta). Ausente = el servidor no lo dice. */
-      enUso?: { id: string; proyecto: string }[];
+      enUso?: { id: string; proyecto: string; tarea?: string }[];
     }
   /**
    * Los ficheros que la sesión ha tocado, y el parche de uno. Los tres `via` son tres cosas
@@ -999,6 +999,8 @@ export type MensajeAlCliente =
       app?: string;
       dispositivo?: DispositivoElegido;
       medido: string;
+      /** Qué se sube cuando no es la copia tal cual (IXCODE-58): con una tarea trabajando, lo terminado. Frase del servidor. */
+      origen?: string;
     }
   /**
    * Cómo va el lanzamiento de la app, o cómo acabó. `lineas` es la COLA del recorrido —lo que

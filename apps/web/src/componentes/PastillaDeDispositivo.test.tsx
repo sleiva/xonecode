@@ -151,6 +151,20 @@ describe("PastillaDeDispositivo", () => {
       expect(screen.getByLabelText("también lo usa TagMyXOne")).toBeTruthy();
     });
 
+    it("una TAREA del mismo proyecto sí avisa: es otra consola probando en ese teléfono (IXCODE-58)", () => {
+      const elegido = { id: "emulator-5556", nombre: "Pixel 9", plataforma: "android" as const, clase: "emulador" as const };
+      render(
+        <PastillaDeDispositivo
+          informe={DOS}
+          elegido={elegido}
+          alElegir={() => {}}
+          enUso={[{ id: "emulator-5556", proyecto: "TagMyXOne", tarea: "Rehacer el login" }]}
+          proyectoActual="TagMyXOne"
+        />
+      );
+      expect(screen.getByLabelText("también lo usa la tarea «Rehacer el login»")).toBeTruthy();
+    });
+
     it("lo de esta misma consola no avisa, y sin enUso todo queda igual", () => {
       const elegido = { id: "emulator-5556", nombre: "Pixel 9", plataforma: "android" as const, clase: "emulador" as const };
       const { unmount } = render(<PastillaDeDispositivo informe={DOS} elegido={elegido} alElegir={() => {}} enUso={USO} proyectoActual="TagMyXOne" />);

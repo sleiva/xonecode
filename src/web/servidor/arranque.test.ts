@@ -6092,6 +6092,63 @@ describe("las tareas en background, por el cable", () => {
     expect(ultimo(cliente).lista[0]!.esperaPorTi).toBeUndefined();
   });
 
+  /**
+   * IXCODE-58: qué teléfono ocupa una tarea en marcha viaja en `enUso` con su TÍTULO, compuesto en el servidor; y se
+   * reemite cuando cambian las tareas, con la foto que ya hay (sin volver a medir).
+   */
+  it("el aparato de una tarea en marcha va en `enUso` con su título, y se reemite al cambiar las tareas", async () => {
+    const servidor = servidorDeMentira();
+    const cola = colaDeMentira();
+    const real = vestibuloDePrueba();
+    let conTarea = false;
+    const vestibulo: Vestibulo = {
+      ...real,
+      tareasAbiertas: () =>
+        conTarea
+          ? ([{ raiz: "/w/AppDemo", dispositivo: { id: "R58", nombre: "Galaxy", plataforma: "android", clase: "fisico" } }] as unknown as ReturnType<
+              Vestibulo["tareasAbiertas"]
+            >)
+          : [],
+    };
+    let medidas = 0;
+    montarRutas(servidor, vestibulo, {
+      colaDeTareas: cola,
+      detectarDispositivos: async () => {
+        medidas += 1;
+        return { sistema: "mac" as const, herramientas: [], dispositivos: [], avds: [], recetas: [], medido: "2026-10-20T10:00:00.000Z" };
+      },
+    });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+    await enviarMensaje(servidor.rutas.get(`POST ${RUTA_ACCION}`)!, { clase: "dispositivos" });
+    await asentar();
+    const antes = medidas;
+    conTarea = true;
+    cola.guardar([
+      {
+        id: "t1",
+        proyecto: { id: "p1", raiz: "/w/AppDemo", nombre: "AppDemo" },
+        titulo: "Rehacer el login",
+        peticion: "x",
+        encargo: "x",
+        adjuntos: [],
+        estado: "en-proceso" as const,
+        creada: "2026-10-20T10:00:00.000Z",
+      },
+    ]);
+    // Un cambio de tareas que llega por el cable (aquí, la concurrencia) reemite tareas Y dispositivos.
+    await enviarMensaje(servidor.rutas.get(`POST ${RUTA_ACCION}`)!, { clase: "tareas", concurrencia: 2 });
+    await asentar();
+    const dispositivos = cliente.recibidos.filter((m) => m.clase === "dispositivos").at(-1) as Extract<
+      MensajeAlCliente,
+      { clase: "dispositivos" }
+    >;
+    expect(dispositivos.enUso).toContainEqual({ id: "R58", proyecto: "AppDemo", tarea: "Rehacer el login" });
+    expect(medidas).toBe(antes);
+    await real.cerrar();
+  });
+
   it("lo que la tarea AUTORIZÓ viaja, con ruta relativa; ausente cuando no consta", async () => {
     const servidor = servidorDeMentira();
     const cola = colaDeMentira([
@@ -10643,6 +10700,60 @@ describe("el recorrido por el cable — el veredicto, la intención y las fases"
       proyecto: "Tienda",
       dispositivo: { id: "ABC", nombre: "Pixel 8", plataforma: "android", clase: "fisico" },
     });
+    await m.cerrar();
+  });
+
+  /**
+   * IXCODE-58: con una tarea TRABAJANDO en la copia, lanzar en otro teléfono sube LO TERMINADO —una carpeta exportada de
+   * git, lo de antes de que empezara—, no el disco con sus cambios a medias. Y el veredicto lo dice antes de pulsar.
+   */
+  it("con una tarea trabajando sube lo terminado desde una carpeta aparte, y lo dice", async () => {
+    const cola = colaDeMentira();
+    let pedido: PeticionDeLanzamiento | undefined;
+    let loQueSubio: string | undefined;
+    const m = await montar({
+      xml: APP_XML,
+      conBase: true,
+      opciones: {
+        colaDeTareas: cola,
+        frameworkEnDispositivo: async () => ({ instalado: true }),
+        lanzarEnDispositivo: (peticion) => {
+          pedido = peticion;
+          loQueSubio = readFileSync(join(peticion.raiz, "app.ini"), "utf8");
+          return { cancelar: () => {}, terminado: Promise.resolve({ estado: "ok", fase: "comprobando-arranque", ms: 1 }) };
+        },
+      },
+    });
+    const git = (...args: string[]) => execFileSync("git", args, { cwd: m.raiz });
+    git("init", "-q");
+    git("add", "-A");
+    git("-c", "user.email=x@y.z", "-c", "user.name=x", "commit", "-q", "-m", "terminado");
+    // La tarea, a medias en el disco.
+    writeFileSync(join(m.raiz, "app.ini"), "name=AppDemo\n# a medias\n");
+    cola.guardar([
+      {
+        id: "t1",
+        proyecto: { id: "p1", raiz: m.raiz, nombre: "Tienda" },
+        titulo: "Rehacer el login",
+        peticion: "x",
+        encargo: "x",
+        adjuntos: [],
+        estado: "en-proceso",
+        creada: new Date().toISOString(),
+        empezada: new Date().toISOString(),
+      },
+    ]);
+
+    await enviarMensaje(m.accion, { clase: "revisarLanzamiento" });
+    await esperarA(() => dichos(m.cliente, "lanzable").length > 0);
+    expect(dichos(m.cliente, "lanzable").at(-1)!.origen).toMatch(/«Rehacer el login».*lo terminado/);
+
+    await enviarMensaje(m.accion, { clase: "lanzarApp" });
+    await esperarA(() => dichos(m.cliente, "lanzamiento").at(-1)?.estado === "ok");
+    expect(pedido!.raiz).not.toBe(m.raiz);
+    expect(loQueSubio).toBe(APP_INI);
+    // La carpeta aparte no se queda en el disco.
+    expect(existsSync(pedido!.raiz)).toBe(false);
     await m.cerrar();
   });
 

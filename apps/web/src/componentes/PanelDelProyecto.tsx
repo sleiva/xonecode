@@ -45,7 +45,7 @@ export type PeticionAlGestor = MensajeDelGestor extends infer M ? (M extends { c
  */
 export type ContextoDeGestor = { destino?: string };
 
-export type PestanaDelProyecto = "resumen" | "sincronizacion" | "tareas" | "conectores" | "soporte";
+export type PestanaDelProyecto = "resumen" | "sincronizacion" | "ejecutar" | "tareas" | "conectores" | "soporte";
 
 /** Lo que el panel necesita para el mapeo de estados y el disparo del vínculo (la puerta 2). Lo resuelve `App`. */
 export interface AjusteDeTareasDesdeElGestor {
@@ -78,6 +78,7 @@ function proyectoALaVista(v: VinculoDelCable): string | undefined {
 const PESTANAS: { id: PestanaDelProyecto; etiqueta: string }[] = [
   { id: "resumen", etiqueta: "Resumen" },
   { id: "sincronizacion", etiqueta: "Sincronización" },
+  { id: "ejecutar", etiqueta: "Ejecutar" },
   { id: "tareas", etiqueta: "Tareas" },
   { id: "conectores", etiqueta: "Conectores" },
   { id: "soporte", etiqueta: "Soporte" },
@@ -122,6 +123,7 @@ export function PanelDelProyecto({
   tareasEnFondo,
   tareasEnCurso,
   sincronizacion,
+  ejecutar,
   gestor,
   conectores,
   conectado,
@@ -160,6 +162,11 @@ export function PanelDelProyecto({
    * proyecto abierto, que es el que sincroniza el servidor).
    */
   sincronizacion?: ReactNode;
+  /**
+   * La pestaña «Ejecutar» (IXCODE-58): la MISMA de la conversación, a mano desde el proyecto. Ranura montada por `App`;
+   * ausente = no hay pestaña (sin copia, o no es el proyecto abierto, que es el que lanza el servidor).
+   */
+  ejecutar?: ReactNode;
   gestor?: EstadoDelCliente["gestor"];
   conectores?: EstadoDelCliente["conectores"];
   conectado: boolean;
@@ -218,7 +225,10 @@ export function PanelDelProyecto({
   const pestanasALaVista = sinCopia
     ? PESTANAS.filter((p) => p.id === "resumen")
     : PESTANAS.filter(
-        (p) => (p.id !== "soporte" || hayPestanaDeSoporte) && (p.id !== "sincronizacion" || sincronizacion !== undefined)
+        (p) =>
+          (p.id !== "soporte" || hayPestanaDeSoporte) &&
+          (p.id !== "sincronizacion" || sincronizacion !== undefined) &&
+          (p.id !== "ejecutar" || ejecutar !== undefined)
       );
   /**
    * La ÚLTIMA petición de cada acción que salió de este panel: lo que se vuelve a mandar, UNA
@@ -390,6 +400,8 @@ export function PanelDelProyecto({
           </>
         ) : pestana === "sincronizacion" && sincronizacion !== undefined ? (
           <div className={estilos.sincronizacion}>{sincronizacion}</div>
+        ) : pestana === "ejecutar" && ejecutar !== undefined ? (
+          <div className={estilos.sincronizacion}>{ejecutar}</div>
         ) : pestana === "tareas" ? (
           <>
             {/* Primero las tareas en BACKGROUND del proyecto —las que el agente hace solo, que

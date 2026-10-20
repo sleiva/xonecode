@@ -895,6 +895,11 @@ export interface Vestibulo {
    * `ocupada` ni ven la guarda de IXCODE-36: bloquean las tareas por aquí (IXCODE-61).
    */
   obrasEnCurso(): readonly string[];
+  /**
+   * Las consolas de las TAREAS vivas (las de `deTareas` sin cerrar). Lo que el resto pregunta de ellas es su raíz y su
+   * aparato: qué teléfono está ocupando una tarea, para no lanzar encima la app de otra cosa (IXCODE-58).
+   */
+  tareasAbiertas(): readonly ConsolaDeProyecto[];
 
   /**
    * Por qué no se puede guardar a mano en esa raíz ahora mismo (`core/settings.ts
@@ -2777,6 +2782,7 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
     // vivo escribe aunque su lazo haya terminado — mientras la consola siga en `abiertas`, que la
     // poda de `cerrarLasOciosasSalvo` al abrir otro proyecto la saca. Las de tarea, vivas o con turno.
     obrasEnCurso: () => [...obras.keys()],
+    tareasAbiertas: () => [...deTareas].filter((c) => !c.cerrada),
     // Las RESERVADAS cuentan como tareas: una que se está abriendo va a escribir ahí (IXCODE-61).
     motivoParaNoEditar: (raiz) =>
       motivoParaNoEditarFichero({

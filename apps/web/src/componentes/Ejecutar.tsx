@@ -45,6 +45,7 @@ export function Ejecutar({
   alLanzar,
   alCancelar,
   alElegirDispositivo,
+  enUso,
 }: {
   /**
    * El veredicto de la medida. Ausente = todavía no ha llegado ninguna.
@@ -80,6 +81,11 @@ export function Ejecutar({
   alCancelar?: () => void;
   /** El id del dispositivo elegido. Ausente = la lista se enseña, pero no se elige. */
   alElegirDispositivo?: (id: string) => void;
+  /**
+   * Quién usa cada aparato (`dispositivos.enUso`): aquí solo cuentan las TAREAS en marcha (IXCODE-58). Lanzar encima de
+   * una le pisa las capturas, así que se dice en su fila; sigue elegible, porque decidir es de la persona.
+   */
+  enUso?: readonly { id: string; proyecto: string; tarea?: string }[];
 }) {
   // Depende de `conectado`, de `alRevisar` y de CUÁL es el dispositivo elegido. Las tres son
   // entradas del veredicto: el aparato elegido es una de las cosas que `puedeLanzarse` mira, así
@@ -160,6 +166,8 @@ export function Ejecutar({
                 sale de la FOTO del equipo —que puede tener minutos—, no de este instante. */}
             {medido === undefined ? null : <span className={estilos.sello}>medido el {medido}</span>}
           </p>
+          {/* Qué se sube, cuando no es la copia tal cual: con una tarea trabajando, lo terminado. La frase es del servidor. */}
+          {veredicto.origen === undefined ? null : <p className={estilos.aviso}>{veredicto.origen}</p>}
           {veredicto.listo ? (
             <p className={estilos.listo}>Está todo lo que hace falta: se puede lanzar.</p>
           ) : (
@@ -270,6 +278,9 @@ export function Ejecutar({
                       explica dónde va a caer el botón de arriba, y un color no lo lee un
                       lector de pantalla. */}
                   {esElegido ? <span className={estilos.marca}>el de esta sesión</span> : null}
+                  {((tarea) => (tarea === undefined ? null : <span className={estilos.marca}>{`lo usa la tarea «${tarea}»`}</span>))(
+                    enUso?.find((u) => u.id === d.id && u.tarea !== undefined)?.tarea
+                  )}
                 </li>
               );
             })}

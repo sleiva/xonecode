@@ -67,6 +67,36 @@ const EN_CURSO: Lanzamiento = {
  */
 const ESTADO_DEL_STORE: EstadoDelCliente = { actos: [], conectado: true, lanzable: VEREDICTO, lanzamiento: EN_CURSO };
 
+/** IXCODE-58: lanzar con una tarea trabajando, y en qué teléfono está ella. */
+describe("Ejecutar: con una tarea trabajando", () => {
+  it("dice qué se sube cuando no es la copia tal cual (frase del servidor)", () => {
+    const origen = "Hay una tarea trabajando en este proyecto («X»): se sube lo terminado.";
+    render(<Ejecutar veredicto={{ ...VEREDICTO, origen }} conectado alRevisar={NADA} />);
+    expect(screen.getByText(origen)).toBeTruthy();
+  });
+
+  it("marca el aparato que usa una tarea, y sigue elegible", () => {
+    const alElegirDispositivo = vi.fn();
+    render(
+      <Ejecutar
+        conectado
+        alRevisar={NADA}
+        dispositivos={[PIXEL]}
+        alElegirDispositivo={alElegirDispositivo}
+        enUso={[{ id: PIXEL.id, proyecto: "AppDemo", tarea: "Rehacer el login" }]}
+      />
+    );
+    expect(screen.getByText("lo usa la tarea «Rehacer el login»")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: new RegExp(PIXEL.nombre) }));
+    expect(alElegirDispositivo).toHaveBeenCalledWith(PIXEL.id);
+  });
+
+  it("una persona en otro proyecto no se marca aquí: solo las tareas", () => {
+    render(<Ejecutar conectado alRevisar={NADA} dispositivos={[PIXEL]} enUso={[{ id: PIXEL.id, proyecto: "Otro" }]} />);
+    expect(screen.queryByText(/lo usa/)).toBeNull();
+  });
+});
+
 describe("Ejecutar: la medida y el botón", () => {
   it("sin veredicto dice que está midiendo, y no adelanta un botón", () => {
     render(<Ejecutar conectado alRevisar={NADA} alLanzar={NADA} />);

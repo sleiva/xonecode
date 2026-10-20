@@ -904,10 +904,21 @@ describe("la foto de la máquina («dispositivos»)", () => {
           d: { puerto: 9000, sinVentana: false },
         },
       },
-      enUso: [{ id: "emulator-5554", proyecto: "App" }, { id: 3, proyecto: "x" }, { id: "y" }],
+      enUso: [
+        { id: "emulator-5554", proyecto: "App" },
+        { id: 3, proyecto: "x" },
+        { id: "y" },
+        // La de una TAREA lleva su título (IXCODE-58); uno que no es texto no se copia.
+        { id: "R58", proyecto: "App", tarea: "Rehacer el login" },
+        { id: "R59", proyecto: "App", tarea: 7 },
+      ],
     });
     expect(s.leer().ajustesDeDispositivos?.avds).toEqual({ pixel8: { puerto: 8443, sinVentana: true }, d: { puerto: 9000 } });
-    expect(s.leer().enUsoDeDispositivos).toEqual([{ id: "emulator-5554", proyecto: "App" }]);
+    expect(s.leer().enUsoDeDispositivos).toEqual([
+      { id: "emulator-5554", proyecto: "App" },
+      { id: "R58", proyecto: "App", tarea: "Rehacer el login" },
+      { id: "R59", proyecto: "App" },
+    ]);
     s.aplicar({ clase: "dispositivos", informe, ajustes: {} });
     expect(s.leer().ajustesDeDispositivos?.avds).toBeUndefined();
     expect(s.leer().enUsoDeDispositivos).toBeUndefined();
@@ -1225,6 +1236,14 @@ describe("el veredicto de lanzar y el recorrido del lanzamiento", () => {
     lineas: ["adb shell am start -n com.xone.android.framework/…"],
     ms: 1200,
     ...extra,
+  });
+
+  it("`lanzable` trae QUÉ se sube cuando hay una tarea trabajando (IXCODE-58), y sin él no se inventa", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar(veredicto({ origen: "se sube lo terminado" }));
+    expect(s.leer().lanzable?.origen).toBe("se sube lo terminado");
+    s.aplicar(veredicto({ origen: 3 }));
+    expect(s.leer().lanzable).not.toHaveProperty("origen");
   });
 
   it("`lanzable` llega campo a campo, con la foto del dispositivo copiada por sus campos", () => {
