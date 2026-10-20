@@ -1,7 +1,7 @@
 import { describe, it, expect, afterAll } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, rmSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import path, { join } from "node:path";
 import {
   claseDeToolExterna,
   veredictoDeRuta,
@@ -12,6 +12,7 @@ import {
   opcionesDeSubagenteExterno,
   eventoDeToolExterna,
   dentroDeUnaLectura,
+  rutaDePlanDelHijo,
   lecturasDelHijo,
   motivoDeBashExterno,
   inventarioDelProyecto,
@@ -821,5 +822,95 @@ describe("leer las referencias de una skill montada (Claude Code)", () => {
     expect(leer(join(skillReal, "trampa.md"))).toBe("deny");
     expect(leer(join(base, "secreto.txt"))).toBe("deny");
     expect(leer(join(base, "casa", "motores", "claude", "otra-cosa.json"))).toBe("deny");
+  });
+});
+
+/**
+ * La puerta de `/planes/` para un hijo de Claude Code. Medido en Maset (20-10-2026, desde Windows): el analista dejó el
+ * plan en `planes/` en la raíz del proyecto porque `.xonecode/` le estaba denegado entero.
+ */
+describe("los planes de un hijo de Claude Code, en `.xonecode/planes/` y en ningún otro sitio", () => {
+  const base = realpathSync(mkdtempSync(join(tmpdir(), "xc-planes-externo-")));
+  const proyecto = join(base, "proyecto");
+  const planes = join(proyecto, ".xonecode", "planes");
+  mkdirSync(join(planes, "entrega"), { recursive: true });
+  writeFileSync(join(planes, "entrega", "TASKS.md"), "- [ ] 1");
+  writeFileSync(join(proyecto, ".xonecode", "checkpoint.sqlite"), "secreto");
+  symlinkSync(join(proyecto, ".xonecode", "checkpoint.sqlite"), join(planes, "entrega", "enlace.md"));
+  afterAll(() => rmSync(base, { recursive: true, force: true }));
+  const plan = (r: string, carpetas = false) => rutaDePlanDelHijo(proyecto, r, realpathSync, { carpetas });
+
+  it("un fichero de un plan, exista o no, sale con su ruta virtual", () => {
+    expect(plan(join(planes, "entrega", "TASKS.md"))).toBe("/planes/entrega/TASKS.md");
+    expect(plan(join(planes, "entrega", "PLAN.md"))).toBe("/planes/entrega/PLAN.md");
+    expect(plan(join(planes, "nuevo", "adr", "0001.md"))).toBe("/planes/nuevo/adr/0001.md");
+  });
+
+  it("y nada más: ni por `..`, ni por un enlace, ni relativa, ni sin plan, ni con un nombre que no es slug", () => {
+    expect(plan(join(planes, "entrega", "..", "..", "checkpoint.sqlite"))).toBeUndefined();
+    expect(plan(join(planes, "entrega", "enlace.md"))).toBeUndefined();
+    expect(plan(".xonecode/planes/entrega/PLAN.md")).toBeUndefined();
+    expect(plan(join(planes, "suelto.md"))).toBeUndefined();
+    expect(plan(join(planes, "Con Espacios", "PLAN.md"))).toBeUndefined();
+    expect(plan(join(proyecto, "planes", "entrega", "PLAN.md"))).toBeUndefined();
+    expect(plan(`${planes}-otra/entrega/PLAN.md`)).toBeUndefined();
+  });
+
+  it("las carpetas solo valen para buscar, no para escribir", () => {
+    expect(plan(planes)).toBeUndefined();
+    expect(plan(planes, true)).toBe("/planes/");
+    expect(plan(join(planes, "entrega"), true)).toBe("/planes/entrega/");
+  });
+
+  it("si `.xonecode/planes` es un ENLACE a otra parte, lo de dentro no pasa", () => {
+    const otro = join(base, "otro");
+    const fuera = join(base, "fuera");
+    mkdirSync(join(otro, ".xonecode"), { recursive: true });
+    mkdirSync(join(fuera, "x"), { recursive: true });
+    symlinkSync(fuera, join(otro, ".xonecode", "planes"));
+    expect(rutaDePlanDelHijo(otro, join(otro, ".xonecode", "planes", "x", "PLAN.md"), realpathSync)).toBeUndefined();
+  });
+
+  it("el hook deja LEER un plan y sigue cerrando el resto de `.xonecode/`", () => {
+    const leer = (file_path: string) =>
+      decisionDePreToolUse({ nombre: "Read", entrada: { file_path }, cwd: proyecto, ficheros: new Set<string>() }).permissionDecision;
+    expect(leer(join(planes, "entrega", "TASKS.md"))).toBe("allow");
+    expect(leer(join(proyecto, ".xonecode", "checkpoint.sqlite"))).toBe("deny");
+    expect(leer(join(planes, "entrega", "enlace.md"))).toBe("deny");
+  });
+
+  it("y la línea de la tool lo cuenta por `/planes/`, no por `.xonecode`", () => {
+    expect(eventoDeToolExterna("Write", { file_path: join(planes, "entrega", "PLAN.md") }, proyecto).detalle).toBe("/planes/entrega/PLAN.md");
+  });
+});
+
+/** Las mismas reglas con las rutas de cada sistema, sin necesitar ese sistema: el disco doblado, `path` de cada uno. */
+describe("los planes de un hijo, con rutas de Windows y de POSIX", () => {
+  const tal = (r: string) => r;
+
+  it("Windows: `\\` o `/`, y la letra de unidad sin distinguir mayúsculas, como NTFS", () => {
+    const p = path.win32;
+    const raiz = "C:\\Users\\rafa\\.xonecode\\workspace\\dev\\Maset";
+    const plan = (r: string, carpetas = false) => rutaDePlanDelHijo(raiz, r, tal, { p, carpetas });
+    expect(plan(`${raiz}\\.xonecode\\planes\\entrega-albaran-2\\PLAN.md`)).toBe("/planes/entrega-albaran-2/PLAN.md");
+    expect(plan("C:/Users/rafa/.xonecode/workspace/dev/Maset/.xonecode/planes/entrega-albaran-2/TASKS.md")).toBe(
+      "/planes/entrega-albaran-2/TASKS.md"
+    );
+    expect(plan("c:\\users\\rafa\\.xonecode\\workspace\\dev\\maset\\.xonecode\\planes\\e\\PLAN.md")).toBe("/planes/e/PLAN.md");
+    expect(plan(`${raiz}\\.xonecode\\planes\\e\\..\\..\\config.json`)).toBeUndefined();
+    expect(plan(`${raiz}\\planes\\e\\PLAN.md`)).toBeUndefined();
+    expect(plan("D:\\Users\\rafa\\.xonecode\\workspace\\dev\\Maset\\.xonecode\\planes\\e\\PLAN.md")).toBeUndefined();
+    expect(plan(".xonecode\\planes\\e\\PLAN.md")).toBeUndefined();
+    expect(plan(`${raiz}\\.xonecode\\planes\\e`, true)).toBe("/planes/e/");
+  });
+
+  it("POSIX (macOS, Linux): una `\\` es parte del nombre y no un separador, así que no pasa", () => {
+    const p = path.posix;
+    const raiz = "/home/rafa/.xonecode/workspace/dev/Maset";
+    const plan = (r: string) => rutaDePlanDelHijo(raiz, r, tal, { p });
+    expect(plan(`${raiz}/.xonecode/planes/e/PLAN.md`)).toBe("/planes/e/PLAN.md");
+    expect(plan(`${raiz}/.xonecode/planes/e/a\\b.md`)).toBeUndefined();
+    expect(plan(`${raiz}/.xonecode/planes/../config.json`)).toBeUndefined();
+    expect(plan(`${raiz}/.XONECODE/planes/e/PLAN.md`)).toBeUndefined();
   });
 });

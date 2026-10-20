@@ -27,6 +27,7 @@ import { TOPE_DE_PREGUNTAS_CONTESTADAS_SOLAS, opcionRecomendada } from "../../..
 import { claseDeTrabajo } from "../../../core/esfuerzo.js";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { CARPETA_DE_PLANES } from "../../../core/planes.js";
 import winston from "winston";
 import { AgentThread, AgentThreadOrchestrator, EventType, NOOP_AGENT_TRACING, askUserQuestion, contextCompaction, dynamicSubAgents } from "./trueforge.js";
 import { TOPE_DE_LLAMADAS_DEL_CONDUCTOR, TOPE_DE_LLAMADAS_DEL_ESPECIALISTA } from "../../turno/resumenDeContexto.js";
@@ -71,7 +72,7 @@ import { carpetaDeHotswap } from "../../../core/hotswap.js";
 import { cargarAgentes } from "../../subagentes/agentesEnDisco.js";
 import { bloqueDeAprendido, NOMBRE_APUNTAR_APRENDIZAJE, USO_DE_APRENDIDO_EXTERNO, USO_DE_APUNTAR_APRENDIZAJE } from "../../../core/aprendido.js";
 import { crearApuntarAprendizaje, leerAprendido } from "../../grafo/aprendido.js";
-import { fichaDeAgente, promptDeAgente, recibeMarcarCriterios, recibeNucleoDeTrabajo, repartirSkills, skillsConLasDeQuienLlama, textoDeCarpetasDeLaSesion, textoDeTrabajoSinLlamar, type Agente } from "../../../core/agentes.js";
+import { fichaDeAgente, promptDeAgente, recibeMarcarCriterios, recibeNucleoDeTrabajo, repartirSkills, skillsConLasDeQuienLlama, textoDeCarpetaDePlanes, textoDeCarpetasDeLaSesion, textoDeTrabajoSinLlamar, type Agente } from "../../../core/agentes.js";
 import { PERFIL_DEL_ORQUESTADOR, promptOrquestador } from "../../grafo/xoneAgent.js";
 import { permisosDe, seDetieneEn, TEXTO_HITL } from "../../grafo/perfiles.js";
 import { cambioDe } from "../../turno/interrupts.js";
@@ -1355,6 +1356,8 @@ export async function abrirSesionTrueforge(
               promptDeAgente(delHijo, repartirSkills(delHijo, disponibles)),
               ...(conEjecucion && (agente.llama ?? []).length > 0 ? [textoDeTrabajoSinLlamar(agente.llama ?? [], carpeta!)] : []),
               ...(lecturasDeSesion === undefined ? [] : [textoDeCarpetasDeLaSesion(lecturasDeSesion[0]!, lecturasDeSesion[1]!)]),
+              // Su puerta a `/planes/` (`escrituraExterna.ts#rutaDePlanDelHijo`): sin decirle dónde cae, el plan acababa en el proyecto.
+              ...(motor === "claude-code" ? [textoDeCarpetaDePlanes(join(raiz, CARPETA_DE_PLANES))] : []),
               ...[bloqueDeAprendido(leerAprendido(raiz))].filter((b): b is string => b !== undefined),
               USO_DE_APRENDIDO_EXTERNO,
               inventarioDelProyecto(ficherosDelProyecto(raiz)),

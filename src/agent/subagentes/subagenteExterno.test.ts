@@ -32,6 +32,14 @@ describe("decisionDeTool — la regla de seguridad de los agentes externos", () 
     expect((await decidir("Read", { entrada: { file_path: "/paquete/skills/xone-development/SKILL.md" } })).behavior).toBe("deny");
   });
 
+  it("un PLAN se escribe sin política y aunque sea de solo lectura, como en el grafo; el resto de `.xonecode/`, no", async () => {
+    const escribir = (file_path: string) => decidir("Write", { entrada: { file_path, content: "# plan" } });
+    expect(await escribir("/proyecto/.xonecode/planes/entrega/PLAN.md")).toEqual({ behavior: "allow" });
+    expect((await escribir("/proyecto/.xonecode/config.json")).behavior).toBe("deny");
+    expect((await escribir("/proyecto/planes/entrega/PLAN.md")).behavior).toBe("deny");
+    expect((await escribir("/proyecto/.xonecode/planes/../config.json")).behavior).toBe("deny");
+  });
+
   it("permite leer y buscar, que es para lo que se llama a uno de estos", async () => {
     for (const tool of ["Read", "Glob", "Grep", "NotebookRead", "TodoWrite"]) {
       expect((await decidir(tool)).behavior, tool).toBe("allow");

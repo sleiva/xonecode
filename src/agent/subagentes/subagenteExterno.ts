@@ -25,6 +25,7 @@
  * `disponible` contestando que no en vez de reventar al importar.
  */
 
+import { realpathSync } from "node:fs";
 import type {
   ConsumoExterno,
   MotorExterno,
@@ -47,6 +48,7 @@ import {
   eventoDeToolExterna,
   veredictoDeLectura,
   lecturasDelHijo,
+  rutaDePlanDelHijo,
   motivoDeToolDenegada,
   veredictoDeRuta,
   MOTIVO_DE_ESCRITURA_RECHAZADA,
@@ -143,6 +145,18 @@ export async function decisionDeTool(opciones: {
   }
   if (clase !== "escritura") {
     return { behavior: "deny", message: motivoDeToolDenegada(nombre, clase) };
+  }
+  /**
+   * **Un plan se escribe sin autorización y también siendo de solo lectura**, como en el grafo (`puedeEscribirRuta`,
+   * `seDetieneEn`): no es el proyecto —no entra en git ni sube a Studio— y es estado de trabajo que el desarrollador
+   * marca sobre la marcha. Va ANTES del papel y de la política por eso, y solo con la forma validada de un plan.
+   */
+  const ficheroDePlan = entrada["file_path"];
+  const plan =
+    typeof ficheroDePlan === "string" ? rutaDePlanDelHijo(peticion.cwd, ficheroDePlan, opciones.real ?? realpathSync) : undefined;
+  if (plan !== undefined) {
+    peticion.trazar?.({ accion: "plan", ruta: plan, decision: "permitido" });
+    return { behavior: "allow" };
   }
   if (!peticion.permitirEscritura) {
     return { behavior: "deny", message: motivoDeToolDenegada(nombre, clase) };

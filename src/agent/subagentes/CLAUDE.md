@@ -90,6 +90,11 @@ Un `.md` con frontmatter en `.xonecode/agentes/<nombre>.md` (`core/agentes.ts`,
 - **La denegación vive en un hook `PreToolUse`** (`allow`/`deny`/`ask`), `permissionMode: default`;
   `canUseTool` repite las comprobaciones como segunda llave.
 - **`settingSources: []`**. Coste: no carga el `CLAUDE.md` del proyecto ni un `apiKeyHelper`.
+- **`.xonecode/planes/` es la ÚNICA puerta de `.xonecode/`** (`escrituraExterna.ts#rutaDePlanDelHijo`): un fichero
+  de plan con forma de `esRutaDePlan` se LEE y se ESCRIBE sin política y aunque sea de solo lectura, como en el grafo.
+  Texto Y `realpath`, con la carpeta compuesta desde la raíz canónica (un `planes` enlazado no pasa); `path` por
+  parámetro para probar `win32` y `posix`. Al hijo se le dice dónde cae (`textoDeCarpetaDePlanes`): sin eso dejaba el
+  plan en la raíz del proyecto.
 - **LEER también lleva guarda**: `.env`, `.git`, `.xonecode` y lo de FUERA se deniegan;
   `/skills/`, `/adjuntos/` y un artefacto mal puesto sí. `Glob`/`Grep`: `path` OPCIONAL (raíz).
   **Límite**: un `Grep` sobre la raíz puede devolver líneas de un denegado.

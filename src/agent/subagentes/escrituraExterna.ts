@@ -23,7 +23,7 @@
 
 import { realpathSync, readFileSync } from "node:fs";
 import { decodificarComoTexto } from "../../core/codificacion.js";
-import { dirname, basename, isAbsolute, resolve, relative, sep } from "node:path";
+import path, { dirname, basename, isAbsolute, resolve, relative, sep } from "node:path";
 import { motivoDeComandoExternoInaceptable } from "../../core/comandoExterno.js";
 import type { LineaDeDiff } from "../../core/diff.js";
 import type { PendienteDeAprobacion } from "../../core/events.js";
@@ -31,6 +31,7 @@ import type { ColaDeEventos } from "../../core/entrelazar.js";
 import type { ConsumoExterno, EjecucionExterna, EscrituraExternaPedida, PoliticaDeEscrituraExterna, ToolDeUnHijo } from "../../core/ports.js";
 import { artefactoFueraDeSitio } from "../../core/artefactos.js";
 import { descargaFueraDeSitio } from "../../core/descargas.js";
+import { CARPETA_DE_PLANES, esRutaDePlan, motivoDePlanInaceptable, RUTA_PLANES } from "../../core/planes.js";
 import type { Decision } from "../../vendor/hitl.js";
 import { puedeLeerRuta } from "../grafo/perfiles.js";
 import { esVistaAplanada } from "../grafo/proyecto.js";
@@ -325,20 +326,71 @@ export function veredictoDeRuta(opciones: {
  * puede esconder ninguno, porque no hay nada que enlazar. Si no existe ni la raíz del
  * sistema, `real` lanza y quien llama deniega.
  */
-function canonicalizarLoQueExista(absoluta: string, real: (r: string) => string): string {
+function canonicalizarLoQueExista(absoluta: string, real: (r: string) => string, p: typeof path = path): string {
   const pendientes: string[] = [];
   let actual = absoluta;
   for (;;) {
     try {
-      return resolve(real(actual), ...pendientes);
+      return p.resolve(real(actual), ...pendientes);
     } catch {
-      const padre = dirname(actual);
+      const padre = p.dirname(actual);
       // `dirname("/") === "/"`: sin esta salida el bucle no termina nunca.
       if (padre === actual) throw new Error(`no existe ningún ancestro de ${absoluta}`);
-      pendientes.unshift(basename(actual));
+      pendientes.unshift(p.basename(actual));
       actual = padre;
     }
   }
+}
+
+/**
+ * La ruta VIRTUAL de plan (`/planes/<slug>/…`) de una ruta absoluta de un hijo de Claude Code que cae en
+ * `<raíz>/.xonecode/planes/`, o `undefined` si no cae ahí o no se puede afirmar.
+ *
+ * **Es la ÚNICA puerta de `.xonecode/` para escribir, y existe por una tarea de Maset** (20-10-2026, desde Windows): el
+ * analista en Claude Code no tenía dónde dejar el plan —`/planes/` es una ruta virtual de NUESTRO backend y `.xonecode/`
+ * le está denegado entero—, así que lo escribió en `planes/` en la RAÍZ del proyecto. Entró en el commit, el juez lo
+ * contó como diff de más y el desarrollador no pudo leer el `TASKS.md` por la ruta que le dieron.
+ *
+ * Las dos pasadas de siempre: el TEXTO (`resolve` deshace un `..`) y el camino REAL (un enlace dentro de la carpeta
+ * que apunte al `checkpoint.sqlite` no pasa). La carpeta de planes se compone desde la raíz CANÓNICA y no se
+ * canonicaliza ella: si `.xonecode/planes` fuera un enlace a otra parte, lo de dentro cae fuera y se deniega.
+ * Con `carpetas` también vale la propia carpeta de planes o la de un plan (para `Glob`/`Grep`); sin él, solo un
+ * fichero de un plan con su forma validada (`esRutaDePlan`).
+ *
+ * `p` entra por parámetro para probar las rutas de Windows (`path.win32`) desde un Mac: en Windows `relative` no
+ * distingue mayúsculas y separa con `\`, que es donde se rompió `dentroDelWorkspace`.
+ */
+export function rutaDePlanDelHijo(
+  cwd: string,
+  ruta: string,
+  real: (ruta: string) => string,
+  opciones: { carpetas?: boolean; p?: typeof path } = {}
+): string | undefined {
+  const p = opciones.p ?? path;
+  if (!p.isAbsolute(ruta)) return undefined;
+  const texto = p.resolve(ruta);
+  let destino: string;
+  let raizReal: string;
+  try {
+    destino = canonicalizarLoQueExista(texto, real, p);
+    raizReal = real(p.resolve(cwd));
+  } catch {
+    return undefined;
+  }
+  const bajoPlanes = (raiz: string, absoluta: string): string | undefined => {
+    const dentro = p.relative(p.join(raiz, CARPETA_DE_PLANES), absoluta);
+    if (dentro.startsWith("..") || p.isAbsolute(dentro)) return undefined;
+    return dentro === "" ? RUTA_PLANES : `${RUTA_PLANES}${dentro.split(p.sep).join("/")}`;
+  };
+  // El texto puede venir con la raíz canonicalizada o sin canonicalizar (en macOS `/tmp` → `/private/tmp`, medido).
+  const porTexto = bajoPlanes(p.resolve(cwd), texto) ?? bajoPlanes(raizReal, texto);
+  const porReal = bajoPlanes(raizReal, destino);
+  if (porTexto === undefined || porReal === undefined) return undefined;
+  if (esRutaDePlan(porReal)) return porReal;
+  if (opciones.carpetas !== true) return undefined;
+  if (porReal === RUTA_PLANES) return porReal;
+  const plan = porReal.slice(RUTA_PLANES.length);
+  return motivoDePlanInaceptable(plan) === undefined ? `${porReal}/` : undefined;
 }
 
 /** Las reglas sobre una ruta VIRTUAL ya normalizada. Las mismas del camino de LangGraph. */
@@ -504,6 +556,10 @@ export function veredictoDeLectura(opciones: {
     return { admitida: false, motivo: "esa ruta no se entiende, así que no se lee" };
   }
   if (opciones.lecturas !== undefined && dentroDeUnaLectura(ruta, opciones.lecturas, opciones.real ?? realpathSync)) {
+    return { admitida: true };
+  }
+  // Los planes de la sesión, como los lee el resto del equipo por `/planes/` (`rutaDePlanDelHijo`).
+  if (rutaDePlanDelHijo(opciones.cwd, ruta, opciones.real ?? realpathSync, { carpetas: true }) !== undefined) {
     return { admitida: true };
   }
   const v = veredictoDeRuta({ ...opciones, ruta, soloConfinamiento: true });
@@ -951,6 +1007,8 @@ export function eventoDeToolExterna(
    * «→ lee ×65» sin UN SOLO nombre de fichero, que es la mitad de lo que esta línea existe
    * para contar.
    */
+  const plan = rutaDePlanDelHijo(cwd, ruta, real);
+  if (plan !== undefined) return { nombre: canonico, detalle: plan };
   const suyo = rutaVirtualDeEscritura(cwd, ruta);
   if (suyo !== undefined) return { nombre: canonico, detalle: suyo };
   try {

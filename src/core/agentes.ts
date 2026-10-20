@@ -393,6 +393,20 @@ export function textoDeCarpetasDeLaSesion(artefactos: string, hotswap: string): 
   ].join("\n");
 }
 
+/**
+ * Dónde está EN EL DISCO la carpeta de los planes, para un hijo de Claude Code: `/planes/<nombre>/` es una ruta virtual
+ * de nuestro backend y para él es una ruta del sistema. Medido en Maset (20-10-2026): el analista, sin esto, escribió el
+ * plan en `planes/` en la RAÍZ del proyecto, entró en el commit y el desarrollador no lo encontró. La ruta llega ya
+ * compuesta con los separadores de la máquina (`\` en Windows), que son los que su `Write` espera.
+ */
+export function textoDeCarpetaDePlanes(planes: string): string {
+  return [
+    `PLANES: cuando tu encargo nombre una ruta que empieza por \`/planes/\`, no es del sistema: \`/planes/\` es ${planes}.`,
+    "Ahí lees y escribes los planes (`PLAN.md`, `TASKS.md`, `CONTEXT.md`…, una carpeta por plan) con Read, Write y Edit,",
+    "sin pedir autorización. NUNCA escribas un plan dentro del proyecto: no es parte de la aplicación y subiría con ella.",
+  ].join("\n");
+}
+
 /** Qué skills de las que el agente declara existen de verdad en el catálogo, y cuáles no. */
 export interface EstadoDeSkills {
   suyas: string[];
