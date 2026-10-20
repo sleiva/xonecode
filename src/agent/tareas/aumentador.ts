@@ -106,6 +106,42 @@ export function invocarParaAumentar(modelos: ModelosPort): InvocarParaAumentar {
 }
 
 /**
+ * Lo que XOne SABE hacer, en corto, para que el encargo proponga medios que existen y no prohíba los que hacen falta
+ * (medido en Maset: «no crear colecciones» vetó el `inherits` que la maqueta necesitaba). No es la skill: el encargo se
+ * redacta con la persona esperando, y medido con cinco peticiones reales de Maset esto y los hechos suben de unos 20,6 s
+ * a unos 23,6 s. Cada línea está comprobada en un proyecto de verdad (`ExecuteNode(irColl(...))` en el `EntryPoint` de
+ * Maset, `inherits` en su `ContentIncidenciasLista.xne`).
+ */
+export const HOJA_DE_XONE = [
+  "LO QUE XONE SABE HACER, para que el encargo proponga medios que EXISTEN y no prohíba los que hacen falta:",
+  "- Una pantalla es una colección (`<coll>`) en su `.xne`: grupos, frames y props. Una lista se embebe con `<contents name src filter>`",
+  "  apuntando a otra colección; una colección puede heredar de otra (`inherits`) para cambiarla solo en un sitio.",
+  "- Se navega de una ventana a otra abriendo su nodo desde un botón (`ExecuteNode(...)`, como las tarjetas del menú de entrada),",
+  "  y se vuelve con su botón de volver. Enlazar una ventana nueva es añadir ese botón y su nodo en la ventana de origen.",
+  "- El aspecto va en el CSS propio (clases en las hojas de estilo del proyecto); las fuentes en `fonts/` y los iconos SVG en `icons/`.",
+  "- XOne no reproduce desenfoques ni animaciones; lo demás de una maqueta (colores, bordes, tipografía, iconos) sí.",
+] as const;
+
+/**
+ * Los hechos del proyecto como líneas del prompt, o NINGUNA si no constan: un «no consta» sin proyecto legible haría
+ * que el modelo hablara de un proyecto vacío. Solo NOMBRES, nunca rutas (`core/hechosDelProyecto.ts`). Los campos no
+ * entran: averiguarlos es del analista, y un encargo que ya lo trae todo hace que el orquestador se salte el plan.
+ */
+export function lineasDeHechos(hechos: PeticionDeTarea["hechos"]): string[] {
+  if (hechos === undefined) return [];
+  const o = (xs: readonly string[]) => (xs.length === 0 ? "no consta" : xs.join(", "));
+  return [
+    "HECHOS DEL PROYECTO (del índice, nombres reales): úsalos para nombrar la pantalla y el menú; no inventes otros, y si",
+    "la pantalla pedida no está entre ellos, es NUEVA o hay que buscarla leyendo el proyecto.",
+    `- Colección de entrada (el menú principal): ${o(hechos.entrada)}`,
+    `- Login: ${o(hechos.login)}`,
+    `- Hojas de estilo: ${o(hechos.estilos)}`,
+    `- Colecciones (${hechos.colecciones.length}): ${o(hechos.colecciones)}`,
+    "",
+  ];
+}
+
+/**
  * El prompt del aumentador.
  *
  * Lleva la petición, el proyecto y su rama, los adjuntos POR NOMBRE y la memoria del proyecto
@@ -202,6 +238,14 @@ export function promptDelAumentador(peticion: PeticionDeTarea): string {
     "una colección o una clase si lo pedido puede necesitarla. Una decisión abierta nunca tiene como recomendada",
     "dejar sin hacer una parte de lo pedido.",
     "",
+    "LO QUE LA PETICIÓN NOMBRA ES REQUISITO: si dice que algo va conectado, enlazado o se abre desde otra pantalla (el menú",
+    "principal, un listado), eso se HACE y va en los criterios de aceptación; nunca como decisión abierta ni en «Qué NO hay",
+    "que tocar». Medido en Maset: «el nuevo menú de Entrada/Salida que va conectado al menú principal» salió como decisión",
+    "abierta con la recomendada «no tocar el menú principal», y la ventana quedó sin enlazar.",
+    "",
+    ...HOJA_DE_XONE,
+    "",
+    ...lineasDeHechos(peticion.hechos),
     "REGLAS DE XONE que el encargo no puede romper: XOne no es desarrollo web. Es XML en",
     "ficheros `.xne`, JavaScript ES5 y un CSS propio; no hay DOM, ni async/await, ni React. Los",
     "`.xml` los genera XOne Studio a partir del `.xne` y NO se tocan. XOne ignora en silencio lo",

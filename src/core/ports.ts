@@ -9,6 +9,7 @@
  * Ink ni React. La frontera está probada en `core/imports.test.ts`.
  */
 
+import type { HechosDelProyecto } from "./hechosDelProyecto.js";
 import type { Proveedor } from "./modelos.js";
 import type { ClaseDeTrabajo, Esfuerzo, Pensamiento } from "./esfuerzo.js";
 import type { ConsumoDeTurno, ConsumoPorModelo } from "./actos.js";
@@ -579,6 +580,13 @@ export interface PeticionDeTarea {
   /** La memoria del proyecto, si existe (`.xonecode/memoria.md`). El árbol entero sería
    *  contexto por gastar; esto son las decisiones que ya se tomaron. */
   memoria?: string;
+  /**
+   * Los HECHOS baratos del proyecto (`core/hechosDelProyecto.ts`): la colección de entrada, login, estilos y los NOMBRES
+   * de las colecciones. Medido en Maset: sin ellos el aumentador decía «búscala por su nombre» y no sabía que el menú
+   * principal es `EntryPoint`; con ellos nombra las colecciones reales. Ausente = no constan (no es un proyecto XOne
+   * legible), y entonces el prompt no los menciona.
+   */
+  hechos?: HechosDelProyecto;
   /**
    * Los CONECTORES del proyecto que llegan al agente, por su nombre («Stitch»). Medido en Maset: sin saberlo, el
    * aumentador convirtió «la pantalla de Stish» en «búscala en el repo y, si no está, PARA», y la tarea no hizo nada.

@@ -214,7 +214,9 @@ import {
   motivoParaNoEnsenar,
 } from "../../agent/grafo/arbolDeProyecto.js";
 import { baseDeFichero } from "../../agent/sesiones/baseDeFichero.js";
-import { modeloEnDisco } from "../../agent/navegacion/indiceEnDisco.js";
+import { indiceEnDisco, modeloEnDisco } from "../../agent/navegacion/indiceEnDisco.js";
+import { hechosDelProyectoDe } from "../../agent/navegacion/hechosEnDisco.js";
+import type { HechosDelProyecto } from "../../core/hechosDelProyecto.js";
 import { ficherosDelProyecto } from "../../agent/turno/ficherosDelProyecto.js";
 import { fotoDeColecciones, type FotoDeColecciones } from "../../core/fotoDeColecciones.js";
 import type { CambiosDeUnaColeccion } from "../../core/diffDeColecciones.js";
@@ -8706,6 +8708,15 @@ export function fuentesDeLaConsolaWeb(cwd: string): FuentesDeEleccion {
 export const TOPE_DE_MEMORIA = 4_000;
 
 /**
+ * Los hechos del proyecto para el aumentador, del MISMO índice que los del turno (`hechosDelProyectoDe`). Extraída y
+ * exportada para probarla contra un proyecto de verdad: en el cierre de `arrancarConsolaWeb` sería una regla escrita, no
+ * probada. Nunca lanza: lo que no se puede indexar vuelve `undefined` y el encargo se redacta sin ellos.
+ */
+export function hechosParaElAumentador(raiz: string): Promise<HechosDelProyecto | undefined> {
+  return hechosDelProyectoDe(indiceEnDisco(raiz), ficherosDelProyecto(raiz));
+}
+
+/**
  * Lo que se le añade a la petición del aumentador leyendo el DISCO por la raíz: la rama del
  * proyecto y su memoria.
  *
@@ -9002,9 +9013,12 @@ export function augmentacionCableada(opciones: {
   /** Por parámetro para poder probar esta composición sin tocar disco. Por omisión,
    *  `contextoDelProyecto`; ausente del todo = sin rama ni memoria. */
   contexto?: (raiz: string) => { rama?: string; memoria?: string; conectores?: string[] };
+  /** Los hechos del proyecto (`hechosParaElAumentador` en producción); ausente o `undefined` = no se mencionan. */
+  hechos?: (raiz: string) => Promise<HechosDelProyecto | undefined>;
 }): NonNullable<OpcionesDeMontaje["augmentar"]> {
   return async ({ texto, proyecto, adjuntos, pantallasDeStitch }) => {
     const extra = opciones.contexto?.(proyecto.raiz) ?? {};
+    const hechos = await opciones.hechos?.(proyecto.raiz);
     return opciones.aumentador.augmentar({
       texto,
       // El `id` del proyecto NO viaja al modelo: es un identificador de CloudStudio y para
@@ -9013,6 +9027,7 @@ export function augmentacionCableada(opciones: {
       adjuntos,
       ...(extra.memoria === undefined ? {} : { memoria: extra.memoria }),
       ...(extra.conectores === undefined ? {} : { conectores: extra.conectores }),
+      ...(hechos === undefined ? {} : { hechos }),
       // Las pantallas elegidas llegan al prompt con sus ids: sin esta línea se perdían aquí, con todo en verde.
       ...(pantallasDeStitch === undefined ? {} : { pantallasDeStitch }),
     });
@@ -9897,6 +9912,7 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
               invocarParaAumentar(new Modelos(fuentesDelJuez(raiz), proveedoresPersonalizados))(papel, prompt, raiz),
           }),
     contexto: contextoDelProyecto,
+    hechos: hechosParaElAumentador,
   });
   /** El sondeo de la puerta 2: nace con el corredor (más abajo); «Mirar ahora» llega por las rutas, montadas antes. */
   let sondeo: SondeoDelGestor | undefined;

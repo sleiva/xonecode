@@ -46,6 +46,7 @@ import { MS_DE_PREPARACION,
   fuentesDelJuez,
   fuentesDeLaConsolaWeb,
   augmentacionCableada,
+  hechosParaElAumentador,
   contextoDelProyecto,
   lecturaDeSync,
   marcarPendientes,
@@ -8495,6 +8496,29 @@ describe("augmentar: lo que se le da y cómo se dice que falló", () => {
  * rama y sin la memoria del proyecto, el encargo se redacta a ciegas y nada falla.
  */
 describe("augmentacionCableada", () => {
+  it("le pasa los HECHOS del proyecto cuando constan, y nada cuando no", async () => {
+    const vistas: PeticionDeTarea[] = [];
+    const hechos = { entrada: ["EntryPoint"], login: [], estilos: [], colecciones: ["EntryPoint"] };
+    const conHechos = augmentacionCableada({ aumentador: { augmentar: async (p) => (vistas.push(p), "E") }, contexto: () => ({}), hechos: async () => hechos });
+    const sinHechos = augmentacionCableada({ aumentador: { augmentar: async (p) => (vistas.push(p), "E") }, contexto: () => ({}), hechos: async () => undefined });
+    const pedir = { texto: "x", proyecto: { id: "p", raiz: "/w/A", nombre: "A" }, adjuntos: [] };
+    await conHechos(pedir);
+    await sinHechos(pedir);
+    expect(vistas[0]!.hechos).toEqual(hechos);
+    expect("hechos" in vistas[1]!).toBe(false);
+  });
+
+  it("`hechosParaElAumentador` lee un proyecto de verdad, el mismo índice que el turno", async () => {
+    const raiz = mkdtempSync(join(tmpdir(), "xc-hechos-aum-"));
+    writeFileSync(join(raiz, "app.xml"), `<?xml version="1.0" encoding="utf-8"?>\n<app name="Demo">\n  <include file="Clientes.xne"/>\n</app>\n`);
+    writeFileSync(join(raiz, "Clientes.xne"), `<?xml version="1.0" encoding="utf-8"?>\n<coll name="Clientes">\n  <prop name="ID" type="N"/>\n</coll>\n`);
+    try {
+      expect((await hechosParaElAumentador(raiz))?.colecciones).toEqual(["Clientes"]);
+    } finally {
+      rmSync(raiz, { recursive: true, force: true });
+    }
+  });
+
   it("le da al aumentador el texto, el proyecto RESUELTO con su rama, los adjuntos y la memoria", async () => {
     const vistas: PeticionDeTarea[] = [];
     const augmentar = augmentacionCableada({
