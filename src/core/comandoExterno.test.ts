@@ -44,6 +44,15 @@ describe("el Bash que se le deja a un agente externo con ejecución", () => {
     ]) expect(vale(c), c).toBeDefined();
   });
 
+  it("un script con EXTENSIÓN también se corre por su nombre (medido: «check-update.mjs no es uno de tus scripts» con él en la lista)", () => {
+    const conMjs = ["check-render-output.mjs", "xone-hotswap", "..x"];
+    expect(motivoDeComandoExternoInaceptable("check-render-output.mjs --help", conMjs)).toBeUndefined();
+    expect(motivoDeComandoExternoInaceptable("./check-render-output.mjs --help", conMjs)).toContain("no es uno de tus scripts");
+    expect(motivoDeComandoExternoInaceptable("scripts/check-render-output.mjs", conMjs)).toContain("no es uno de tus scripts");
+    expect(motivoDeComandoExternoInaceptable("..x", conMjs)).toContain("no es uno de tus scripts");
+    expect(motivoDeComandoExternoInaceptable("otro.mjs", conMjs)).toContain("no es uno de tus scripts");
+  });
+
   it("el motivo dice la forma que SÍ vale, con los scripts por su nombre", () => {
     expect(vale("./scripts/xone-hotswap shot")).toContain("xone-hotswap, xone-log-android");
     expect(motivoDeComandoExternoInaceptable("xone-hotswap shot", [])).toBeDefined();

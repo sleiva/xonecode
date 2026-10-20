@@ -54,7 +54,9 @@ export function motivoDeComandoExternoInaceptable(comando: string, scripts: read
   const partes = palabras(limpio);
   if (partes === undefined || partes.length === 0) return forma;
   const [programa, ...argumentos] = partes;
-  if (programa === undefined || !/^[A-Za-z0-9_-]+$/.test(programa) || !scripts.includes(programa)) {
+  // Con PUNTO dentro del nombre (`check-update.mjs`), no al principio: medido en Maset, la regla sin punto denegaba los
+  // `.mjs` que el motivo le ANUNCIABA al hijo. Una ruta sigue fuera (`/` no entra) y `.`/`..` no son ningún script.
+  if (programa === undefined || !/^[A-Za-z0-9_-][A-Za-z0-9_.-]*$/.test(programa) || !scripts.includes(programa)) {
     return `«${programa ?? ""}» no es uno de tus scripts. ${forma}`;
   }
   for (const a of argumentos) {
