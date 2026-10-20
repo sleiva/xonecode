@@ -49,6 +49,7 @@ describe("Ajustes", () => {
 
     it("sin dato del servidor NO se pinta: una caja vacía se leería como «no hay ninguna»", () => {
       render(<Ajustes {...MANEJADORES} proveedores={PROVEEDORES} conectado />);
+      fireEvent.click(screen.getByRole("tab", { name: /^Equipo/ }));
       expect(screen.queryByLabelText("Carpeta donde se bajan los proyectos")).toBeNull();
     });
 
@@ -63,6 +64,7 @@ describe("Ajustes", () => {
           alCambiarWorkspace={(r) => void elegidas.push(r)}
         />
       );
+      fireEvent.click(screen.getByRole("tab", { name: /^Equipo/ }));
       expect(campo().value).toBe("/Users/ana/.xonecode/workspace");
       fireEvent.change(campo(), { target: { value: "~/xone-proyectos" } });
       fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
@@ -91,6 +93,7 @@ describe("Ajustes", () => {
           alCambiarWorkspace={(r) => void elegidas.push(r)}
         />
       );
+      fireEvent.click(screen.getByRole("tab", { name: /^Equipo/ }));
       expect(campo().getAttribute("aria-invalid")).toBeNull();
       fireEvent.change(campo(), { target: { value: String.raw`D:\Xone\workspace` } });
       const guardar = screen.getByRole("button", { name: "Guardar" }) as HTMLButtonElement;
@@ -109,6 +112,7 @@ describe("Ajustes", () => {
           alCambiarWorkspace={() => {}}
         />
       );
+      fireEvent.click(screen.getByRole("tab", { name: /^Equipo/ }));
       expect((screen.getByRole("button", { name: "Guardar" }) as HTMLButtonElement).disabled).toBe(true);
     });
 
@@ -125,6 +129,7 @@ describe("Ajustes", () => {
           alCambiarWorkspace={(r) => void elegidas.push(r)}
         />
       );
+      fireEvent.click(screen.getByRole("tab", { name: /^Equipo/ }));
       fireEvent.change(campo(), { target: { value: "proyectos" } });
       expect((screen.getByRole("button", { name: "Guardar" }) as HTMLButtonElement).disabled).toBe(true);
       expect(campo().getAttribute("aria-invalid")).toBe("true");
@@ -145,6 +150,7 @@ describe("Ajustes", () => {
           alCambiarWorkspace={(r) => void elegidas.push(r)}
         />
       );
+      fireEvent.click(screen.getByRole("tab", { name: /^Equipo/ }));
       fireEvent.change(campo(), { target: { value: "/" } });
       expect(screen.getByRole("alert").textContent).toMatch(/raíz del disco/);
       expect(elegidas).toEqual([]);
@@ -154,6 +160,7 @@ describe("Ajustes", () => {
       render(
         <Ajustes {...MANEJADORES} proveedores={PROVEEDORES} conectado workspace="/Users/ana/.xonecode/workspace" />
       );
+      fireEvent.click(screen.getByRole("tab", { name: /^Equipo/ }));
       expect(screen.queryByRole("button", { name: /Examinar/ })).toBeNull();
     });
 
@@ -171,6 +178,7 @@ describe("Ajustes", () => {
           alElegirCarpeta={() => {}}
         />
       );
+      fireEvent.click(screen.getByRole("tab", { name: /^Equipo/ }));
       fireEvent.click(screen.getByRole("button", { name: "Examinar…" }));
       rerender(
         <Ajustes
@@ -198,6 +206,7 @@ describe("Ajustes", () => {
         alElegirCarpeta: () => {},
       };
       const { rerender } = render(<Ajustes {...props} />);
+      fireEvent.click(screen.getByRole("tab", { name: /^Equipo/ }));
       fireEvent.click(screen.getByRole("button", { name: "Examinar…" }));
       expect(screen.getByRole("button", { name: "Abriendo…" })).toBeTruthy();
       rerender(<Ajustes {...props} carpetaElegida={{ n: 1 }} />);
@@ -216,6 +225,7 @@ describe("Ajustes", () => {
           alElegirCarpeta={() => {}}
         />
       );
+      fireEvent.click(screen.getByRole("tab", { name: /^Equipo/ }));
       fireEvent.click(screen.getByRole("button", { name: "Examinar…" }));
       expect(screen.getByText(/Esperando la carpeta que elijas/)).toBeTruthy();
     });
@@ -232,6 +242,7 @@ describe("Ajustes", () => {
         alCerrar: () => void cerrados.push(1),
       };
       const { rerender } = render(<Ajustes {...props} />);
+      fireEvent.click(screen.getByRole("tab", { name: /^Equipo/ }));
       rerender(<Ajustes {...props} carpetaElegida={{ n: 1, ruta: "/datos/xone" }} />);
       expect(campo().value).toBe("/datos/xone");
       // Pegado JUSTO debajo del campo, no entre las notas del final.
@@ -255,6 +266,7 @@ describe("Ajustes", () => {
           carpetaElegida={{ n: 3, ruta: "/datos/xone" }}
         />
       );
+      fireEvent.click(screen.getByRole("tab", { name: /^Equipo/ }));
       expect(campo().value).toBe("/Users/ana/.xonecode/workspace");
       expect(screen.queryByText(/Sin guardar/)).toBeNull();
     });
@@ -263,6 +275,7 @@ describe("Ajustes", () => {
       render(
         <Ajustes {...MANEJADORES} proveedores={PROVEEDORES} conectado workspace="/Users/ana/.xonecode/workspace" />
       );
+      fireEvent.click(screen.getByRole("tab", { name: /^Equipo/ }));
       expect(screen.getByText(/MUEVE lo que ya está bajado/)).toBeTruthy();
     });
 
@@ -278,6 +291,7 @@ describe("Ajustes", () => {
           alPlanearWorkspace={async () => ({ proyectos: [{ entorno: "mcp.xone.dev", proyecto: "Dieta" }], megas: 12 })}
         />
       );
+      fireEvent.click(screen.getByRole("tab", { name: /^Equipo/ }));
       fireEvent.change(campo(), { target: { value: "/datos/xone" } });
       fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
       const dialogo = await confirmacion();
@@ -304,6 +318,7 @@ describe("Ajustes", () => {
         alPlanearWorkspace: async () => ({ proyectos: [{ entorno: "e", proyecto: "Dieta" }] }),
       };
       const { rerender } = render(<Ajustes {...props} />);
+      fireEvent.click(screen.getByRole("tab", { name: /^Equipo/ }));
       fireEvent.change(campo(), { target: { value: "/datos/xone" } });
       fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
       fireEvent.click(within(await confirmacion()).getByRole("button", { name: "Mover y cambiar" }));
@@ -335,6 +350,7 @@ describe("Ajustes", () => {
         alPlanearWorkspace: async () => ({ proyectos: [{ entorno: "e", proyecto: "Dieta" }] }),
       };
       const { rerender } = render(<Ajustes {...props} />);
+      fireEvent.click(screen.getByRole("tab", { name: /^Equipo/ }));
       fireEvent.change(campo(), { target: { value: "/datos/xone" } });
       fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
       fireEvent.click(within(await confirmacion()).getByRole("button", { name: "Mover y cambiar" }));
@@ -357,6 +373,7 @@ describe("Ajustes", () => {
           alPlanearWorkspace={async () => ({ proyectos: [], motivo: "hay un chat trabajando en un proyecto del workspace" })}
         />
       );
+      fireEvent.click(screen.getByRole("tab", { name: /^Equipo/ }));
       fireEvent.change(campo(), { target: { value: "/datos/xone" } });
       fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
       // FLOTANDO, en su propia ventana: una línea más de la página no se veía.
@@ -379,6 +396,7 @@ describe("Ajustes", () => {
           alPlanearWorkspace={async () => ({ proyectos: [] })}
         />
       );
+      fireEvent.click(screen.getByRole("tab", { name: /^Equipo/ }));
       fireEvent.change(campo(), { target: { value: "/datos/xone" } });
       fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
       await waitFor(() => expect(aplicadas).toEqual(["/datos/xone"]));
@@ -397,6 +415,7 @@ describe("Ajustes", () => {
           mudanzaDeWorkspace={{ progreso: { fase: "verificar", proyecto: "Dieta", indice: 1, total: 3 } }}
         />
       );
+      fireEvent.click(screen.getByRole("tab", { name: /^Equipo/ }));
       const enCurso = screen.getByRole("dialog", { name: "Moviendo los proyectos…" });
       expect(within(enCurso).getByRole("status").textContent).toBe("Comprobando que la copia «Dieta» (1 de 3) es idéntica…");
       expect(campo().disabled).toBe(true);
@@ -413,6 +432,7 @@ describe("Ajustes", () => {
           mudanzaDeWorkspace={{ resultado: { estado: "rechazado", motivo: "no cabe" } }}
         />
       );
+      fireEvent.click(screen.getByRole("tab", { name: /^Equipo/ }));
       expect(screen.queryByRole("alertdialog")).toBeNull();
     });
 
@@ -426,6 +446,7 @@ describe("Ajustes", () => {
           mudanzaDeWorkspace={{ progreso: { fase: "copiar" } }}
         />
       );
+      fireEvent.click(screen.getByRole("tab", { name: /^Equipo/ }));
       rerender(
         <Ajustes
           {...MANEJADORES}
@@ -442,6 +463,7 @@ describe("Ajustes", () => {
       render(
         <Ajustes {...MANEJADORES} proveedores={PROVEEDORES} conectado workspace="/Users/ana/.xonecode/workspace" />
       );
+      fireEvent.click(screen.getByRole("tab", { name: /^Equipo/ }));
       expect(campo().disabled).toBe(true);
     });
   });
@@ -451,6 +473,7 @@ describe("Ajustes", () => {
 
     it("sin dato del servidor NO se pinta: un control sin dato detrás no se pinta", () => {
       render(<Ajustes {...MANEJADORES} proveedores={PROVEEDORES} conectado />);
+      fireEvent.click(screen.getByRole("tab", { name: /^Equipo/ }));
       expect(screen.queryByLabelText(CASILLA)).toBeNull();
     });
 
@@ -465,6 +488,7 @@ describe("Ajustes", () => {
           alCambiarDepuracion={(a) => void vistos.push(a)}
         />
       );
+      fireEvent.click(screen.getByRole("tab", { name: /^Equipo/ }));
       const casilla = screen.getByLabelText(CASILLA) as HTMLInputElement;
       expect(casilla.checked).toBe(true);
       fireEvent.click(casilla);
@@ -473,13 +497,67 @@ describe("Ajustes", () => {
 
     it("sin manejador se enseña apagada: el ajuste existe, cambiarlo desde aquí no", () => {
       render(<Ajustes {...MANEJADORES} proveedores={PROVEEDORES} conectado depuracionActiva={false} />);
+      fireEvent.click(screen.getByRole("tab", { name: /^Equipo/ }));
       expect((screen.getByLabelText(CASILLA) as HTMLInputElement).disabled).toBe(true);
     });
   });
 
+  describe("las pestañas de General (IXCODE-62)", () => {
+    const WORKSPACE = "/Users/ana/.xonecode/workspace";
+
+    it("abre en «Al empezar»: el modo, el aparato y las tareas, sin la carpeta ni los temas", () => {
+      render(
+        <Ajustes
+          {...MANEJADORES}
+          proveedores={PROVEEDORES}
+          conectado
+          workspace={WORKSPACE}
+          temas={{ claro: "github-claro", oscuro: "dracula" }}
+        />
+      );
+      expect(screen.getByRole("tab", { name: "Al empezar" }).getAttribute("aria-selected")).toBe("true");
+      expect(screen.getByRole("heading", { name: "Tareas" })).toBeTruthy();
+      expect(screen.queryByLabelText("Carpeta donde se bajan los proyectos")).toBeNull();
+      expect(screen.queryByRole("group", { name: "Tema claro" })).toBeNull();
+    });
+
+    it("cada pestaña enseña lo suyo y solo lo suyo", () => {
+      render(
+        <Ajustes
+          {...MANEJADORES}
+          proveedores={PROVEEDORES}
+          conectado
+          workspace={WORKSPACE}
+          depuracionActiva
+          temas={{ claro: "github-claro", oscuro: "dracula" }}
+        />
+      );
+      fireEvent.click(screen.getByRole("tab", { name: "Equipo" }));
+      expect(screen.getByLabelText("Carpeta donde se bajan los proyectos")).toBeTruthy();
+      expect(screen.getByRole("heading", { name: "Depurar" })).toBeTruthy();
+      expect(screen.queryByRole("heading", { name: "Tareas" })).toBeNull();
+      fireEvent.click(screen.getByRole("tab", { name: "Apariencia" }));
+      expect(screen.getByRole("group", { name: "Tema claro" })).toBeTruthy();
+      expect(screen.queryByLabelText("Carpeta donde se bajan los proyectos")).toBeNull();
+    });
+
+    it("una carpeta tecleada y sin guardar se MARCA en Equipo y sigue ahí al volver", () => {
+      render(
+        <Ajustes {...MANEJADORES} proveedores={PROVEEDORES} conectado workspace={WORKSPACE} alCambiarWorkspace={() => {}} />
+      );
+      fireEvent.click(screen.getByRole("tab", { name: "Equipo" }));
+      fireEvent.change(screen.getByLabelText("Carpeta donde se bajan los proyectos"), { target: { value: "~/otra" } });
+      fireEvent.click(screen.getByRole("tab", { name: "Al empezar" }));
+      expect(screen.getByRole("tab", { name: "Equipo, carpeta sin guardar" })).toBeTruthy();
+      fireEvent.click(screen.getByRole("tab", { name: "Equipo, carpeta sin guardar" }));
+      expect((screen.getByLabelText("Carpeta donde se bajan los proyectos") as HTMLInputElement).value).toBe("~/otra");
+    });
+  });
+
   describe("los temas", () => {
-    it("sin temas NO se pinta la sección", () => {
+    it("sin temas NO se pinta la sección, ni su pestaña: abriría un panel vacío", () => {
       render(<Ajustes {...MANEJADORES} proveedores={PROVEEDORES} conectado seccionInicial="general" />);
+      expect(screen.queryByRole("tab", { name: "Apariencia" })).toBeNull();
       expect(screen.queryByRole("group", { name: "Tema claro" })).toBeNull();
       expect(screen.queryByRole("group", { name: "Tema oscuro" })).toBeNull();
     });
@@ -497,6 +575,7 @@ describe("Ajustes", () => {
           alCambiarTema={(modo, id) => void vistos.push([modo, id])}
         />
       );
+      fireEvent.click(screen.getByRole("tab", { name: /^Apariencia/ }));
       const claro = screen.getByRole("group", { name: "Tema claro" });
       const oscuro = screen.getByRole("group", { name: "Tema oscuro" });
       expect(within(claro).getByRole("button", { name: "GitHub Light" }).getAttribute("aria-pressed")).toBe("true");

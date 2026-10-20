@@ -370,6 +370,20 @@ const ETIQUETA_DE_PLATAFORMA: Record<Dispositivo["plataforma"], string> = {
   ios: "iOS",
 };
 
+/**
+ * Las pestañas de General (IXCODE-62). Era una sola columna con seis bloques y los temas
+ * —catorce tarjetas— en medio, empujando lo demás fuera de la ventana. Se agrupan por DE
+ * QUÉ habla cada ajuste: lo que depende de esta máquina y se toca al instalar, lo que se
+ * ve, y con qué empieza el trabajo nuevo. Se abre en «Al empezar», que es lo que se cambia.
+ */
+type PestanaDeGeneral = "inicio" | "equipo" | "apariencia";
+
+const PESTANAS_DE_GENERAL: readonly { id: PestanaDeGeneral; etiqueta: string }[] = [
+  { id: "inicio", etiqueta: "Al empezar" },
+  { id: "equipo", etiqueta: "Equipo" },
+  { id: "apariencia", etiqueta: "Apariencia" },
+];
+
 /** La MISMA frase que pone el servidor en `detalle` cuando `sistema !== "mac"`
  *  (`dispositivosEnMaquina.ts`): dos copias del motivo es donde divergirían. */
 const TITULO_IOS_REQUIERE_MAC = "los simuladores y dispositivos iOS solo se detectan en macOS";
@@ -1321,6 +1335,11 @@ export function Ajustes({
    */
   const [plataformaAbierta, setPlataformaAbierta] = useState<Dispositivo["plataforma"]>("android");
 
+  /** La pestaña de General abierta. Cambiarla no pierde nada: el borrador de la carpeta vive aquí, no en su panel. */
+  const [pestanaDeGeneral, setPestanaDeGeneral] = useState<PestanaDeGeneral>("inicio");
+  // Si los temas dejan de llegar con Apariencia abierta, no se queda un panel vacío elegido.
+  const generalAbierta: PestanaDeGeneral = pestanaDeGeneral === "apariencia" && temas === undefined ? "inicio" : pestanaDeGeneral;
+
   /**
    * Qué filas de Requisitos tienen el panel de «ruta actual / ruta personalizada»
    * desplegado. Solo `adb`/`emulator` lo ofrecen —son las dos únicas con `ruta` y con campo
@@ -1988,6 +2007,39 @@ export function Ajustes({
                 trabajo. El campo solo se pinta si el servidor dice cuál es — ausente ≠
                 vacío, y una caja en blanco se leería como «no hay ninguna puesta».
               */}
+              {/*
+                Apariencia solo existe si llegan los temas: una pestaña que abre un panel vacío
+                diría que hay algo que elegir. La carpeta tecleada y sin guardar se MARCA en
+                Equipo, porque desde otra pestaña el aviso de «Sin guardar» no se ve. Los paneles
+                NO llevan `panelDePestana`: su flex en columna estira el selector de modo a todo el ancho.
+              */}
+              <div className={estilos.pestanas} role="tablist" aria-label="Apartados de General">
+                {PESTANAS_DE_GENERAL.filter((p) => p.id !== "apariencia" || temas !== undefined).map((p) => {
+                  const sinGuardar = p.id === "equipo" && workspaceCambiado;
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      role="tab"
+                      className={estilos.pestana}
+                      aria-selected={p.id === generalAbierta}
+                      aria-label={sinGuardar ? `${p.etiqueta}, carpeta sin guardar` : p.etiqueta}
+                      data-actual={p.id === generalAbierta ? "" : undefined}
+                      onClick={() => setPestanaDeGeneral(p.id)}
+                    >
+                      {p.etiqueta}
+                      {sinGuardar ? (
+                        <span className={estilos.cuenta} aria-hidden>
+                          sin guardar
+                        </span>
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {generalAbierta === "equipo" ? (
+              <div role="tabpanel" aria-label="Equipo">
               {workspace === undefined ? null : (
                 <>
                   <h3 className={estilos.subencabezado}>Dónde se bajan los proyectos</h3>
@@ -2112,14 +2164,16 @@ export function Ajustes({
                   </p>
                 </>
               )}
+              </div>
+              ) : null}
 
               {/*
                 Los temas: uno por modo. Va en General porque es de esta MÁQUINA (este navegador),
                 no de un proyecto. El modo se sigue eligiendo en la cabecera; aquí, qué tema pinta
                 cada modo.
               */}
-              {temas === undefined ? null : (
-                <>
+              {generalAbierta !== "apariencia" || temas === undefined ? null : (
+                <div role="tabpanel" aria-label="Apariencia">
                   <h3 className={estilos.subencabezado}>Temas</h3>
                   <p className={estilos.nota}>
                     Un tema para el modo claro y otro para el oscuro. Elegir uno del otro modo pone la consola en
@@ -2135,9 +2189,11 @@ export function Ajustes({
                       alElegir={(id) => alCambiarTema?.(modo, id)}
                     />
                   ))}
-                </>
+                </div>
               )}
 
+              {generalAbierta === "inicio" ? (
+              <div role="tabpanel" aria-label="Al empezar">
               {modoPorDefecto === undefined ? null : (
                 <>
                   <h3 className={estilos.subencabezado}>Conversaciones nuevas</h3>
@@ -2190,6 +2246,8 @@ export function Ajustes({
                 <p className={estilos.nota} role="alert">
                   Con 0 la cola queda PAUSADA: nada nuevo arranca.
                 </p>
+              ) : null}
+              </div>
               ) : null}
             </>
           ) : null}

@@ -623,6 +623,7 @@ describe("App: el tema del modo en vigor", () => {
     window.localStorage.setItem("xonecode.apariencia", "oscuro");
     montar();
     fireEvent.click(screen.getAllByRole("button", { name: "Ajustes" })[0]!);
+    fireEvent.click(screen.getByRole("tab", { name: "Apariencia" }));
     const grupo = screen.getByRole("group", { name: "Tema oscuro" });
     fireEvent.click(within(grupo).getByRole("button", { name: "Dracula" }));
     expect(document.body.getAttribute("data-tema")).toBe("dracula");
@@ -635,6 +636,7 @@ describe("App: el tema del modo en vigor", () => {
     montar();
     expect(document.body.hasAttribute("data-ds-dark-theme")).toBe(false);
     fireEvent.click(screen.getAllByRole("button", { name: "Ajustes" })[0]!);
+    fireEvent.click(screen.getByRole("tab", { name: "Apariencia" }));
     fireEvent.click(within(screen.getByRole("group", { name: "Tema oscuro" })).getByRole("button", { name: "Dracula" }));
     expect(document.body.hasAttribute("data-ds-dark-theme")).toBe(true);
     expect(document.body.getAttribute("data-tema")).toBe("dracula");
@@ -647,6 +649,7 @@ describe("App: el tema del modo en vigor", () => {
     try {
       montar();
       fireEvent.click(screen.getAllByRole("button", { name: "Ajustes" })[0]!);
+      fireEvent.click(screen.getByRole("tab", { name: "Apariencia" }));
       fireEvent.click(within(screen.getByRole("group", { name: "Tema oscuro" })).getByRole("button", { name: "GitHub Dark" }));
       expect(document.body.getAttribute("data-tema")).toBe("github-oscuro");
       expect(window.localStorage.getItem("xonecode.apariencia")).toBe("sistema");
