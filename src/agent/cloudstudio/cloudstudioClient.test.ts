@@ -79,6 +79,40 @@ describe("clienteCloudStudio", () => {
     expect(r.pausas).toEqual([PAUSAS_DE_REAPERTURA_MS[1]]);
   });
 
+  /**
+   * IXCODE-56, medido en APPSalud: `doc/02-peticiones-xone.md` no se podía releer NUNCA porque CITA el error del MCP. El
+   * texto de `studio_get_file` es el CONTENIDO (serializado como cadena JSON), y buscar la frase en cualquier parte lo
+   * tomaba por sesión caída: reabría, releía, y tres vueltas después «sigue diciendo que no hay proyecto abierto».
+   */
+  it("un fichero que CITA «No project is open» se lee tal cual, sin reabrir nada", async () => {
+    const doc = "# Peticiones\nSi el MCP contesta «Error: No project is open», hay que abrirlo.\n";
+    const falso = clienteFalso([{ content: [{ type: "text", text: JSON.stringify(doc) }] }]);
+    expect(await clienteCloudStudio(falso.invocar, "APPSalud").leerTexto("doc/02-peticiones-xone.md")).toBe(doc);
+    expect(falso.llamadas.map((l) => l.nombre)).toEqual(["studio_get_file"]);
+  });
+
+  /** IXCODE-56: una apertura que REVIENTA (red, plazo) se reintenta con pausa, como la sesión perdida. */
+  it("una apertura que revienta se reintenta, y si a la siguiente abre, la llamada sigue", async () => {
+    const falso = clienteFalso([
+      new Error("No project is open"),
+      new Error("fetch failed"),
+      { status: "project_open" },
+      "contenido",
+    ]);
+    const r = reloj();
+    expect(await clienteCloudStudio(falso.invocar, "APPSalud", r.esperar).leerTexto("app.ini")).toBe("contenido");
+    expect(falso.llamadas.map((l) => l.nombre)).toEqual(["studio_get_file", "studio_open_project", "studio_open_project", "studio_get_file"]);
+  });
+
+  it("si la apertura revienta SIEMPRE, el error dice lo que contestó, tras los intentos del tope", async () => {
+    const intentos = PAUSAS_DE_REAPERTURA_MS.length;
+    const falso = clienteFalso([new Error("No project is open"), ...Array.from({ length: intentos }, () => new Error("fetch failed"))]);
+    await expect(clienteCloudStudio(falso.invocar, "APPSalud", reloj().esperar).leerTexto("app.ini")).rejects.toThrow(
+      new RegExp(`${intentos} veces.*fetch failed`, "s")
+    );
+    expect(falso.llamadas).toHaveLength(1 + intentos);
+  });
+
   it("una apertura RECHAZADA con texto de error falla con SU motivo, no con «no hay proyecto»", async () => {
     const falso = clienteFalso([
       new Error("No project is open"),

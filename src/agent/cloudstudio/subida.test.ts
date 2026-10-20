@@ -6,7 +6,7 @@ import { dirname, join } from "node:path";
 import { CloudStudioEnMemoria, type CloudStudioPort } from "../../core/ports.js";
 import { prepararRepo, cambiosPendientes, marcarSubidoParcial, REMOTO } from "../sesiones/gitSync.js";
 import { rutaSyncJson } from "./descarga.js";
-import { subir, rutaSyncLog } from "./subida.js";
+import { subir, rutaSyncLog, INTENTOS_SI_LLEGA_DISTINTO } from "./subida.js";
 import type { OperacionDeSubida } from "../../core/cloudstudio.js";
 
 /** `politicaDeAprobacion` es obligatoria (fail-closed por tipo): estos tests no la
@@ -678,8 +678,10 @@ describe("subir verifica lo que deja en Studio", () => {
     expect(informe.fallos).toHaveLength(1);
     expect(informe.fallos[0]!.ruta).toBe("a.xne");
     expect(informe.fallos[0]!.motivo).toBe(
-      "llegó distinto a Studio: 5.007 B en local, 1.200 B en Studio (difieren desde el carácter 1.200)"
+      "llegó distinto a Studio: 5.007 B en local, 1.200 B en Studio (difieren desde el carácter 1.200) (tras 3 intentos)"
     );
+    // Se escribió las veces del tope, no una: lo intermitente se reintenta aquí mismo (IXCODE-54).
+    expect(puerto.escrituras.filter((e) => e.ruta === "a.xne")).toHaveLength(INTENTOS_SI_LLEGA_DISTINTO);
     // El motivo se DICE, no solo se cuenta: el diálogo enseña las últimas líneas del recorrido.
     expect(dicho.join("")).toContain("a.xne: llegó distinto a Studio");
     // Lo cortado sigue pendiente; lo que llegó bien ya no.
@@ -690,6 +692,33 @@ describe("subir verifica lo que deja en Studio", () => {
     expect(ultima.fallos[0].ruta).toBe("a.xne");
     expect(ultima.fallos[0].sha256Local).toMatch(/^[0-9a-f]{64}$/);
     expect(ultima.fallos[0].sha256Studio).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  /**
+   * IXCODE-54, medido en APPSalud: el mismo fichero llegaba cambiado en una posición distinta en cada intento. Un tropiezo
+   * intermitente se reintenta en la MISMA subida, y si a la segunda llega bien es un «ok», no un fallo para el próximo /sync.
+   */
+  it("un texto que llega distinto UNA vez se vuelve a escribir, y si llega bien es un ok", async () => {
+    const raiz = await dosTextos();
+    const puerto = new CloudStudioEnMemoria({ rama: "master", textos: { "app.xml": "<app/>", "a.xne": "<a/>" } });
+    const escribirDeVerdad = puerto.escribirTexto.bind(puerto);
+    let primera = true;
+    puerto.escribirTexto = async (ruta, contenido) => {
+      if (ruta === "a.xne" && primera) {
+        primera = false;
+        return escribirDeVerdad(ruta, `${contenido.slice(0, 10)}X${contenido.slice(11)}`);
+      }
+      return escribirDeVerdad(ruta, contenido);
+    };
+    const dicho: string[] = [];
+
+    const informe = await subir({ puerto, raiz, ramaOrigen: "master", proyecto, politicaDeAprobacion: autorizaSiempre, informar: (t) => dicho.push(t) });
+
+    expect(informe.fallos).toEqual([]);
+    expect(informe.ok.sort()).toEqual(["a.xne", "app.xml"]);
+    expect(dicho.join("")).toContain("a.xne: llegó distinto a Studio");
+    expect(dicho.join("")).toContain("se vuelve a escribir (intento 2 de 3)");
+    expect(await cambiosPendientes(raiz, "master")).toEqual([]);
   });
 
   it("si la relectura FALLA, no se da por bueno: fallo «subido pero no se pudo comprobar»", async () => {

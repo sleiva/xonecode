@@ -9659,3 +9659,26 @@ QUITANDO cada pieza.
 exportar y el lanzamiento falla diciéndolo (desde IXCODE-60 no se crean tareas en una copia sin git). Toca el mismo
 recorrido que IXCODE-38 (Alejandro): coordinar al fusionar.
 
+## Subir a CloudStudio: detectar y reintentar (IXCODE-54 e IXCODE-56, 20-10-2026)
+
+Lo reportado, en APPSalud: subidas que acababan con fallos y había que repetir hasta cuatro veces. Dos fallos distintos,
+y un tercero que se pidió prevenir:
+
+- **`doc/02-peticiones-xone.md` no se podía releer NUNCA** («CloudStudio sigue diciendo que no hay proyecto abierto
+  después de reabrir 3 veces», con la apertura contestando `project_open`). `conSesion` buscaba `no project is open` en
+  TODO el texto de la respuesta, y el de `studio_get_file` es el contenido del fichero: un documento sobre peticiones al
+  MCP que cita ese error se tomaba por sesión caída, en todos los intentos y solo ese fichero. En una respuesta correcta
+  el aviso cuenta solo si la EMPIEZA (`esSesionPerdida`); el contenido además viaja serializado (empieza por `"`). Sin
+  la copia de APPSalud a mano, la cita dentro del fichero es la explicación que casa con todo, NO una medida.
+- **«Llegó distinto a Studio»**: mismos bytes y otra posición en cada intento (`funciones.js`: 114.084, 144.155), un
+  tropiezo intermitente al escribir y no una regla de codificación. Se reescribe y relee en la MISMA subida hasta
+  `INTENTOS_SI_LLEGA_DISTINTO` (3); solo lo que sigue mal es fallo. La causa en el servidor sigue sin encontrar.
+- **Token caducado** (pedido, no observado en estos tickets): la sesión MCP reconecta UNA vez renovando con el refresh
+  guardado y SIN navegador (`invocarConRenovacion`, `esCaducidad`: `UnauthorizedError`, 401, «Session not found»); si
+  hace falta una persona, `MOTIVO_SESION_CADUCADA` dice dónde volver a entrar. Una vez y no en bucle.
+- **Apertura que falla**: la que REVIENTA (red, plazo) entra en las mismas pausas que la sesión perdida; la RECHAZADA con
+  motivo sale a la primera, como ya fijaba su test.
+
+**Límites**: el camino `sinNavegador` de `abrirCliente` no tiene test (necesita OAuth real); la reconexión pierde el
+proyecto abierto y la reapertura depende de que la capa de encima vea «no project is open».
+

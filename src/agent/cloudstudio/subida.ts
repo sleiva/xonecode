@@ -42,6 +42,9 @@ import { rutaSyncJson } from "./descarga.js";
 import { ramaActiva } from "./ramaActiva.js";
 import { validarTrasDescarga, type FicheroIlegible } from "./validarTrasDescarga.js";
 
+/** Cuántas veces se escribe un texto que vuelve DISTINTO de Studio antes de darlo por fallido (IXCODE-54). */
+export const INTENTOS_SI_LLEGA_DISTINTO = 3;
+
 export interface OpcionesDeSubida {
   puerto: CloudStudioPort;
   raiz: string;
@@ -314,19 +317,31 @@ export async function subir(opciones: OpcionesDeSubida): Promise<InformeDeSubida
             // guardaba así y la relectura, igual de rota, daba la subida por buena. Studio quiere
             // el texto DECODIFICADO y lo guarda él en la codificación que declara su prólogo.
             const contenido = decodificarComoTexto(readFileSync(join(raiz, operacion.ruta)));
-            await puerto.escribirTexto(operacion.ruta, contenido);
-            // Releer lo escrito: es la única prueba de que llegó entero. Una relectura que
-            // falla NO es un «ok»: el fichero puede estar cortado y no lo sabríamos.
-            let enStudio: string;
-            try {
-              enStudio = await puerto.leerTexto(operacion.ruta);
-            } catch (error) {
-              throw new Error(motivoSinComprobar((error as Error).message));
+            /**
+             * Escribir y RELEER, y si llega distinto, VOLVER A ESCRIBIR aquí mismo (IXCODE-54). Medido en APPSalud: el
+             * mismo fichero llegaba cambiado en un carácter distinto en cada intento (mismos bytes, otra posición), o sea
+             * un tropiezo intermitente del servidor y no una regla; dejarlo para el siguiente `/sync` obligaba a pulsar
+             * Subir cuatro veces. Acotado (`INTENTOS_SI_LLEGA_DISTINTO`): lo que sigue llegando mal se da por fallido.
+             */
+            let diferencia: ReturnType<typeof diferenciaDeTexto>;
+            for (let intento = 1; ; intento++) {
+              await puerto.escribirTexto(operacion.ruta, contenido);
+              // Releer lo escrito: es la única prueba de que llegó entero. Una relectura que
+              // falla NO es un «ok»: el fichero puede estar cortado y no lo sabríamos.
+              let enStudio: string;
+              try {
+                enStudio = await puerto.leerTexto(operacion.ruta);
+              } catch (error) {
+                throw new Error(motivoSinComprobar((error as Error).message));
+              }
+              diferencia = diferenciaDeTexto(contenido, enStudio);
+              if (diferencia === undefined || intento >= INTENTOS_SI_LLEGA_DISTINTO) break;
+              informar(`${operacion.ruta}: ${diferencia.motivo}; se vuelve a escribir (intento ${intento + 1} de ${INTENTOS_SI_LLEGA_DISTINTO})\n`);
             }
-            const diferencia = diferenciaDeTexto(contenido, enStudio);
             if (diferencia !== undefined) {
-              informe.fallos.push({ ruta: operacion.ruta, ...diferencia });
-              informar(`${operacion.ruta}: ${diferencia.motivo}\n`);
+              const motivo = `${diferencia.motivo} (tras ${INTENTOS_SI_LLEGA_DISTINTO} intentos)`;
+              informe.fallos.push({ ruta: operacion.ruta, ...diferencia, motivo });
+              informar(`${operacion.ruta}: ${motivo}\n`);
               continue;
             }
           } else {

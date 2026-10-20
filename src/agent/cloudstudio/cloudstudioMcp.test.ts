@@ -2,7 +2,12 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSy
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js";
 import {
+  esCaducidad,
+  invocarConRenovacion,
+  MOTIVO_SESION_CADUCADA,
+  type ConexionMcp,
   adoptarLegadoSiProcede,
   EstadoOAuthVersionIncompatible,
   guardarEstadoDeEntorno,
@@ -630,3 +635,75 @@ describe("con qué comando se abre el navegador", () => {
     });
   });
 });
+
+/**
+ * IXCODE-54/56: el token de CloudStudio caduca (y el servidor olvida la sesión MCP) en mitad de una subida larga. Se
+ * reconecta UNA vez renovando sin navegador y se repite la llamada; lo que no se renueva sale con un motivo que dice qué
+ * hacer, y un rechazo de la TOOL no se toma por caducidad.
+ */
+describe("invocarConRenovacion: el token caducado", () => {
+  const conexion = (respuestas: Array<unknown | Error>, cierres: string[], nombre: string): ConexionMcp => {
+    let i = 0;
+    return {
+      callTool: async () => {
+        const r = respuestas[i++];
+        if (r instanceof Error) throw r;
+        return r;
+      },
+      cerrar: async () => void cierres.push(nombre),
+    };
+  };
+
+  it("distingue la caducidad de un rechazo de la tool", () => {
+    expect(esCaducidad(new UnauthorizedError("Unauthorized"))).toBe(true);
+    expect(esCaducidad(Object.assign(new Error("HTTP"), { code: 401 }))).toBe(true);
+    expect(esCaducidad(new Error("Streamable HTTP error: Error POSTing to endpoint (HTTP 404): Session not found"))).toBe(true);
+    expect(esCaducidad(new Error("studio_get_file: File not found"))).toBe(false);
+    expect(esCaducidad(new Error("fetch failed"))).toBe(false);
+  });
+
+  it("con el token caducado reconecta UNA vez, cierra la vieja y repite la llamada", async () => {
+    const cierres: string[] = [];
+    let reconexiones = 0;
+    const sesion = invocarConRenovacion(conexion([new UnauthorizedError("Unauthorized")], cierres, "vieja"), async () => {
+      reconexiones += 1;
+      return conexion([{ content: [{ type: "text", text: "ok" }] }], cierres, "nueva");
+    });
+    expect(await sesion.invocar("studio_get_file", { filePath: "app.ini" })).toEqual({ content: [{ type: "text", text: "ok" }] });
+    expect(reconexiones).toBe(1);
+    expect(cierres).toEqual(["vieja"]);
+    await sesion.cerrar();
+    expect(cierres).toEqual(["vieja", "nueva"]);
+  });
+
+  it("si no se puede renovar sin una persona, lo DICE con qué hacer", async () => {
+    const sesion = invocarConRenovacion(conexion([new UnauthorizedError("Unauthorized")], [], "vieja"), async () => {
+      throw new Error(MOTIVO_SESION_CADUCADA);
+    });
+    await expect(sesion.invocar("studio_edit_file", { filePath: "a.xne" })).rejects.toThrow(MOTIVO_SESION_CADUCADA);
+  });
+
+  it("si la credencial recién renovada TAMBIÉN se rechaza, no insiste", async () => {
+    let reconexiones = 0;
+    const sesion = invocarConRenovacion(conexion([new UnauthorizedError("Unauthorized")], [], "vieja"), async () => {
+      reconexiones += 1;
+      return conexion([new UnauthorizedError("Unauthorized")], [], "nueva");
+    });
+    await expect(sesion.invocar("studio_get_file", {})).rejects.toThrow(MOTIVO_SESION_CADUCADA);
+    expect(reconexiones).toBe(1);
+  });
+
+  it("un rechazo de la TOOL no reconecta: sube tal cual", async () => {
+    let reconexiones = 0;
+    const sesion = invocarConRenovacion(
+      conexion([{ isError: true, content: [{ type: "text", text: "File not found" }] }], [], "vieja"),
+      async () => {
+        reconexiones += 1;
+        return conexion([], [], "nueva");
+      }
+    );
+    await expect(sesion.invocar("studio_get_file", { filePath: "x" })).rejects.toThrow(/studio_get_file: File not found/);
+    expect(reconexiones).toBe(0);
+  });
+});
+

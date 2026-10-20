@@ -26,7 +26,25 @@ export type Invocar = (nombre: string, argumentos: Record<string, unknown>) => P
  * `JSON.parse` de quien lo llamó, que reventaba con «Unexpected token 'E'». Un fallo de
  * sesión disfrazado de fallo de formato.
  */
-const SESION_PERDIDA = /no project is open/i;
+const SESION_PERDIDA_EN_TEXTO = /^\s*(?:[\w.-]+:\s*)?(?:error:\s*)?no project is open/i;
+
+/**
+ * ¿Ese texto ES el aviso de sesión perdida? Solo si EMPIEZA por él —con el nombre de la tool delante, como lo deja la
+ * excepción de `invocarSobre`, o con «Error:»—, nunca si lo CONTIENE (IXCODE-56).
+ *
+ * Medido en APPSalud: `doc/02-peticiones-xone.md` no se podía releer nunca. El texto de `studio_get_file` ES el contenido
+ * del fichero, y un documento sobre peticiones al MCP de XOne cita ese error; buscando la frase en cualquier parte, el
+ * fichero se tomaba por sesión caída, se reabría el proyecto (que contestaba `project_open`), se volvía a leer… y tres
+ * veces después, «sigue diciendo que no hay proyecto abierto». El contenido de un fichero llega además serializado como
+ * cadena JSON (empieza por `"`), así que nunca empieza por el aviso.
+ */
+export const esSesionPerdida = (texto: string): boolean => SESION_PERDIDA_EN_TEXTO.test(texto);
+
+/**
+ * Y en una EXCEPCIÓN, en cualquier parte, como siempre: su texto es el error del servidor (`invocarSobre` lo arma con el
+ * nombre de la tool delante), nunca el contenido de un fichero, y anclarlo perdería formas del aviso que no empiecen igual.
+ */
+const SESION_PERDIDA_EN_ERROR = /no project is open/i;
 
 /** Los SDK MCP envuelven el resultado en `content[].text`. */
 function texto(valor: unknown): string {
@@ -77,6 +95,9 @@ function contenidoDeFichero(bruto: string): string {
     return bruto;
   }
 }
+
+/** El servidor CONTESTÓ que no abre el proyecto, con su motivo: definitivo, no se reintenta. */
+class AperturaRechazada extends Error {}
 
 /** Cuánto del cuerpo remoto se deja ver en un error de formato: lo justo para reconocerlo. */
 const TOPE_DE_MUESTRA = 120;
@@ -132,7 +153,7 @@ export function clienteCloudStudio(
   const abrirComprobando = async (nombre: string): Promise<string> => {
     const respuesta = await invocar("studio_open_project", { project: nombre });
     const dicho = texto(respuesta) || (typeof respuesta === "string" ? respuesta : JSON.stringify(respuesta ?? ""));
-    if (/^\s*error\b/i.test(dicho)) throw new Error(`studio_open_project «${nombre}»: ${muestra(dicho)}`);
+    if (/^\s*error\b/i.test(dicho)) throw new AperturaRechazada(`studio_open_project «${nombre}»: ${muestra(dicho)}`);
     return muestra(dicho);
   };
   /**
@@ -140,7 +161,7 @@ export function clienteCloudStudio(
    * vuelta convertiría un servidor caído en un bucle silencioso.
    *
    * Mira las DOS formas en que el servidor dice que perdió el proyecto (ver
-   * `SESION_PERDIDA`): la excepción y el texto de una respuesta por lo demás correcta. Y
+   * `esSesionPerdida`): la excepción y el texto de una respuesta por lo demás correcta. Y
    * después de reabrir vuelve a mirar: si sigue diciendo lo mismo, se lanza con el nombre
    * de la tool delante en vez de devolver ese texto a quien llamó — devolverlo es como
    * acabó siendo un error de JSON en la interfaz.
@@ -149,10 +170,10 @@ export function clienteCloudStudio(
     let perdida = false;
     try {
       const resultado = await invocar(nombre, argumentos);
-      if (!SESION_PERDIDA.test(texto(resultado))) return resultado;
+      if (!esSesionPerdida(texto(resultado))) return resultado;
       perdida = true;
     } catch (error) {
-      if (!SESION_PERDIDA.test((error as Error).message)) throw error;
+      if (!SESION_PERDIDA_EN_ERROR.test((error as Error).message)) throw error;
       perdida = true;
     }
     if (!perdida) throw new Error(`${nombre}: no se pudo determinar el estado de la sesión`);
@@ -169,12 +190,21 @@ export function clienteCloudStudio(
     let apertura = "";
     for (const pausa of PAUSAS_DE_REAPERTURA_MS) {
       if (pausa > 0) await esperar(pausa);
-      apertura = await abrirComprobando(proyecto);
+      // Una apertura que REVIENTA (red, plazo, respuesta vacía) también se reintenta (IXCODE-56): es la misma clase de
+      // tropiezo que la sesión perdida, y lanzarla a la primera dejaba sin las otras dos vueltas justo el caso en que el
+      // servidor tarda en asentarse. Un RECHAZO con motivo («Project not found») sale ya: insistir no lo cambia.
+      try {
+        apertura = await abrirComprobando(proyecto);
+      } catch (error) {
+        if (error instanceof AperturaRechazada) throw error;
+        apertura = muestra((error as Error).message);
+        continue;
+      }
       try {
         const reintento = await invocar(nombre, argumentos);
-        if (!SESION_PERDIDA.test(texto(reintento))) return reintento;
+        if (!esSesionPerdida(texto(reintento))) return reintento;
       } catch (error) {
-        if (!SESION_PERDIDA.test((error as Error).message)) throw error;
+        if (!SESION_PERDIDA_EN_ERROR.test((error as Error).message)) throw error;
       }
     }
     throw new Error(
@@ -273,10 +303,10 @@ export function clienteCloudStudio(
       // El `switch` CIERRA el proyecto. No es una suposición: el propio servidor lo declara
       // en su respuesta (`action: "closeandopenproject"`), y medido, todo lo que venga
       // después contesta «Empty response from server» hasta que se reabre. Ese texto NO
-      // encaja en `SESION_PERDIDA`, así que la reapertura automática no se dispara: sin
+      // encaja en `esSesionPerdida`, así que la reapertura automática no se dispara: sin
       // esta línea, `/sync bajar` moría justo después de posicionar la rama.
       //
-      // Se reabre aquí, y NO se amplía `SESION_PERDIDA` con ese otro texto: un mensaje
+      // Se reabre aquí, y NO se amplía `esSesionPerdida` con ese otro texto: un mensaje
       // vacío puede venir de cualquier fallo del servidor, y tratarlo como sesión caída
       // pondría una reapertura —y un reintento— delante de problemas que no arregla.
       await abrirComprobando(proyecto);

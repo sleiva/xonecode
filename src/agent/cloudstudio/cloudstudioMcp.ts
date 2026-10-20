@@ -14,7 +14,7 @@ import { closeSync, existsSync, mkdirSync, openSync, readFileSync, unlinkSync, w
 import { join, dirname } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import { auth, type OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js";
+import { auth, UnauthorizedError, type OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js";
 import type { OAuthClientInformationMixed, OAuthClientMetadata, OAuthTokens } from "@modelcontextprotocol/sdk/shared/auth.js";
 import type { Entorno } from "../../core/settings.js";
 import { motivoDeEndpointInaceptable } from "../../core/modelos.js";
@@ -117,6 +117,12 @@ export interface OpcionesCloudStudio {
    * `cli/main.ts` no lo pasa) sigue leyendo y escribiendo exactamente donde lo hacía.
    */
   entornoId?: string;
+  /**
+   * Sin navegador: si la autorización necesita que una persona vuelva a entrar, LANZA (`MOTIVO_SESION_CADUCADA`) en vez
+   * de abrir el IDS y esperar. Lo usa la reconexión a mitad de una operación (`sesionCloudStudio`): renovar el token con
+   * el refresh guardado es transparente; pedir login en mitad de una subida, no.
+   */
+  sinNavegador?: boolean;
   /**
    * A dónde mandar el navegador cuando la autorización SALE BIEN.
    *
@@ -854,6 +860,7 @@ async function abrirCliente(
       scope: scopes.join(" "),
     };
     const inicial = await auth(provider, opcionesAuth);
+    if (inicial === "REDIRECT" && opciones.sinNavegador === true) throw new Error(MOTIVO_SESION_CADUCADA);
     if (inicial === "REDIRECT") {
       callback = await escucharCallback(opciones.timeoutMs ?? 5 * 60_000, opciones.redirigirA);
       const codigo = await callback.codigo;
@@ -880,10 +887,79 @@ async function abrirCliente(
  * porque cierra el transporte en cuanto termina de mirar el catálogo.
  */
 export async function sesionCloudStudio(urlTexto: string, opciones: OpcionesCloudStudio = {}): Promise<SesionCloudStudio> {
-  const { cliente, cerrar } = await abrirCliente(urlTexto, opciones);
+  const conectar = async (): Promise<ConexionMcp> => {
+    const { cliente, cerrar } = await abrirCliente(urlTexto, opciones);
+    return { callTool: (peticion) => cliente.callTool(peticion), cerrar };
+  };
+  // La RE-conexión, sin navegador y sin volcar nada: renueva con el refresh guardado o dice que hay que volver a entrar.
+  const reconectar = async (): Promise<ConexionMcp> => {
+    const { cliente, cerrar } = await abrirCliente(urlTexto, { ...opciones, sinNavegador: true, abrirNavegador: () => {} });
+    return { callTool: (peticion) => cliente.callTool(peticion), cerrar };
+  };
+  return invocarConRenovacion(await conectar(), reconectar);
+}
+
+/** Lo que dice una sesión de CloudStudio que ya no se puede renovar sola (IXCODE-54/56). */
+export const MOTIVO_SESION_CADUCADA =
+  "la sesión de CloudStudio ha caducado y no se ha podido renovar sola: vuelve a entrar (Ajustes → Entornos, «Conectar»)";
+
+/** Una conexión MCP viva: lo único que la renovación necesita de ella. */
+export interface ConexionMcp {
+  callTool: (peticion: { name: string; arguments: Record<string, unknown> }) => Promise<unknown>;
+  cerrar: () => Promise<void>;
+}
+
+/**
+ * ¿Ese fallo es de CREDENCIAL o de sesión MCP muerta, y no de la tool? El token de CloudStudio caduca (y el servidor
+ * olvida la sesión MCP) en mitad de una subida larga: el SDK lo deja ver como `UnauthorizedError`, o como un error HTTP
+ * con su código. Un rechazo de la TOOL (`invocarSobre`, `isError`) no es esto: su texto es del servidor y empieza por el
+ * nombre de la tool, y reconectar no lo arregla.
+ */
+export function esCaducidad(error: unknown): boolean {
+  if (error instanceof UnauthorizedError) return true;
+  const e = error as { code?: unknown; message?: unknown } | null;
+  if (e?.code === 401) return true;
+  const mensaje = typeof e?.message === "string" ? e.message : "";
+  return /\b401\b|unauthori[sz]ed|invalid_token|token (?:has )?expired|session not found/i.test(mensaje);
+}
+
+/**
+ * `invocar` que sobrevive a un token CADUCADO (IXCODE-54/56): si una llamada falla por credencial o por sesión MCP muerta,
+ * reconecta UNA vez —renovando el token con el refresh guardado, sin navegador— y repite la llamada. Lo que no se puede
+ * renovar sale con `MOTIVO_SESION_CADUCADA`, no con un error genérico de transporte.
+ *
+ * Una vez y no en bucle: un servidor que rechaza la credencial recién renovada no va a cambiar de idea. Y el proyecto
+ * abierto se pierde con la sesión: lo reabre `clienteCloudStudio#conSesion`, que es la capa de encima.
+ */
+export function invocarConRenovacion(inicial: ConexionMcp, reconectar: () => Promise<ConexionMcp>): SesionCloudStudio {
+  let actual = inicial;
+  const llamar = (nombre: string, argumentos: Record<string, unknown>): Promise<unknown> =>
+    invocarSobre((peticion) => actual.callTool(peticion))(nombre, argumentos);
   return {
-    invocar: invocarSobre((peticion) => cliente.callTool(peticion)),
-    cerrar,
+    invocar: async (nombre, argumentos) => {
+      try {
+        return await llamar(nombre, argumentos);
+      } catch (error) {
+        if (!esCaducidad(error)) throw error;
+        await actual.cerrar().catch(() => undefined);
+        try {
+          actual = await reconectar();
+        } catch (motivo) {
+          throw new Error(
+            (motivo as Error).message === MOTIVO_SESION_CADUCADA
+              ? MOTIVO_SESION_CADUCADA
+              : `${MOTIVO_SESION_CADUCADA} (${primeraLineaAcotada(String((motivo as Error).message))})`
+          );
+        }
+        try {
+          return await llamar(nombre, argumentos);
+        } catch (otra) {
+          if (esCaducidad(otra)) throw new Error(MOTIVO_SESION_CADUCADA);
+          throw otra;
+        }
+      }
+    },
+    cerrar: () => actual.cerrar(),
   };
 }
 

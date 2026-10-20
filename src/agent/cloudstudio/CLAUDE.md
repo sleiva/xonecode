@@ -18,6 +18,15 @@ Ante una discrepancia con el código, **el código manda**.
   cuyo texto empieza por «Error: No project is open…». `conSesion` mira el RESULTADO además de la
   excepción, reabre y reintenta con pausa creciente (`PAUSAS_DE_REAPERTURA_MS`).
   `ProviderCloudStudio.invalidateCredentials` tiene que existir.
+- **En una respuesta correcta, el aviso solo cuenta si la EMPIEZA** (`esSesionPerdida`, IXCODE-56): el texto
+  de `studio_get_file` es el CONTENIDO, y un fichero que cita el error se tomaba por sesión caída para siempre.
+  En una excepción se busca en cualquier parte. Una apertura que REVIENTA se reintenta con las mismas pausas;
+  un RECHAZO con motivo («not found») sale a la primera (`AperturaRechazada`).
+- **Token caducado: se reconecta UNA vez renovando sin navegador** (`cloudstudioMcp.ts#invocarConRenovacion`,
+  `esCaducidad`, `sinNavegador`); lo que no se renueva sale con `MOTIVO_SESION_CADUCADA`. Un rechazo de la
+  TOOL no es caducidad. La reapertura del proyecto la hace la capa de encima.
+- **Un texto que llega DISTINTO se reescribe en la misma subida** (`subida.ts#INTENTOS_SI_LLEGA_DISTINTO`):
+  el tropiezo medido era intermitente (otra posición en cada intento).
 - **El nombre de la tool de proyectos no se codifica a pelo** (`herramientaDeProyectos`), y la
   respuesta es un mapa bajo «recents» con el id en `pid`. `proyectosDeResultado` se queda con
   `{id, nombre, compartido?}` y NADA MÁS (la respuesta trae el correo del propietario).
