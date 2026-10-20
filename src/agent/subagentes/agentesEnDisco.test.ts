@@ -1089,3 +1089,9 @@ describe("un de serie que perdió campos al guardarse desde Ajustes", () => {
     );
   });
 });
+
+describe("las skills de serie del desarrollador", () => {
+  it("lleva `xone-hotswap` (decisión suya): maqueta y comprueba su pantalla en el aparato", () => {
+    expect(AGENTES_DE_SERIE.find((a) => a.nombre === "developer-xone")!.skills).toContain("xone-hotswap");
+  });
+});

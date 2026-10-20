@@ -1205,7 +1205,9 @@ export const AGENTES_DE_SERIE: readonly Agente[] = [
     // `artifacts-builder` se queda: escribe documentos e informes. `archify` no, que los
     // diagramas son de `designer-xone` y su descripción son ~700 caracteres por llamada.
     // `xone-debugging` se quitó: 0 lecturas en seis pasadas, y su método es correr `xone-simulator`, que quien no tiene shell no puede.
-    skills: ["xone-development", "artifacts-builder", "openui-builder"],
+    // `xone-hotswap` de serie, decisión suya (20-10-2026): es quien maqueta y comprueba su pantalla, y la skill le dice cómo
+    // se toca, se captura y se recarga en el aparato. Con shell (Claude Code, `ejecucion`) también trae sus scripts.
+    skills: ["xone-development", "artifacts-builder", "openui-builder", "xone-hotswap"],
     // A quién puede llamar él mismo (`core/agentes.ts#Agente.llama`): solo lo honra TrueForge y solo con el
     // interruptor del bucle del desarrollador encendido. El de pruebas para comprobar y el diseñador para los RECURSOS
     // (iconos y fondos SVG): lo visual de la pantalla es suyo, y devolverlo al orquestador o al diseñador lo rehacía entero.
