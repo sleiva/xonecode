@@ -754,6 +754,7 @@ function piezasFalsas(overrides: Partial<PiezasDeSincronizacion> = {}): PiezasDe
     subirProyecto: overrides.subirProyecto ?? (async () => ({ ok: [], fallos: [], omitidas: [] })),
     vaciar: overrides.vaciar ?? (() => []),
     repoPropio: overrides.repoPropio ?? (async () => false),
+    versionDeGit: overrides.versionDeGit ?? (async () => "git version 2.47.0"),
     // Por omisión la raíz del test NO está en el workspace: los tests de siempre siguen
     // ejercitando la regla de antes, y el vaciado se pide a mano.
     baseDeWorkspace: overrides.baseDeWorkspace ?? (() => "/no/es/el/workspace"),
@@ -762,6 +763,35 @@ function piezasFalsas(overrides: Partial<PiezasDeSincronizacion> = {}): PiezasDe
 }
 
 describe("crearSincronizador", () => {
+  /**
+   * IXCODE-60: bajar escribe los ficheros y DESPUÉS hace el `git init`. Sin git, la copia se
+   * quedaba en el disco sin repo y todo lo que cuelga de git fallaba más tarde sin nombrarlo.
+   */
+  it("sin git NO baja nada: se niega antes de abrir CloudStudio, y lo dice", async () => {
+    const raiz = raizConProyectoCloudYEntorno();
+    const sesion = vi.fn(piezasFalsas().sesion);
+    const descargar = vi.fn(piezasFalsas().descargar);
+    const sinGit = async (): Promise<string> => {
+      throw Object.assign(new Error("spawn git ENOENT"), { code: "ENOENT" });
+    };
+    await expect(crearSincronizador(piezasFalsas({ sesion, descargar, versionDeGit: sinGit }))("bajar", raiz)).rejects.toThrow(
+      /no se encuentra git/
+    );
+    expect(sesion).not.toHaveBeenCalled();
+    expect(descargar).not.toHaveBeenCalled();
+  });
+
+  it("si git falla DESPUÉS de bajar, dice que la copia quedó sin git, no un fallo de descarga a secas", async () => {
+    const raiz = raizConProyectoCloudYEntorno();
+    const preparar = async (): Promise<string> => {
+      throw Object.assign(new Error(`fatal: ${raiz} no se pudo`), { code: 128 });
+    };
+    const fallo = crearSincronizador(piezasFalsas({ preparar }))("bajar", raiz);
+    await expect(fallo).rejects.toThrow(/la copia ha quedado SIN git \(salió con código 128\)/);
+    // Y sin la ruta de la máquina: del error de git solo su código.
+    await expect(fallo).rejects.not.toThrow(raiz);
+  });
+
   it("le pasa a la sesión el ENTORNO del proyecto: si no, un proyecto ya migrado reautentica en «legado»", async () => {
     const raiz = raizConProyectoCloudYEntorno();
     const sesion = vi.fn(piezasFalsas().sesion);

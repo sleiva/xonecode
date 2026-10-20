@@ -44,7 +44,8 @@ import { clienteCloudStudio } from "../agent/cloudstudio/cloudstudioClient.js";
 import { cargarSettings } from "../agent/config/settingsEnDisco.js";
 import { dentroDelWorkspace, depuracionActiva, entornoDeUrl, type Entorno } from "../core/settings.js";
 import { descargarProyecto } from "../agent/cloudstudio/descarga.js";
-import { arbolLimpio, cambiosPendientes, esRepoPropio, prepararRepo, sinCommitear, vaciarCopia } from "../agent/sesiones/gitSync.js";
+import { motivoDeFallo } from "../core/diagnosticoDeNode.js";
+import { arbolLimpio, cambiosPendientes, esRepoPropio, MOTIVO_SIN_GIT, prepararRepo, sinCommitear, vaciarCopia, versionDeGit } from "../agent/sesiones/gitSync.js";
 import { baseDeWorkspace } from "../agent/config/settingsEnDisco.js";
 import { subir } from "../agent/cloudstudio/subida.js";
 import { guardarCredencial } from "../agent/config/authEnDisco.js";
@@ -925,6 +926,8 @@ export interface PiezasDeSincronizacion {
   vaciar: typeof vaciarCopia;
   /** Si la carpeta es la raíz de su propio repo: decide si hay historia que perder. */
   repoPropio: typeof esRepoPropio;
+  /** Si xonecode ENCUENTRA git (`gitSync.ts#versionDeGit`): sin él, bajar deja una copia sin repo (IXCODE-60). */
+  versionDeGit: typeof versionDeGit;
   /** La base del workspace EN VIGOR, leída en cada uso. */
   baseDeWorkspace: () => string;
   /** Apuntar en el registro de fallos del proyecto una sincronización que REVENTÓ. */
@@ -944,6 +947,7 @@ const PIEZAS_DE_SINCRONIZACION_REALES: PiezasDeSincronizacion = {
   subirProyecto: subir,
   vaciar: vaciarCopia,
   repoPropio: esRepoPropio,
+  versionDeGit,
   baseDeWorkspace,
   anotarFallo: (raiz, fallo) => void crearRegistroDeFallos(raiz).anotar(fallo),
 };
@@ -1045,6 +1049,16 @@ export function crearSincronizador(
      * sería borrarle su trabajo. Y siempre con CONFIRMACIÓN delante, salvo si no hay nada que
      * perder (una carpeta vacía, que es el alta): sin quien confirme no se vacía nada.
      */
+    // SIN GIT NO SE BAJA (IXCODE-60). Bajar escribe los ficheros y DESPUÉS hace el `git init`, así
+    // que sin git la copia se quedaba en el disco sin repo: la marca de cada sesión, «lo que falta
+    // por subir» y «Subir» fallaban después sin nombrar a git. Antes de vaciar nada y de abrir MCP.
+    if (accion !== "estado") {
+      try {
+        await piezas.versionDeGit();
+      } catch {
+        throw new Error(MOTIVO_SIN_GIT);
+      }
+    }
     const vaciable = accion === "bajar" && dentroDelWorkspace(raiz, piezas.baseDeWorkspace());
     let vaciar = false;
     if (vaciable) {
@@ -1095,7 +1109,16 @@ export function crearSincronizador(
         });
         // `prepararRepo` va DESPUÉS de bajar, y es quien hace el `git init`: con la copia
         // vaciada no hay `.git`, así que el primer commit es la bajada entera.
-        await piezas.preparar(raiz, bajada.rama, informar, vaciar ? { propio: true } : {});
+        try {
+          await piezas.preparar(raiz, bajada.rama, informar, vaciar ? { propio: true } : {});
+        } catch (error) {
+          // Los ficheros YA están en el disco: se dice que la copia quedó sin git y lo que eso
+          // cuesta, no un fallo de descarga a secas. Del error, solo su `code` (sin rutas).
+          throw new Error(
+            `bajados ${bajada.descargados.length} ficheros, pero la copia ha quedado SIN git (${motivoDeFallo(error)}): ` +
+              "no se podrá revisar ni subir lo que se haga en ella. Arregla git y vuelve a bajarla"
+          );
+        }
         return {
           tipo: "texto",
           texto: `bajados ${bajada.descargados.length} ficheros (${bajada.via})\n`,

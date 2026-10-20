@@ -10,6 +10,9 @@ corre solo y escribe sin aprobación. Cuatro estados; `requiere-atencion` = **es
 
 ## Autorización y entrega
 
+- **Sin git no hay tarea** (`gitSync.ts#motivoSinGitParaTarea`, IXCODE-60): crearla en una copia
+  sin repo se NIEGA (409 con motivo) antes de preparar el encargo; lo cablea la composición del
+  corredor (`opcionesDeMontaje`), no `arrancarConsolaWeb`.
 - **La autorización es el ACTO DE CREAR LA TAREA**; **no se reutiliza el modo de escritura de una sesión**.
 - **Las guardas de RUTA siguen enteras**: `/artifacts/`, vistas aplanadas, `/.env`, `/.git`, `/.xonecode`.
 - **Escrituras LOCALES de un especialista no paran el turno** (`escribeSinPreguntar`,

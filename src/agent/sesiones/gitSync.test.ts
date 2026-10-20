@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, writeFileSync, mkdirSync, readFileSync, existsSync, unlinkSync, symlinkSync, statSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { prepararRepo, cambiosPendientes, marcarSubido, arbolLimpio, sinCommitear, trabajoSinCommitear, commitDeTurno, asegurarExclusiones, REMOTO, vaciarCopia, esRepoPropio } from "./gitSync.js";
+import { prepararRepo, cambiosPendientes, marcarSubido, arbolLimpio, sinCommitear, trabajoSinCommitear, commitDeTurno, asegurarExclusiones, REMOTO, vaciarCopia, esRepoPropio, motivoSinGitParaTarea, versionDeGit } from "./gitSync.js";
 
 const git = (raiz: string, ...args: string[]) =>
   execFileSync("git", args, { cwd: raiz, encoding: "utf8" }).trim();
@@ -619,5 +619,30 @@ describe("vaciarCopia y el git recién hecho", () => {
     await prepararRepo(raiz, "master", () => {}, { propio: true });
     expect(await esRepoPropio(raiz)).toBe(true);
     expect(git(raiz, "rev-list", "--count", "HEAD")).toBe("1");
+  });
+});
+
+/**
+ * IXCODE-60: una copia que se bajó sin git deja la tarea trabajando sin poder revisar ni subir lo que hace. Se pregunta
+ * con el git de verdad de esta máquina (el suite ya lo exige para todo este fichero).
+ */
+describe("motivoSinGitParaTarea", () => {
+  it("con git y una copia SIN repo lo dice, y nombra cómo rehacerla y lo que cuesta", async () => {
+    const raiz = mkdtempSync(join(tmpdir(), "xc-sin-git-"));
+    const motivo = await motivoSinGitParaTarea(raiz);
+    expect(motivo).toMatch(/esta copia no tiene git/);
+    expect(motivo).toMatch(/VACÍA la copia/);
+    rmSync(raiz, { recursive: true, force: true });
+  });
+
+  it("con su repo no hay motivo", async () => {
+    const raiz = mkdtempSync(join(tmpdir(), "xc-con-git-"));
+    execFileSync("git", ["init", "-q"], { cwd: raiz });
+    expect(await motivoSinGitParaTarea(raiz)).toBeUndefined();
+    rmSync(raiz, { recursive: true, force: true });
+  });
+
+  it("versionDeGit dice la del git que encuentra xonecode", async () => {
+    expect(await versionDeGit()).toMatch(/^git version \d+\.\d+/);
   });
 });

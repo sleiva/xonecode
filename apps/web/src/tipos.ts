@@ -1974,4 +1974,5 @@ export interface DiagnosticoDeNode {
   simulador: LineaDeDiagnostico;
   claudeCode: LineaDeDiagnostico;
   navegador?: LineaDeDiagnostico;
+  git?: LineaDeDiagnostico;
 }

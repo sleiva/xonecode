@@ -15,6 +15,12 @@ const FOTO: Diagnostico = {
 };
 
 describe("DiagnosticoDeNode (Ajustes → General)", () => {
+  it("sin git lo dice en su línea (IXCODE-60)", () => {
+    render(<DiagnosticoDeNode diagnostico={{ ...FOTO, simulador: { ok: true }, git: { ok: false, motivo: "no se encuentra el programa (ENOENT)" } }} />);
+    expect(screen.getByText(/Git \(revisar y subir\)/)).toBeTruthy();
+    expect(screen.getByText("No funciona: no se encuentra el programa (ENOENT)")).toBeTruthy();
+  });
+
   it("sin foto dice que no se ha comprobado, y «Comprobar» pide medir y gira hasta que llega otra", () => {
     const alComprobar = vi.fn();
     const { rerender } = render(<DiagnosticoDeNode alComprobar={alComprobar} />);
@@ -32,6 +38,8 @@ describe("DiagnosticoDeNode (Ajustes → General)", () => {
     expect(screen.getByText("12 detectados · xone-hotswap --help arranca")).toBeTruthy();
     expect(screen.getByText("No funciona: no se encuentra el programa (ENOENT)")).toBeTruthy();
     expect(screen.getByText("2.1.301")).toBeTruthy();
+    // Sin git en la foto (una vieja), su línea no se pinta.
+    expect(screen.queryByText(/Git/)).toBeNull();
     // Sin intención no hay botón: un control sin dato detrás no se pinta.
     expect(screen.queryByRole("button")).toBeNull();
   });

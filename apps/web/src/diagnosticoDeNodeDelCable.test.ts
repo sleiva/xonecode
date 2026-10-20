@@ -15,6 +15,12 @@ describe("leerDiagnosticoDeNode: lista blanca del cable", () => {
     expect(leerDiagnosticoDeNode({ ...BUENO, ruta: "/Users/x", nodeEnPath: { ...BUENO.nodeEnPath, extra: 1 } })).toEqual(BUENO);
   });
 
+  it("la línea de git viaja si tiene la forma; ausente (foto vieja) no se inventa", () => {
+    const git = { ok: false, motivo: "no se encuentra el programa (ENOENT)" };
+    expect(leerDiagnosticoDeNode({ ...BUENO, git })).toEqual({ ...BUENO, git });
+    expect(leerDiagnosticoDeNode(BUENO)).not.toHaveProperty("git");
+  });
+
   it("lo que no tiene la forma no se pinta", () => {
     expect(leerDiagnosticoDeNode(undefined)).toBeUndefined();
     expect(leerDiagnosticoDeNode({ ...BUENO, simulador: { valor: "x" } })).toBeUndefined();

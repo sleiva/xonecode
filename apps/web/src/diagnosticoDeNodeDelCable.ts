@@ -27,6 +27,7 @@ export function leerDiagnosticoDeNode(valor: unknown): DiagnosticoDeNode | undef
     simulador,
     claudeCode,
     ...(linea(v["navegador"]) === undefined ? {} : { navegador: linea(v["navegador"])! }),
+    ...(linea(v["git"]) === undefined ? {} : { git: linea(v["git"])! }),
   };
 }
 

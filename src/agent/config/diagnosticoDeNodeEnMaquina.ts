@@ -12,6 +12,7 @@ import { skillsConRuta } from "../grafo/skills.js";
 import { binarioDeClaudeDelSdk } from "../motores/motoresLocales.js";
 import { comoLanzarElSimulador } from "../turno/verificador.js";
 import { navegadorParaImprimir } from "../exportarPdf.js";
+import { versionDeGit } from "../sesiones/gitSync.js";
 
 /**
  * Las medidas de `core/diagnosticoDeNode.ts` en la máquina de verdad. Cada una con su tope, y ninguna devuelve una ruta:
@@ -47,6 +48,8 @@ export interface DependenciasDelDiagnostico {
   nodeDelServidor?: string;
   /** El navegador para medir la maqueta (`exportarPdf.ts#navegadorParaImprimir`). */
   navegador?: () => string | undefined;
+  /** `git --version` con el PATH del servidor (`gitSync.ts#versionDeGit`): LANZA si no lo encuentra. */
+  git?: () => Promise<string>;
 }
 
 const execFileP = promisify(execFile);
@@ -150,6 +153,9 @@ export async function medirDiagnosticoDeNode(deps: DependenciasDelDiagnostico = 
     });
   })();
 
+  // Con el PATH del SERVIDOR y no el de los agentes: git lo lanza xonecode (`gitSync.ts`), no el agente.
+  const git = intentar(async () => versionDeSalida(await (deps.git ?? versionDeGit)()));
+
   return {
     cuando: (deps.ahora ?? (() => new Date()))().toISOString(),
     servidor: { version: deps.versionDeNode ?? process.version, plataforma, arquitectura: deps.arquitectura ?? process.arch },
@@ -164,5 +170,6 @@ export async function medirDiagnosticoDeNode(deps: DependenciasDelDiagnostico = 
         ? { ok: false, motivo: "no hay Chrome, Edge, Chromium ni Brave: el crítico no podrá medir la maqueta" }
         : { ok: true, valor: n.split(/[\\/]/).pop() ?? n };
     })(),
+    git: await git,
   };
 }

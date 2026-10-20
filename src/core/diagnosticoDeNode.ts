@@ -35,6 +35,11 @@ export interface DiagnosticoDeNode {
    * crítico comparaba contra una descripción. Ausente en una foto vieja.
    */
   navegador?: LineaDeDiagnostico;
+  /**
+   * El git que ENCUENTRA xonecode, con el PATH del servidor (el de sus comandos de git). Sin él la copia que se baja
+   * queda sin repo y no se puede revisar ni subir nada (IXCODE-60). Ausente en una foto vieja.
+   */
+  git?: LineaDeDiagnostico;
 }
 
 /** Los sistemas con su nombre de persona; lo que no se reconoce va tal cual. */
@@ -57,5 +62,5 @@ export function motivoDeFallo(error: unknown): string {
 
 /** Si TODO lo que el agente necesita funciona. */
 export function todoBien(d: DiagnosticoDeNode): boolean {
-  return d.nodeEnPath.ok && d.scripts.ok && d.simulador.ok && d.claudeCode.ok && (d.navegador?.ok ?? true);
+  return d.nodeEnPath.ok && d.scripts.ok && d.simulador.ok && d.claudeCode.ok && (d.navegador?.ok ?? true) && (d.git?.ok ?? true);
 }

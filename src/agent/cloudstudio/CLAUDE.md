@@ -23,6 +23,10 @@ Ante una discrepancia con el código, **el código manda**.
   `{id, nombre, compartido?}` y NADA MÁS (la respuesta trae el correo del propietario).
 - **El estado de «qué hay arriba» no es un fichero nuestro**: es la ref
   `refs/remotes/cloudstudio/<rama>`.
+- **Sin git NO se baja ni se sube** (`cli/main.ts#crearSincronizador`, `gitSync.ts#versionDeGit`,
+  IXCODE-60): bajar escribe y DESPUÉS hace el `git init`, así que sin git la copia quedaba sin repo
+  y todo lo de git caía después sin nombrarlo. Se niega ANTES de abrir MCP; si git falla tras bajar,
+  se dice «quedó SIN git», solo con el `code`. Git sale también en el diagnóstico de Node.
 - **Lo que no se pudo bajar, no se puede borrar** (`core/planDeSubida.ts`): el manifiesto de
   `sync.json`.
 - **Se sube a la MISMA rama de la que se bajó** (`config.rama`).

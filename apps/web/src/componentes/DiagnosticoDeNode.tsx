@@ -56,6 +56,8 @@ export function DiagnosticoDeNode({ diagnostico, alComprobar }: { diagnostico?: 
             <Fila nombre="xone-simulator (verificador)" linea={diagnostico.simulador} />
             <Fila nombre="Claude Code" linea={diagnostico.claudeCode} />
             {diagnostico.navegador === undefined ? null : <Fila nombre="Navegador (para medir la maqueta)" linea={diagnostico.navegador} />}
+            {/* Sin git, una copia bajada no se puede revisar ni subir (IXCODE-60). Ausente en una foto vieja: no se pinta. */}
+            {diagnostico.git === undefined ? null : <Fila nombre="Git (revisar y subir)" linea={diagnostico.git} />}
           </dl>
         )}
       </div>

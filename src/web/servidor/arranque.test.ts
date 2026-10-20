@@ -7,7 +7,7 @@
  */
 import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
 import { execFileSync } from "node:child_process";
-import { commitDeTurno } from "../../agent/sesiones/gitSync.js";
+import { commitDeTurno, motivoSinGitParaTarea } from "../../agent/sesiones/gitSync.js";
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir, homedir } from "node:os";
 import { dirname, join } from "node:path";
@@ -6171,6 +6171,52 @@ describe("las tareas en background, por el cable", () => {
       { texto: "segundo", creado: "2026-09-08T11:00:00.000Z", consumido: false },
     ]);
     expect(mensaje.lista.find((t) => t.id === "t2")?.feedback).toBeUndefined();
+  });
+
+  /**
+   * IXCODE-60: una tarea en una copia sin git trabaja, y lo que hace no se puede revisar ni subir. Se niega AL CREARLA,
+   * con el motivo y sin tocar la cola ni el gestor; y la comprobación la lleva la composición del corredor, no un cierre.
+   */
+  it("crear una tarea en una copia SIN git se niega con 409 y el motivo, sin encolar nada", async () => {
+    const base = mkdtempSync(join(tmpdir(), "xc-tarea-sin-git-"));
+    const vestibulo = vestibuloDePrueba({ baseDeWorkspace: () => base });
+    const raiz = vestibulo.raizDeProyecto("webstudio", "Tienda");
+    mkdirSync(join(raiz, ".xonecode"), { recursive: true });
+    writeFileSync(join(raiz, ".xonecode", "config.json"), "{}");
+    const servidor = servidorDeMentira();
+    const cola = colaDeMentira();
+    const preguntadas: string[] = [];
+    montarRutas(servidor, vestibulo, {
+      colaDeTareas: cola,
+      motivoSinGitParaTarea: async (r) => {
+        preguntadas.push(r);
+        return "esta copia no tiene git";
+      },
+    });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+    const r = await postearConCuerpo(
+      servidor.rutas.get(`POST ${RUTA_ACCION}`)!,
+      JSON.stringify({ clase: "tarea", accion: "crear", proyecto: "p1", peticion: "x", encargo: "y" })
+    );
+    expect(r.estado).toBe(409);
+    expect(JSON.parse(r.cuerpo).motivo).toBe("esta copia no tiene git");
+    expect(preguntadas).toEqual([raiz]);
+    expect(cola.verTareas()).toEqual([]);
+    rmSync(base, { recursive: true, force: true });
+  });
+
+  it("la composición del corredor lleva la comprobación de git de VERDAD a las rutas", () => {
+    const { opcionesDeMontaje } = construirCorredorDeTareasCableado({
+      vestibulo: { abrirParaTarea: async () => { throw new Error("no"); }, proyectosAbiertos: () => [], obrasEnCurso: () => [], sesionesDe: () => [] },
+      tareasFabrica: () => colaDeMentira(),
+      informar: () => {},
+      olvidarHiloDeSesion: async () => {},
+      juez: { juzgar: async () => ({ veredicto: "verde" as const, resumen: "bien" }) },
+      revisable: async () => ({ revisable: true, escribio: true }),
+    });
+    expect(opcionesDeMontaje.motivoSinGitParaTarea).toBe(motivoSinGitParaTarea);
   });
 
   /** La puerta 1 de `docs/superpowers/specs/2026-10-15-tareas-desde-el-gestor-design.md`: con gestor vinculado, la tarea vive en él. */

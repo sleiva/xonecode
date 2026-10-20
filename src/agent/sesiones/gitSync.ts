@@ -35,6 +35,47 @@ async function esRepo(raiz: string): Promise<boolean> {
   }
 }
 
+/** Más que esto es «no contesta»: es un `--version`. */
+const TOPE_DE_GIT_VERSION_MS = 10_000;
+
+/**
+ * La versión del git que ENCUENTRA xonecode, o LANZA con el error de Node (su `code` dice el
+ * porqué: `ENOENT` es «no está»). Con el PATH del servidor, el MISMO de `git()`: un git que
+ * responde en el terminal de la persona y no aquí es justo el caso que hay que pillar.
+ */
+export async function versionDeGit(): Promise<string> {
+  const { stdout } = await ejecutar("git", ["--version"], { env: process.env, timeout: TOPE_DE_GIT_VERSION_MS, windowsHide: true });
+  return stdout.trim();
+}
+
+/**
+ * Lo que se le dice a quien no tiene git (IXCODE-60). Sin él, la copia que se baja se queda SIN
+ * repo y todo lo que cuelga de git cae en cadena y con mensajes que no lo nombran: la marca de
+ * cada sesión, «lo que falta por subir» y la guarda de «Subir», que lista el proyecto entero
+ * como sin commitear.
+ */
+export const MOTIVO_SIN_GIT =
+  "no se encuentra git en esta máquina (o no está en el PATH con que arranca xonecode): instálalo y vuelve a intentarlo";
+
+/**
+ * Por qué una TAREA no puede trabajar en esa copia por falta de git, o `undefined`. Una tarea
+ * escribe sin aprobación y lo que hizo solo se puede revisar y subir por git: sin repo, termina
+ * «bien» y su trabajo se queda atascado en el disco (IXCODE-60, medido en una copia de XOne
+ * Manager). Mejor decirlo al crearla que después de que trabaje.
+ */
+export async function motivoSinGitParaTarea(raiz: string): Promise<string | undefined> {
+  try {
+    await versionDeGit();
+  } catch {
+    return `${MOTIVO_SIN_GIT}. Sin git no se puede revisar ni subir lo que haga la tarea`;
+  }
+  if (await esRepo(raiz)) return undefined;
+  return (
+    "esta copia no tiene git (se bajó sin él), así que no se podría revisar ni subir lo que haga la tarea. " +
+    "«Actualizar repo local» la rehace con git, pero VACÍA la copia: guarda antes lo que quieras conservar"
+  );
+}
+
 /**
  * Si la carpeta es la RAÍZ de su propio repo, y no una subcarpeta del repo de otra.
  *

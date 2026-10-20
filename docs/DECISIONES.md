@@ -9605,3 +9605,32 @@ ficheros leídos) puede quedar viejo tras una tarea que escribió mientras estab
 siguiente turno parte del disco de verdad para escribir, pero el agente puede razonar con lo que
 leyó antes. Un comando del lazo que escriba y no sea `/sync` no es obra: hoy no hay otro que toque
 la copia (`/plan` y `/config` escriben bajo `.xonecode/`).
+
+## Sin git, ni bajar ni tareas (IXCODE-60, 20-10-2026)
+
+Lo reportado, en una copia de XOne Manager: la tarea termina y escribe bien, pero «la sesión no dejó
+marca de git», el Resumen dice «la copia local no se puede comparar con la rama» y «Subir» se niega
+listando el proyecto ENTERO como sin commitear. La lista lo delató: entradas de primer nivel sin
+barra (`doc`, `icons`, `bd`), que es lo que `sinCommitear` da cuando la carpeta NO es un repo (cae a
+un `readdir`; con git habría sido `doc/`). La copia no tenía git.
+
+Cómo se llega: bajar escribe los ficheros y DESPUÉS `prepararRepo` hace el `git init` y el baseline.
+Sin git en la máquina —o sin git en el PATH con que arranca xonecode—, los ficheros se quedan y la
+descarga acaba en un error genérico fácil de pasar por alto. Ningún diagnóstico lo avisaba. La causa
+exacta en esa máquina NO está confirmada (falta su `git --version` y su `fallos.jsonl`).
+
+Tres comprobaciones, las que pidió:
+- **Diagnóstico de Node** (Ajustes → Equipo): línea «Git», con el PATH del SERVIDOR —el de los
+  comandos de git de xonecode, no el de los agentes—. Opcional en el tipo: una foto vieja no la trae.
+- **Bajar y subir** (`crearSincronizador`): sin git se NIEGA antes de vaciar nada y de abrir MCP
+  (`MOTIVO_SIN_GIT`); si git falla después de bajar, el error dice «quedó SIN git» y lo que cuesta,
+  con el `code` y sin la ruta.
+- **Crear una tarea**: en una copia sin repo, 409 con motivo antes de preparar el encargo (que puede
+  costar un modelo) y antes del gestor. Lo cablea `construirCorredorDeTareasCableado` y no
+  `arrancarConsolaWeb`, por el patrón de fallo de siempre; un test comprueba que la composición
+  lleva la función de VERDAD.
+
+**Límites**: no repara una copia ya bajada sin git (rehacerla con «Actualizar repo local» la VACÍA;
+conservar lo local exige bajar CloudStudio aparte como base). Una tarea que llega del SONDEO del
+gestor no pasa por la ruta de crear y no se comprueba.
+

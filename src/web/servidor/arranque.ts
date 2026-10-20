@@ -196,6 +196,7 @@ import {
   cambiosPendientes,
   parcheDeSubida,
   pendientesDeSubida,
+  motivoSinGitParaTarea,
   sinSeguir,
   trabajoSinCommitear,
 } from "../../agent/sesiones/gitSync.js";
@@ -872,6 +873,12 @@ export interface OpcionesDeMontaje {
   dispositivoPorDefecto?: () => DispositivoElegido | undefined;
   /** Cambia —o quita— el aparato por defecto. Ausente = Ajustes lo enseña sin dejar cambiarlo. */
   guardarDispositivoPorDefecto?: (dispositivo: DispositivoElegido | undefined) => void;
+  /**
+   * Por qué no se puede crear una tarea en esa copia por falta de git (`gitSync.ts#motivoSinGitParaTarea`), o
+   * `undefined`. Sin git, la tarea trabaja y su trabajo no se puede revisar ni subir (IXCODE-60). La cablea
+   * `construirCorredorDeTareasCableado`; ausente = no se comprueba (los tests de rutas con raíces de mentira).
+   */
+  motivoSinGitParaTarea?: (raiz: string) => Promise<string | undefined>;
   /** El modo de las sesiones nuevas de un proyecto, por su RAÍZ. Ausente = el panel no lo pinta. */
   modoDelProyecto?: (raiz: string) => ModoDeEscritura | undefined;
   /** Fija —o quita, con `undefined`— el de un proyecto. */
@@ -7901,6 +7908,17 @@ export function montarRutas(
         respuesta.end(JSON.stringify({ motivo: "se está cambiando la carpeta de los proyectos: crea la tarea cuando termine" }));
         return;
       }
+      // SIN GIT NO HAY TAREA (IXCODE-60): trabajaría, y lo que hiciera no se podría revisar ni subir. Antes de preparar
+      // el encargo, que puede costar un modelo, y antes de tocar el gestor.
+      if (mensaje.accion === "crear" && opciones.motivoSinGitParaTarea !== undefined) {
+        const raiz = proyectoParaTarea(mensaje.proyecto)?.raiz;
+        const motivo = raiz === undefined ? undefined : await opciones.motivoSinGitParaTarea(raiz);
+        if (motivo !== undefined) {
+          respuesta.writeHead(409, { "content-type": "application/json" });
+          respuesta.end(JSON.stringify({ motivo }));
+          return;
+        }
+      }
       // Con gestor vinculado, la tarea vive en él: se contesta en la propia respuesta (la ventana no se cierra hasta saber
       // si el gestor la creó). Sin él, el camino de siempre.
       const enGestor = mensaje.accion === "crear" ? gestorParaTareaNueva(mensaje.proyecto) : undefined;
@@ -8539,7 +8557,7 @@ export interface CorredorDeTareasCableado {
   /** Lo que hay que fundir en las opciones de `montarRutas`. */
   opcionesDeMontaje: Pick<
     OpcionesDeMontaje,
-    "colaDeTareas" | "corredorDeTareas" | "concurrenciaDeTareas" | "guardarConcurrencia"
+    "colaDeTareas" | "corredorDeTareas" | "concurrenciaDeTareas" | "guardarConcurrencia" | "motivoSinGitParaTarea"
   >;
   /**
    * Arranca el corredor YA conectado al cable. Es UNA función y no dos —«conecta el
@@ -9357,6 +9375,8 @@ export function construirCorredorDeTareasCableado(opciones: {
    * se trae a su carpeta de artefactos antes del primer turno (`prepararDisenoDeTarea`). Ausente = no se trae.
    */
   conectores?: ConectoresPort;
+  /** Por omisión, la de verdad (`gitSync.ts#motivoSinGitParaTarea`). */
+  motivoSinGitParaTarea?: (raiz: string) => Promise<string | undefined>;
 }): CorredorDeTareasCableado {
   const crudo = opciones.tareasFabrica === undefined ? undefined : opciones.tareasFabrica(opciones.informar);
   /**
@@ -9505,6 +9525,8 @@ export function construirCorredorDeTareasCableado(opciones: {
       guardarConcurrencia: (c) => {
         guardarConcurrenciaDeTareas(undefined, c);
       },
+      // Aquí y no en `arrancarConsolaWeb`: esta composición la montan los tests de verdad.
+      motivoSinGitParaTarea: opciones.motivoSinGitParaTarea ?? motivoSinGitParaTarea,
     },
     arrancarConectado: async (cable) => {
       emitirCambioDeTareas = cable.emitirTareas;

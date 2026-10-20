@@ -22,6 +22,7 @@ function con(extra: Partial<DependenciasDelDiagnostico> = {}, responder?: (l: Ll
     entornoDeAgente: () => ({ PATH: "/agente/bin" }),
     navegador: () => "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
     nodeDelServidor: "/srv/node",
+    git: async () => "git version 2.47.0 (Apple Git-154)",
     ejecutar: async (programa, args, opciones) => {
       const l = { programa, args, shell: opciones.shell, ...(opciones.entorno === undefined ? {} : { entorno: opciones.entorno }) };
       llamadas.push(l);
@@ -48,6 +49,7 @@ describe("medirDiagnosticoDeNode", () => {
       claudeCode: { ok: true, valor: "2.1.301" },
       // Solo el nombre del programa: la ruta no cruza.
       navegador: { ok: true, valor: "Google Chrome" },
+      git: { ok: true, valor: "2.47.0" },
     });
     expect(llamadas).toContainEqual({ programa: "/s/xone-hotswap", args: ["--help"], shell: false, entorno: { PATH: "/agente/bin" } });
   });
@@ -83,6 +85,16 @@ describe("medirDiagnosticoDeNode", () => {
   it("sin navegador lo dice (medido en Windows: el crítico no podía medir la maqueta)", async () => {
     const { deps } = con({ navegador: () => undefined });
     expect((await medirDiagnosticoDeNode(deps)).navegador).toEqual({ ok: false, motivo: "no hay Chrome, Edge, Chromium ni Brave: el crítico no podrá medir la maqueta" });
+  });
+
+  /** IXCODE-60: sin git una copia se baja sin repo y no se puede revisar ni subir; ningún diagnóstico lo decía. */
+  it("sin git lo dice en su línea, con el porqué y sin rutas", async () => {
+    const { deps } = con({
+      git: async () => {
+        throw Object.assign(new Error("spawn git ENOENT /usr/bin"), { code: "ENOENT" });
+      },
+    });
+    expect((await medirDiagnosticoDeNode(deps)).git).toEqual({ ok: false, motivo: "no se encuentra el programa (ENOENT)" });
   });
 
   it("sin scripts, o sin el binario de Claude Code para el sistema, cada uno lo dice en SU línea", async () => {
