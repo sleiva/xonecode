@@ -114,6 +114,16 @@ const ENCAJE = 0.04;
 const FACTOR_DE_TAMAÑO_DE_IMAGEN = 1.5;
 /** Cuánto (en fracción del ancho de la maqueta) puede separarse una cifra de su etiqueta para ser su CONTADOR. */
 const VECINDAD_DE_CONTADOR = 0.12;
+/**
+ * Una LISTA de ejemplo: textos sin pareja alineados en una COLUMNA (el borde izquierdo a menos de esta fracción del
+ * ancho) en al menos `FILAS_DE_UNA_LISTA` filas. Medido en Maset (Resumen día): los clientes de la maqueta («COTS
+ * REGUA», «COMA MUNNE»…) salían como BLOQUEANTES uno por fila con los clientes reales pintados en su columna, y el juez
+ * dio rojo por «falta COTS REGUA».
+ */
+const COLUMNA_DE_LISTA = 0.03;
+const FILAS_DE_UNA_LISTA = 3;
+/** Cuánto (en fracción del ancho) puede moverse esa columna en el aparato y seguir siendo la misma. */
+const COLUMNA_EN_EL_APARATO = 0.06;
 
 
 // ---------------------------------------------------------------- el árbol del aparato
@@ -474,7 +484,47 @@ export function compararConMaqueta(m: MaquetaMedida, g: GeometriaDelAparato, mod
       return dx <= VECINDAD_DE_CONTADOR * g.pantalla.ancho && dy <= Math.max(2 * suya.caja.alto, VECINDAD_DE_CONTADOR * g.pantalla.ancho);
     });
   };
+  /**
+   * Las COLUMNAS de una lista de ejemplo (ver `COLUMNA_DE_LISTA`), y la franja vertical de sus filas. Una columna cuyo
+   * sitio en el aparato lleva texto son los datos REALES de la lista, y no faltan; una sin nada en su sitio falta, pero
+   * es UNA pieza y se dice una vez, no una por fila. Lo que cae dentro de esas filas sin pareja puede depender del dato
+   * de cada fila («Crédito» en las que no pagan en efectivo): eso es una diferencia que mirar, no un bloqueante.
+   */
+  const deLista = new Set<ElementoDeMaqueta>();
+  const franjasDeLista: { desde: number; hasta: number }[] = [];
+  if (!aproximada) {
+    const conLetras = sinPareja
+      .filter((e) => e.boton !== true && tieneLetras(textoParaEmparejar(e.texto)) && !dentroDeUnaImagen(e))
+      .sort((a, b) => a.caja.x - b.caja.x);
+    const columnas: ElementoDeMaqueta[][] = [];
+    for (const e of conLetras) {
+      const ultima = columnas[columnas.length - 1];
+      if (ultima !== undefined && Math.abs(e.caja.x - ultima[0]!.caja.x) <= COLUMNA_DE_LISTA * m.ancho) ultima.push(e);
+      else columnas.push([e]);
+    }
+    const textosDelAparato = g.controles.filter(
+      (c) => c.texto !== undefined && tieneLetras(textoParaEmparejar(c.texto)) && !parejas.some((p) => p.aparato === c)
+    );
+    for (const columna of columnas) {
+      if (new Set(filas(columna.map((e) => e.caja))).size < FILAS_DE_UNA_LISTA) continue;
+      for (const e of columna) deLista.add(e);
+      const desde = Math.min(...columna.map((e) => e.caja.y));
+      const hasta = Math.max(...columna.map((e) => e.caja.y + e.caja.alto)) + mediana(columna.map((e) => e.caja.alto)) * 2;
+      franjasDeLista.push({ desde, hasta });
+      const x = mediana(columna.map((e) => e.caja.x)) / m.ancho;
+      const enSuSitio = textosDelAparato.some((c) => Math.abs(c.caja.x / g.pantalla.ancho - x) <= COLUMNA_EN_EL_APARATO);
+      const muestra = `${columna.slice(0, 3).map(etiqueta).join(", ")}${columna.length > 3 ? "…" : ""}`;
+      if (enSuSitio) {
+        notas.push(`filas de una lista de ejemplo de ${laMaqueta} (${muestra}): en ${elAparato} esa columna lleva sus datos reales, no faltan.`);
+      } else {
+        bloqueantes.push(`la columna de la lista de ${laMaqueta} (${muestra}) NO está en ${elAparato}: ninguna fila lleva texto en ese sitio.`);
+      }
+    }
+  }
+  const dentroDeUnaLista = (e: ElementoDeMaqueta): boolean =>
+    franjasDeLista.some((f) => e.caja.y >= f.desde && e.caja.y <= f.hasta);
   for (const e of sinPareja) {
+    if (deLista.has(e)) continue;
     const candidata =
       !aproximada && e.boton !== true && textoParaEmparejar(e.texto) !== "" && !tieneLetras(textoParaEmparejar(e.texto)) ? etiquetaVecina(e) : undefined;
     const vecina = candidata !== undefined && !cifraJuntoA(candidata) ? candidata : undefined;
@@ -491,6 +541,10 @@ export function compararConMaqueta(m: MaquetaMedida, g: GeometriaDelAparato, mod
     } else if (aproximada) {
       if (filasConPareja.has(e.caja.y)) diferencias.push(`${etiqueta(e)} de ${laMaqueta} no lo encuentro en ${elAparato} con ese texto (puede ser una imagen en su sitio: míralo).`);
       else sinFila.push(etiqueta(e));
+    } else if (e.boton !== true && dentroDeUnaLista(e)) {
+      diferencias.push(
+        `${etiqueta(e)} de ${laMaqueta}, dentro de las filas de su lista, no está en ${elAparato}: si depende del dato de cada fila, no falta; si es una pieza fija de la fila, sí.`
+      );
     } else bloqueantes.push(`${etiqueta(e)} de ${laMaqueta} NO está en ${elAparato} (ningún control con ese texto).`);
   }
   if (enImagen.length > 0) {

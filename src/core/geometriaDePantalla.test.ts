@@ -400,3 +400,58 @@ describe("una proporción que al redondear sale igual se dice con dos decimales"
     expect(linea).toMatch(/0,24 en el aparato y 0,17 en la maqueta/);
   });
 });
+
+/**
+ * Una LISTA de ejemplo (Maset, Resumen día): los clientes de la maqueta salían como BLOQUEANTES uno por fila, con los
+ * clientes reales pintados en su columna, y el juez dio rojo por «falta COTS REGUA».
+ */
+describe("una lista de la maqueta: sus filas son datos de ejemplo", () => {
+  // Maqueta 400×800; aparato 1000×2000. Cuatro filas: albarán (cifra), cliente, y en una «Crédito».
+  const fila = (i: number) => [
+    { texto: `A16-08428${i}`, caja: { x: 10, y: 300 + i * 56, ancho: 80, alto: 14 } },
+    { texto: ["COTS REGUA", "COMA MUNNE", "REINA GUER", "PABLO SASO"][i]!, caja: { x: 100, y: 300 + i * 56, ancho: 90, alto: 14 } },
+  ];
+  const maqueta: MaquetaMedida = {
+    ancho: 400,
+    alto: 800,
+    elementos: [
+      { texto: "RESUMEN DÍA", caja: { x: 140, y: 40, ancho: 120, alto: 20 } },
+      ...[0, 1, 2, 3].flatMap(fila),
+      { texto: "Crédito", caja: { x: 200, y: 300 + 56 + 20, ancho: 40, alto: 12 } },
+    ],
+  };
+  const cliente = (t: string, i: number) => ({ nombre: "MAP_CLIENTE", texto: t, tipo: "prop", clase: "T", caja: { x: 260, y: 750 + i * 230, ancho: 400, alto: 50 } });
+  const conClientes: GeometriaDelAparato = {
+    pantalla: { ancho: 1000, alto: 2000 },
+    controles: [
+      { nombre: "MAP_TIT", texto: "RESUMEN DÍA", tipo: "prop", clase: "L", caja: { x: 350, y: 100, ancho: 300, alto: 50 } },
+      ...["COTS REGUANT, RAMON", "COMA MUNNE, MIQUEL", "REINA GUERRA, JOSEP", "PABLO SASOT GARCIA"].map(cliente),
+    ],
+  };
+
+  it("con los datos REALES en su columna, los de la maqueta no faltan: una nota, ningún bloqueante", () => {
+    const h = compararConMaqueta(maqueta, conClientes);
+    expect(h.bloqueantes.join("\n")).not.toMatch(/COTS|COMA|REINA|PABLO/);
+    expect(h.notas.some((n) => n.startsWith("filas de una lista de ejemplo") && n.includes("«COTS REGUA»"))).toBe(true);
+  });
+
+  it("lo que cae en sus filas sin pareja puede depender del dato: diferencia, no bloqueante", () => {
+    const h = compararConMaqueta(maqueta, conClientes);
+    expect(h.bloqueantes.join("\n")).not.toContain("Crédito");
+    expect(h.diferencias.some((d) => d.startsWith("«Crédito» de la maqueta, dentro de las filas de su lista"))).toBe(true);
+  });
+
+  it("pero si la columna entera falta, es UN bloqueante, no uno por fila", () => {
+    const sinClientes: GeometriaDelAparato = { ...conClientes, controles: conClientes.controles.slice(0, 1) };
+    const h = compararConMaqueta(maqueta, sinClientes);
+    expect(h.bloqueantes.filter((b) => b.includes("COTS") || b.includes("COMA"))).toEqual([
+      "la columna de la lista de la maqueta («COTS REGUA», «COMA MUNNE», «REINA GUER»…) NO está en el aparato: ninguna fila lleva texto en ese sitio.",
+    ]);
+  });
+
+  it("y dos textos sueltos alineados NO son una lista: siguen siendo bloqueantes", () => {
+    const dos: MaquetaMedida = { ...maqueta, elementos: [maqueta.elementos[0]!, ...[0, 1].flatMap(fila)] };
+    const h = compararConMaqueta(dos, { ...conClientes, controles: conClientes.controles.slice(0, 1) });
+    expect(h.bloqueantes).toContain("«COTS REGUA» de la maqueta NO está en el aparato (ningún control con ese texto).");
+  });
+});
