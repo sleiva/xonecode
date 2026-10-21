@@ -298,11 +298,17 @@ export function palabrasQueDistinguen(titulo: string, entradas: readonly Entrada
  * título «» de su misma línea (o su id), hasta `TOPE_DE_PANTALLAS_ELEGIDAS`. Puro.
  */
 export function pantallasCitadasEnElEncargo(encargo: string): { name: string; titulo: string }[] {
+  // El id abreviado (`.../screens/<id>`, medido en Maset: el proyecto una vez en la cabecera y luego abreviado) solo se
+  // completa si el encargo nombra UN proyecto; con dos, no se adivina de cuál es.
+  const proyectos = new Set([...encargo.matchAll(/projects\/([0-9A-Za-z_-]+)/g)].map((m) => m[1]!));
+  const unico = proyectos.size === 1 ? [...proyectos][0] : undefined;
   const vistas = new Set<string>();
   const pantallas: { name: string; titulo: string }[] = [];
   for (const linea of encargo.split("\n")) {
-    for (const m of linea.matchAll(/projects\/[0-9A-Za-z_-]+\/screens\/[0-9A-Za-z_-]+/g)) {
-      const name = m[0];
+    for (const m of linea.matchAll(/(?:projects\/([0-9A-Za-z_-]+)|\.\.\.|…)\/screens\/([0-9A-Za-z_-]+)/g)) {
+      const proyecto = m[1] ?? unico;
+      if (proyecto === undefined) continue;
+      const name = `projects/${proyecto}/screens/${m[2]}`;
       if (vistas.has(name) || pantallas.length >= TOPE_DE_PANTALLAS_ELEGIDAS) continue;
       vistas.add(name);
       const titulo = [...linea.slice(0, m.index).matchAll(/«([^»]+)»/g)].at(-1)?.[1]?.trim();

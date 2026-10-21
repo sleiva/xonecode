@@ -229,4 +229,18 @@ describe("pantallasCitadasEnElEncargo", () => {
     const muchas = Array.from({ length: TOPE_DE_PANTALLAS_ELEGIDAS + 3 }, (_, i) => `projects/1/screens/a${i}`).join("\n");
     expect(pantallasCitadasEnElEncargo(muchas)).toHaveLength(TOPE_DE_PANTALLAS_ELEGIDAS);
   });
+
+  it("completa el id ABREVIADO con el único proyecto que nombra el encargo, y con dos no adivina", () => {
+    const abreviado = [
+      "MAQUETAS (proyecto Stitch COMPARTIDO «Maset», projects/8393658318620482446; tráelas TÚ):",
+      "1. «Réplica - Info. Sistema» — .../screens/ad6ea4378d624dab8396e5f37525950d",
+      "2. «Réplica - Info. Dispositivo» — …/screens/b8de7a14ac304ee9ae38d3d7d1480e14",
+    ].join("\n");
+    expect(pantallasCitadasEnElEncargo(abreviado)).toEqual([
+      { name: "projects/8393658318620482446/screens/ad6ea4378d624dab8396e5f37525950d", titulo: "Réplica - Info. Sistema" },
+      { name: "projects/8393658318620482446/screens/b8de7a14ac304ee9ae38d3d7d1480e14", titulo: "Réplica - Info. Dispositivo" },
+    ]);
+    expect(pantallasCitadasEnElEncargo(`projects/1 y projects/2\n«A» — .../screens/x`)).toEqual([]);
+    expect(pantallasCitadasEnElEncargo("«A» — .../screens/x")).toEqual([]);
+  });
 });
