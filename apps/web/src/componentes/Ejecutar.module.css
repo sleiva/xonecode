@@ -66,6 +66,19 @@
   font-size: 12px;
 }
 
+/* Hay un framework más nuevo: no es una falta (se puede lanzar igual), así que va aparte, con el
+   botón al lado de la frase y partiéndose en dos renglones si no cabe. */
+.actualizacion {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
 /* Las faltas, una por renglón y con su viñeta: son varias y hay que poder contarlas — el
    orden es el de la lectura, así que la de arriba es la que hay que arreglar primero. */
 .faltas {
@@ -106,6 +119,11 @@
 
 .ejecutar:hover {
   background: var(--xonecode-cian);
+}
+
+/* Los dos «Copiar…» son secundarios: el verbo principal sigue siendo Ejecutar. */
+.copiar {
+  composes: secundario from "./Boton.module.css";
 }
 
 /* El recorrido. La misma tarjeta que una operación del registro de `/sync`: es lo que es —

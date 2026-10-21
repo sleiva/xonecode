@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { unzipSync } from "fflate";
-import { empaquetarProyecto, TOPE_DE_PAQUETE } from "./paqueteDelProyecto.js";
+import { empaquetarProyecto, ficherosQueViajan, TOPE_DE_PAQUETE } from "./paqueteDelProyecto.js";
 
 function escribir(raiz: string, ficheros: readonly string[]): void {
   for (const fichero of ficheros) {
@@ -79,6 +79,23 @@ describe("empaquetarProyecto", () => {
     // fuera el `.xml` deja la app rota.
     const paquete = empaquetarProyecto(nuevoProyecto(["Clientes.xne", "Clientes.xml"]));
     expect(paquete.ficheros).toEqual(["Clientes.xml", "Clientes.xne"]);
+  });
+
+  it("con `solo` lleva únicamente esas rutas, y nunca algo que no viaja", () => {
+    // Para «Copiar solo los modificados». `solo` recorta, no amplía: un `.env` o un `.db`
+    // pedidos por la lista siguen fuera, porque el filtro es el del recorrido.
+    const raiz = nuevoProyecto();
+    const paquete = empaquetarProyecto(raiz, TOPE_DE_PAQUETE, {
+      solo: new Set(["app.ini", "objects.xne", ".env", "bd/gestion.db"]),
+    });
+    expect(paquete.ficheros).toEqual(["app.ini", "objects.xne"]);
+    expect(Object.keys(unzipSync(paquete.bytes)).sort()).toEqual(["app.ini", "objects.xne"]);
+    expect(paquete.total).toBe("contenido de app.ini".length + "contenido de objects.xne".length);
+  });
+
+  it("ficherosQueViajan son las mismas rutas que el paquete entero", () => {
+    const raiz = nuevoProyecto();
+    expect(ficherosQueViajan(raiz).map((f) => f.ruta)).toEqual(empaquetarProyecto(raiz).ficheros);
   });
 
   it("no escribe nada en disco", () => {

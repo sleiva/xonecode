@@ -71,6 +71,7 @@ export function unirRuta(plataforma: string, ...partes: string[]): string {
   return rutasDe(plataforma).join(...partes);
 }
 import { promisify } from "node:util";
+import { versionDeDumpsys } from "../../core/frameworkLocal.js";
 import { seMira, type AjustesDeDispositivos } from "../../core/settings.js";
 import {
   recetaDeEmuladorAndroid,
@@ -803,8 +804,10 @@ const PAQUETES_DEL_FRAMEWORK = ["com.xone.android.framework", "com.xone.android.
  * contestó: el filtro es por subcadena, así que la lista puede traer parecidos, y dar por
  * instalado algo que solo se le parece es afirmar de más.
  *
- * **No se lee `versionName` ni `versionCode`**: eso es de la INSTALACIÓN, que es otra pasada.
- * Aquí la pregunta es de sí o no.
+ * **Con el paquete encontrado se lee además su `versionName`** (`dumpsys package`, un segundo
+ * viaje): instalar el framework (`instalacionEnMaquina.ts#instalarFramework`) enseña «instalada vX
+ * frente a la que se ofrece». Es un dato AÑADIDO y no cambia la respuesta: si esa lectura falla,
+ * el framework sigue instalado y la versión, sin constar.
  *
  * **El `paquete` viaja en el resultado y no se guarda en ningún módulo**: es lo que necesita
  * el reinicio posterior, porque el comando depende del flavor que este aparato tenga
@@ -822,6 +825,8 @@ export interface FrameworkEnDispositivo {
    * framework» de «hay este».
    */
   paquete?: string;
+  /** El `versionName` del paquete encontrado. Ausente es «no consta», no «no tiene». */
+  version?: string;
   /** Una línea: qué se encontró, o por qué no. Nunca la salida entera. */
   detalle: string;
 }
@@ -864,9 +869,30 @@ export async function frameworkEnDispositivo(
     if (paquete === undefined) {
       return { instalado: false, detalle: "no aparece ni el standalone ni el de Play Store: no está instalado" };
     }
-    return { instalado: true, paquete, detalle: `framework instalado: ${paquete}` };
+    const version = await versionDelPaquete(ejecutar, adb, dispositivo.id, paquete);
+    return {
+      instalado: true,
+      paquete,
+      ...(version === undefined ? {} : { version }),
+      detalle: `framework instalado: ${paquete}${version === undefined ? "" : ` ${version}`}`,
+    };
   } catch (error) {
     return { instalado: false, detalle: describirFallo(error, TOPES_MS.adb) };
+  }
+}
+
+/** El `versionName` de un paquete, o `undefined` si no se pudo leer. Nunca lanza. */
+async function versionDelPaquete(
+  ejecutar: NonNullable<DependenciasDeDeteccion["ejecutar"]>,
+  adb: string,
+  serie: string,
+  paquete: string
+): Promise<string | undefined> {
+  try {
+    const { stdout } = await ejecutar(adb, ["-s", serie, "shell", "dumpsys", "package", paquete], { timeout: TOPES_MS.adb });
+    return versionDeDumpsys(stdout);
+  } catch {
+    return undefined;
   }
 }
 

@@ -48,6 +48,7 @@
  * cable ven una ruta.
  */
 import { VARIABLE_DE_DISPOSITIVO, type DispositivoDeLaSesion } from "./dispositivoDeSesion.js";
+import { VARIABLES_SECRETAS_BYXONE } from "./byxone.js";
 import { VARIABLES_POR_PROVEEDOR } from "./modelos.js";
 
 /** El prefijo de las claves de un proveedor personalizado (`core/modelos.ts#variableDeProveedor`). */
@@ -161,7 +162,8 @@ export function entornoDeShell(opciones: {
    */
   plataforma?: string;
 }): Record<string, string> {
-  const credenciales = new Set<string>(Object.values(VARIABLES_POR_PROVEEDOR));
+  // Y la credencial de byXOne (`core/byxone.ts`): no es de un proveedor de modelos, pero es igual de secreta.
+  const credenciales = new Set<string>([...Object.values(VARIABLES_POR_PROVEEDOR), ...VARIABLES_SECRETAS_BYXONE]);
   const limpio: Record<string, string> = {};
 
   for (const [clave, valor] of Object.entries(opciones.entorno)) {

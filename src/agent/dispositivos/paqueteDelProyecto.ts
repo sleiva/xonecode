@@ -172,14 +172,41 @@ export function enMegas(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1).replace(".", ",")} MB`;
 }
 
+export interface OpcionesDePaquete {
+  /**
+   * Solo estas rutas (relativas, en POSIX), para «Copiar solo los modificados»: el ZIP no limpia
+   * el destino —añade y sobrescribe—, así que uno parcial deja intacto lo que no lleva.
+   */
+  solo?: ReadonlySet<string>;
+}
+
+/**
+ * Las rutas que viajarían, sin leer ni un byte: lo que se compara con el aparato antes de
+ * empaquetar. Es el MISMO recorrido y el mismo filtro que el paquete.
+ */
+export function ficherosQueViajan(raiz: string): { ruta: string; absoluta: string }[] {
+  const candidatos: Candidato[] = [];
+  recorrer(raiz, "", candidatos);
+  candidatos.sort((a, b) => (a.ruta < b.ruta ? -1 : a.ruta > b.ruta ? 1 : 0));
+  return candidatos.map(({ ruta, absoluta }) => ({ ruta, absoluta }));
+}
+
 /**
  * Los bytes del paquete. El `tope` entra por parámetro para poder probar el rechazo sin
  * fabricar medio giga —el mismo recurso que el reloj de `MS_ENTRE_PARCIALES`—: un tope
  * que solo se puede ejercitar con 512 MB de verdad es un tope que nadie prueba.
  */
-export function empaquetarProyecto(raiz: string, tope: number = TOPE_DE_PAQUETE): PaqueteDelProyecto {
-  const candidatos: Candidato[] = [];
-  recorrer(raiz, "", candidatos);
+export function empaquetarProyecto(
+  raiz: string,
+  tope: number = TOPE_DE_PAQUETE,
+  opciones: OpcionesDePaquete = {}
+): PaqueteDelProyecto {
+  const recorridos: Candidato[] = [];
+  recorrer(raiz, "", recorridos);
+  // `solo` RECORTA lo que viaja, nunca lo amplía: una ruta que `viaja` rechaza no entra aunque
+  // venga en la lista, porque el filtro es el mismo recorrido de siempre.
+  const solo = opciones.solo;
+  const candidatos = solo === undefined ? recorridos : recorridos.filter((c) => solo.has(c.ruta));
 
   // El orden lo fija la RUTA, y el ZIP se escribe en el orden en que recibe sus entradas:
   // sin esto el mismo árbol daría bytes distintos en cada ejecución y dos paquetes iguales

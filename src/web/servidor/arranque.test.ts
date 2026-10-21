@@ -34,6 +34,7 @@ import { MS_DE_PREPARACION,
   ajusteDeConectoresCableado,
   ajusteDeGestorCableado,
   banderaDeEjecutor,
+  instaladorDeFrameworkTardio,
   construirCorredorDeTareasCableado,
   construirSondeoCableado,
   copiasConGestor,
@@ -63,7 +64,7 @@ import { leerArtefactoCrudo, leerArtefactoDeSesion } from "../../agent/grafo/art
 import { CABECERA_DEL_ENCARGO } from "../../core/tareasEnElGestor.js";
 import { RUTA_ICONO_DEL_PROYECTO, RUTA_IMAGEN_DEL_PROYECTO } from "../../core/imagenesDeDocumento.js";
 import { CLAVE_DE_SELLO, cambiosDeSesion, fotoDeApertura } from "../../agent/sesiones/sesionGit.js";
-import type { PeticionDeTarea } from "../../core/ports.js";
+import type { InstaladorDeFrameworkPort, PeticionDeTarea } from "../../core/ports.js";
 import { crearVestibulo, type Vestibulo } from "./vestibulo.js";
 import { rutaGlobalDeAgentes } from "../../agent/subagentes/agentesEnDisco.js";
 import { strToU8, unzipSync, zipSync } from "fflate";
@@ -72,7 +73,7 @@ import { crearConsolaWeb, type ConsolaWeb, type OpcionesDeConsolaWeb } from "./c
 import { PAPELES } from "../../core/modelos.js";
 import { anotarActo, crearSesion, listarSesiones, type DispositivoElegido } from "./sesiones.js";
 import { COMANDOS } from "../../cli/consola.js";
-import { CatalogoModelosEnMemoria, GestorDeTareasEnMemoria, PuenteRemotoEnMemoria, TunelEnMemoria } from "../../core/ports.js";
+import { CatalogoModelosEnMemoria, GestorDeTareasEnMemoria, InstaladorDeFrameworkEnMemoria, PuenteRemotoEnMemoria, TunelEnMemoria } from "../../core/ports.js";
 import type { FichaDelGestor, GestorDeTareasPort, TransicionDelGestor, Vinculo } from "../../core/gestorDeTareas.js";
 import { crearGestorJira } from "../../agent/conectores/gestorJira.js";
 import type { AjustesDeDispositivos, Entorno } from "../../core/settings.js";
@@ -10534,6 +10535,69 @@ describe("el recorrido por el cable — el veredicto, la intención y las fases"
     for (let i = 0; i < vueltas && !listo(); i++) await new Promise((r) => setTimeout(r, 0));
   };
 
+  /** Un servicio del framework de mentira: solo lo que el veredicto usa. */
+  const servicioConLocales = (locales: string[], catalogo: { titulo: string; ficheroId: number }[] = [], conCredencial = false) => {
+    let ofertas = 0;
+    return {
+      ofertas: () => ofertas,
+      servicio: {
+        ofrecer: async () => {
+          ofertas++;
+          return { opciones: catalogo.map((c) => ({ origen: "catalogo" as const, ...c, preferida: false })) };
+        },
+        resolver: () => undefined,
+        cliente: () => (conCredencial ? ({} as never) : undefined),
+        locales: () =>
+          locales.map((titulo, i) => ({ titulo, ficheroId: i, sha256: String(i).repeat(64), bytes: 1, bajado: "2026-10-01T00:00:00Z", paquete: "com.xone.android.framework" })),
+      },
+    };
+  };
+
+  it("con un framework posterior en la copia local, el veredicto lo dice como DATO; con uno más viejo, nada", async () => {
+    const nuevo = servicioConLocales(["v5.0.4.4dev", "v5.0.6.0rel"]);
+    const m = await montar({
+      xml: APP_XML,
+      conBase: true,
+      opciones: { frameworkEnDispositivo: async () => ({ instalado: true, version: "5.0.5.9dev" }), servicioDeFramework: nuevo.servicio as never },
+    });
+    await enviarMensaje(m.accion, { clase: "revisarLanzamiento" });
+    await esperarA(() => dichos(m.cliente, "lanzable").length > 0);
+    expect(dichos(m.cliente, "lanzable").at(-1)!.frameworkMasNuevo).toEqual({ instalada: "5.0.5.9dev", titulo: "v5.0.6.0rel" });
+    // Sin credencial no se va a byXOne: lo de disco basta.
+    expect(nuevo.ofertas()).toBe(0);
+    await m.cerrar();
+
+    const viejo = servicioConLocales(["v5.0.4.4dev"]);
+    const m2 = await montar({
+      xml: APP_XML,
+      conBase: true,
+      opciones: { frameworkEnDispositivo: async () => ({ instalado: true, version: "5.0.5.9dev" }), servicioDeFramework: viejo.servicio as never },
+    });
+    await enviarMensaje(m2.accion, { clase: "revisarLanzamiento" });
+    await esperarA(() => dichos(m2.cliente, "lanzable").length > 0);
+    expect(dichos(m2.cliente, "lanzable").at(-1)).not.toHaveProperty("frameworkMasNuevo");
+    await m2.cerrar();
+  });
+
+  it("el catálogo se pide EN SEGUNDO PLANO y una vez por vigencia; si trae uno más nuevo, se vuelve a medir", async () => {
+    const s = servicioConLocales([], [{ titulo: "v5.0.7.0rel", ficheroId: 70 }], true);
+    const m = await montar({
+      xml: APP_XML,
+      conBase: true,
+      opciones: { frameworkEnDispositivo: async () => ({ instalado: true, version: "5.0.5.9dev" }), servicioDeFramework: s.servicio as never },
+    });
+    await enviarMensaje(m.accion, { clase: "revisarLanzamiento" });
+    await esperarA(() => dichos(m.cliente, "lanzable").length >= 2);
+    const [primero, segundo] = dichos(m.cliente, "lanzable");
+    // El primero sale con lo que había (nada), sin esperar a la red; el segundo, con el catálogo.
+    expect(primero).not.toHaveProperty("frameworkMasNuevo");
+    expect(segundo!.frameworkMasNuevo).toEqual({ instalada: "5.0.5.9dev", titulo: "v5.0.7.0rel" });
+    await enviarMensaje(m.accion, { clase: "revisarLanzamiento" });
+    await esperarA(() => dichos(m.cliente, "lanzable").length >= 3);
+    expect(s.ofertas()).toBe(1);
+    await m.cerrar();
+  });
+
   it("sin nada que mida el framework, el veredicto dice «no se sabe» y NO promete el botón", async () => {
     // Sin `frameworkEnDispositivo` esta ejecución no sabe si el framework está: la causa es
     // `framework-no-medido`, cuya frase NO se arregla instalando nada.
@@ -10749,7 +10813,7 @@ describe("el recorrido por el cable — el veredicto, la intención y las fases"
     // primera `alFase("comprobando", …)` no cambia nada y no gasta un mensaje en repetirlo. Las
     // cinco que cambian sí se emiten —la fase que cambia SIEMPRE se emite: son seis en todo el
     // recorrido, no un flujo— y el último es el desenlace, que es el único que dice `ok`.
-    expect(suyos.map((x) => x.estado)).toEqual(["corriendo", "corriendo", "corriendo", "corriendo", "corriendo", "corriendo", "ok"]);
+    expect(suyos.map((x) => x.estado)).toEqual([...FASES_DE_LANZAMIENTO.map(() => "corriendo"), "ok"]);
     const vistas = suyos.map((x) => x.fase).filter((f, i, todas) => todas.indexOf(f) === i);
     expect(vistas).toEqual([...FASES_DE_LANZAMIENTO]);
     // `ms` es el reloj del CABLE y no el del resultado de la máquina (1234): lo que la pestaña
@@ -10760,6 +10824,48 @@ describe("el recorrido por el cable — el veredicto, la intención y las fases"
       proyecto: "Tienda",
       dispositivo: { id: "ABC", nombre: "Pixel 8", plataforma: "android", clase: "fisico" },
     });
+    await m.cerrar();
+  });
+
+  /** «Copiar…»: el MISMO lanzamiento, con el `modo` del botón. */
+  it("el `modo` de «Copiar solo los modificados» llega al lanzador; `todo` no se manda", async () => {
+    const pedidos: PeticionDeLanzamiento[] = [];
+    const m = await montar({
+      xml: APP_XML,
+      conBase: true,
+      opciones: {
+        frameworkEnDispositivo: async () => ({ instalado: true }),
+        lanzarEnDispositivo: (peticion) => {
+          pedidos.push(peticion);
+          return { cancelar: () => {}, terminado: Promise.resolve({ estado: "ok", fase: "comparando", ms: 1 }) };
+        },
+      },
+    });
+    await enviarMensaje(m.accion, { clase: "lanzarApp", modo: "modificados" });
+    await esperarA(() => pedidos.length === 1 && dichos(m.cliente, "lanzamiento").at(-1)?.estado === "ok");
+    await enviarMensaje(m.accion, { clase: "lanzarApp", modo: "todo" });
+    await esperarA(() => pedidos.length === 2);
+
+    expect(pedidos[0]).toEqual({ dispositivo: PIXEL, raiz: m.raiz, app: "AppDemo", modo: "modificados", puerto: 8443 });
+    expect(pedidos[1]).toEqual({ dispositivo: PIXEL, raiz: m.raiz, app: "AppDemo", puerto: 8443 });
+    await m.cerrar();
+  });
+
+  it("un `modo` desconocido se rechaza con 400 y no lanza nada", async () => {
+    let lanzado = false;
+    const m = await montar({
+      xml: APP_XML,
+      conBase: true,
+      opciones: {
+        frameworkEnDispositivo: async () => ({ instalado: true }),
+        lanzarEnDispositivo: () => {
+          lanzado = true;
+          return { cancelar: () => {}, terminado: Promise.resolve({ estado: "ok", fase: "comprobando-arranque", ms: 1 }) };
+        },
+      },
+    });
+    expect(await enviarMensaje(m.accion, { clase: "lanzarApp", modo: "borrarTodo" } as never)).toBe(400);
+    expect(lanzado).toBe(false);
     await m.cerrar();
   });
 
@@ -11276,9 +11382,10 @@ describe("el recorrido por el cable — el veredicto, la intención y las fases"
  * un lado y no al otro sale rojo con nombre y apellidos.
  */
 describe("las fases y los estados del cable, atados a los de la máquina", () => {
-  it("las seis fases son las mismas, y en el mismo orden", () => {
+  it("las siete fases son las mismas, y en el mismo orden", () => {
     const fasesDeLaMaquina: Record<FaseDeLanzamiento, true> = {
       comprobando: true,
+      comparando: true,
       empaquetando: true,
       subiendo: true,
       reiniciando: true,
@@ -14735,5 +14842,288 @@ describe("datosDeCierreDeTarea con el gasto", () => {
       gasto,
     });
     expect(datos.gasto).toEqual(gasto);
+  });
+});
+
+/**
+ * El framework de XOne por el cable: lo que se ofrece instalar, la instalación por el cerrojo de la
+ * máquina y el instalador del AGENTE montado sobre ese mismo cerrojo. Todo entra por opción —el
+ * servicio y la instalación son dobles—, así que lo que se afirma es la COMPOSICIÓN: qué se valida,
+ * qué no se lanza y qué sale por el cable.
+ */
+describe("el framework de XOne: ofrecer, instalar y el instalador del agente", () => {
+  const SHA = "a".repeat(64);
+  const pixel: Dispositivo = { id: "emulator-5554", nombre: "Pixel", plataforma: "android", clase: "emulador", estado: "conectado" };
+  const medida = (dispositivos: Dispositivo[] = [pixel], avds: string[] = ["pixel"]) => ({
+    sistema: "mac" as const, herramientas: [], dispositivos, avds, recetas: [], medido: "2026-10-07T10:00:00.000Z",
+  });
+  const LOCAL = { titulo: "v5.0.5.8rel", ficheroId: 8, sha256: SHA, bytes: 10, bajado: "2026-10-07T00:00:00Z", paquete: "com.xone.android.framework" };
+  /** Un servicio de mentira: una versión local (si se pide) y una del catálogo. */
+  const servicio = (conLocal = true) => ({
+    ofrecer: async () => ({
+      opciones: [
+        ...(conLocal ? [{ origen: "local" as const, titulo: LOCAL.titulo, sha256: SHA, bytes: 10, preferida: true }] : []),
+        { origen: "catalogo" as const, titulo: "v5.0.6.0rel", ficheroId: 60, preferida: !conLocal },
+      ],
+    }),
+    resolver: (e: { local: string } | { catalogo: number }) =>
+      "local" in e
+        ? e.local === SHA && conLocal ? { origen: "local" as const, local: LOCAL } : undefined
+        : e.catalogo === 60 ? { origen: "catalogo" as const, ficheroId: 60, titulo: "v5.0.6.0rel" } : undefined,
+    cliente: () => undefined,
+    locales: () => (conLocal ? [LOCAL] : []),
+  });
+  function trabajoPendiente() {
+    let acabar: ((r: { estado: string; ms: number; motivo?: string }) => void) | undefined;
+    return {
+      acabar: (estado: string) => acabar?.({ estado, ms: 1 }),
+      trabajo: {
+        titulo: "Instalando el framework",
+        cancelar: () => {},
+        terminado: new Promise<{ estado: string; motivo?: string; ms: number }>((r) => {
+          acabar = r;
+        }),
+      },
+    };
+  }
+  const conectar = async (opciones: Parameters<typeof montarRutas>[2]) => {
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), { informar: () => {}, ...opciones });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+    return { cliente, accion: servidor.rutas.get(`POST ${RUTA_ACCION}`)! };
+  };
+  const de = <C extends MensajeAlCliente["clase"]>(cliente: ReturnType<typeof clienteDeMentira>, clase: C) =>
+    cliente.recibidos.filter((m) => m.clase === clase) as Extract<MensajeAlCliente, { clase: C }>[];
+
+  it("ofrece las locales y el catálogo, con la versión que el aparato tiene", async () => {
+    const { cliente, accion } = await conectar({
+      detectarDispositivos: async () => medida(),
+      servicioDeFramework: servicio() as never,
+      frameworkEnDispositivo: async () => ({ instalado: true, version: "5.0.2.2dev" }),
+    });
+    await enviarMensaje(accion, { clase: "frameworks", serie: pixel.id });
+    await asentar();
+    expect(de(cliente, "frameworks").at(-1)).toMatchObject({
+      serie: pixel.id,
+      instalada: "5.0.2.2dev",
+      opciones: [{ origen: "local", preferida: true }, { origen: "catalogo", ficheroId: 60 }],
+    });
+  });
+
+  it("medido y SIN framework viaja como dato, distinto de «no se pudo leer»", async () => {
+    const { cliente, accion } = await conectar({
+      detectarDispositivos: async () => medida(),
+      servicioDeFramework: servicio() as never,
+      frameworkEnDispositivo: async () => ({ instalado: false }),
+    });
+    await enviarMensaje(accion, { clase: "frameworks", serie: pixel.id });
+    await asentar();
+    const ultimo = de(cliente, "frameworks").at(-1)!;
+    expect(ultimo.sinFramework).toBe(true);
+    expect(ultimo).not.toHaveProperty("instalada");
+  });
+
+  it("instala lo SERVIDO por el cerrojo, y al acabar vuelve a medir", async () => {
+    const t = trabajoPendiente();
+    const pedidas: unknown[] = [];
+    let medidas = 0;
+    const { cliente, accion } = await conectar({
+      detectarDispositivos: async () => {
+        medidas++;
+        return medida();
+      },
+      servicioDeFramework: servicio() as never,
+      instalarFramework: (p) => {
+        pedidas.push(p);
+        return t.trabajo;
+      },
+    });
+    await enviarMensaje(accion, { clase: "frameworks", serie: pixel.id });
+    await asentar();
+    await enviarMensaje(accion, { clase: "instalarFramework", serie: pixel.id, eleccion: { local: SHA } });
+    await asentar();
+    expect(pedidas).toMatchObject([{ serie: pixel.id, version: { origen: "local" }, puedeDescargar: true }]);
+    expect(de(cliente, "instalacion").at(-1)).toMatchObject({ receta: "instalar-framework", estado: "corriendo" });
+    const antes = medidas;
+    t.acabar("ok");
+    await asentar();
+    expect(de(cliente, "instalacion").at(-1)).toMatchObject({ receta: "instalar-framework", estado: "ok" });
+    expect(medidas).toBe(antes + 1);
+  });
+
+  it("una elección que NO se sirvió, o un aparato que no está en la medida, no lanza nada y lo dice", async () => {
+    const pedidas: unknown[] = [];
+    const { cliente, accion } = await conectar({
+      detectarDispositivos: async () => medida(),
+      servicioDeFramework: servicio() as never,
+      instalarFramework: (p) => {
+        pedidas.push(p);
+        return trabajoPendiente().trabajo;
+      },
+    });
+    // Sin haber pedido la lista: no se sirvió nada.
+    await enviarMensaje(accion, { clase: "instalarFramework", serie: pixel.id, eleccion: { local: SHA } });
+    await asentar();
+    expect(de(cliente, "instalacion").at(-1)).toMatchObject({ receta: "instalar-framework", estado: "fallo", motivo: expect.stringContaining("lista") });
+    await enviarMensaje(accion, { clase: "instalarFramework", serie: "otro", eleccion: { local: SHA } });
+    await asentar();
+    expect(de(cliente, "instalacion").at(-1)).toMatchObject({ estado: "fallo", motivo: expect.stringContaining("medida") });
+    expect(pedidas).toEqual([]);
+  });
+
+  it("una elección con forma rara no entra", async () => {
+    const pedidas: unknown[] = [];
+    const { accion } = await conectar({
+      detectarDispositivos: async () => medida(),
+      servicioDeFramework: servicio() as never,
+      instalarFramework: (p) => {
+        pedidas.push(p);
+        return trabajoPendiente().trabajo;
+      },
+    });
+    await enviarMensaje(accion, { clase: "instalarFramework", serie: pixel.id, eleccion: { url: "https://x" } } as never);
+    await asentar();
+    expect(pedidas).toEqual([]);
+  });
+
+  it("el instalador del AGENTE va por el MISMO cerrojo: con otro trabajo en marcha no lanza nada", async () => {
+    const crear = trabajoPendiente();
+    const instalados: unknown[] = [];
+    let instalador: InstaladorDeFrameworkPort | undefined;
+    const { accion } = await conectar({
+      detectarDispositivos: async () => medida(),
+      servicioDeFramework: servicio() as never,
+      crearAvd: () => crear.trabajo,
+      instalarFramework: (p) => {
+        instalados.push(p);
+        return trabajoPendiente().trabajo;
+      },
+      enlazarInstaladorDeFramework: (i) => {
+        instalador = i;
+      },
+    });
+    expect(instalador).toBeDefined();
+    expect(await instalador!.plan({ id: pixel.id, nombre: pixel.nombre })).toMatchObject({ titulo: "v5.0.5.8rel", descarga: false });
+    await enviarMensaje(accion, { clase: "crearEmulador", nombre: "nuevo" });
+    await asentar();
+    const r = await instalador!.instalar({ id: pixel.id, nombre: pixel.nombre }, { soloLocal: false });
+    expect(r).toMatchObject({ ok: false, motivo: expect.stringContaining("otro trabajo") });
+    expect(instalados).toEqual([]);
+  });
+
+  it("el del agente con `soloLocal` y sin nada descargado dice que no, sin lanzar", async () => {
+    const instalados: unknown[] = [];
+    let instalador: InstaladorDeFrameworkPort | undefined;
+    await conectar({
+      detectarDispositivos: async () => medida(),
+      servicioDeFramework: servicio(false) as never,
+      instalarFramework: (p) => {
+        instalados.push(p);
+        return trabajoPendiente().trabajo;
+      },
+      enlazarInstaladorDeFramework: (i) => {
+        instalador = i;
+      },
+    });
+    expect(await instalador!.plan({ id: pixel.id, nombre: pixel.nombre })).toMatchObject({ descarga: true });
+    expect(await instalador!.instalar({ id: pixel.id, nombre: pixel.nombre }, { soloLocal: true })).toMatchObject({ ok: false });
+    expect(instalados).toEqual([]);
+  });
+
+  it("el instalador TARDÍO dice que no está listo hasta enlazarse, y luego delega", async () => {
+    const tardio = instaladorDeFrameworkTardio();
+    expect(await tardio.puerto.plan({ id: "x", nombre: "x" })).toHaveProperty("motivo");
+    tardio.enlazar(new InstaladorDeFrameworkEnMemoria({ aparato: "Pixel", titulo: "v1rel", descarga: false }));
+    expect(await tardio.puerto.instalar({ id: "x", nombre: "Pixel" }, { soloLocal: true })).toMatchObject({ ok: true });
+  });
+
+  it("`banderaDeEjecutor` añade el instalador a TODAS las consolas, junto a los conectores", () => {
+    const recibidas: unknown[] = [];
+    const conectores = { delProyecto: () => [], tools: async () => [], llamar: async () => "" };
+    const framework = new InstaladorDeFrameworkEnMemoria({ motivo: "x" });
+    const { crearEjecutor } = banderaDeEjecutor(
+      { crearEjecutor: (_a: unknown, o: unknown) => { recibidas.push(o); return {} as never; } } as never,
+      conectores,
+      framework
+    );
+    crearEjecutor!(() => {});
+    expect(recibidas).toEqual([{ conectores, framework }]);
+  });
+});
+
+describe("el vigía de lo que se enchufa", () => {
+  const foto = (ids: string[]) => ({
+    sistema: "mac" as const,
+    herramientas: [],
+    dispositivos: ids.map((id) => ({ id, nombre: id, plataforma: "android" as const, clase: "fisico" as const, estado: "conectado" as const })),
+    avds: [],
+    recetas: [],
+    medido: "2026-10-21T10:00:00.000Z",
+  });
+
+  it("un aviso del vigía vuelve a medir y la foto va a TODOS; parar lo para", async () => {
+    let avisar: (() => void) | undefined;
+    let parado = false;
+    let ids = ["A"];
+    const servidor = servidorDeMentira();
+    const cable = montarRutas(servidor, vestibuloDePrueba(), {
+      informar: () => {},
+      detectarDispositivos: async () => foto(ids),
+      vigilarDispositivos: (alCambiar) => {
+        avisar = alCambiar;
+        return { parar: () => void (parado = true) };
+      },
+    });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+    cliente.recibidos.length = 0;
+    ids = ["A", "B"];
+    avisar!();
+    await asentar();
+    const fotos = cliente.recibidos.filter((m) => m.clase === "dispositivos") as Extract<MensajeAlCliente, { clase: "dispositivos" }>[];
+    expect(fotos.at(-1)!.informe.dispositivos.map((d) => d.id)).toEqual(["A", "B"]);
+    cable.pararVigia();
+    expect(parado).toBe(true);
+  });
+
+  it("un aviso a MITAD de una medida no se queda con ella: se mide otra vez al acabar", async () => {
+    let avisar: (() => void) | undefined;
+    let soltar: (() => void) | undefined;
+    let medidas = 0;
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), {
+      informar: () => {},
+      detectarDispositivos: async () => {
+        medidas++;
+        if (medidas === 2) await new Promise<void>((r) => (soltar = r));
+        return foto(["A"]);
+      },
+      vigilarDispositivos: (alCambiar) => {
+        avisar = alCambiar;
+        return { parar: () => {} };
+      },
+    });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+    const antes = medidas;
+    avisar!();
+    await asentar();
+    expect(medidas).toBe(antes + 1);
+    // Llega otro aviso mientras esa medida sigue en vuelo: no se pierde.
+    avisar!();
+    soltar?.();
+    await asentar();
+    await asentar();
+    expect(medidas).toBe(antes + 2);
+  });
+
+  it("la consola de verdad lo monta con el vigía de adb, y lo para al cerrar", () => {
+    const fuente = readFileSync(new URL("./arranque.ts", import.meta.url), "utf8");
+    expect(fuente).toMatch(/vigilarDispositivos: \(alCambiar\) =>\s+vigilarDispositivosAndroid\(alCambiar/);
+    expect(fuente).toMatch(/cable\.pararVigia\(\);/);
   });
 });

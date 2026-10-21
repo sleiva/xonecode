@@ -60,6 +60,7 @@ import {
   restaurarAgente,
 } from "../../agent/subagentes/agentesEnDisco.js";
 import { detectarDispositivos, frameworkEnDispositivo } from "../../agent/dispositivos/dispositivosEnMaquina.js";
+import { vigilarDispositivosAndroid } from "../../agent/dispositivos/vigiaDeAdb.js";
 /**
  * El veredicto de «¿se puede lanzar?» y el lanzamiento entero.
  *
@@ -74,6 +75,7 @@ import {
   type DependenciasDeLanzamiento,
   type FaseDeLanzamiento,
   type LanzamientoEnCurso,
+  type ModoDeCopia,
   type PeticionDeLanzamiento,
 } from "../../agent/dispositivos/lanzamientoEnMaquina.js";
 import {
@@ -84,6 +86,7 @@ import {
 } from "../../core/puedeLanzarse.js";
 
 import type { Dispositivo, Herramienta, InformeDeDispositivos } from "../../core/dispositivos.js";
+import { esAlcanzable } from "../../core/dispositivos.js";
 import { PLATAFORMAS_DE_DISPOSITIVO, remotoEnVigor, type AjustesDeDispositivos } from "../../core/settings.js";
 import type { NombreDeHerramienta } from "../../core/dispositivos.js";
 import type { ViaRemota } from "../../core/settings.js";
@@ -91,6 +94,13 @@ import { motivoDeDominioInaceptable } from "../../core/tunel.js";
 import { instalarHerramientaDeDispositivos, verificarDispositivo } from "../../agent/dispositivos/dispositivosEnMaquina.js";
 import { arrancarEmulador, pararEmulador } from "../../agent/dispositivos/arranqueDeEmulador.js";
 import { borrarAvd, clonarAvd, correrPasoDeReceta, crearAvd } from "../../agent/dispositivos/instalacionEnMaquina.js";
+import { instalarFramework, type PeticionDeInstalarFramework, type VersionAInstalar } from "../../agent/dispositivos/instalacionDeFramework.js";
+import { servicioDeFramework, type ServicioDeFramework } from "../../agent/dispositivos/servicioDeFramework.js";
+import {
+  actualizacionDisponible, eleccionServida, type EleccionDeFramework, type OpcionDeInstalacion, opcionesDeInstalacion,
+  VIGENCIA_DEL_CATALOGO_MS,
+} from "../../core/frameworkLocal.js";
+import type { InstaladorDeFrameworkPort } from "../../core/ports.js";
 import {
   asignarPuertosDeFisicos,
   asignarPuertosPendientes,
@@ -628,6 +638,13 @@ export interface OpcionesDeMontaje {
    */
   detectarDispositivos?: () => Promise<InformeDeDispositivos>;
   /**
+   * El VIGÍA de lo que se enchufa (`agent/dispositivos/vigiaDeAdb.ts`, `adb track-devices`): llama a
+   * `alCambiar` cuando la lista de aparatos de adb cambia, y entonces se vuelve a medir y la foto va a
+   * todos. No es un sondeo: sin cambios no se lanza nada. Ausente = la foto solo se rehace al
+   * entrar, al volver a la ventana y con «Refrescar», como antes; un test del cable no lanza adb.
+   */
+  vigilarDispositivos?: (alCambiar: () => void) => { parar: () => void };
+  /**
    * Qué destinos se miran, leídos de `settings.json` en el momento de emitir. Se lee y no
    * se cachea porque el fichero es del usuario y puede cambiar por fuera. Ausente = esta
    * ejecución no los conoce y viaja `{}`, que significa «se miran todos».
@@ -724,7 +741,27 @@ export interface OpcionesDeMontaje {
    * botón. Esa es la diferencia con no tener framework: las dos dan «no listo», pero una se
    * arregla instalando y la otra mirando.
    */
-  frameworkEnDispositivo?: (dispositivo: Dispositivo) => Promise<FrameworkMedido>;
+  frameworkEnDispositivo?: (dispositivo: Dispositivo) => Promise<FrameworkMedido & { version?: string }>;
+  /**
+   * El framework que se puede instalar (`agent/dispositivos/servicioDeFramework.ts`): la copia local
+   * y, con credencial de byXOne, el catálogo. **Ausente = esta ejecución no instala el framework**,
+   * y se dice en vez de pintar un botón muerto.
+   */
+  servicioDeFramework?: ServicioDeFramework;
+  /**
+   * Instala el framework en un aparato (`agent/dispositivos/instalacionDeFramework.ts`), con su
+   * salida en vivo. Comparte el cerrojo de las recetas y de los AVD: uno a la vez en la máquina.
+   */
+  instalarFramework?: (
+    peticion: PeticionDeInstalarFramework,
+    alSalirLinea: (linea: string) => void
+  ) => { titulo: string; cancelar: () => void; terminado: Promise<{ estado: string; motivo?: string; ms: number }> };
+  /**
+   * Entrega el instalador del AGENTE (la tool `instalar_framework`), montado sobre el cerrojo de
+   * ESTAS rutas. Lo recibe quien lo pasa a las sesiones (`instaladorDeFrameworkTardio`): el
+   * vestíbulo, que las abre, nace antes que estas rutas.
+   */
+  enlazarInstaladorDeFramework?: (instalador: InstaladorDeFrameworkPort) => void;
   /**
    * ¿Existe esa ruta dentro del proyecto? Toca el disco, así que entra por opción.
    *
@@ -1102,7 +1139,7 @@ export function montarRutas(
   servidor: Pick<ServidorWeb, "registrarRuta" | "registrarRutaPublica" | "puerto">,
   vestibulo: Vestibulo,
   opciones: OpcionesDeMontaje = {}
-): { emitirTareas: () => void; cerrarRemoto: () => Promise<void> } {
+): { emitirTareas: () => void; cerrarRemoto: () => Promise<void>; pararVigia: () => void } {
   const informar = opciones.informar ?? (() => {});
   const hayCredencialDe = opciones.hayCredencial ?? (() => false);
   // Se llama UNA vez, aquí: no cambia mientras el proceso vive, y es el mismo dato que ya se
@@ -3098,6 +3135,8 @@ export function montarRutas(
    */
   let ultimoArranque: { avd: string; ok: boolean; detalle: string } | undefined;
 
+  /** Un aviso del vigía llegó con una medida en vuelo: al acabar, otra (`remedirPorElVigia`). */
+  let remedirAlAcabar = false;
   const atenderDispositivos = (): Promise<void> => {
     if (opciones.detectarDispositivos === undefined) return Promise.resolve();
     if (deteccionEnVuelo !== undefined) return deteccionEnVuelo;
@@ -3145,10 +3184,25 @@ export function montarRutas(
         informar(`no se pudo mirar qué dispositivos hay: ${error instanceof Error ? error.message : String(error)}`);
       } finally {
         deteccionEnVuelo = undefined;
+        // Un aviso del vigía que llegó a mitad de una medida no puede quedarse con ella: esa
+        // medida pudo empezar ANTES de desenchufar. Se mide otra vez, ya con la de ahora.
+        if (remedirAlAcabar) {
+          remedirAlAcabar = false;
+          void atenderDispositivos().catch(contar);
+        }
       }
     })();
     return deteccionEnVuelo;
   };
+  /** «La lista de adb cambió»: medir, y si ya se está midiendo, medir OTRA vez al acabar. */
+  const remedirPorElVigia = (): void => {
+    if (deteccionEnVuelo !== undefined) {
+      remedirAlAcabar = true;
+      return;
+    }
+    void atenderDispositivos().catch(contar);
+  };
+  const vigia = opciones.detectarDispositivos === undefined ? undefined : opciones.vigilarDispositivos?.(remedirPorElVigia);
 
   /**
    * **Arrancar un AVD, y contarlo con la foto de después.**
@@ -4282,7 +4336,7 @@ export function montarRutas(
    * `{instalado: false, detalle}` para lo que no sabe), así que se cuenta y el veredicto sale
    * como «no se sabe», que es la verdad.
    */
-  const medirFramework = async (dispositivo: Dispositivo): Promise<FrameworkMedido | undefined> => {
+  const medirFramework = async (dispositivo: Dispositivo): Promise<(FrameworkMedido & { version?: string }) | undefined> => {
     const medir = opciones.frameworkEnDispositivo;
     if (medir === undefined) return undefined;
     try {
@@ -4329,6 +4383,8 @@ export function montarRutas(
         dispositivo: Dispositivo | undefined;
         app?: string;
         veredicto: Veredicto;
+        /** La versión del framework medida AHORA en el aparato, si se leyó. */
+        versionDelFramework?: string;
       }
     | undefined
   > => {
@@ -4367,6 +4423,7 @@ export function montarRutas(
       dispositivo,
       ...(veredicto.app === undefined ? {} : { app: veredicto.app }),
       veredicto,
+      ...(framework?.version === undefined ? {} : { versionDelFramework: framework.version }),
     };
   };
 
@@ -4406,6 +4463,13 @@ export function montarRutas(
       // `core/puedeLanzarse.ts#motivoDeBloqueo`, que es donde vive la regla y donde se
       // arregla. Aquí solo se recorren.
       faltas: medida.veredicto.causas.map(motivoDeBloqueo),
+      ...(medida.veredicto.causas.some((c) => c.causa === "framework-ausente") ? { sinFramework: true as const } : {}),
+      ...((): { frameworkMasNuevo?: { instalada: string; titulo: string } } => {
+        const instalada = medida.versionDelFramework;
+        if (instalada === undefined || medida.dispositivo === undefined) return {};
+        const titulo = actualizacionDelFramework(instalada);
+        return titulo === undefined ? {} : { frameworkMasNuevo: { instalada, titulo } };
+      })(),
       ...(medida.app === undefined ? {} : { app: medida.app }),
       ...(foto === undefined ? {} : { dispositivo: foto }),
       // La fecha de la FOTO del equipo, no la de ahora: la medida del framework y la elección
@@ -4433,7 +4497,10 @@ export function montarRutas(
    * `alAcabar` es para quien lanzó por OTRO camino que la pestaña (el «Probar» del editor): le dice
    * cómo acabó, para que su línea no se quede en «desplegando» para siempre.
    */
-  const atenderLanzarApp = async (alAcabar?: (estado: "ok" | "fallo" | "ocupado", motivo?: string) => void): Promise<void> => {
+  const atenderLanzarApp = async (
+    alAcabar?: (estado: "ok" | "fallo" | "ocupado", motivo?: string) => void,
+    modo: ModoDeCopia = "todo"
+  ): Promise<void> => {
     // Ya hay uno: se reenvía su estado en vez de lanzar otro, como `atenderReceta`.
     if (lanzamiento !== undefined) {
       emitirLanzamiento("corriendo");
@@ -4550,6 +4617,8 @@ export function montarRutas(
           dispositivo: medida.dispositivo,
           raiz: raizDelPaquete,
           app: medida.app,
+          // «Ejecutar» y «Copiar todos» no lo mandan: el lanzador sin modo sube el proyecto entero.
+          ...(modo === "todo" ? {} : { modo }),
           // El puerto LOCAL del túnel es el de SU aparato: con dos aparatos y el mismo puerto,
           // el `adb forward` del segundo le quita el túnel al primero sin error. Un físico
           // tiene el suyo por su serie (IXCODE-32): antes iba al 8443 del primer AVD.
@@ -5657,6 +5726,205 @@ export function montarRutas(
       if (r.estado === "ok") opciones.quitarAjustesDeAvd?.(avd);
     });
   };
+
+  /**
+   * El framework de XOne: qué se ofrece instalar en un aparato y la instalación, por el MISMO
+   * cerrojo que las recetas y los AVD (`correrTrabajo`). Tres puertas lo usan —Ajustes, Ejecutar y
+   * la tool del agente— y las tres pasan por aquí.
+   *
+   * **Lo que se instala sale de la ÚLTIMA lista servida a ESE aparato**, nunca de lo que mande el
+   * cliente: la elección vuelve como sha (local) o id de fichero (catálogo) y se busca en ella.
+   * Las negativas viajan como un `instalacion` en `fallo` con su motivo: `informar` no llega al
+   * navegador desde el vestíbulo, y un botón que no contesta es peor que un no.
+   */
+  const RECETA_DEL_FRAMEWORK = "instalar-framework";
+  const frameworksServidos = new Map<string, OpcionDeInstalacion[]>();
+  const negarInstalacion = (motivo: string): void => {
+    emitir({ clase: "instalacion", receta: RECETA_DEL_FRAMEWORK, paso: 0, titulo: "Instalar el framework", estado: "fallo", lineas: [], ms: 0, motivo });
+  };
+  /** El aparato, de la última medida (se mide si no hay ninguna). Android y alcanzable, o el motivo. */
+  const aparatoParaFramework = async (serie: string): Promise<Dispositivo | { motivo: string }> => {
+    if (informeDeDispositivos === undefined) await atenderDispositivos().catch(contar);
+    const d = informeDeDispositivos?.dispositivos.find((x) => x.id === serie);
+    if (d === undefined) return { motivo: "ese aparato no está en la última medida: vuelve a mirar en Ajustes → Dispositivos" };
+    if (d.plataforma !== "android") return { motivo: "instalar el framework solo está montado para Android" };
+    if (!esAlcanzable(d.estado)) return { motivo: `«${d.nombre}» no está alcanzable: arráncalo o conéctalo y vuelve a mirar` };
+    return d;
+  };
+  const versionInstalada = async (d: Dispositivo): Promise<string | undefined> => (await medirFrameworkInstalado(d))?.version;
+  /** Lo que tiene el aparato: instalado (con versión si se lee), o no. `undefined` = no se pudo medir. */
+  const medirFrameworkInstalado = async (d: Dispositivo): Promise<{ instalado: boolean; version?: string } | undefined> => {
+    try {
+      return await opciones.frameworkEnDispositivo?.(d);
+    } catch {
+      return undefined;
+    }
+  };
+  /**
+   * **El catálogo que se conoce, con su hora**, para decir en el veredicto si hay un framework más
+   * nuevo sin ir a byXOne en cada medida: Ejecutar mide al entrar, al volver y al enchufar. Lo
+   * renuevan `atenderFrameworks` (el selector) y, pasada `VIGENCIA_DEL_CATALOGO_MS`, el propio
+   * veredicto EN SEGUNDO PLANO: el de ahora sale con lo que hay, y si lo nuevo cambia la respuesta se
+   * vuelve a medir. Las locales se leen siempre de disco: una descarga cuenta al momento.
+   */
+  let catalogoConocido: { opciones: OpcionDeInstalacion[]; cuando: number } | undefined;
+  let catalogoEnVuelo = false;
+  const recordarCatalogo = (opcionesServidas: readonly OpcionDeInstalacion[]): void => {
+    catalogoConocido = { opciones: opcionesServidas.filter((o) => o.origen === "catalogo"), cuando: Date.now() };
+  };
+  /** El título de la versión a la que actualizar un aparato con `instalada`, o nada. */
+  const actualizacionDelFramework = (instalada: string): string | undefined => {
+    const servicio = opciones.servicioDeFramework;
+    if (servicio === undefined) return undefined;
+    const conocidas = (): OpcionDeInstalacion[] => {
+      let locales: OpcionDeInstalacion[] = [];
+      try {
+        locales = opcionesDeInstalacion(servicio.locales());
+      } catch {
+        // Un índice ilegible no impide decir lo del catálogo.
+      }
+      return [...locales, ...(catalogoConocido?.opciones ?? [])];
+    };
+    const ahora = actualizacionDisponible(conocidas(), instalada)?.titulo;
+    const viejo = catalogoConocido === undefined || Date.now() - catalogoConocido.cuando >= VIGENCIA_DEL_CATALOGO_MS;
+    if (viejo && !catalogoEnVuelo && servicio.cliente() !== undefined) {
+      catalogoEnVuelo = true;
+      void servicio
+        .ofrecer()
+        .then((oferta) => {
+          recordarCatalogo(oferta.opciones);
+          if (actualizacionDisponible(conocidas(), instalada)?.titulo !== ahora) void atenderRevisarLanzamiento().catch(contar);
+        })
+        .catch(contar)
+        .finally(() => {
+          catalogoEnVuelo = false;
+        });
+    }
+    return ahora;
+  };
+  const atenderFrameworks = async (serie: string): Promise<void> => {
+    const servicio = opciones.servicioDeFramework;
+    if (servicio === undefined) {
+      emitir({ clase: "frameworks", serie, opciones: [], motivoDelCatalogo: "esta ejecución no instala el framework" });
+      return;
+    }
+    const aparato = await aparatoParaFramework(serie);
+    const [oferta, medido] = await Promise.all([
+      servicio.ofrecer(),
+      "motivo" in aparato ? Promise.resolve(undefined) : medirFrameworkInstalado(aparato),
+    ]);
+    frameworksServidos.set(serie, oferta.opciones);
+    recordarCatalogo(oferta.opciones);
+    emitir({
+      clase: "frameworks",
+      serie,
+      opciones: oferta.opciones,
+      ...(oferta.motivoDelCatalogo === undefined ? {} : { motivoDelCatalogo: oferta.motivoDelCatalogo }),
+      ...(medido?.version === undefined ? {} : { instalada: medido.version }),
+      // Medido y SIN framework es un dato distinto de «no se pudo leer»: la ventana dice cuál.
+      ...(medido?.instalado === false ? { sinFramework: true as const } : {}),
+    });
+  };
+  /**
+   * Arranca la instalación por el cerrojo, o dice por qué no. Devuelve el trabajo en marcha: la
+   * tool del agente espera su final; el botón lo sigue por los `instalacion`.
+   */
+  const lanzarInstalacionDeFramework = (
+    aparato: Dispositivo,
+    version: VersionAInstalar,
+    extra: { soloLocal: boolean; bajarVersion?: boolean }
+  ): { motivo: string } | { enMarcha: { cancelar: () => void; terminado: Promise<{ estado: string; motivo?: string }> } } => {
+    const instalar = opciones.instalarFramework;
+    const servicio = opciones.servicioDeFramework;
+    if (instalar === undefined || servicio === undefined) return { motivo: "esta ejecución no instala el framework" };
+    if (trabajo !== undefined) return { motivo: `la máquina ya está con otro trabajo («${trabajo.titulo}»): espera a que acabe` };
+    const cliente = servicio.cliente();
+    const enMarcha = instalar(
+      {
+        serie: aparato.id,
+        nombre: aparato.nombre,
+        version,
+        puedeDescargar: !extra.soloLocal,
+        ...(extra.bajarVersion === true ? { bajarVersion: true } : {}),
+        ...(cliente === undefined ? {} : { cliente }),
+      },
+      alSalirLineaDelTrabajo
+    );
+    correrTrabajo(RECETA_DEL_FRAMEWORK, 0, enMarcha);
+    return { enMarcha };
+  };
+  const atenderInstalarFramework = async (mensaje: Extract<MensajeDelCliente, { clase: "instalarFramework" }>): Promise<void> => {
+    if (trabajo !== undefined) {
+      emitirProgreso("corriendo");
+      return;
+    }
+    const servicio = opciones.servicioDeFramework;
+    if (servicio === undefined) return negarInstalacion("esta ejecución no instala el framework");
+    const aparato = await aparatoParaFramework(mensaje.serie);
+    if ("motivo" in aparato) return negarInstalacion(aparato.motivo);
+    // La elección vale solo si está en lo SERVIDO a ese aparato: se comprueba aquí, con la regla pura,
+    // y no se delega en el servicio.
+    const servidas = frameworksServidos.get(mensaje.serie) ?? [];
+    const version = eleccionServida(mensaje.eleccion, servidas) === undefined ? undefined : servicio.resolver(mensaje.eleccion, servidas);
+    if (version === undefined) return negarInstalacion("esa versión no está en la lista que se ofreció: vuelve a abrir la lista");
+    const r = lanzarInstalacionDeFramework(aparato, version, { soloLocal: false, ...(mensaje.bajarVersion === true ? { bajarVersion: true } : {}) });
+    if ("motivo" in r) negarInstalacion(r.motivo);
+  };
+  /**
+   * El instalador del AGENTE, sobre lo de arriba. Instala la versión PREFERIDA (la local más nueva,
+   * o sin locales la más nueva del catálogo): el agente no elige versión. Ninguno lanza.
+   */
+  const instaladorDelAgente: InstaladorDeFrameworkPort = {
+    plan: async (pedido) => {
+      const servicio = opciones.servicioDeFramework;
+      if (servicio === undefined || opciones.instalarFramework === undefined) return { motivo: "esta consola no instala el framework" };
+      const aparato = await aparatoParaFramework(pedido.id);
+      if ("motivo" in aparato) return aparato;
+      const [oferta, instalada] = await Promise.all([servicio.ofrecer(), versionInstalada(aparato)]);
+      const preferida = oferta.opciones.find((o) => o.preferida);
+      if (preferida === undefined) {
+        return {
+          motivo: `no hay ninguna versión del framework descargada${oferta.motivoDelCatalogo === undefined ? "" : `, y el catálogo no está disponible: ${oferta.motivoDelCatalogo}`}`,
+        };
+      }
+      return {
+        aparato: aparato.nombre,
+        titulo: preferida.titulo,
+        descarga: preferida.origen === "catalogo",
+        ...(preferida.bytes === undefined ? {} : { bytes: preferida.bytes }),
+        ...(instalada === undefined ? {} : { instalada }),
+      };
+    },
+    instalar: async (pedido, extra) => {
+      const servicio = opciones.servicioDeFramework;
+      if (servicio === undefined) return { ok: false, motivo: "esta consola no instala el framework" };
+      const aparato = await aparatoParaFramework(pedido.id);
+      if ("motivo" in aparato) return { ok: false, motivo: aparato.motivo };
+      const oferta = await servicio.ofrecer();
+      const preferida = oferta.opciones.find((o) => o.preferida);
+      if (preferida === undefined) return { ok: false, motivo: "no hay ninguna versión del framework que instalar" };
+      if (extra.soloLocal && preferida.origen === "catalogo") {
+        return { ok: false, motivo: "no hay ninguna versión del framework descargada, y aquí no se descarga: instálala desde Ajustes → Dispositivos" };
+      }
+      const version = servicio.resolver(
+        preferida.origen === "local" ? { local: preferida.sha256 } : { catalogo: preferida.ficheroId },
+        oferta.opciones
+      );
+      if (version === undefined) return { ok: false, motivo: "la versión preferida ya no está disponible" };
+      const r = lanzarInstalacionDeFramework(aparato, version, { soloLocal: extra.soloLocal });
+      if ("motivo" in r) return { ok: false, motivo: r.motivo };
+      const cancelar = (): void => r.enMarcha.cancelar();
+      extra.senal?.addEventListener("abort", cancelar, { once: true });
+      try {
+        const fin = await r.enMarcha.terminado;
+        if (fin.estado === "ok") return { ok: true, detalle: `framework ${preferida.titulo} instalado en «${aparato.nombre}»` };
+        return { ok: false, motivo: fin.motivo ?? `la instalación acabó en «${fin.estado}»` };
+      } finally {
+        extra.senal?.removeEventListener("abort", cancelar);
+      }
+    },
+  };
+  opciones.enlazarInstaladorDeFramework?.(instaladorDelAgente);
 
   /**
    * Los modelos de un motor externo, para el desplegable de un subagente.
@@ -7708,6 +7976,25 @@ export function montarRutas(
       respuesta.end();
       return;
     }
+    if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "frameworks" && typeof mensaje.serie === "string") {
+      void atenderFrameworks(mensaje.serie).catch(contar);
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
+    if (
+      typeof mensaje === "object" &&
+      mensaje !== null &&
+      mensaje.clase === "instalarFramework" &&
+      typeof mensaje.serie === "string" &&
+      eleccionAceptable(mensaje.eleccion) &&
+      (mensaje.bajarVersion === undefined || typeof mensaje.bajarVersion === "boolean")
+    ) {
+      void atenderInstalarFramework(mensaje).catch(contar);
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
     if (
       typeof mensaje === "object" &&
       mensaje !== null &&
@@ -8461,7 +8748,14 @@ export function montarRutas(
     if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "lanzarApp") {
       // Suelto: revalida (otro adb), y el lanzamiento entero tarda minutos. La respuesta va
       // por el SSE, en forma de `lanzamiento`, y no se espera aquí ni de lejos.
-      void atenderLanzarApp().catch(contar);
+      // `modo` es de los botones «Copiar…»: ausente es `todo`, y uno desconocido no lanza nada.
+      const modo = (mensaje as { modo?: unknown }).modo;
+      if (modo !== undefined && modo !== "todo" && modo !== "modificados") {
+        respuesta.writeHead(400);
+        respuesta.end();
+        return;
+      }
+      void atenderLanzarApp(undefined, modo ?? "todo").catch(contar);
       respuesta.writeHead(204);
       respuesta.end();
       return;
@@ -8588,7 +8882,7 @@ export function montarRutas(
     respuesta.end();
   });
 
-  return { emitirTareas, cerrarRemoto: apagarRemoto };
+  return { emitirTareas, cerrarRemoto: apagarRemoto, pararVigia: () => vigia?.parar() };
 }
 
 /**
@@ -9715,7 +10009,7 @@ export interface OpcionesDeArranque {
     /** Lo que depende de la CONSOLA y no de su raíz: hoy la carpeta de adjuntos de una
      *  tarea. La misma forma que `OpcionesDelVestibulo.crearEjecutor`, porque esto se le
      *  pasa tal cual. */
-    opciones?: { adjuntos?: string; conectores?: ConectoresPort }
+    opciones?: { adjuntos?: string; conectores?: ConectoresPort; framework?: InstaladorDeFrameworkPort }
   ) => EjecutorDeTurno;
   /** Lo que la consola de proyecto necesita y depende de la raíz (`/sync`, los escritores). */
   dependenciasDeProyecto?: (raiz: string) => Partial<Consola>;
@@ -9841,7 +10135,11 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
   // Los conectores y el gestor de tareas, sobre UN servicio —construido luego por `montarRutas`—, y
   // las sesiones sobre ese mismo: por eso esto va ANTES del vestíbulo, que es quien las abre.
   const conectoresYGestor = ajusteDeGestorCableado(ajusteDeConectoresCableado({ casa: homedir() }));
-  vestibulo = opciones.vestibulo ?? vestibuloReal(opciones, servidor, escribir, informar, conectoresYGestor.conectoresDeSesion);
+  // El instalador del framework para la tool del agente, enlazado TARDE por la misma razón.
+  const instaladorTardio = instaladorDeFrameworkTardio();
+  vestibulo =
+    opciones.vestibulo ??
+    vestibuloReal(opciones, servidor, escribir, informar, conectoresYGestor.conectoresDeSesion, instaladorTardio.puerto);
   const conVestibulo = vestibulo;
 
   /**
@@ -9972,6 +10270,7 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
         (async (token) => (await import("../../agent/remoto/ngrokEnMaquina.js")).guardarAuthtoken(token)),
       guardarAjustes: (cambio) => void guardarAjustesDeRemotoEnDisco(undefined, cambio),
     },
+    enlazarInstaladorDeFramework: instaladorTardio.enlazar,
     // El tope de ventana, tal cual llega: es la misma función que la barra del terminal, y
     // dos resoluciones serían dos porcentajes distintos para el mismo modelo.
     ...(opciones.topeDeContexto === undefined ? {} : { topeDeContexto: opciones.topeDeContexto }),
@@ -10064,6 +10363,9 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
     // La máquina de verdad: adb/emulator del PATH o del SDK, xcrun solo en macOS y solo con
     // herramientas de desarrollo. Cada proceso con su tope.
     detectarDispositivos: () => detectarDispositivos({}, cargarSettings().settings.dispositivos ?? {}),
+    // Lo que se enchufa y se desenchufa, por el canal de avisos de adb: el MISMO adb que la medida.
+    vigilarDispositivos: (alCambiar) =>
+      vigilarDispositivosAndroid(alCambiar, { ajustes: () => cargarSettings().settings.dispositivos ?? {} }),
     // Se lee de disco en cada consulta, no se cachea: `settings.json` es del usuario.
     ajustesDeDispositivos: () => cargarSettings().settings.dispositivos ?? {},
     guardarAjustesDeDispositivos: (ajustes) => void guardarDispositivos(undefined, ajustes),
@@ -10093,6 +10395,9 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
      * doble en esta ejecución.
      */
     frameworkEnDispositivo: (dispositivo) => frameworkEnDispositivo(dispositivo),
+    // El framework: la copia local y el catálogo, y la instalación, con las funciones REALES.
+    servicioDeFramework: servicioDeFramework(),
+    instalarFramework: (peticion, alSalirLinea) => instalarFramework(peticion, { alSalirLinea }),
     // La criba de balde primero (relativa, sin `.`/`..`/segmentos vacíos) y el disco después.
     // Con `join` sobre una ruta ya cribada: sin la criba, un `../../.env` de `app.xml`
     // preguntaría por un fichero de fuera del proyecto.
@@ -10218,6 +10523,8 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
   // Se ESPERA: con la vía ngrok, cerrar mata ngrok y el puente local, y sin esperar el proceso
   // saldría antes y dejaría a ngrok huérfano del `SIGKILL` de rescate.
   await cable.cerrarRemoto().catch(() => {});
+  // El vigía de adb, antes de nada que mida: un aviso a mitad del cierre lanzaría otro adb.
+  cable.pararVigia();
   /**
    * El corredor PRIMERO, y el orden es load-bearing: `parar()` corta los turnos en vuelo y
    * los deja aparcados diciendo que la consola se cerró a mitad. Al revés, el
@@ -10268,11 +10575,12 @@ function vestibuloReal(
   servidor: ServidorWeb,
   escribir: (texto: string) => void,
   informar: (texto: string) => void,
-  conectores?: ConectoresPort
+  conectores?: ConectoresPort,
+  framework?: InstaladorDeFrameworkPort
 ): Vestibulo {
   // Lo PRIMERO, antes de leer nada de disco: si esto va a fallar, que falle sin haber
   // aplicado credenciales al proceso ni construido medio vestíbulo.
-  const ejecutor = banderaDeEjecutor(opciones, conectores);
+  const ejecutor = banderaDeEjecutor(opciones, conectores, framework);
   const cargado = cargar(opciones.cwd);
   aplicarAuth(cargado.auth);
   // La lectura NO se hace aquí: se hace al abrir cada consola, que es lo que hace que una
@@ -10389,7 +10697,11 @@ function vestibuloReal(
  * O el ejecutor real, o el de pega PEDIDO con `--guion`, o un error. Lo que no hay es una
  * tercera opción muda.
  */
-export function banderaDeEjecutor(opciones: OpcionesDeArranque, conectores?: ConectoresPort): Pick<OpcionesDelVestibulo, "crearEjecutor"> {
+export function banderaDeEjecutor(
+  opciones: OpcionesDeArranque,
+  conectores?: ConectoresPort,
+  framework?: InstaladorDeFrameworkPort
+): Pick<OpcionesDelVestibulo, "crearEjecutor"> {
   if (opciones.guion === true) return {};
   const crear = opciones.crearEjecutor;
   if (crear === undefined) {
@@ -10400,9 +10712,47 @@ export function banderaDeEjecutor(opciones: OpcionesDeArranque, conectores?: Con
   // Los conectores se AÑADEN aquí, a todas las consolas —de persona y de tarea—: el vestíbulo no
   // tiene que acordarse de pasarlos en cada puerta. En una tarea, lo que escriben se rechaza igual
   // (`consolaDeTarea.ts`).
-  if (conectores === undefined) return { crearEjecutor: crear };
-  return { crearEjecutor: (alAbrir, o) => crear(alAbrir, { ...o, conectores }) };
+  // Y el instalador del framework, por la misma puerta y a todas: en una tarea, lo que haría falta
+  // descargar se rechaza y aparca (`consolaDeTarea.ts`).
+  if (conectores === undefined && framework === undefined) return { crearEjecutor: crear };
+  return {
+    crearEjecutor: (alAbrir, o) =>
+      crear(alAbrir, { ...o, ...(conectores === undefined ? {} : { conectores }), ...(framework === undefined ? {} : { framework }) }),
+  };
+}
+
+/**
+ * El instalador del framework para las SESIONES, enlazado tarde: el vestíbulo, que abre las
+ * sesiones, nace antes que `montarRutas`, que es quien tiene el cerrojo de la máquina. Mientras no
+ * se enlace, contesta que no está listo (nunca lanza). Extraído para que la composición tenga test.
+ */
+export function instaladorDeFrameworkTardio(): {
+  puerto: InstaladorDeFrameworkPort;
+  enlazar: (instalador: InstaladorDeFrameworkPort) => void;
+} {
+  let real: InstaladorDeFrameworkPort | undefined;
+  const noListo = "la consola todavía no puede instalar el framework";
+  return {
+    puerto: {
+      plan: async (aparato) => (real === undefined ? { motivo: noListo } : real.plan(aparato)),
+      instalar: async (aparato, o) => (real === undefined ? { ok: false, motivo: noListo } : real.instalar(aparato, o)),
+    },
+    enlazar: (instalador) => {
+      real = instalador;
+    },
+  };
 }
 
 /** Los pasos, reexportados para quien monte otra piel sobre el mismo vestíbulo. */
 export type { OpcionDeEntorno, PasoDelVestibulo };
+
+/** La forma de una elección de framework que llega por el cable: un sha o un id de fichero, nada más. */
+function eleccionAceptable(x: unknown): x is EleccionDeFramework {
+  if (typeof x !== "object" || x === null) return false;
+  const e = x as Record<string, unknown>;
+  const claves = Object.keys(e);
+  if (claves.length !== 1) return false;
+  if (claves[0] === "local") return typeof e.local === "string" && /^[0-9a-f]{64}$/.test(e.local);
+  if (claves[0] === "catalogo") return typeof e.catalogo === "number" && Number.isInteger(e.catalogo) && e.catalogo > 0;
+  return false;
+}

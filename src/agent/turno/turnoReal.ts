@@ -27,7 +27,7 @@ import { rutaRealDeVirtual } from "../../core/rutaVirtual.js";
 import type { Piel } from "../../core/turno.js";
 import { Bitacora } from "../../core/bitacora.js";
 import { correrTurno } from "../../core/turno.js";
-import type { ConectoresPort, FuentesPort, IconosPort, ModelosPort, SkillsPort, VerifierPort } from "../../core/ports.js";
+import type { ConectoresPort, FuentesPort, InstaladorDeFrameworkPort, IconosPort, ModelosPort, SkillsPort, VerifierPort } from "../../core/ports.js";
 import { iconosEnRed } from "../config/iconosEnRed.js";
 import { fuentesEnRed } from "../config/fuentesEnRed.js";
 import type { EstadoDeVerificador, ResultadoDeTurno } from "../../core/entrega.js";
@@ -271,6 +271,11 @@ export async function abrirSesionReal(opciones: {
    */
   conectores?: ConectoresPort;
   /**
+   * Instalar el framework de XOne en el aparato de la sesión (la tool `instalar_framework`). Solo lo
+   * pasa la web, que es quien tiene el cerrojo de la máquina; ausente, la tool no se monta.
+   */
+  framework?: InstaladorDeFrameworkPort;
+  /**
    * El motor de agente (`core/motor.ts`). Ausente = el de la configuración: `XONECODE_MOTOR`, el
    * `config.json` del proyecto o el global, y si no, `MOTOR_POR_OMISION`. La web lo pasa con el motor con
    * el que NACIÓ la sesión; el terminal, `run`, el banco y los evals lo dejan a la configuración.
@@ -312,6 +317,7 @@ export async function abrirSesionReal(opciones: {
       iconos,
       fuentes: opciones.fuentes ?? fuentesEnRed(),
       ...(opciones.conectores === undefined ? {} : { conectores: opciones.conectores }),
+      ...(opciones.framework === undefined ? {} : { framework: opciones.framework }),
       ...(opciones.verifier === undefined ? {} : { verifier: opciones.verifier }),
       ...(opciones.pedirAprobacion === undefined ? {} : { pedirAprobacion: opciones.pedirAprobacion }),
       ...(opciones.sinAprobacion === undefined ? {} : { sinAprobacion: opciones.sinAprobacion }),

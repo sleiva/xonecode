@@ -260,6 +260,21 @@ export function crearConsolaDeTarea(opciones: {
           sinResolver.push(nombreDe(p));
           continue;
         }
+        // Instalar el framework en el aparato: crear la tarea autoriza instalar lo que YA está en la
+        // copia local, no DESCARGAR de byXOne. Si hay que bajarlo, se rechaza y la tarea aparca con
+        // el remedio; sin descarga, se aplica y se dice, como una escritura más.
+        if (p.dispositivo !== undefined) {
+          if (p.dispositivo.descarga) {
+            decisiones.set(p.id, { type: "reject", message: MENSAJE_DE_RECHAZO_DE_TAREA });
+            sinResolver.push(
+              "instalar el framework: no hay ninguna versión descargada, y una tarea no descarga (instálala desde Ajustes → Dispositivos)"
+            );
+            continue;
+          }
+          decisiones.set(p.id, { type: "approve" });
+          opciones.escribir(`\n✎ ${p.descripcion} —es una tarea de fondo y la versión ya estaba descargada—\n`);
+          continue;
+        }
         decisiones.set(p.id, { type: "approve" });
         autorizadas.push(nombreDe(p));
       }

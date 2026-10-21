@@ -77,7 +77,7 @@ import {
   CatalogoModelos, baseUrlDeOllama, baseUrlDeOllamaCloud, capacidadesDeOllama,
 } from "../agent/config/catalogoModelos.js";
 import type { Esfuerzo } from "../core/esfuerzo.js";
-import type { ConectoresPort } from "../core/ports.js";
+import type { ConectoresPort, InstaladorDeFrameworkPort } from "../core/ports.js";
 import { abrirSesionReal } from "../agent/turno/turnoReal.js";
 import type { SesionReal } from "../agent/turno/sesionReal.js";
 import { ficherosDelProyecto } from "../agent/turno/ficherosDelProyecto.js";
@@ -536,6 +536,8 @@ export function crearEjecutorReal(
   leerSettings: typeof cargarSettings = cargarSettings,
   /** Los conectores MCP, el mismo servicio de Ajustes. Solo la web lo tiene; ver `abrirSesionReal`. */
   conectores?: ConectoresPort,
+  /** El instalador del framework (la tool `instalar_framework`). Solo la web lo tiene. */
+  framework?: InstaladorDeFrameworkPort,
 ): EjecutorDeTurno {
   let sesion: SesionReal | undefined;
   let fuentesVistas: FuentesDeEleccion | undefined;
@@ -598,6 +600,7 @@ export function crearEjecutorReal(
       sesion = await abrirSesionReal({
         raiz: estado.raiz,
         ...(conectores === undefined ? {} : { conectores }),
+        ...(framework === undefined ? {} : { framework }),
         modelos: await modelosDeSesion(estado),
         // El motor con el que NACIÓ la sesión (la web lo guarda en el índice); sin él, el de la
         // configuración. Ver `core/motor.ts`.
@@ -1544,7 +1547,8 @@ export async function main(argvCrudo: string[]): Promise<number> {
               carpetaDeArtefactosDeSesion,
               opcionesDeConsola?.adjuntos,
               cargarSettings,
-              opcionesDeConsola?.conectores
+              opcionesDeConsola?.conectores,
+              opcionesDeConsola?.framework
             ),
           // El tope de la ventana para el contador de contexto de la web, con LA MISMA
           // función que la barra de stdio y la de la TUI. Dos resoluciones del tope serían

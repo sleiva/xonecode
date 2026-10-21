@@ -1,10 +1,11 @@
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { etiquetaDeEstado, seLlegaAlDispositivo } from "../inventarioDeDispositivos.js";
 import { useMedirAlVolver } from "../medirAlVolver.js";
 import { selloDeFecha } from "../selloDeFecha.js";
 import type { EstadoDelCliente } from "../store.js";
 import { formatearMs } from "../tiempo.js";
-import type { Dispositivo, DispositivoElegido, FaseDelLanzamiento } from "../tipos.js";
+import type { Dispositivo, DispositivoElegido, EleccionDeFramework, FaseDelLanzamiento, FrameworksDelAparato } from "../tipos.js";
+import { InstalarFramework } from "./InstalarFramework.js";
 import estilos from "./Ejecutar.module.css";
 
 /**
@@ -43,9 +44,12 @@ export function Ejecutar({
   conectado,
   alRevisar,
   alLanzar,
+  alCopiarTodo,
+  alCopiarModificados,
   alCancelar,
   alElegirDispositivo,
   enUso,
+  framework,
 }: {
   /**
    * El veredicto de la medida. Ausente = todavía no ha llegado ninguna.
@@ -77,6 +81,15 @@ export function Ejecutar({
   alRevisar?: () => void;
   /** El único verbo que puede apagar el botón: ausente = no hay botón. */
   alLanzar?: () => void;
+  /**
+   * «Copiar todos los ficheros»: sube el proyecto entero y relanza la app. Ausente = no hay botón.
+   */
+  alCopiarTodo?: () => void;
+  /**
+   * «Copiar solo los modificados»: el servidor pregunta al APARATO qué tiene distinto (CRC32), sube
+   * solo eso y relanza. Ausente = no hay botón.
+   */
+  alCopiarModificados?: () => void;
   /** Parar el lanzamiento en curso. Ausente = se deja correr, y no se finge poder pararlo. */
   alCancelar?: () => void;
   /** El id del dispositivo elegido. Ausente = la lista se enseña, pero no se elige. */
@@ -86,7 +99,22 @@ export function Ejecutar({
    * una le pisa las capturas, así que se dice en su fila; sigue elegible, porque decidir es de la persona.
    */
   enUso?: readonly { id: string; proyecto: string; tarea?: string }[];
+  /**
+   * Instalar el framework cuando el veredicto dice que falta (`sinFramework`), o ACTUALIZARLO cuando
+   * dice que hay uno más nuevo (`frameworkMasNuevo`): el mismo selector de Ajustes → Dispositivos.
+   * Ausente = no se ofrece ningún botón.
+   */
+  framework?: {
+    frameworks?: FrameworksDelAparato;
+    alPedir: (serie: string) => void;
+    alInstalar: (serie: string, eleccion: EleccionDeFramework, bajarVersion: boolean) => void;
+    /** El `instalacion` del store YA filtrado a `instalar-framework`. */
+    progreso?: EstadoDelCliente["instalacion"];
+    alCancelar: () => void;
+  };
 }) {
+  // El selector del framework abierto, y con qué versión elegida al abrir (la de la actualización).
+  const [selectorDeFramework, setSelectorDeFramework] = useState<{ inicial?: string } | undefined>(undefined);
   // Depende de `conectado`, de `alRevisar` y de CUÁL es el dispositivo elegido. Las tres son
   // entradas del veredicto: el aparato elegido es una de las cosas que `puedeLanzarse` mira, así
   // que cambiar de aparato invalida la medida igual que volver el cable. Sin esa tercera
@@ -112,8 +140,40 @@ export function Ejecutar({
    */
   useMedirAlVolver(conectado !== false, alActualizarDispositivos);
 
+  /**
+   * **Y el veredicto se rehace cuando cambia lo que está A MANO**: enchufar o quitar un móvil, o que
+   * un emulador arranque o se apague. La foto nueva la manda el servidor sola (su vigía de adb,
+   * `agent/dispositivos/vigiaDeAdb.ts`), pero el veredicto se PIDE —es de este proyecto—, y sin esto
+   * seguiría diciendo «se puede lanzar» sobre un teléfono que ya no está.
+   *
+   * La huella es una CADENA (ids y estados), no la lista: la lista es un objeto nuevo en cada foto y
+   * eso sería una medida por foto aunque nada cambiara. La primera foto no cuenta —la medida de
+   * entrar ya va en el efecto de arriba—.
+   */
+  const huellaAMano =
+    dispositivos === undefined
+      ? undefined
+      : dispositivos
+          .filter(seLlegaAlDispositivo)
+          .map((d) => `${d.id}:${d.estado}`)
+          .sort()
+          .join(",");
+  const huellaAnterior = useRef(huellaAMano);
+  useEffect(() => {
+    const antes = huellaAnterior.current;
+    huellaAnterior.current = huellaAMano;
+    if (antes === undefined || huellaAMano === undefined || antes === huellaAMano) return;
+    if (conectado === false || alRevisar === undefined) return;
+    alRevisar();
+  }, [huellaAMano]);
+
   const enCurso = lanzamiento?.estado === "corriendo";
-  const puedeLanzar = conectado === true && veredicto?.listo === true && alLanzar !== undefined && !enCurso;
+  // Las tres condiciones del apagado valen para los TRES verbos (Ejecutar y los dos «Copiar…»):
+  // los tres recorren el mismo camino en el servidor. Cada botón existe solo con su manejador.
+  const listo = conectado === true && veredicto?.listo === true && !enCurso;
+  const puedeLanzar = listo && alLanzar !== undefined;
+  const hayAcciones =
+    listo && (alLanzar !== undefined || alCopiarTodo !== undefined || alCopiarModificados !== undefined);
 
   /**
    * Los que están A MANO ahora mismo: lo conectado y lo arrancado, que es la misma cuenta que
@@ -184,8 +244,50 @@ export function Ejecutar({
                   {falta}
                 </li>
               ))}
+              {/* «Falta el framework» es un DATO del veredicto, no una frase que se interpreta: al lado,
+                  el mismo instalador de Ajustes. Al cerrarlo se vuelve a medir. */}
+              {veredicto.sinFramework === true && veredicto.dispositivo !== undefined && framework !== undefined ? (
+                <li className={estilos.falta}>
+                  <button type="button" disabled={conectado !== true} onClick={() => setSelectorDeFramework({})}>
+                    Instalar framework en «{veredicto.dispositivo.nombre}»
+                  </button>
+                </li>
+              ) : null}
             </ul>
           )}
+          {/* Un framework MÁS NUEVO no es una falta: se puede lanzar igual, así que va fuera de la
+              lista, y la versión y su sucesora las dice el servidor. */}
+          {veredicto.frameworkMasNuevo !== undefined && veredicto.dispositivo !== undefined && framework !== undefined ? (
+            <p className={estilos.actualizacion}>
+              <span>
+                «{veredicto.dispositivo.nombre}» tiene el framework {veredicto.frameworkMasNuevo.instalada}; hay uno más nuevo:{" "}
+                <strong>{veredicto.frameworkMasNuevo.titulo}</strong>.
+              </span>
+              <button
+                type="button"
+                className={estilos.copiar}
+                disabled={conectado !== true}
+                onClick={() => setSelectorDeFramework({ inicial: veredicto.frameworkMasNuevo!.titulo })}
+              >
+                Actualizar framework
+              </button>
+            </p>
+          ) : null}
+          {selectorDeFramework !== undefined && veredicto.dispositivo !== undefined && framework !== undefined ? (
+            <InstalarFramework
+              aparato={{ id: veredicto.dispositivo.id, nombre: veredicto.dispositivo.nombre }}
+              {...(selectorDeFramework.inicial === undefined ? {} : { inicial: selectorDeFramework.inicial })}
+              {...(framework.frameworks === undefined ? {} : { frameworks: framework.frameworks })}
+              {...(framework.progreso === undefined ? {} : { progreso: framework.progreso })}
+              alPedir={() => framework.alPedir(veredicto.dispositivo!.id)}
+              alInstalar={(eleccion, bajar) => framework.alInstalar(veredicto.dispositivo!.id, eleccion, bajar)}
+              alCancelar={framework.alCancelar}
+              alCerrar={() => {
+                setSelectorDeFramework(undefined);
+                alRevisar?.();
+              }}
+            />
+          ) : null}
         </div>
       ) : alRevisar === undefined ? (
         // Nadie ha cableado la petición, y la única razón por la que esta ventana no puede
@@ -203,27 +305,49 @@ export function Ejecutar({
       {/* El verbo ARRIBA y el recorrido debajo: el botón es lo que se pulsa —también después
           de un fallo, que es cuando más se pulsa— y lo que pasó se lee justo debajo. Mientras
           corre no hay botón, así que lo que queda es el recorrido solo. */}
-      {puedeLanzar ? (
+      {hayAcciones ? (
         <div className={estilos.acciones}>
-          <button
-            type="button"
-            className={estilos.ejecutar}
-            // Dice EN QUÉ aparato va a lanzar, y no «Ejecutar» a secas: el sujeto de la
-            // promesa es lo que la hace comprobable — con dos dispositivos a mano, el mismo
-            // botón lanzaría en uno distinto según lo que estuviera elegido en otra pestaña.
-            title={
-              destino === undefined
-                ? "Lanza la app del proyecto en el dispositivo de esta sesión"
-                : `Lanza la app del proyecto en ${destino}`
-            }
-            onClick={alLanzar}
-          >
-            {destino === undefined ? "Ejecutar en el dispositivo de la sesión" : `Ejecutar en ${destino}`}
-          </button>
+          {puedeLanzar ? (
+            <button
+              type="button"
+              className={estilos.ejecutar}
+              // Dice EN QUÉ aparato va a lanzar, y no «Ejecutar» a secas: el sujeto de la
+              // promesa es lo que la hace comprobable — con dos dispositivos a mano, el mismo
+              // botón lanzaría en uno distinto según lo que estuviera elegido en otra pestaña.
+              title={
+                destino === undefined
+                  ? "Lanza la app del proyecto en el dispositivo de esta sesión"
+                  : `Lanza la app del proyecto en ${destino}`
+              }
+              onClick={alLanzar}
+            >
+              {destino === undefined ? "Ejecutar en el dispositivo de la sesión" : `Ejecutar en ${destino}`}
+            </button>
+          ) : null}
+          {alCopiarTodo === undefined ? null : (
+            <button
+              type="button"
+              className={estilos.copiar}
+              title="Sube todos los ficheros del proyecto al dispositivo y relanza la app"
+              onClick={alCopiarTodo}
+            >
+              Copiar todos los ficheros
+            </button>
+          )}
+          {alCopiarModificados === undefined ? null : (
+            <button
+              type="button"
+              className={estilos.copiar}
+              title="Compara con lo que tiene el dispositivo, sube solo lo distinto o lo que falta y relanza la app"
+              onClick={alCopiarModificados}
+            >
+              Copiar solo los modificados
+            </button>
+          )}
         </div>
       ) : null}
 
-      {lanzamiento === undefined ? null : (
+      {lanzamiento === undefined || !esDeAqui(lanzamiento, veredicto?.proyecto, elegido?.id ?? veredicto?.dispositivo?.id) ? null : (
         <Recorrido
           lanzamiento={lanzamiento}
           {...(destino === undefined ? {} : { destino })}
@@ -299,6 +423,23 @@ export function Ejecutar({
  * que se enseña deja de ser lo que pasó. Y la FASE y el TIEMPO son del cable: `ms` se mide
  * desde que se dijo `corriendo`, que es exactamente lo que esta tarjeta está contando.
  */
+/**
+ * ¿El recorrido es de ESTE proyecto y de ESTE aparato? Uno en marcha se enseña siempre —hay que poder
+ * verlo y pararlo—; uno TERMINADO solo donde se lanzó. Medido en la pantalla del usuario: tras cambiar
+ * de móvil seguía «La app arrancó y está viva en SM G996B», que se leía como dicho del nuevo. Lo que no
+ * consta (un recorrido sin aparato, o sin aparato elegido) no se usa para esconder.
+ */
+export function esDeAqui(
+  lanzamiento: NonNullable<EstadoDelCliente["lanzamiento"]>,
+  proyecto: string | undefined,
+  aparato: string | undefined
+): boolean {
+  if (lanzamiento.estado === "corriendo") return true;
+  if (lanzamiento.proyecto !== undefined && proyecto !== undefined && lanzamiento.proyecto !== proyecto) return false;
+  if (lanzamiento.dispositivo !== undefined && aparato !== undefined && lanzamiento.dispositivo.id !== aparato) return false;
+  return true;
+}
+
 function Recorrido({
   lanzamiento,
   destino,
@@ -329,8 +470,11 @@ function Recorrido({
   return (
     <section className={estilos.recorrido} data-estado={lanzamiento.estado}>
       <p className={estilos.cabeceraDelRecorrido}>
-        <span className={estilos.fase}>{ETIQUETA_DE_FASE[lanzamiento.fase]}</span>
-        <span className={estilos.tiempo}>{formatearMs(lanzamiento.ms)}</span>
+        {/* La FASE solo mientras corre: «comprobando que arrancó» sobre un recorrido ya acabado se
+            leía como algo en marcha. Acabado, es el último lanzamiento, y si se quedó a medias se
+            dice en qué fase. */}
+        <span className={estilos.fase}>{cabeceraDe(lanzamiento)}</span>
+        <span className={estilos.tiempo}>{enCurso ? formatearMs(lanzamiento.ms) : `duró ${formatearMs(lanzamiento.ms)}`}</span>
         {enCurso && alCancelar !== undefined ? (
           // Cancelar SOLO mientras corre y SOLO si hay a quién pedírselo: sobre un recorrido
           // cerrado no hay nada que parar, y sin manejador el botón no llevaría a ninguna
@@ -351,6 +495,19 @@ function Recorrido({
       ) : null}
     </section>
   );
+}
+
+function cabeceraDe(lanzamiento: NonNullable<EstadoDelCliente["lanzamiento"]>): string {
+  switch (lanzamiento.estado) {
+    case "corriendo":
+      return ETIQUETA_DE_FASE[lanzamiento.fase];
+    case "ok":
+    case "cancelada":
+      return "Último lanzamiento";
+    case "fallo":
+    case "colgada":
+      return `Último lanzamiento · se quedó en «${ETIQUETA_DE_FASE[lanzamiento.fase]}»`;
+  }
 }
 
 /**
@@ -392,6 +549,7 @@ function desenlaceDe(
  */
 const ETIQUETA_DE_FASE: Record<FaseDelLanzamiento, string> = {
   comprobando: "comprobando el dispositivo",
+  comparando: "comparando con el aparato",
   empaquetando: "empaquetando la app",
   subiendo: "subiendo al dispositivo",
   reiniciando: "reiniciando el framework",

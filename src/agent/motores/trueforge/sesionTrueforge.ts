@@ -38,6 +38,8 @@ import type {
   IconosPort,
   FuentesPort,
   ConectoresPort,
+  InstaladorDeFrameworkPort,
+  PlanDeFramework,
   Papel,
   ModelosPort,
   MotorExterno,
@@ -68,6 +70,7 @@ import { createTokenTracker, type TokenTracker } from "../../../vendor/tokenTrac
 import { MAX_APPROVAL_ROUNDS, type Decision } from "../../../vendor/hitl.js";
 import { resumenDelEntorno } from "../../../core/shellDeAgente.js";
 import { artefactosNuevos, backendDeAgente, entornoDeLaShellDelProyecto, fotoDeArtefactos, lectorDelDispositivoDeSesion, scriptsConRuta } from "../../grafo/proyecto.js";
+import { crearInstalarFramework, NOMBRE_INSTALAR_FRAMEWORK, recibeInstalarFramework } from "../../grafo/instalarFramework.js";
 import { carpetaDeHotswap } from "../../../core/hotswap.js";
 import { cargarAgentes } from "../../subagentes/agentesEnDisco.js";
 import { bloqueDeAprendido, NOMBRE_APUNTAR_APRENDIZAJE, USO_DE_APRENDIDO_EXTERNO, USO_DE_APUNTAR_APRENDIZAJE } from "../../../core/aprendido.js";
@@ -581,6 +584,15 @@ export const USO_DE_CONVERTIR_A_P =
   "Los px de una maqueta (su code.html, su imagen) NO son p: toda medida que copies de ella —anchos, altos, márgenes, " +
   "paddings, tamaño de iconos— pasa ANTES por `convertir_a_p`, todas de una vez, y escribes lo que devuelve.";
 
+/**
+ * CUÁNDO instalar el framework, junto a la lista de tools y solo a quien la tiene montada (la web): nombrada solo
+ * en la lista, una tool se queda sin usar (el caso medido de `USO_DE_XONE_ATRIBUTOS`). No va en la skill, que llega
+ * también a los motores externos, que no la tienen.
+ */
+export const USO_DE_INSTALAR_FRAMEWORK =
+  "Si un despliegue o un reinicio dice `FRAMEWORK_AUSENTE`, llama a `instalar_framework` (pide aprobación y lo instala en el " +
+  "aparato de la sesión) y vuelve a lanzar. No lo instales con adb a mano ni desinstales nada.";
+
 export function notaDeTools(nombres: readonly string[], limite: string): string {
   return `NOTA DEL HARNESS: aunque tu identidad diga lo contrario, NO tienes las mismas tools que quien te delega. Tienes ${nombres
     .map((n) => `\`${n}\``)
@@ -694,6 +706,11 @@ export interface OpcionesDeSesionTrueforge {
    * web: ausente —el terminal, `run`, los evals— es que ningún agente recibe sus tools.
    */
   conectores?: ConectoresPort;
+  /**
+   * Instalar el framework de XOne en el aparato de la sesión (la tool `instalar_framework`). Solo lo
+   * pasa la web, que es quien tiene el cerrojo de la máquina; ausente, la tool no se monta.
+   */
+  framework?: InstaladorDeFrameworkPort;
   hilo?: string;
   /**
    * El índice de `xone_navegacion`. Solo para doblarlo en un test: ausente es el REAL, sobre la
@@ -1247,6 +1264,20 @@ export async function abrirSesionTrueforge(
           }) as unknown as ToolDeLangchain,
         ]
       : []),
+    // Instalar el framework en el aparato de la sesión cuando el despliegue dice que falta: a quien
+    // ejecuta y a quien lo llama en su bucle, y solo con el puerto (la web). Pide aprobación con su
+    // propia tarjeta (`dispositivo`, en las rondas de abajo), no como una escritura del proyecto.
+    ...(opciones.framework !== undefined && recibeInstalarFramework(agente)
+      ? [
+          crearInstalarFramework({
+            instalador: opciones.framework,
+            dispositivo: lectorDelDispositivoDeSesion(opciones.artefactos),
+            // La del turno, como la shell: el adaptador de las propias no pasa ninguna, y sin esta Parar
+            // dejaría la descarga corriendo con el cerrojo de la máquina puesto.
+            senal: () => aborto?.signal,
+          }) as unknown as ToolDeLangchain,
+        ]
+      : []),
     // ¿Cambió la zona tras el toque? Al conductor, que es quien saca las capturas: comprueba una
     // ACCIÓN suya, no juzga la pantalla (eso sigue siendo del crítico y de `comparar_capturas`).
     ...(carpeta !== undefined && agente.ejecucion === true
@@ -1537,6 +1568,7 @@ export async function abrirSesionTrueforge(
       ...(nombres.includes(NOMBRE_ATRIBUTOS_XONE) ? [USO_DE_XONE_ATRIBUTOS] : []),
       ...(nombres.includes(NOMBRE_CONVERTIR_A_P) ? [USO_DE_CONVERTIR_A_P] : []),
       ...(nombres.includes(NOMBRE_APUNTAR_APRENDIZAJE) ? [USO_DE_APUNTAR_APRENDIZAJE] : []),
+      ...(nombres.includes(NOMBRE_INSTALAR_FRAMEWORK) ? [USO_DE_INSTALAR_FRAMEWORK] : []),
     ].join("\n");
     // Lo aprendido en encargos anteriores, leído AHORA (otro encargo pudo apuntar algo hace un momento).
     const aprendido = bloqueDeAprendido(leerAprendido(raiz));
@@ -2110,6 +2142,32 @@ export async function abrirSesionTrueforge(
           const diffs = new Map<string, LineaDeDiff[]>();
           const autonomo = opciones.sinAprobacion?.() === true;
           for (const p of pendientes) {
+            // Instalar el framework actúa sobre el APARATO, no sobre el proyecto: su propia tarjeta, sin
+            // diff, y fuera de la cuenta de escrituras. En autónomo se aplica y se dice; si no, a la persona
+            // —o, en una tarea, a `consolaDeTarea.ts`, que solo la deja pasar si no hay que descargar—.
+            if (p.nombre === NOMBRE_INSTALAR_FRAMEWORK) {
+              const aparato = lectorDelDispositivoDeSesion(opciones.artefactos)();
+              const plan =
+                opciones.framework === undefined || aparato === undefined
+                  ? { motivo: "no hay aparato elegido en esta sesión" }
+                  : await opciones.framework.plan({ id: aparato.id, nombre: aparato.nombre });
+              const tarjeta = tarjetaDeFramework(plan);
+              if (autonomo) {
+                decisiones.set(p.clave, { type: "approve" });
+                yield { tipo: "aviso", texto: `modo autónomo: ${tarjeta.descripcion}, sin preguntar`, severidad: "aviso" };
+                continue;
+              }
+              humanos.push({
+                id: p.clave,
+                origen: quienEs.get(p.hilo) ?? p.hilo,
+                descripcion: tarjeta.descripcion,
+                decisionesPermitidas: ["approve", "reject"],
+                // Sin plan (sin versión que instalar) cuenta como «habría que descargar»: en una tarea aparca.
+                dispositivo: { descarga: "motivo" in plan ? true : plan.descarga },
+              });
+              diffs.set(p.clave, tarjeta.lineas);
+              continue;
+            }
             // Una tool de un CONECTOR que escribe (generar en Stitch…) va SIEMPRE a una persona, también
             // en modo autónomo: el modo gobierna las escrituras LOCALES, como con `/sync subir`. Sin
             // fichero: la tarjeta enseña el conector, la tool y sus argumentos enteros.
@@ -2644,4 +2702,28 @@ export async function abrirSesionTrueforge(
       aborto?.abort(new Error("sesión cerrada"));
     },
   } as SesionReal & { agregarNota(texto: string): void; detener(texto: string): void; readonly llamadasTiradasPorDetener: number };
+}
+
+/**
+ * La tarjeta de `instalar_framework`: qué versión, en qué aparato, si hay que descargarla y qué tiene
+ * ahora. Sin diff: no es un fichero del proyecto.
+ */
+function tarjetaDeFramework(plan: PlanDeFramework | { motivo: string }): { descripcion: string; lineas: LineaDeDiff[] } {
+  if ("motivo" in plan) {
+    return {
+      descripcion: "quiere instalar el framework de XOne en el aparato",
+      lineas: [{ tipo: "igual", texto: `[aparato] no se puede instalar ahora: ${plan.motivo}` }],
+    };
+  }
+  const tamano = plan.bytes === undefined ? "" : `, ${Math.max(1, Math.round(plan.bytes / 1024 ** 2))} MB`;
+  return {
+    descripcion: `quiere instalar el framework ${plan.titulo} en «${plan.aparato}»`,
+    lineas: [
+      {
+        tipo: "anadido",
+        texto: `[aparato] se instala el framework ${plan.titulo} en «${plan.aparato}» (${plan.descarga ? `se descarga de byXOne${tamano}` : "ya descargado"}) — adb install -r, sin desinstalar`,
+      },
+      ...(plan.instalada === undefined ? [] : [{ tipo: "quitado" as const, texto: `[aparato] ahora tiene ${plan.instalada}` }]),
+    ],
+  };
 }
