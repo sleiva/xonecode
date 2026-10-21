@@ -1258,7 +1258,8 @@ export async function abrirSesionTrueforge(
     razonamientoPendiente.set(salida, [...(razonamientoPendiente.get(salida) ?? []), razonamiento]);
   };
   const razonamientoDeSalida = (salida: number): number | undefined => razonamientoPendiente.get(salida)?.shift();
-  const llm = modeloParaTrueforge({ modelo: () => clienteDe("papel:trabajo:", () => modelos.paraPapel("trabajo")), senal: () => aborto?.signal, alRazonar });
+  // El raíz, con la caché de UNA HORA (`DuracionDeCache`): espera a cada especialista y con 5 min la perdía entera.
+  const llm = modeloParaTrueforge({ modelo: () => clienteDe("papel:trabajo:raiz", () => modelos.paraPapel("trabajo", undefined, undefined, undefined, "1h")), senal: () => aborto?.signal, alRazonar });
   /**
    * El modelo de la COMPACTACIÓN: el mismo del raíz, con el pensamiento APAGADO donde el modelo lo
    * admite (`core/esfuerzo.ts#pensamientoAplicable`: hoy DeepSeek; en los demás no se manda nada que

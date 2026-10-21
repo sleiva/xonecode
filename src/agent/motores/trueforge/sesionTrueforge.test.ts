@@ -774,6 +774,30 @@ describe("una sesión con el motor TrueForge", () => {
     expect(s.consumo().contexto).toBe(1_000);
   }, 30_000);
 
+  it("solo el raíz pide la caché de UNA HORA: espera a los especialistas más de 5 min, y ellos llaman seguido", async () => {
+    const raiz = proyecto();
+    const { m } = modelosConGuion([
+      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "c1", name: "create_sub_agent", args: JSON.stringify({ name: "consultant-xone", input: "¿qué es un mapcol?" }) }] })],
+      [new AIMessageChunk({ content: "Una referencia a otra colección." })],
+      [new AIMessageChunk({ content: "Hecho." })],
+    ]);
+    const cachePorLlamada: (string | undefined)[] = [];
+    const espia = {
+      ...m,
+      paraPapel: (papel: string, esfuerzo?: string, clase?: string, pensamiento?: string, cache?: string) => {
+        const base = (m.paraPapel as (...a: unknown[]) => { stream: (x: unknown) => unknown; bindTools: (t: unknown) => unknown })(papel, esfuerzo, clase, pensamiento, cache);
+        const propio = {
+          bindTools: (t: unknown) => (base.bindTools(t), propio),
+          stream: (x: unknown) => (cachePorLlamada.push(cache), base.stream(x)),
+        };
+        return propio;
+      },
+    } as unknown as ModelosPort;
+    const s = await abrirSesionTrueforge({ raiz, modelos: espia, entorno: ENTORNO, skills: CATALOGO });
+    await s.turno("pregunta", piel().p);
+    expect(cachePorLlamada).toEqual(["1h", undefined, "1h"]);
+  }, 30_000);
+
   it("con un modelo de ventana GRANDE (DeepSeek) el raíz NO se compacta a 40.000: el umbral sale de su ventana", async () => {
     const raiz = proyecto();
     const { m, vistos } = modelosConGuion([

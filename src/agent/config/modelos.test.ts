@@ -102,6 +102,22 @@ describe("la caché de Anthropic viaja en la petición", () => {
     expect(cuerpos.length).toBeGreaterThan(0);
     expect(cuerpos[0]!["cache_control"]).toEqual({ type: "ephemeral" });
   });
+
+  it("con `1h` la pide de UNA HORA, y solo quien la pide", async () => {
+    const cuerpos: Record<string, unknown>[] = [];
+    globalThis.fetch = (async (_url: unknown, init?: { body?: unknown }) => {
+      cuerpos.push(JSON.parse(String(init?.body)));
+      return new Response(
+        JSON.stringify({ id: "msg_1", type: "message", role: "assistant", model: "claude-sonnet-5-5", content: [{ type: "text", text: "ok" }], stop_reason: "end_turn", stop_sequence: null, usage: { input_tokens: 1, output_tokens: 1 } }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      );
+    }) as typeof fetch;
+    const modelos = new Modelos({ bandera: "anthropic/claude-sonnet-5-5" });
+    for (const cliente of [modelos.paraPapel("trabajo", undefined, undefined, undefined, "1h"), modelos.paraPapel("trabajo")]) {
+      await (cliente as { invoke: (m: unknown) => Promise<unknown> }).invoke([{ role: "user", content: "hola" }]).catch(() => undefined);
+    }
+    expect(cuerpos.map((c) => c["cache_control"])).toEqual([{ type: "ephemeral", ttl: "1h" }, { type: "ephemeral" }]);
+  });
 });
 
 describe("el esfuerzo, contra el invocationParams de cada cliente", () => {

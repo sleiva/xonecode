@@ -11,7 +11,7 @@
 
 import type { HechosDelProyecto } from "./hechosDelProyecto.js";
 import type { Proveedor } from "./modelos.js";
-import type { ClaseDeTrabajo, Esfuerzo, Pensamiento } from "./esfuerzo.js";
+import type { ClaseDeTrabajo, DuracionDeCache, Esfuerzo, Pensamiento } from "./esfuerzo.js";
 import type { ConsumoDeTurno, ConsumoPorModelo } from "./actos.js";
 import { sumarPorModelo } from "./actos.js";
 import type { EstadoDeVerificador, VeredictoDeTarea } from "./entrega.js";
@@ -395,8 +395,10 @@ export interface ModelosPort {
    * papel. Pasar aquí un `xhigh` para un modelo que no lo admite tiene que acabar en un
    * parámetro omitido y no en un 400, y el único sitio que conoce las dos mitades —el
    * nivel elegido y el modelo resuelto— está dentro.
+   *
+   * `cache` sigue la misma regla: opcional, ausente es la de omisión, y quien no tiene caché que pedir la ignora.
    */
-  paraPapel(papel: Papel, esfuerzo?: Esfuerzo, clase?: ClaseDeTrabajo, pensamiento?: Pensamiento): unknown;
+  paraPapel(papel: Papel, esfuerzo?: Esfuerzo, clase?: ClaseDeTrabajo, pensamiento?: Pensamiento, cache?: DuracionDeCache): unknown;
   /**
    * Un modelo CONCRETO, «proveedor/modelo», para el subagente que fija el suyo
    * (`core/agentes.ts`). Los papeles no sirven para esto: son tres funciones del turno

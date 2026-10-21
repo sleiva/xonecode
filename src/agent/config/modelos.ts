@@ -9,7 +9,7 @@ import {
   type Eleccion, type FuentesDeEleccion, type Proveedor, type ProveedorDeclarado,
 } from "../../core/modelos.js";
 import { topeDeSalida } from "../../core/contextos.js";
-import { esfuerzoAplicable, pensamientoAplicable, type CapacidadesVivas, type ClaseDeTrabajo, type Esfuerzo, type Pensamiento } from "../../core/esfuerzo.js";
+import { esfuerzoAplicable, pensamientoAplicable, type CapacidadesVivas, type ClaseDeTrabajo, type DuracionDeCache, type Esfuerzo, type Pensamiento } from "../../core/esfuerzo.js";
 import { baseUrlDeOllama, baseUrlDeOllamaCloud } from "./catalogoModelos.js";
 import { crearMemoriaDeEco, fetchConEcoDeRazonamiento } from "./ecoDeRazonamiento.js";
 import { ChatGoogleGenerativeAICompatible } from "./gemini.js";
@@ -97,9 +97,9 @@ export class Modelos implements ModelosPort {
     this.esfuerzoDeLaSesion = esfuerzo;
   }
 
-  paraPapel(papel: Papel, esfuerzo?: Esfuerzo, clase?: ClaseDeTrabajo, pensamiento?: Pensamiento): unknown {
+  paraPapel(papel: Papel, esfuerzo?: Esfuerzo, clase?: ClaseDeTrabajo, pensamiento?: Pensamiento, cache?: DuracionDeCache): unknown {
     return construirModelo(
-      this.eleccion[papel], this.personalizados(), esfuerzo ?? this.esfuerzoDeLaSesion, this.capacidades, this.identidad, clase, pensamiento,
+      this.eleccion[papel], this.personalizados(), esfuerzo ?? this.esfuerzoDeLaSesion, this.capacidades, this.identidad, clase, pensamiento, cache,
     );
   }
 
@@ -246,6 +246,7 @@ function construirModelo(
   identidad: () => string | undefined = () => undefined,
   clase?: ClaseDeTrabajo,
   pensamiento?: Pensamiento,
+  cache?: DuracionDeCache,
 ): unknown {
     /**
      * **El nivel se criba AQUÍ y contra ESTE modelo, no donde se eligió.**
@@ -318,8 +319,9 @@ function construirModelo(
           // de caché; con esto, 9.229. Es la caché AUTOMÁTICA (`cache_control` de primer nivel): el corte va al último bloque
           // y avanza con la conversación, que es lo que hace un bucle de agente. Va en `invocationKwargs` porque la
           // dependencia (1.5.2) lo extiende el ÚLTIMO en las dos peticiones, con y sin streaming; su `cache_control` de
-          // `invocationParams` sale de las opciones de CADA llamada y llegaría `undefined`. TTL de 5 min, el de omisión.
-          invocationKwargs: { cache_control: { type: "ephemeral" } },
+          // `invocationParams` sale de las opciones de CADA llamada y llegaría `undefined`. TTL de 5 min, el de omisión,
+          // salvo para quien pide la de una hora (`DuracionDeCache`): el primer nivel admite `ttl` y no hay otros cortes.
+          invocationKwargs: { cache_control: { type: "ephemeral", ...(cache === undefined ? {} : { ttl: cache }) } },
           ...(topeDeSalida("anthropic", modelo) === undefined
             ? {}
             : { maxTokens: topeDeSalida("anthropic", modelo) }),

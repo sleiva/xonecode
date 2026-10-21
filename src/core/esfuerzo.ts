@@ -218,6 +218,14 @@ export function claseDeTrabajo(a: Pick<Agente, "ejecucion">): ClaseDeTrabajo | u
  */
 export type Pensamiento = "apagado" | "activo";
 
+/**
+ * Cuánto VIVE la caché del prefijo que se pide, donde se pide (hoy solo Anthropic: Gemini y DeepSeek cachean solos).
+ * Ausente es la de omisión, 5 min. `1h` cuesta 2× al escribir en vez de 1,25×, así que solo paga en quien ESPERA entre
+ * llamadas: simulado el 21-10-2026 sobre 8 sesiones, 1 h para todos ahorraba un 3 % de la entrada y para el orquestador
+ * solo un 11 % — los especialistas llaman seguido y nunca la pierden; el orquestador espera a cada uno.
+ */
+export type DuracionDeCache = "1h";
+
 export function esPensamiento(valor: string): valor is Pensamiento {
   return valor === "apagado" || valor === "activo";
 }
