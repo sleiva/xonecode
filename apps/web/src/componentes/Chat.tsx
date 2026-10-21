@@ -10,6 +10,7 @@ import { ETIQUETAS_DE_CODIGO } from "../etiquetasDeCodigo.js";
 import { BotonDeCopiar } from "./BotonDeCopiar.js";
 import { fechaCompleta, horaDelMensaje } from "../selloDeFecha.js";
 import { CierreDelTurno } from "./CierreDelTurno.js";
+import { abreviar } from "../cifras.js";
 import { useUrlDeArtefacto } from "./Artefactos.js";
 import { IconoDeAbrir, IconoDeArtefacto } from "./IconosDelVisor.js";
 import { IconoDeBajar } from "./IconosDelCompositor.js";
@@ -908,6 +909,8 @@ export function Chat({
    * saber qué viene DESPUÉS —si hay un `fin`, su turno acabó—, y eso no se ve mirando un
    * acto solo.
    */
+  /** Los cierres que ya pinta el pie de su respuesta (`cierreDeLaRespuesta`): los llena la respuesta, que va ANTES. */
+  const cierresEnElPie = new Set<number>();
   const piezas: Array<
     | { tipo: "acto"; acto: Acto; indice: number }
     | { tipo: "pulso"; tramo: TramoDePulso }
@@ -1221,6 +1224,8 @@ export function Chat({
           ) : null}
           {piezas.map((pieza, numero) => conAutor(numero, pieza, (() => {
             if (pieza.tipo === "cierre") {
+              // Justo detrás de una respuesta PINTADA, sus cifras ya van en el pie de esa respuesta (`cierreDeLaRespuesta`).
+              if (cierresEnElPie.has(numero)) return null;
               return (
                 // Sin `<details>`: un turno sin actos de trabajo no tiene nada que desplegar,
                 // y un control que al pulsarlo no enseña nada es el botón muerto de siempre.
@@ -1361,15 +1366,6 @@ export function Chat({
                     </span>
                   </span>
                   <div className={estilos.cuerpoDeLaPersona}>
-                  <p className={estilos.autor}>
-                    <span className={estilos.nombreDelAutor}>Tú</span>
-                    {acto.cuando === undefined || horaDelMensaje(acto.cuando) === undefined ? null : (
-                      <span className={estilos.cifrasDelAutor}>
-                        {" · "}
-                        <HoraDelMensaje cuando={acto.cuando} clase={undefined} />
-                      </span>
-                    )}
-                  </p>
                   {/* Una prosa vacía CON adjuntos se acepta (Task 6, IXCODE-7): sin texto no
                       hay nada que pintar aquí, y las fichas de abajo bastan. */}
                   {acto.texto === "" ? null : <div className={estilos.textoDeLaPersona}>{acto.texto}</div>}
@@ -1388,11 +1384,11 @@ export function Chat({
                   </div>
                   {/* Copiar, DEBAJO de la burbuja y a la derecha (petición suya: dentro, pegado al texto, no se veía bien),
                       como el de las respuestas. */}
-                  {acto.texto === "" ? null : (
-                    <span className={estilos.copiarDeLaPersona}>
-                      <BotonDeCopiar texto={acto.texto} etiqueta="Copiar el mensaje" />
-                    </span>
-                  )}
+                  {/* Debajo de la burbuja, en UNA línea a la derecha: la hora y copiar, como el pie de las respuestas. */}
+                  <span className={estilos.pieDeLaPersona}>
+                    <HoraDelMensaje cuando={acto.cuando} clase={estilos.hora} />
+                    {acto.texto === "" ? null : <BotonDeCopiar texto={acto.texto} etiqueta="Copiar el mensaje" forma="pie" />}
+                  </span>
                 </div>
               );
             }
@@ -1469,10 +1465,19 @@ export function Chat({
                     código ya traen el suyo (lo pinta `MarkdownText`), pero copiar el
                     mensaje completo no se podía sin seleccionar a mano.
                   */}
+                  {/* UN pie (petición suya: los copiar y las cifras no estaban alineados): a la izquierda la hora
+                      (IXCODE-24) y, si el turno acabó aquí sin trabajo, su duración y sus tokens; a la derecha, copiar. */}
                   <div className={estilos.acciones}>
-                    {/* La hora (IXCODE-24) va al lado de copiar, y los dos SIEMPRE a la vista. */}
-                    <HoraDelMensaje cuando={acto.cuando} clase={estilos.hora} />
-                    <BotonDeCopiar texto={acto.texto} etiqueta="Copiar la respuesta" />
+                    <span className={estilos.datosDelPie} data-pie="">
+                      {(() => {
+                        const cierre = cierreDeLaRespuesta(piezas, numero);
+                        if (cierre === undefined) return null;
+                        cierresEnElPie.add(numero + 1);
+                        return <CifrasDelPie ms={cierre.ms} consumo={cierre.consumo} />;
+                      })()}
+                      <HoraDelMensaje cuando={acto.cuando} clase={estilos.hora} />
+                    </span>
+                    <BotonDeCopiar texto={acto.texto} etiqueta="Copiar la respuesta" forma="pie" />
                   </div>
                 </div>
               );
@@ -1545,5 +1550,50 @@ function HoraDelMensaje({ cuando, clase }: { cuando: string | undefined; clase: 
     <time className={clase} dateTime={cuando} {...(titulo === undefined ? {} : { title: titulo })}>
       {texto}
     </time>
+  );
+}
+
+/**
+ * El cierre de un turno SIN trabajo que va justo detrás de la respuesta `numero`: sus cifras se pintan en el pie de esa
+ * respuesta, no en una línea aparte. `undefined` si la pieza no es una respuesta o la siguiente no es su cierre.
+ */
+function cierreDeLaRespuesta(
+  piezas: readonly { tipo: string }[],
+  numero: number
+): { ms: number; consumo: ConsumoDeTurno } | undefined {
+  const esta = piezas[numero] as { tipo: string; acto?: { tipo: string } } | undefined;
+  const siguiente = piezas[numero + 1] as { tipo: string; ms?: number; consumo?: ConsumoDeTurno } | undefined;
+  if (esta?.tipo !== "acto" || esta.acto?.tipo !== "asistente" || siguiente?.tipo !== "cierre") return undefined;
+  return siguiente.ms === undefined || siguiente.consumo === undefined ? undefined : { ms: siguiente.ms, consumo: siguiente.consumo };
+}
+
+/**
+ * Las cifras del turno en el PIE de una respuesta (opción F de su lienzo): la duración y los tokens en UN número, cada uno
+ * con su icono; el desglose (entrada, salida, caché) en el `title`, y dicho entero para quien lo oye. Ausente no se pinta.
+ */
+function CifrasDelPie({ ms, consumo }: { ms: number; consumo: ConsumoDeTurno }) {
+  const entrada = consumo.modelo.entrada + consumo.externo.entrada;
+  const salida = consumo.modelo.salida + consumo.externo.salida;
+  const cache = consumo.modelo.cache + consumo.externo.cache;
+  const conCoste = entrada + salida > 0;
+  const detalle = `↑ ${abreviar(entrada)} de entrada · ↓ ${abreviar(salida)} de salida${cache > 0 ? ` · ${abreviar(cache)} de caché` : ""}`;
+  return (
+    <>
+      <span className={estilos.cifraDelPie}>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+          <circle cx="12" cy="12" r="9" />
+          <path d="M12 7v5l3 2" />
+        </svg>
+        {`${(Math.round(ms / 100) / 10).toLocaleString("es-ES")} s`}
+      </span>
+      {conCoste ? (
+        <span className={estilos.cifraDelPie} title={detalle} aria-label={`${abreviar(entrada + salida)} tokens: ${detalle}`}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+            <path d="M4 7h16M4 12h10M4 17h6" />
+          </svg>
+          {`${abreviar(entrada + salida)} tokens`}
+        </span>
+      ) : null}
+    </>
   );
 }

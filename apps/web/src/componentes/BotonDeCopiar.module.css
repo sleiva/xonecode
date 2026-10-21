@@ -33,3 +33,33 @@
 .boton[data-estado="fallo"] {
   color: var(--dsw-alias-state-error-primary);
 }
+
+/* En el PIE de un mensaje (opción F de su lienzo): sin caja y con la palabra; el fondo sale al pasar. */
+.botonDelPie {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--dsw-alias-label-tertiary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.botonDelPie:hover,
+.botonDelPie:focus-visible {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.botonDelPie[data-estado="copiado"] {
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.botonDelPie[data-estado="fallo"] {
+  color: var(--dsw-alias-state-error-primary);
+}

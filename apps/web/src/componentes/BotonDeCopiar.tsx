@@ -20,7 +20,16 @@ import estilos from "./BotonDeCopiar.module.css";
  * seguro y puede estar denegado por permisos: quedarse callado sería prometer una copia que
  * no ocurrió. Y el título cambia, que es lo que un lector de pantalla anuncia.
  */
-export function BotonDeCopiar({ texto, etiqueta = "Copiar" }: { texto: string; etiqueta?: string }) {
+export function BotonDeCopiar({
+  texto,
+  etiqueta = "Copiar",
+  forma = "caja",
+}: {
+  texto: string;
+  etiqueta?: string;
+  /** `caja`: el icono con borde de siempre. `pie`: sin caja y con la palabra, en el pie de un mensaje (su lienzo, opción F). */
+  forma?: "caja" | "pie";
+}) {
   const [estado, setEstado] = useState<"quieto" | "copiado" | "fallo">("quieto");
   const temporizador = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -41,13 +50,14 @@ export function BotonDeCopiar({ texto, etiqueta = "Copiar" }: { texto: string; e
   return (
     <button
       type="button"
-      className={estilos.boton}
+      className={forma === "pie" ? estilos.botonDelPie : estilos.boton}
       data-estado={estado}
       title={titulo}
       aria-label={titulo}
       onClick={() => void copiar()}
     >
       {estado === "copiado" ? <IconCheckOutline16 size={14} /> : <IconCopyOutline16 size={14} />}
+      {forma === "pie" ? <span>{estado === "copiado" ? "Copiado" : estado === "fallo" ? "No se pudo" : "Copiar"}</span> : null}
     </button>
   );
 }

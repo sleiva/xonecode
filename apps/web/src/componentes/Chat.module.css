@@ -1052,9 +1052,63 @@
   padding-left: 0;
 }
 
-/* Copiar el mensaje de la persona: debajo de su burbuja, a la derecha, como el de las respuestas. */
-.usuario > .copiarDeLaPersona {
+/* ── Los PIES de los mensajes, alineados (petición suya: los copiar y las cifras no lo estaban) ───
+   Respuesta: hora y cifras del turno a la izquierda, copiar a la derecha, en UNA línea.
+   Persona: debajo de su burbuja, hora y copiar en una línea a la derecha. */
+/* Opción F de su lienzo: una BARRA fina bajo la respuesta, siempre a la vista: duración y tokens con su icono y la hora a
+   la izquierda, separados por un filete; «Copiar» sin caja a la derecha. */
+.acciones.acciones {
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+.datosDelPie {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 0;
+  min-width: 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Cada dato con su icono, y entre uno y otro un filete vertical. */
+.datosDelPie > * + * {
+  margin-left: 10px;
+  padding-left: 10px;
+  border-left: 1px solid var(--dsw-alias-border-l2);
+}
+
+.cifraDelPie {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.datosDelPie .hora {
+  font-size: 12px;
+}
+
+/* El pie de la persona: la hora y copiar al PASAR (o con el foco dentro), como en su lienzo. */
+.usuario > .pieDeLaPersona {
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.usuario:hover > .pieDeLaPersona,
+.usuario:focus-within > .pieDeLaPersona {
+  opacity: 1;
+}
+
+.usuario > .pieDeLaPersona {
   grid-column: 1;
   grid-row: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
   margin-top: 4px;
 }

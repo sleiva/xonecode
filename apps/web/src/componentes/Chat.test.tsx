@@ -697,7 +697,11 @@ describe("Chat: lo que costó cada turno", () => {
   const herramientas = (linea: string): Acto => ({ tipo: "herramientas", lineas: [linea] });
   /** El texto visible de la línea de cierre, sin los espacios que separan los trozos. */
   const cierres = (container: HTMLElement) =>
-    [...container.querySelectorAll("summary, p")].map((n) => n.textContent ?? "").filter((t) => /[↑↓]/.test(t));
+    // También el PIE de una respuesta (`data-pie`): ahí van las cifras de un turno que acabó en ella sin trabajo, como
+    // «2,6 s · 2,2k tokens» (opción F de su lienzo; el desglose con flechas va en el `title`).
+    [...container.querySelectorAll("summary, p, [data-pie]")]
+      .map((n) => n.textContent ?? "")
+      .filter((t) => /[↑↓]|tokens/.test(t));
 
   it("un turno sin ningún acto de trabajo cuelga su coste de su propio cierre", () => {
     // Sin tramo no había dónde ponerlo, y el gasto de una pregunta contestada a pelo se
@@ -705,9 +709,10 @@ describe("Chat: lo que costó cada turno", () => {
     const { container } = render(
       <Chat actos={[{ tipo: "usuario", texto: "¿qué es XOne?" }, asistente("Una plataforma."), fin(2600, 2200, 5)]} />
     );
-    expect(cierres(container).join(" ")).toContain("2.6s");
-    expect(cierres(container).join(" ")).toContain("2,2k");
-    expect(cierres(container).join(" ")).toContain("5");
+    expect(cierres(container).join(" ")).toContain("2,6 s");
+    // 2200 de entrada + 5 de salida: UN número, y el desglose en el `title`.
+    expect(cierres(container).join(" ")).toContain("2,2k tokens");
+    expect(container.querySelector("[data-pie] [title]")?.getAttribute("title")).toBe("↑ 2,2k de entrada · ↓ 5 de salida");
   });
 
   it("y el turno siguiente, si tampoco tiene trabajo, NO le roba la cifra al anterior", () => {
@@ -731,8 +736,8 @@ describe("Chat: lo que costó cada turno", () => {
     expect(linea).toContain("2.6s");
     expect(linea).toContain("8,8k");
     // …y el de después lleva lo suyo, en su propia línea.
-    expect(cierres(container).join(" ")).toContain("5.9s");
-    expect(cierres(container).join(" ")).toContain("3,4k");
+    expect(cierres(container).join(" ")).toContain("5,9 s");
+    expect(cierres(container).join(" ")).toContain("3,4k tokens");
   });
 
   it("un turno sin consumo no añade una línea: ausente es «no consta»", () => {
@@ -1348,13 +1353,12 @@ describe("la hora de cada mensaje (IXCODE-24)", () => {
     const horas = [...container.querySelectorAll("time")].map((t) => t.getAttribute("datetime"));
     expect(horas).toEqual([cuandoUsuario, cuandoRespuesta]);
     const copiar = screen.getByRole("button", { name: "Copiar la respuesta" });
+    // En el PIE de la respuesta: la hora a la izquierda y copiar a la derecha, en la misma fila.
     expect(copiar.parentElement?.querySelector("time")?.getAttribute("datetime")).toBe(cuandoRespuesta);
-    // Y el mensaje de la persona también se copia: el botón DEBAJO de su burbuja (petición suya, dentro no se veía bien),
-    // y la hora en la línea del autor, «Tú · hoy a las…», dentro de la burbuja.
+    // Y el mensaje de la persona también se copia: DEBAJO de su burbuja, en la misma línea que su hora (petición suya:
+    // los copiar y la hora no estaban alineados).
     const copiarMensaje = screen.getByRole("button", { name: "Copiar el mensaje" });
-    expect(copiarMensaje.closest("p")).toBeNull();
-    const autor = [...container.querySelectorAll("p")].find((p) => /^Tú · /u.test(p.textContent ?? ""));
-    expect(autor?.querySelector("time")?.getAttribute("datetime")).toBe(cuandoUsuario);
+    expect(copiarMensaje.parentElement?.querySelector("time")?.getAttribute("datetime")).toBe(cuandoUsuario);
   });
 
   it("sin `cuando` —una sesión de antes— no se pinta ninguna hora", () => {

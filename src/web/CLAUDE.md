@@ -96,7 +96,10 @@ Ante una discrepancia con el código, **el código manda**.
   «Trabajando ahora» (la primera en marcha, `EnMarcha`), proyectos en rejilla, y Tareas y Tu equipo en dos columnas.
   Las tareas nacen en CIFRAS (`ResumenDeTareas`); «Ver el tablero» monta el `Kanban` de siempre (`tableroAbierto`).
 - **El chat**: la persona en burbuja a la derecha CON su icono, el agente a la izquierda con el de XOneCode (petición
-  suya); «Trabajo del agente» es una pastilla (`.tramo`) que nace SIEMPRE plegada.
+  suya); «Trabajo del agente» es una pastilla (`.tramo`) que nace SIEMPRE plegada. **Un pie por mensaje** (opción F
+  de su lienzo): barra fina con duración y tokens en UN número (desglose en el `title`, `CifrasDelPie`) y la hora, y
+  «Copiar» sin caja (`BotonDeCopiar forma="pie"`); el cierre de un turno sin trabajo va en el pie de su respuesta
+  (`cierreDeLaRespuesta`). La persona: hora y copiar bajo la burbuja, al pasar.
 
 ## Gestor de tareas y conectores
 
