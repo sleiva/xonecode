@@ -25,8 +25,12 @@ export const METODO_DE_COMPARACION_VISUAL = [
   "   - COLOR y LETRA: color, grosor, tamaño de la letra y espacio entre letras.",
   "3. SOBRANTES. Recorre después la CAPTURA y di lo que está en ella y NO en la maqueta.",
   "",
-  "Los números de la maqueta (un 12, un 0…) pueden ser datos de ejemplo y su valor no importa; pero que su SITIO esté",
-  "vacío, o que en su lugar haya otra cosa, sí es una diferencia. Ignora la barra de estado del teléfono (hora, batería),",
+  // Medido en Maset (login): la crítica pedía la versión «5.0.6.1dev» de la maqueta donde la app pinta la real, y los
+  // puntos de una contraseña en un campo que la app abre vacío. Los VALORES son de muestra; su sitio y su estilo, no.
+  "Los VALORES de la maqueta son datos de ejemplo: números (un 12, un 0…), versiones, fechas, nombres, códigos y lo que",
+  "haya escrito en un campo, también los puntos de una contraseña. Que el valor sea OTRO no es una diferencia y no lo",
+  "digas, ni que un campo de entrada esté vacío; de un valor compara solo su estilo (color, letra, tamaño).",
+  "Pero que su SITIO esté vacío, o que en su lugar haya otra cosa, sí es una diferencia. Ignora la barra de estado del teléfono (hora, batería),",
   // Medido en Maset (Entradas/Salidas): «junto a Volver no aparece el 09:41 de la maqueta», y era el reloj de la barra
   // que Stitch dibuja arriba de cada maqueta.
   "también la que la MAQUETA dibuja arriba: su hora («09:41») no es un dato de la pantalla y no falta.",

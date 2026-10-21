@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import type { PantallaDescrita } from "../../core/descripcionDePantalla.js";
 import { describe, expect, it } from "vitest";
-import { crearCriticaVisual, TABLA_DE_TRADUCCION } from "./criticaVisual.js";
+import { crearCriticaVisual, resumenDelInforme, TABLA_DE_TRADUCCION } from "./criticaVisual.js";
 import { decodificarImagen } from "../dispositivos/decodificarImagen.js";
 import type { InvocarVisual } from "../dispositivos/juezVisual.js";
 
@@ -504,5 +504,41 @@ describe("xone_critica_visual con MAQUETA y la captura de un control", () => {
     expect(salida).toMatch(/^NO he juzgado la captura: es de UN CONTROL/);
     expect(salida).toContain("`xone-hotswap shot` (sin `name=`)");
     expect(llamadas).toEqual([]);
+  });
+});
+
+/**
+ * El RESUMEN que abre el informe. Medido en Maset (login): la persona no entendía por qué la crítica final era roja —un
+ * bloqueante medido entre diez observaciones de estilo y notas de datos de ejemplo—. Cuerpo real de esa crítica.
+ */
+describe("el resumen del informe del crítico", () => {
+  const cuerpo = [
+    "GEOMETRÍA, MEDIDA (árbol de controles del aparato contra las cajas de la maqueta: exacta, no es una opinión):",
+    "- BLOQUEANTE · la columna de la lista de la maqueta («Aplicación:», «Framework:», «Versión Code:») NO está en el aparato: ninguna fila lleva texto en ese sitio.",
+    "- «10.09.2026-1» de la maqueta, junto a «5.0.6.1dev», no se pinta en el aparato: su etiqueta está y el número no (su valor puede ser de ejemplo; que su sitio quede vacío, no).",
+    "- (nota) «5.0.6.1dev» de la maqueta dice «Aplicación: 10.09.2026-1 Framework: 5.0.5.7dev Versión Code: 28» en el aparato: otro texto en su sitio (traducido o cambiado), no falta. Comparo su caja igual.",
+    "",
+    "COMPARACIÓN CONTROL A CONTROL, MEDIDA en los píxeles de cada control (la caja del árbol en la captura, la del code.html en la maqueta; en cada línea, maqueta → aparato):",
+    "- No los encuentro en la captura: «Framework:», «Versión Code:».",
+    "- (menor, no hace falta arreglarlo) letra 1,3 veces la de la maqueta en «Bodegas Maset © 2026».",
+    "",
+    "ESTILO, lo que dice el modelo que ve (una OPINIÓN; la redacción no es fiable: fíate de QUÉ",
+    "control señala, no de su explicación, y míralo tú):",
+    "- El campo «CONTRASEÑA DE ACCESO» está vacío.",
+    "- En la píldora «LOGÍSTICA & REPARTO» el icono del camión queda muy separado del texto.",
+  ];
+
+  it("dice POR QUÉ es rojo y cuánto hay de cada clase, en tres líneas", () => {
+    expect(resumenDelInforme(cuerpo, "rojo")).toEqual([
+      "EN RESUMEN: rojo por lo MEDIDO, 1 bloqueante: la columna de la lista de la maqueta («Aplicación:», «Framework:», «Versión Code:») NO está en el aparato: ninguna fila lleva texto en ese sitio.",
+      "Por arreglar o mirar: 1 bloqueante, 2 diferencias medidas (y 1 menor, no hace falta) y 2 observaciones de estilo (una opinión: míralas tú).",
+      "No cuentan: 1 nota (datos de ejemplo, textos traducidos o juntos en un control).",
+    ]);
+  });
+
+  it("un rojo que solo dice el modelo se dice así, y un verde sin nada no lleva cola", () => {
+    const soloEstilo = cuerpo.slice(9);
+    expect(resumenDelInforme(soloEstilo, "rojo")[0]).toBe("EN RESUMEN: rojo por lo que VE el modelo (una opinión); lo medido no tiene nada en rojo.");
+    expect(resumenDelInforme(["GEOMETRÍA, MEDIDA (…):", "- Nada: ningún control tapado."], "verde")).toEqual(["EN RESUMEN: verde, nada que arreglar."]);
   });
 });

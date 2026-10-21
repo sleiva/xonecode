@@ -1309,6 +1309,8 @@ describe("una sesión con el motor TrueForge", () => {
       expect(r.preguntaPendiente).toBeUndefined();
       expect(vistos[0]![0]).toContain("TAREA DE FONDO");
       expect(vistos[0]![0]).toContain("DECISIONES que tomaste tú sin preguntar");
+      // Lo que QUEDA, en cuatro grupos: un dato de ejemplo no puede leerse igual de grave que un fallo.
+      for (const grupo of ["«Por arreglar»", "«No es un defecto»", "«Sin comprobar»", "«No se puede en XOne»"]) expect(vistos[0]![0]).toContain(grupo);
     }, 30_000);
 
     it("sin tarea de fondo, el prompt del raíz no habla de ella", async () => {

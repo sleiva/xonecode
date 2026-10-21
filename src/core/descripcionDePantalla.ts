@@ -21,7 +21,7 @@
  * Las filas descritas de una maqueta sin `code.html` se comparan además contra el árbol medido
  * (`compararConMaqueta` en modo `aproximada`, vía `maquetaDeLaDescripcion`).
  */
-import { tieneLetras, textoParaEmparejar, textoVisible, type ControlDelAparato, type GeometriaDelAparato, type MaquetaMedida } from "./geometriaDePantalla.js";
+import { contieneTexto, tieneLetras, textoParaEmparejar, textoVisible, type ControlDelAparato, type GeometriaDelAparato, type MaquetaMedida } from "./geometriaDePantalla.js";
 
 export const FORMAS = ["pildora", "redondeada", "recta", "circulo"] as const;
 export const LETRAS = ["pequena", "normal", "grande", "enorme"] as const;
@@ -354,7 +354,12 @@ export function compararDescripciones(maqueta: PantallaDescrita, captura: Pantal
     if (j === undefined) {
       // Una cifra o un signo suelto de la maqueta («12», «09:41») es un dato de ejemplo: que falte no es un defecto. Un
       // BOTÓN que falta (una tecla) ya lo dice la geometría, que sí sabe si es un botón.
-      if (filasConPareja.has(fila) && clave(m) !== ICONO && tieneLetras(clave(m))) faltan.push(nombrar(m));
+      if (filasConPareja.has(fila) && clave(m) !== ICONO && tieneLetras(clave(m))) {
+        // Dentro de otro texto de la captura no falta (`contieneTexto`): la app lo escribe junto en un control.
+        const dentro = as.find(({ c: a }) => clave(a) !== ICONO && contieneTexto(a.texto, m.texto));
+        if (dentro === undefined) faltan.push(nombrar(m));
+        else notas.push(`${nombrar(m)} va dentro de ${nombrar(dentro.c)} en la captura: en la maqueta separado, aquí en un solo texto. No falta.`);
+      }
       return;
     }
     const a = as[j]!.c;

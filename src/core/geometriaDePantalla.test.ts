@@ -486,3 +486,33 @@ describe("la hora de la barra de estado de la maqueta", () => {
     expect(h.diferencias.some((d) => d.startsWith("«09:41» de la maqueta, junto a «Volver»"))).toBe(true);
   });
 });
+
+/**
+ * Textos de la maqueta que en el aparato van JUNTOS en un solo control. El caso REAL (Maset, login, 21-10-2026): el pie de
+ * la maqueta es una lista de tres filas —«Aplicación:», «Framework:», «Versión Code:» con su valor al lado— y la app lo
+ * escribe en UNA etiqueta que rellena su `create`. El crítico dio rojo por «la columna de la lista NO está» y «el número
+ * no se pinta», con todo dentro de esa etiqueta. La geometría es la de la última captura y la maqueta, su `code.html`
+ * renderizado a 390×884 con `cajasDeMaqueta`.
+ */
+describe("lo que en el aparato va dentro de otro texto no falta (pie del login de Maset)", () => {
+  const geoLogin = JSON.parse(readFileSync(new URL("./__oro__/geometria/login-maset.geometria.json", import.meta.url), "utf8"));
+  const maquetaLogin: MaquetaMedida = JSON.parse(readFileSync(new URL("./__oro__/geometria/login-maset.maqueta.json", import.meta.url), "utf8"));
+  const aparatoLogin: GeometriaDelAparato = { pantalla: geoLogin.pantalla, barras: geoLogin.barras, controles: controlesDelArbol(geoLogin.arbol) };
+
+  it("ni la columna de etiquetas es bloqueante, ni sus valores «no se pintan»", () => {
+    const h = compararConMaqueta(maquetaLogin, aparatoLogin);
+    expect(h.bloqueantes).toEqual([]);
+    expect(h.diferencias.join("\n")).not.toMatch(/10\.09\.2026-1|«28»|Framework|Aplicación/);
+  });
+
+  it("y se dice UNA vez, como nota: en la maqueta separados, en el aparato en un solo texto", () => {
+    const nota = compararConMaqueta(maquetaLogin, aparatoLogin).notas.find((n) => n.includes("en un solo texto"));
+    expect(nota).toMatch(/«Aplicación:».*«Framework:».*«Versión Code:»/);
+    expect(nota).toMatch(/«10\.09\.2026-1»/);
+  });
+
+  it("pero sin esa etiqueta, la columna sigue faltando", () => {
+    const sinPie: GeometriaDelAparato = { ...aparatoLogin, controles: aparatoLogin.controles.filter((c) => c.nombre !== "MAP_VERSIONAPP") };
+    expect(compararConMaqueta(maquetaLogin, sinPie).bloqueantes.join("\n")).toMatch(/Aplicación/);
+  });
+});

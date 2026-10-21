@@ -218,3 +218,21 @@ describe("lo MENOR no pone el rojo", () => {
   });
 });
 
+
+/** El pie de Maset: en la maqueta «Framework:» va suelto y en la captura dentro de una línea con las tres etiquetas. */
+describe("compararDescripciones: lo que va dentro de otro texto de la captura no falta", () => {
+  const maqueta: PantallaDescrita = { filas: [fila("pie", "Framework:", "PIE")], extras: [] };
+  const captura: PantallaDescrita = { filas: [fila("pie", "Aplicación: 10.09.2026-1 Framework: 5.0.5.7dev Versión Code: 28", "PIE")], extras: [] };
+
+  it("no está en `faltan` ni pone el rojo; va como nota", () => {
+    const c = compararDescripciones(maqueta, captura);
+    expect(c.faltan).toEqual([]);
+    expect(hayQueArreglar(c)).toBe(false);
+    expect(c.notas?.some((n) => n.includes("«Framework:»") && n.includes("dentro de"))).toBe(true);
+  });
+
+  it("sin esa línea, sí falta", () => {
+    const sola: PantallaDescrita = { filas: [fila("pie", "PIE")], extras: [] };
+    expect(compararDescripciones(maqueta, sola).faltan).toEqual(["«Framework:»"]);
+  });
+});

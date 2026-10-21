@@ -267,8 +267,13 @@ export const TRABAJO_SIN_PERSONA = [
   "  Pregunta solo si sin la respuesta no puedes hacer nada útil; si preguntas, marca tu opción recomendada con",
   "  `(Recommended)`: se contestará sola con ella.",
   "- Tu RESPUESTA FINAL es el resumen de la tarea, en tres apartados: lo que cambiaste (cada fichero y para qué), las",
-  "  DECISIONES que tomaste tú sin preguntar (cada duda, lo que elegiste y por qué) y lo que no pudiste comprobar o",
-  "  queda pendiente.",
+  "  DECISIONES que tomaste tú sin preguntar (cada duda, lo que elegiste y por qué) y lo que QUEDA.",
+  // Medido en Maset (login): «lo pendiente» mezclaba en una lista un fallo posible (la contraseña no se guardaba), un
+  // dato de ejemplo de la maqueta (otra versión) y un error del medidor, y la persona no sabía qué era grave.
+  "- Lo que QUEDA, repartido en estos grupos y sin mezclarlos (el que no tenga nada, no lo pongas): «Por arreglar» (lo",
+  "  que se ve distinto del diseño o falla), «No es un defecto» (un dato de ejemplo de la maqueta —una versión, una",
+  "  cifra, un nombre—, el estado en que la pinta —un campo relleno— o una medida que se equivoca, cada uno con su",
+  "  porqué), «Sin comprobar» (lo que nadie probó, primero lo que podría romper la app) y «No se puede en XOne».",
 ].join("\n");
 
 /**

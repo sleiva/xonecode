@@ -15,6 +15,7 @@ import {
   filasDelAparato,
   hallazgosDeGeometria,
   informeDeGeometria,
+  MARCA_DE_BLOQUEANTE,
   type ControlDelAparato,
   type GeometriaDelAparato,
   type MaquetaMedida,
@@ -397,6 +398,53 @@ function medirEstilo(
 }
 
 /** La tabla de traducción de Tailwind a XOne de la skill, por su ruta virtual. */
+/**
+ * **El RESUMEN que abre el informe**: por qué es ese color y cuánto hay de cada clase. Medido en Maset (login): la persona
+ * no entendía la crítica final —un bloqueante medido perdido entre diez observaciones de estilo y notas de datos de
+ * ejemplo—, y el juez de la tarea solo lee sus tres primeras líneas (`lineaDeComprobacion`). Se CUENTA del propio cuerpo
+ * —lo medido antes del bloque de ESTILO, la opinión después—, así que no puede decir otra cosa que lo que va debajo. Puro.
+ */
+export function resumenDelInforme(cuerpo: readonly string[], final: string): string[] {
+  const bloqueantes: string[] = [];
+  let medidas = 0;
+  let menores = 0;
+  let notas = 0;
+  let opiniones = 0;
+  let enOpinion = false;
+  for (const l of cuerpo) {
+    if (l.startsWith("ESTILO, lo que dice") || l.startsWith("Lo que dice que ve")) enOpinion = true;
+    if (!l.startsWith("- ")) continue;
+    if (enOpinion) opiniones++;
+    else if (l.startsWith(`- ${MARCA_DE_BLOQUEANTE}`)) bloqueantes.push(l.slice(2 + MARCA_DE_BLOQUEANTE.length));
+    else if (l.startsWith("- (nota)")) notas++;
+    else if (l.startsWith("- (menor")) menores++;
+    // Lo que dice que no hay nada, y lo que se ENSEÑA sin contar para el veredicto (lo que no es un control).
+    else if (!/^- (Nada|Ningún texto recortado|Lo que se ve y no es un control)/.test(l)) medidas++;
+  }
+  const plural = (n: number, una: string, varias: string) => `${n} ${n === 1 ? una : varias}`;
+  const porQue =
+    bloqueantes.length > 0
+      ? `rojo por lo MEDIDO, ${plural(bloqueantes.length, "bloqueante", "bloqueantes")}: ${bloqueantes[0]}${bloqueantes.length > 1 ? " (y más abajo, el resto)" : ""}`
+      : final === "rojo" && medidas > 0
+        ? `rojo por ${plural(medidas, "diferencia MEDIDA", "diferencias MEDIDAS")} con la maqueta.`
+        : final === "rojo"
+          ? "rojo por lo que VE el modelo (una opinión); lo medido no tiene nada en rojo."
+          : final === "verde"
+            ? "verde, nada que arreglar."
+            : `${final}.`;
+  const resumen = [`EN RESUMEN: ${porQue}`];
+  if (bloqueantes.length + medidas + opiniones > 0) {
+    resumen.push(
+      `Por arreglar o mirar: ${bloqueantes.length > 0 ? `${plural(bloqueantes.length, "bloqueante", "bloqueantes")}, ` : ""}` +
+        `${plural(medidas, "diferencia medida", "diferencias medidas")}` +
+        `${menores > 0 ? ` (y ${plural(menores, "menor", "menores")}, no hace falta)` : ""}` +
+        ` y ${plural(opiniones, "observación de estilo", "observaciones de estilo")} (una opinión: míralas tú).`
+    );
+  }
+  if (notas > 0) resumen.push(`No cuentan: ${plural(notas, "nota", "notas")} (datos de ejemplo, textos traducidos o juntos en un control).`);
+  return resumen;
+}
+
 export const TABLA_DE_TRADUCCION = "`read_file /skills/xone-development/references/css/de-una-maqueta-a-xone.md`";
 
 export function crearCriticaVisual(deps: DependenciasDeCritica) {
@@ -550,6 +598,8 @@ export function crearCriticaVisual(deps: DependenciasDeCritica) {
         );
         for (const o of veredicto.observaciones) lineas.push(`- ${o}`);
       }
+      // El resumen va DEBAJO del veredicto y ANTES de todo lo demás: es lo que se lee primero.
+      lineas.splice(1, 0, ...resumenDelInforme(lineas.slice(1), final));
       /**
        * **Un rojo tiene que ENTERAR a alguien, y el sitio fuerte es aquí.**
        *

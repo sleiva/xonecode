@@ -124,7 +124,10 @@ Todas **reaplican `puedeLeerRuta` a mano** (una tool de xonecode no pasa por el 
   como OPINIÓN; el mismo método va a Claude Code (`textoDeTrabajoSinLlamar`). **Cifra junto a etiqueta
   presente = CONTADOR que no se pinta** (`VECINDAD_DE_CONTADOR`), salvo otra cifra junto a su pareja.
   **No se describe la captura con el modelo**, ni la maqueta con `code.html`. Texto distinto en el mismo
-  sitio = estado o TRADUCCIÓN: NOTA, no rojo. Recorte solo sin fondo propio. Informe en `.critica.txt`; un
+  sitio = estado o TRADUCCIÓN: NOTA, no rojo. **Texto de la maqueta DENTRO de otro del aparato no falta**
+  (`contieneTexto`, en los dos emparejamientos): una NOTA por control. **Los VALORES de la maqueta son de ejemplo**
+  (versiones, cifras, un campo relleno): el método no los señala; su SITIO vacío, sí. **El informe abre con un
+  RESUMEN contado de su propio cuerpo** (`resumenDelInforme`): es lo que lee el juez. Recorte solo sin fondo propio. Informe en `.critica.txt`; un
   rojo va a `developer-xone` (el diseñador solo escribe en `icons/` y `fonts/`). **ENCAJE y BLOQUES** (`ENCAJE`, `compararBloques`, solo lo emparejado). Foto de
   UN control sin geometría (`esCapturaDeUnControl`). **Tamaño de IMAGEN respecto a su pantalla**
   (`FACTOR_DE_TAMAÑO_DE_IMAGEN`), nunca bloqueante.

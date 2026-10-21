@@ -292,6 +292,20 @@ export function tieneLetras(texto: string): boolean {
   return /[a-záéíóúüñ]/i.test(texto);
 }
 
+/**
+ * ¿Va `texto` DENTRO de `contenedor`, como palabras enteras y en orden, sin ser el mismo texto? Lo que la maqueta pinta en
+ * piezas sueltas, la app lo escribe a menudo en UN control que rellena su código: medido en Maset (login), el pie de la
+ * maqueta eran tres filas («Aplicación:», «Framework:», «Versión Code:» con su valor) y el aparato, una etiqueta con las
+ * tres; el crítico dio rojo por «la columna NO está» con todo dentro de ella. Pura.
+ */
+export function contieneTexto(contenedor: string, texto: string): boolean {
+  const piezas = textoParaEmparejar(texto).split(" ").filter((p) => p !== "");
+  const todo = textoParaEmparejar(contenedor).split(" ").filter((p) => p !== "");
+  if (piezas.length === 0 || todo.length <= piezas.length) return false;
+  for (let i = 0; i + piezas.length <= todo.length; i++) if (piezas.every((p, k) => todo[i + k] === p)) return true;
+  return false;
+}
+
 /** Lo que se VE de un texto: sin el nombre de la ligadura de un icono (`content_copy COPY` → `COPY`). */
 export function textoVisible(texto: string): string {
   const palabras = texto.replace(ADORNOS, " ").trim().split(/\s+/).filter((p) => p !== "");
@@ -431,7 +445,22 @@ export function compararConMaqueta(m: MaquetaMedida, g: GeometriaDelAparato, mod
   const notas: string[] = [];
   const aproximada = modo.aproximada === true;
   const { maqueta: laMaqueta, aparato: elAparato } = modo.nombres ?? { maqueta: "la maqueta", aparato: "el aparato" };
-  const { parejas, sinPareja } = emparejar(m, g, aproximada);
+  const { parejas, sinPareja: sueltos } = emparejar(m, g, aproximada);
+  /**
+   * Lo que va DENTRO de otro texto del aparato (`contieneTexto`) no falta, y se dice una vez por control: así no llega a
+   * ser columna de una lista, ni el número de un contador, ni un «NO está».
+   */
+  const dentroDe = new Map<ControlDelAparato, ElementoDeMaqueta[]>();
+  const sinPareja = sueltos.filter((e) => {
+    const c = aproximada ? undefined : g.controles.find((x) => x.texto !== undefined && contieneTexto(x.texto, e.texto));
+    if (c === undefined) return true;
+    dentroDe.set(c, [...(dentroDe.get(c) ?? []), e]);
+    return false;
+  });
+  for (const [c, piezas] of dentroDe) {
+    const muestra = `${piezas.slice(0, 6).map(etiqueta).join(", ")}${piezas.length > 6 ? "…" : ""}`;
+    notas.push(`${muestra} de ${laMaqueta} van en ${elAparato} dentro de «${textoVisible(c.texto ?? "")}»: en ${laMaqueta} separados, en ${elAparato} en un solo texto. No faltan.`);
+  }
   for (const p of parejas) {
     if (p.otroTexto === true) {
       notas.push(`${etiqueta(p.maqueta)} de ${laMaqueta} dice «${textoVisible(p.aparato.texto ?? "")}» en ${elAparato}: otro texto en su sitio (traducido o cambiado), no falta. Comparo su caja igual.`);
