@@ -1349,11 +1349,11 @@ describe("la hora de cada mensaje (IXCODE-24)", () => {
     expect(horas).toEqual([cuandoUsuario, cuandoRespuesta]);
     const copiar = screen.getByRole("button", { name: "Copiar la respuesta" });
     expect(copiar.parentElement?.querySelector("time")?.getAttribute("datetime")).toBe(cuandoRespuesta);
-    // Y el mensaje de la persona también se copia, con su hora en la MISMA línea: la del autor,
-    // «Tú · hoy a las…» (rediseño del chat, tablero D).
+    // Y el mensaje de la persona también se copia: el botón DEBAJO de su burbuja (petición suya, dentro no se veía bien),
+    // y la hora en la línea del autor, «Tú · hoy a las…», dentro de la burbuja.
     const copiarMensaje = screen.getByRole("button", { name: "Copiar el mensaje" });
-    const autor = copiarMensaje.closest("p");
-    expect(autor?.textContent).toMatch(/^Tú · /u);
+    expect(copiarMensaje.closest("p")).toBeNull();
+    const autor = [...container.querySelectorAll("p")].find((p) => /^Tú · /u.test(p.textContent ?? ""));
     expect(autor?.querySelector("time")?.getAttribute("datetime")).toBe(cuandoUsuario);
   });
 

@@ -189,21 +189,11 @@ function TramoDeTrabajo({
   // alguien lo abra. Sale del `detalle.error` de cada línea, no de buscar `✗` en el texto.
   const fallidas = toolsFallidas(t.actos);
   /**
-   * **Un tramo CORTO se ve abierto, y uno largo nace plegado** (rediseño del chat, petición suya:
-   * «abierto hasta 8 pasos»). Con pocos pasos el raíl ES la explicación de lo que hizo el agente
-   * y plegarlo obligaba a un clic para leer tres líneas; con muchos, abierto empujaba la respuesta
-   * fuera de la pantalla, que es por lo que se plegó (medido al limpiar el chat).
-   *
-   * Solo al TERMINAR: en vuelo sigue plegado, porque su línea ya dice en qué paso está y un tramo
-   * vivo crece. Y lo que la persona haya hecho manda: si lo plegó o lo abrió a mano, terminar no
-   * se lo cambia.
+   * **El tramo nace SIEMPRE plegado** (petición suya, 21-10-2026: «los trabajos del agente, colapsados»), también al
+   * terminar con pocos pasos: la pastilla ya dice cuántos fueron y si alguno falló, y se abre solo si se pulsa. Antes uno
+   * de hasta `PASOS_ABIERTOS` se abría solo al acabar.
    */
-  const corto = pasos <= PASOS_ABIERTOS;
-  const [abierto, setAbierto] = useState(t.terminado && corto);
-  const [tocado, setTocado] = useState(false);
-  useEffect(() => {
-    if (!tocado && t.terminado && corto) setAbierto(true);
-  }, [tocado, t.terminado, corto]);
+  const [abierto, setAbierto] = useState(false);
   return (
     <details
       className={`${vista.flowItem} ${estilos.pensando} ${estilos.tramo}`}
@@ -211,10 +201,7 @@ function TramoDeTrabajo({
       // Al abrirlo, al FINAL: lo último es lo que está pasando, y es lo que se viene a ver.
       onToggle={(e) => {
         const ahora = e.currentTarget.open;
-        if (ahora !== abierto) {
-          setAbierto(ahora);
-          setTocado(true);
-        }
+        if (ahora !== abierto) setAbierto(ahora);
         if (!ahora || nodo.current === null) return;
         nodo.current.scrollTop = nodo.current.scrollHeight;
       }}
@@ -1382,11 +1369,6 @@ export function Chat({
                         <HoraDelMensaje cuando={acto.cuando} clase={undefined} />
                       </span>
                     )}
-                    {acto.texto === "" ? null : (
-                      <span className={estilos.copiarDelAutor}>
-                        <BotonDeCopiar texto={acto.texto} etiqueta="Copiar el mensaje" />
-                      </span>
-                    )}
                   </p>
                   {/* Una prosa vacía CON adjuntos se acepta (Task 6, IXCODE-7): sin texto no
                       hay nada que pintar aquí, y las fichas de abajo bastan. */}
@@ -1404,6 +1386,13 @@ export function Chat({
                     </ul>
                   )}
                   </div>
+                  {/* Copiar, DEBAJO de la burbuja y a la derecha (petición suya: dentro, pegado al texto, no se veía bien),
+                      como el de las respuestas. */}
+                  {acto.texto === "" ? null : (
+                    <span className={estilos.copiarDeLaPersona}>
+                      <BotonDeCopiar texto={acto.texto} etiqueta="Copiar el mensaje" />
+                    </span>
+                  )}
                 </div>
               );
             }

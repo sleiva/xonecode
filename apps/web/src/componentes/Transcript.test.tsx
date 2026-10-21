@@ -49,11 +49,10 @@ describe("Transcript", () => {
   });
 
   /**
-   * Al terminar el turno, un andamio CORTO se queda abierto —es la explicación de lo que hizo el
-   * agente, y plegar tres líneas obligaba a un clic— y uno LARGO se dobla en su línea con la
-   * cuenta (rediseño del chat, «abierto hasta 8 pasos», `PASOS_ABIERTOS`). No se borra nunca.
+   * Al terminar el turno el andamio se queda PLEGADO en su línea con la cuenta, también con pocos pasos (petición suya,
+   * 21-10-2026: «los trabajos del agente, colapsados»), y se abre al pulsarlo. No se borra nunca.
    */
-  it("cuando el turno TERMINA con pocos pasos, el pulso se queda ABIERTO con su cuenta", () => {
+  it("cuando el turno TERMINA, el pulso queda PLEGADO con su cuenta, y se abre al pulsarlo", () => {
     render(
       <Transcript
         actos={[
@@ -66,6 +65,8 @@ describe("Transcript", () => {
       />
     );
     const detalle = document.querySelector("details")!;
+    expect(detalle.hasAttribute("open")).toBe(false);
+    fireEvent.click(detalle.querySelector("summary")!);
     expect(detalle.hasAttribute("open")).toBe(true);
     // Dos pasos: las dos llamadas a tool. El razonamiento no es un paso (`pasos.ts`): va plegado
     // en su propia línea «Pensó».

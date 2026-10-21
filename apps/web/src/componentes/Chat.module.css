@@ -1051,3 +1051,10 @@
 .tramo.tramo {
   padding-left: 0;
 }
+
+/* Copiar el mensaje de la persona: debajo de su burbuja, a la derecha, como el de las respuestas. */
+.usuario > .copiarDeLaPersona {
+  grid-column: 1;
+  grid-row: 2;
+  margin-top: 4px;
+}
