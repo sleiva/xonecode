@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { ListaDePantallas } from "./DisenoDelProyecto.js";
-import { ListaDeAdjuntos, useAdjuntosDeBorrador, type AdjuntosDelBorrador } from "./adjuntosDeBorrador.js";
+import { RejillaDeAdjuntos, useAdjuntosDeBorrador, type AdjuntosDelBorrador } from "./adjuntosDeBorrador.js";
 export type { AdjuntosDelBorrador } from "./adjuntosDeBorrador.js";
 import ventana from "./NuevaTarea.module.css";
 
@@ -776,7 +776,6 @@ function Reencolar({
   const [motivo, setMotivo] = useState<string | undefined>(undefined);
   // El borrador nace con el formulario: sus capturas se suben ahí ANTES de encolar, y el servidor lo adopta.
   const [borrador] = useState(() => crypto.randomUUID());
-  const entradaDeFicheros = useRef<HTMLInputElement>(null);
   const { adjuntos, añadir, quitar, alPegar, enVuelo, algunoFalló, algunoListo, puedeQuitar } = useAdjuntosDeBorrador({
     alSubir: (fichero, nombre) =>
       adjuntosDelBorrador === undefined ? Promise.resolve({ ok: false, motivo: "aquí no se pueden adjuntar ficheros" }) : adjuntosDelBorrador.subir(borrador, nombre, fichero),
@@ -842,23 +841,7 @@ function Reencolar({
           />
           {adjuntosDelBorrador === undefined ? null : (
             <>
-              <div className={ventana.filaDeEncargo}>
-                <span className={ventana.etiqueta}>Imágenes (pega una captura en el texto, o elígela)</span>
-                <Button variant="outline" className={ventana.accion} disabled={enviando} onClick={() => entradaDeFicheros.current?.click()}>
-                  Adjuntar imagen…
-                </Button>
-              </div>
-              <input
-                ref={entradaDeFicheros}
-                hidden
-                type="file"
-                multiple
-                onChange={(e) => {
-                  void añadir(e.target.files);
-                  e.target.value = "";
-                }}
-              />
-              <ListaDeAdjuntos adjuntos={adjuntos} quitar={quitar} puedeQuitar={puedeQuitar} />
+              <RejillaDeAdjuntos nuevos={adjuntos} quitar={quitar} puedeQuitar={puedeQuitar} añadir={añadir} deshabilitado={enviando} />
               <p className={ventana.nota}>El agente las verá en «/adjuntos/», junto a las de la tarea original.</p>
             </>
           )}

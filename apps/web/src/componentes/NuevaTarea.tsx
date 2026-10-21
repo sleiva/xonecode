@@ -2,7 +2,7 @@ import { ListaDePantallas, SelectorDePantalla } from "./DisenoDelProyecto.js";
 import type { EstadoDeDiseno } from "../disenoDelCable.js";
 import { useEffect, useRef, useState, type ClipboardEvent } from "react";
 import { Modal, Button } from "@deepseek-ai/dsh-client-ui-primitives";
-import { ListaDeAdjuntos, useAdjuntosDeBorrador } from "./adjuntosDeBorrador.js";
+import { RejillaDeAdjuntos, useAdjuntosDeBorrador } from "./adjuntosDeBorrador.js";
 import { useEsperaDeRefresco } from "../esperaDeRefresco.js";
 import { GiroDeCarga } from "./GiroDeCarga.js";
 import estilos from "./NuevaTarea.module.css";
@@ -162,7 +162,6 @@ export function NuevaTarea({
    * `htmlFor` hacia él —una etiqueta apuntando a un control escondido no nombra nada—: el
    * nombre accesible del control lo pone el TEXTO del botón, que es el que se enfoca.
    */
-  const entradaDeFicheros = useRef<HTMLInputElement>(null);
   const { adjuntos, añadir, quitar, alPegar, enVuelo, algunoFalló, puedeQuitar } = useAdjuntosDeBorrador({
     alSubir: alSubirAdjunto,
     ...(alQuitarAdjunto === undefined ? {} : { alQuitar: alQuitarAdjunto }),
@@ -314,38 +313,8 @@ export function NuevaTarea({
             placeholder="Se rellena con «Preparar el encargo», y se puede editar. Vacío, se prepara al encolar."
           />
 
-          <div className={estilos.filaDeEncargo}>
-            <span className={estilos.etiqueta}>Adjuntar ficheros</span>
-            <Button
-              variant="outline"
-              className={estilos.accion}
-              onClick={() => entradaDeFicheros.current?.click()}
-            >
-              Elegir ficheros…
-            </Button>
-          </div>
-          <input
-            ref={entradaDeFicheros}
-            hidden
-            type="file"
-            multiple
-            onChange={(e) => {
-              void añadir(e.target.files);
-              // El mismo fichero se puede volver a elegir tras un fallo: sin esto el
-              // `change` no vuelve a dispararse con el mismo nombre.
-              e.target.value = "";
-            }}
-          />
-          {/*
-            La limitación declarada del §2 del diseño. Va aquí y no en una ayuda escondida:
-            quien adjunta un mockup está a punto de suponer que el agente lo va a mirar.
-          */}
-          <p className={estilos.nota}>
-            El agente puede <strong>leer</strong> estos ficheros en «/adjuntos/», de solo lectura; una
-            imagen <strong>no la ve</strong> todavía. Si el trabajo depende de mirar una captura,
-            descríbela por escrito.
-          </p>
-          <ListaDeAdjuntos adjuntos={adjuntos} quitar={quitar} puedeQuitar={puedeQuitar} />
+          {/* Las imágenes en MINIATURAS, la misma pieza que «Editar la tarea» (petición suya: «es igual»). */}
+          <RejillaDeAdjuntos nuevos={adjuntos} quitar={quitar} puedeQuitar={puedeQuitar} añadir={añadir} />
               {!conDiseno ? null : (
                 pantallas.length > 1 ? (
                   // Varias: numeradas y una por línea, como en la pestaña Diseño.

@@ -40,11 +40,12 @@ describe("NuevaTarea", () => {
     expect(texto).toMatch(/escrib/i);
   });
 
-  it("y dice que el agente LEE los ficheros adjuntos, pero no VE una imagen", () => {
+  // Ya las VE (`describe_image`): la nota vieja de «no la ve» mentía. Dice dónde las tendrá, y que no las puede tocar.
+  it("y dice dónde verá el agente las imágenes adjuntas, de solo lectura", () => {
     render(<NuevaTarea {...base} />);
     const texto = document.body.textContent ?? "";
-    expect(texto).toMatch(/leer/i);
-    expect(texto).toMatch(/no la ve|no las ve/i);
+    expect(texto).toMatch(/\/adjuntos\//);
+    expect(texto).toMatch(/solo lectura/i);
   });
 
   it("no se puede encolar con la petición vacía", () => {
@@ -208,7 +209,7 @@ describe("NuevaTarea", () => {
     expect(entrada.hasAttribute("hidden")).toBe(true);
     let abierto = 0;
     entrada.click = () => void abierto++;
-    fireEvent.click(screen.getByRole("button", { name: /elegir ficheros/i }));
+    fireEvent.click(screen.getByRole("button", { name: /añadir imagen/i }));
     expect(abierto).toBe(1);
   });
 
@@ -492,7 +493,7 @@ describe("NuevaTarea: quitar un adjunto y su miniatura (IXCODE-59)", () => {
       />
     );
     fireEvent.change(entradaDeFicheros(), { target: { files: [captura("uno.png"), captura("dos.png")] } });
-    await waitFor(() => expect(screen.getAllByText("listo")).toHaveLength(2));
+    await waitFor(() => expect(screen.getAllByText("nueva")).toHaveLength(2));
     fireEvent.click(screen.getByRole("button", { name: "Quitar uno.png" }));
     await waitFor(() => expect(screen.queryByText("uno.png")).toBeNull());
     expect(quitados).toEqual(["uno.png"]);
@@ -502,7 +503,7 @@ describe("NuevaTarea: quitar un adjunto y su miniatura (IXCODE-59)", () => {
   it("si el servidor se niega, la fila se QUEDA con el motivo", async () => {
     render(<NuevaTarea {...base} alQuitarAdjunto={async () => ({ ok: false, motivo: "no hay ningún adjunto con ese nombre" })} />);
     fireEvent.change(entradaDeFicheros(), { target: { files: [captura()] } });
-    await waitFor(() => expect(screen.getByText("listo")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("nueva")).toBeTruthy());
     fireEvent.click(screen.getByRole("button", { name: "Quitar a.png" }));
     await waitFor(() => expect(screen.getByText("no hay ningún adjunto con ese nombre")).toBeTruthy());
     expect(screen.getByText("a.png")).toBeTruthy();
@@ -522,7 +523,7 @@ describe("NuevaTarea: quitar un adjunto y su miniatura (IXCODE-59)", () => {
 
     render(<NuevaTarea {...base} />);
     fireEvent.change(entradaDeFicheros(), { target: { files: [captura()] } });
-    await waitFor(() => expect(screen.getByText("listo")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("nueva")).toBeTruthy());
     expect(screen.queryByRole("button", { name: "Quitar a.png" })).toBeNull();
   });
 
@@ -541,7 +542,7 @@ describe("NuevaTarea: quitar un adjunto y su miniatura (IXCODE-59)", () => {
       fireEvent.change(entradaDeFicheros(), {
         target: { files: [captura(), new File(["%PDF"], "doc.pdf", { type: "application/pdf" })] },
       });
-      await waitFor(() => expect(screen.getAllByText("listo")).toHaveLength(2));
+      await waitFor(() => expect(screen.getAllByText("nueva")).toHaveLength(2));
       // Solo la imagen: un PDF no tiene miniatura que enseñar. En `document`: el modal va por portal.
       expect(Array.from(document.querySelectorAll("li img")).map((i) => i.getAttribute("src"))).toEqual(["blob:prueba/0"]);
       fireEvent.click(screen.getByRole("button", { name: "Quitar a.png" }));

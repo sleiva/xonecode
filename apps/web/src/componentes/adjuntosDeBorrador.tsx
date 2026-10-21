@@ -8,6 +8,7 @@ import { nombreDeAdjuntoSeguro } from "../nombreDeAdjunto.js";
 import { ficherosDelPegado, renombrarPegados } from "../pegado.js";
 import { useVistasPrevias } from "../vistaPrevia.js";
 import estilos from "./NuevaTarea.module.css";
+import rejilla from "./RejillaDeAdjuntos.module.css";
 
 export interface AdjuntoDeBorrador {
   id: number;
@@ -140,53 +141,138 @@ export function peso(bytes: number): string {
   return `${(bytes / 1_000_000).toFixed(1)} MB`;
 }
 
-/** La lista de adjuntos de un borrador, con su miniatura, su estado y «Quitar». */
-export function ListaDeAdjuntos({
-  adjuntos,
-  quitar,
-  puedeQuitar,
-}: {
-  adjuntos: readonly AdjuntoDeBorrador[];
-  quitar: (id: number) => Promise<void>;
-  puedeQuitar: boolean;
-}) {
-  if (adjuntos.length === 0) return null;
-  return (
-    <ul className={estilos.adjuntos}>
-      {adjuntos.map((a) => (
-        <li key={a.id} className={estilos.adjunto} data-estado={a.estado}>
-          {a.vista === undefined ? null : <img className={estilos.miniatura} src={a.vista} alt="" />}
-          <span className={estilos.nombreDeAdjunto}>{a.nombre}</span>
-          <span className={estilos.peso}>{peso(a.bytes)}</span>
-          <span className={estilos.estado}>
-            {a.quitando
-              ? "quitando…"
-              : a.estado === "subiendo"
-                ? "subiendo…"
-                : a.estado === "listo"
-                  ? (a.motivo ?? "listo")
-                  : (a.motivo ?? "no se pudo subir")}
-          </span>
-          {a.estado === "listo" && !puedeQuitar ? null : (
-            <button
-              type="button"
-              className={estilos.quitar}
-              aria-label={`Quitar ${a.nombre}`}
-              disabled={a.estado === "subiendo" || a.quitando === true}
-              onClick={() => void quitar(a.id)}
-            >
-              Quitar
-            </button>
-          )}
-        </li>
-      ))}
-    </ul>
-  );
-}
 
 /** Subir, quitar y descartar las imágenes NUEVAS de un formulario bajo su borrador (Reencolar, Editar la tarea). */
 export interface AdjuntosDelBorrador {
   subir: (borrador: string, nombre: string, fichero: File) => Promise<{ ok: boolean; motivo?: string }>;
   quitar?: (borrador: string, nombre: string) => Promise<{ ok: boolean; motivo?: string }>;
   descartar: (borrador: string) => void;
+}
+
+/** Uno que el formulario YA tenía (los de una tarea que se edita): sin vista, que el servidor no los sirve. */
+export interface AdjuntoPrevio {
+  nombre: string;
+  quitado: boolean;
+  alternar: () => void;
+}
+
+/**
+ * **Las imágenes en MINIATURAS** (su lienzo, 21-10-2026: «Editar la tarea» y «Nueva tarea» iguales): las que ya tenía —con
+ * su icono y su nombre— y las nuevas con su vista, cada una con × para quitarla (↺ para recuperar una de antes), y una
+ * casilla para añadir que también recibe lo que se ARRASTRA. Pegar en los textos lo lleva el formulario (`alPegar`).
+ */
+export function RejillaDeAdjuntos({
+  nuevos,
+  quitar,
+  puedeQuitar,
+  añadir,
+  previos = [],
+  deshabilitado = false,
+  nota,
+}: {
+  nuevos: readonly AdjuntoDeBorrador[];
+  quitar: (id: number) => Promise<void>;
+  puedeQuitar: boolean;
+  añadir: (elegidos: ArrayLike<File> | null) => Promise<void>;
+  previos?: readonly AdjuntoPrevio[];
+  deshabilitado?: boolean;
+  /** Lo que se dice a la derecha del título. Ausente = dónde los verá el agente. */
+  nota?: string;
+}) {
+  const entrada = useRef<HTMLInputElement>(null);
+  const cuantos = previos.filter((p) => !p.quitado).length + nuevos.length;
+  return (
+    <section
+      className={rejilla.imagenes}
+      aria-label="Imágenes"
+      onDragOver={(e) => {
+        if (e.dataTransfer.types.includes("Files")) e.preventDefault();
+      }}
+      onDrop={(e) => {
+        if (e.dataTransfer.files.length === 0) return;
+        e.preventDefault();
+        void añadir(e.dataTransfer.files);
+      }}
+    >
+      <div className={rejilla.cabeceraDeImagenes}>
+        <span className={rejilla.etiqueta}>{`Imágenes · ${cuantos}`}</span>
+        <span className={rejilla.notaDeImagenes}>{nota ?? "Las verá el agente en /adjuntos/, de solo lectura"}</span>
+      </div>
+      <ul className={rejilla.rejillaDeImagenes}>
+        {previos.map((a) => (
+          <li key={`antes-${a.nombre}`} className={rejilla.imagen} data-quitado={a.quitado ? "" : undefined}>
+            <span className={rejilla.sinVista} aria-hidden="true">
+              <IconoDeImagen />
+            </span>
+            <span className={rejilla.nombreDeImagen}>{a.nombre}</span>
+            <span className={rejilla.estadoDeImagen}>{a.quitado ? "se quitará al guardar" : "ya la tenía"}</span>
+            <button
+              type="button"
+              className={rejilla.quitarImagen}
+              aria-label={a.quitado ? `Volver a poner ${a.nombre}` : `Quitar ${a.nombre}`}
+              disabled={deshabilitado}
+              onClick={a.alternar}
+            >
+              {a.quitado ? "↺" : "×"}
+            </button>
+          </li>
+        ))}
+        {nuevos.map((a) => (
+          <li key={`nueva-${a.id}`} className={rejilla.imagen} data-nueva="" data-estado={a.estado}>
+            {a.vista === undefined ? (
+              <span className={rejilla.sinVista} aria-hidden="true">
+                <IconoDeImagen />
+              </span>
+            ) : (
+              <img className={rejilla.vista} src={a.vista} alt="" />
+            )}
+            <span className={rejilla.nombreDeImagen}>{a.nombre}</span>
+            <span className={rejilla.estadoDeImagen}>
+              {a.quitando ? "quitando…" : a.estado === "subiendo" ? "subiendo…" : a.estado === "listo" ? (a.motivo ?? "nueva") : (a.motivo ?? "no se pudo subir")}
+            </span>
+            {a.estado === "listo" && !puedeQuitar ? null : (
+              <button
+                type="button"
+                className={rejilla.quitarImagen}
+                aria-label={`Quitar ${a.nombre}`}
+                disabled={a.estado === "subiendo" || a.quitando === true}
+                onClick={() => void quitar(a.id)}
+              >
+                ×
+              </button>
+            )}
+          </li>
+        ))}
+        <li>
+          <button type="button" className={rejilla.anadirImagen} disabled={deshabilitado} onClick={() => entrada.current?.click()}>
+            <span aria-hidden="true">+</span>
+            Añadir imagen o arrástrala aquí
+          </button>
+        </li>
+      </ul>
+      <input
+        ref={entrada}
+        hidden
+        type="file"
+        multiple
+        onChange={(e) => {
+          void añadir(e.target.files);
+          // El mismo fichero se puede volver a elegir tras un fallo: sin esto el `change` no vuelve a dispararse.
+          e.target.value = "";
+        }}
+      />
+      <p className={rejilla.notaDeImagenes}>También puedes pegar una captura en el texto.</p>
+    </section>
+  );
+}
+
+/** Una imagen sin vista. Trazo, en el color del texto. */
+function IconoDeImagen() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <circle cx="9" cy="10" r="1.6" />
+      <path d="M21 16l-5-5-8 8" />
+    </svg>
+  );
 }
