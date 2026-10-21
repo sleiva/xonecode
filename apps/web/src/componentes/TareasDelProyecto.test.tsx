@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { TareasDelProyecto } from "./TareasDelProyecto.js";
+import { tiempoQueLleva, TareasDelProyecto } from "./TareasDelProyecto.js";
 import type { TareaDelCable } from "../tipos.js";
 
 afterEach(cleanup);
@@ -449,6 +449,15 @@ describe("TareasDelProyecto: ver lo que hace una tarea en proceso", () => {
       expect(screen.getByText("el juez de QA dijo «rojo»")).toBeTruthy();
     });
 
+    /** Petición suya (21-10-2026): una tarea en marcha dice cuánto lleva y cuánto gasta; sin gasto que conste, solo el tiempo. */
+    it("en marcha dice cuánto LLEVA y lo que va gastando", () => {
+      const empezada = new Date(Date.now() - 125_000).toISOString();
+      const gastoEnCurso = { modelo: { entrada: 1_500_000, salida: 60_000, cache: 1_300_000 }, externo: { entrada: 0, salida: 0, cache: 0 } };
+      render(<TareasDelProyecto tareas={[tarea({ id: "x", titulo: "Menú", estado: "en-proceso", empezada, gastoEnCurso }), tarea({ id: "y", titulo: "Login", estado: "en-proceso", empezada })]} />);
+      expect(screen.getByText(/^Lleva 2 min 0[5-9] s · 260k tokens · 1,3M de caché$/)).toBeTruthy();
+      expect(screen.getByText(/^Lleva 2 min 0[5-9] s$/)).toBeTruthy();
+    });
+
     /** Petición suya (21-10-2026): el resumen final de la tarea dice cuánto gastó. Sin gasto que conste, no se pinta nada. */
     it("al desplegarla dice cuánto GASTÓ, y sin gasto que conste no dice nada", () => {
       const gasto = { modelo: { entrada: 1_500_000, salida: 60_000, cache: 1_300_000 }, externo: { entrada: 0, salida: 0, cache: 0 } };
@@ -456,6 +465,9 @@ describe("TareasDelProyecto: ver lo que hace una tarea en proceso", () => {
       fireEvent.click(screen.getByRole("tab", { name: /Finalizadas/ }));
       fireEvent.click(filaDe("Menú"));
       expect(screen.getByText("Gastó: 260k tokens · 1,3M de caché")).toBeTruthy();
+      // Y en la línea PLEGADA, solo los tokens (petición suya: a la vista sin desplegar).
+      expect(filaDe("Menú").textContent).toContain("260k tokens");
+      expect(filaDe("Login").textContent).not.toContain("tokens");
       fireEvent.click(filaDe("Menú"));
       fireEvent.click(filaDe("Login"));
       expect(screen.queryByText(/^Gastó:/)).toBeNull();
@@ -689,5 +701,14 @@ describe("TareasDelProyecto: ver lo que hace una tarea en proceso", () => {
     rerender(<TareasDelProyecto tareas={[]} alMirarGestor={async () => "lanzadas: MAS-3"} />);
     fireEvent.click(screen.getByRole("button", { name: "Mirar ahora" }));
     expect((await screen.findByRole("status")).textContent).toBe("lanzadas: MAS-3");
+  });
+});
+
+describe("tiempoQueLleva", () => {
+  it("segundos el primer minuto, minutos y segundos la primera hora, horas y minutos después", () => {
+    expect(tiempoQueLleva(42_000)).toBe("42 s");
+    expect(tiempoQueLleva(125_000)).toBe("2 min 05 s");
+    expect(tiempoQueLleva(91 * 60_000 + 30_000)).toBe("1 h 31 min");
+    expect(tiempoQueLleva(-5_000)).toBe("0 s");
   });
 });

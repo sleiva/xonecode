@@ -339,6 +339,12 @@ export interface Corredor {
    * de la máquina, no le dice nada a quien lo lee, y este valor viaja por el cable.
    */
   ejecutaOtroProceso(): boolean | undefined;
+  /**
+   * Lo que lleva gastado una tarea EN MARCHA: lo de sus pasadas anteriores (`Tarea.gasto`) más lo que ha crecido su sesión
+   * desde que empezó esta, con el turno en curso que el volcado a mitad apunta (`EntradaIndice.consumoEnCurso`). Petición
+   * suya (21-10-2026): «en las tareas en curso, los tokens consumidos». Sin pasada en marcha, o sin nada que conste, nada.
+   */
+  gastoEnCurso(id: string): ConsumoDeTurno | undefined;
   /** Vuelve a mirar la cola: se llama al crear una tarea, al terminar una, y al abrir o
    *  cerrar un proyecto (que es lo que bloquea y desbloquea su raíz). */
   revisar(): void;
@@ -536,6 +542,19 @@ export function crearCorredorDeTareas(opciones: {
         return undefined;
       }
     });
+  /** El de `consumoDeSesion` más el turno EN CURSO: solo para `gastoEnCurso`, porque al cerrar el `fin` ya lo soltó. */
+  const consumoVivoDeSesion =
+    opciones.consumoDeSesion ??
+    ((raiz: string, sesion: string): ConsumoDeTurno | undefined => {
+      try {
+        const e = listarSesiones(raiz).find((x) => x.id === sesion);
+        return e?.consumoEnCurso === undefined ? e?.consumo : acumularTotales(e.consumo, e.consumoEnCurso);
+      } catch {
+        return undefined;
+      }
+    });
+  /** Las pasadas en marcha, para `gastoEnCurso`: de qué sesión, qué traía al empezar y lo de las pasadas anteriores. */
+  const pasadasEnCurso = new Map<string, { raiz: string; hilo: string; alEmpezar: ConsumoDeTurno | undefined; previo: ConsumoDeTurno | undefined }>();
   const informar = opciones.informar ?? (() => {});
   let miCerrojo = false;
   /** Ver `Corredor.ejecutaOtroProceso`. Nace sin afirmar nada: todavía no se ha mirado. */
@@ -1032,6 +1051,7 @@ export function crearCorredorDeTareas(opciones: {
     const hilo = consola.idDeHilo;
     /** Lo que ya traía su sesión: el gasto de ESTA pasada es lo que crezca desde aquí (`Tarea.gasto`). */
     const consumoAlEmpezar = consumoDeSesion(tarea.proyecto.raiz, hilo);
+    pasadasEnCurso.set(tarea.id, { raiz: tarea.proyecto.raiz, hilo, alEmpezar: consumoAlEmpezar, previo: tarea.gasto });
     /**
      * ¿Esto CONTINÚA una conversación, o abre una en blanco? `tarea.sesion` es la única
      * fuente: si estaba puesta, es lo que se le pasó a `abrirParaTarea` para que reabriera
@@ -1166,6 +1186,7 @@ export function crearCorredorDeTareas(opciones: {
        * no se pudo escribir y el turno que revienta son un handle filtrado por tarea, y con un
        * lazo corriendo eso se acumula.
        */
+      pasadasEnCurso.delete(tarea.id);
       await cortar();
     }
     if (!marcada) {
@@ -1592,6 +1613,12 @@ export function crearCorredorDeTareas(opciones: {
     corriendoAqui: () => miCerrojo,
     // La otra mitad, y nunca deducida de la primera: ver `Corredor.ejecutaOtroProceso`.
     ejecutaOtroProceso: () => cerrojoAjeno,
+    gastoEnCurso: (id) => {
+      const p = pasadasEnCurso.get(id);
+      if (p === undefined) return undefined;
+      const pasada = gastoEntre(p.alEmpezar, consumoVivoDeSesion(p.raiz, p.hilo));
+      return pasada === undefined ? p.previo : acumularTotales(p.previo, pasada);
+    },
     revisar,
     /**
      * Deja que se asiente lo lanzado. Vive en producción y no en el test porque solo el

@@ -17,7 +17,7 @@ import { EntregaDeTarea } from "./EntregaDeTarea.js";
 import { MirarTarea } from "./MirarTarea.js";
 import { QuienEjecutaTareas } from "./QuienEjecutaTareas.js";
 import { selloDeFecha } from "../selloDeFecha.js";
-import { textoDelGastoDeTarea } from "../gastoDelProyecto.js";
+import { textoCortoDelGastoDeTarea, textoDelGastoDeTarea } from "../gastoDelProyecto.js";
 import { Button, MarkdownText, Modal } from "@deepseek-ai/dsh-client-ui-primitives";
 import { protegerDolares } from "../protegerDolares.js";
 import { ETIQUETAS_DE_CODIGO } from "../etiquetasDeCodigo.js";
@@ -471,6 +471,7 @@ function FilaFinalizada({
           {observaciones.length > 0 ? <span className={estilos.cuentaObservaciones}>{`${observaciones.length} obs.`}</span> : null}
           {resultado === "limpia" ? <span className={estilos.cuentaLimpia}>limpia</span> : null}
           {resultado === "mano" ? <span className={estilos.cuentaMano}>a mano</span> : null}
+          {t.gasto === undefined ? null : <span className={estilos.cuentaGasto}>{textoCortoDelGastoDeTarea(t.gasto)}</span>}
         </span>
         <span className={estilos.fechasFinalizada}>{fechas}</span>
         <span className={estilos.flecha} aria-hidden="true">
@@ -876,6 +877,7 @@ function Fila({
             {t.estado === "nuevo" && anterior !== undefined && anterior.estado !== "terminada" ? (
               <p className={estilos.espera}>{`espera a: ${anterior.titulo}`}</p>
             ) : null}
+            {t.estado === "en-proceso" && t.empezada !== undefined ? <EnMarcha empezada={t.empezada} gasto={t.gastoEnCurso} /> : null}
             {/* Lo que se le encargó, para poder leerlo antes de que arranque: plegado, porque un
                 encargo son párrafos y la lista tiene que seguir siendo una lista. */}
             <details className={estilos.contenido} onToggle={(e) => setVerEncargo((e.currentTarget as HTMLDetailsElement).open)}>
@@ -989,4 +991,35 @@ function ClaveDelTicket({ tarea: t }: { tarea: TareaDelCable }) {
 function AvisoDelTicket({ tarea: t }: { tarea: TareaDelCable }) {
   if (t.ticket?.aviso === undefined) return null;
   return <p className={estilos.motivo}>{t.ticket.aviso}</p>;
+}
+
+/**
+ * El tiempo que lleva una tarea, para leer: segundos el primer minuto, minutos y segundos la primera hora, y luego horas
+ * y minutos —a la hora, los segundos ya no dicen nada—. Puro.
+ */
+export function tiempoQueLleva(ms: number): string {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  if (s < 60) return `${s} s`;
+  if (s < 3600) return `${Math.floor(s / 60)} min ${String(s % 60).padStart(2, "0")} s`;
+  return `${Math.floor(s / 3600)} h ${String(Math.floor((s % 3600) / 60)).padStart(2, "0")} min`;
+}
+
+/**
+ * **Una tarea en marcha dice cuánto lleva y cuánto ha gastado** (petición suya, 21-10-2026). El reloj corre aquí, contra
+ * `empezada` (la hora del SERVIDOR); el gasto lo manda el servidor (`gastoEnCurso`), que lo reemite mientras trabaja.
+ * Sin gasto que conste no se pinta la cifra: ausente no es cero.
+ */
+function EnMarcha({ empezada, gasto }: { empezada: string; gasto: TareaDelCable["gastoEnCurso"] }) {
+  const [ahora, setAhora] = useState(() => Date.now());
+  useEffect(() => {
+    const reloj = setInterval(() => setAhora(Date.now()), 1000);
+    return () => clearInterval(reloj);
+  }, []);
+  const desde = Date.parse(empezada);
+  if (Number.isNaN(desde)) return null;
+  return (
+    <p className={estilos.gasto}>
+      {`Lleva ${tiempoQueLleva(ahora - desde)}${gasto === undefined ? "" : ` · ${textoDelGastoDeTarea(gasto)}`}`}
+    </p>
+  );
 }

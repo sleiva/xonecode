@@ -1312,6 +1312,8 @@ export interface TareaDelCable {
   cierre?: { criticos: string[]; observaciones: string[] };
   /** Lo que GASTÓ la tarea (`Tarea.gasto`): Finalizadas lo enseña. Ausente = no consta. */
   gasto?: ConsumoDeTurno;
+  /** Lo que lleva gastado la tarea EN MARCHA (`Corredor.gastoEnCurso`): solo en `en-proceso`. Ausente = no consta. */
+  gastoEnCurso?: ConsumoDeTurno;
   /**
    * El ticket del gestor de tareas en el que vive (`core/tareas.ts#TicketDeTarea`). Cruzan la CLAVE, el conector (de él
    * sale el nombre que se enseña: «Jira»), el enlace y el aviso de lo último que no se pudo escribir; el `sitio` y el
@@ -1344,8 +1346,9 @@ export interface TareaDelCable {
  * Campo a campo, y también DENTRO del veredicto: un `...tarea.veredicto` dejaría pasar sin
  * nombrar el campo que alguien le añada mañana a `VeredictoDeTarea`.
  */
-export function filaDeTarea(t: Tarea, esperaPorTi?: EsperaPorPersona): TareaDelCable {
+export function filaDeTarea(t: Tarea, esperaPorTi?: EsperaPorPersona, gastoEnCurso?: ConsumoDeTurno): TareaDelCable {
   return {
+    ...(gastoEnCurso === undefined || t.estado !== "en-proceso" ? {} : { gastoEnCurso }),
     ...(esperaPorTi === undefined ? {} : { esperaPorTi }),
     id: t.id,
     // El ID, que es con lo que la interfaz filtra; el nombre va aparte, para leer. La RAÍZ

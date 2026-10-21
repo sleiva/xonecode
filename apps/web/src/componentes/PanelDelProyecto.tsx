@@ -374,6 +374,9 @@ export function PanelDelProyecto({
       <div className={estilos.cuerpo} role="tabpanel">
         {pestana === "resumen" || sinCopia ? (
           <>
+            {/* Los planes, LO PRIMERO (petición suya, 21-10-2026: «los planes no salen desde un inicio en el resumen»): son
+                lo que dice por dónde va el trabajo, y debajo de la copia y del gasto había que bajar a buscarlos. */}
+            {sinCopia ? null : <Resumen {...(planes === undefined ? {} : { planes })} />}
             {copia === undefined ? null : (
               <ResumenDeProyecto
                 proyecto={copia.proyecto}
@@ -394,9 +397,7 @@ export function PanelDelProyecto({
                 Tareas y Conectores aparecen cuando el proyecto está descargado: los dos trabajan sobre la copia
                 abierta.
               </p>
-            ) : (
-              <Resumen {...(planes === undefined ? {} : { planes })} />
-            )}
+            ) : null}
           </>
         ) : pestana === "sincronizacion" && sincronizacion !== undefined ? (
           <div className={estilos.sincronizacion}>{sincronizacion}</div>
@@ -475,7 +476,7 @@ export function PanelDelProyecto({
 }
 
 /**
- * El resumen: los planes, debajo de lo de la copia (`ResumenDeProyecto`). Las SESIONES no están aquí —ni la lista ni «Nueva sesión»—, a petición
+ * El resumen: los planes, ENCIMA de lo de la copia (`ResumenDeProyecto`). Las SESIONES no están aquí —ni la lista ni «Nueva sesión»—, a petición
  * suya: ya están en la barra lateral (con su «+»). Las tareas en background tampoco: van en la
  * pestaña Tareas, encima de las del gestor.
  */

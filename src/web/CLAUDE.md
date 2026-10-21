@@ -58,8 +58,8 @@ Ante una discrepancia con el código, **el código manda**.
   (la MISMA pestaña de la conversación, `App.tsx#pestanaDeEjecutar`, IXCODE-58), Tareas, Soporte, Conectores. El proyecto YA abierto enseña el panel SIN mandar `sesion`; «+» y una sesión de la
   barra llevan al chat. **Una sola fila marcada** (`proyectoEnResumen` manda); con panel delante
   ningún chat va marcado.
-- **Resumen** (`ResumenDeProyecto.tsx`): la COPIA (pastillas, Descargar, «Abrir carpeta», «Borrar
-  copia local»), lo pendiente, el gasto y los planes. **Sin copia el panel abre SOLO el Resumen** (`App.tsx#panelSinCopia`) sin abrir nada en el
+- **Resumen** (`ResumenDeProyecto.tsx`): los PLANES primero, luego la COPIA (pastillas, Descargar, «Abrir carpeta», «Borrar
+  copia local»), lo pendiente y el gasto. **Sin copia el panel abre SOLO el Resumen** (`App.tsx#panelSinCopia`) sin abrir nada en el
   servidor, y dice por qué faltan Tareas y Conectores. «Abrir carpeta» (`accion: "abrirCarpeta"`)
   lo lanza el SERVIDOR (`comandoParaAbrirDirectorio`); **límite**: por un túnel abre en su máquina.
 - **Lo pendiente de subir es UNA foto** (`accion: "resumen"`, `FotoDelResumen`) en la respuesta del
@@ -69,7 +69,9 @@ Ante una discrepancia con el código, **el código manda**.
 - **El gasto va en TOKENS por sesión** (`gastoDelProyecto.ts`, `SESIONES_EN_EL_GASTO`): gráfico, cada
   cuenta con su convención de caché, sin sumarse; el total dice cuántas no constan. **Suma lo del turno EN CURSO**
   (`EntradaIndice.consumoEnCurso`, apuntado por el volcado a mitad; el `fin` lo suelta) y el alta se reanuncia cada
-  `INTERVALO_DEL_GASTO_EN_CURSO_MS` mientras alguien trabaja: una tarea es un turno largo. Colores
+  `INTERVALO_DEL_GASTO_EN_CURSO_MS` mientras alguien trabaja: una tarea es un turno largo. **Una tarea en marcha dice
+  cuánto lleva y cuánto va gastando** (`Corredor.gastoEnCurso` → `TareaDelCable.gastoEnCurso`, reemitido con ese mismo
+  reloj; el tiempo corre en el cliente contra `empezada`); Finalizadas pone sus tokens en la línea plegada. Colores
   `--xonecode-gasto-*` validados con `dataviz` por MODO; **límite**: no contra los otros temas.
 - **Soporte** (`soporte.ts`, `core/paqueteDeSoporte.ts`, `core/analisisDeSesion.ts`): solo con copia;
   chats (`SESIONES_EN_SOPORTE`) y tareas; **las filas NO abren el chat**. Tres paquetes por `GET /soporte`, raíz del SERVIDOR

@@ -3464,6 +3464,23 @@ describe("el gasto de la tarea", () => {
     await corredor.parar();
   });
 
+  it("EN MARCHA dice lo que lleva gastado esta pasada más lo de las anteriores, y al acabar ya no", async () => {
+    const { disco } = discoDeMentira([TAREA({ gasto: consumo(10, 1, 0) })]);
+    const p = proyectoDeMentira();
+    let medido: ConsumoDeTurno | undefined = consumo(1000, 100, 800);
+    const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE, disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 1, consumoDeSesion: () => medido });
+    await corredor.arrancar();
+    await corredor.asentar();
+    const id = TAREA().id;
+    expect(corredor.gastoEnCurso(id)).toEqual(consumo(10, 1, 0));
+    medido = consumo(1300, 130, 1000);
+    expect(corredor.gastoEnCurso(id)).toEqual(consumo(310, 31, 200));
+    p.acabar({ verificador: "verde", pendientes: 0 });
+    await corredor.asentar();
+    expect(corredor.gastoEnCurso(id)).toBeUndefined();
+    await corredor.parar();
+  });
+
   it("sin medida de la sesión no consta: sin campo, no cero", async () => {
     const { disco, estado } = discoDeMentira([TAREA()]);
     const p = proyectoDeMentira();

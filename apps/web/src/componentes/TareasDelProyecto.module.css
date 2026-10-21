@@ -428,6 +428,13 @@
   color: var(--dsw-alias-label-secondary);
 }
 
+/* El gasto no es un juicio: sin color de estado, en cifras de ancho fijo. */
+.cuentaGasto {
+  color: var(--dsw-alias-label-secondary);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
 .fechasFinalizada {
   flex: none;
   color: var(--dsw-alias-label-tertiary);

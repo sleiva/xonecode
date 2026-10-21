@@ -1159,7 +1159,7 @@ describe("PanelDelProyecto: lo de la copia en el Resumen", () => {
     expect(sinCopia.container.querySelector("header img")).toBeNull();
   });
 
-  it("con copia: pastillas y acciones, lo que queda por subir y el gasto, y DESPUÉS los planes", async () => {
+  it("con copia: los planes PRIMERO, y debajo pastillas y acciones, lo que queda por subir y el gasto", async () => {
     const c = copia(true);
     montar({ copia: c, planes: [PLAN] });
     await act(async () => {});
@@ -1171,9 +1171,9 @@ describe("PanelDelProyecto: lo de la copia en el Resumen", () => {
     expect(screen.getByRole("status").textContent).toMatch(/2 ficheros con cambios sin subir a «main»/);
     const gasto = screen.getByRole("region", { name: "Gasto del proyecto" });
     const planes = screen.getByRole("region", { name: "Planes" });
-    // El orden de la decisión: la copia arriba, los planes al final.
+    // El orden de la decisión (21-10-2026: «los planes no salen desde un inicio»): los planes arriba, luego la copia y el gasto.
+    expect(planes.compareDocumentPosition(grupo) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(grupo.compareDocumentPosition(gasto) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(gasto.compareDocumentPosition(planes) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     // Sin sesiones que abrir: el gasto no es una lista de sesiones.
     expect(screen.queryByRole("region", { name: "Últimas sesiones" })).toBeNull();
     expect(screen.queryByRole("button", { name: /Menú/ })).toBeNull();

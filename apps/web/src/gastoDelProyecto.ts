@@ -129,3 +129,14 @@ export function textoDelGastoDeTarea(gasto: ConsumoDeTurno): string {
     ...(e.tokens > 0 ? [`agente externo ${abreviar(e.tokens)} tokens`] : []),
   ].join(" · ");
 }
+
+/**
+ * El gasto de una tarea en la LÍNEA plegada de Finalizadas (petición suya, 21-10-2026: «los tokens consumidos en las
+ * tareas finalizadas», a la vista sin desplegar): solo los tokens, sin la caché, que va en el desplegado. Las dos cuentas
+ * no se suman; la externa solo si gastó algo.
+ */
+export function textoCortoDelGastoDeTarea(gasto: ConsumoDeTurno): string {
+  const m = deUnaCuenta("modelo", gasto);
+  const e = deUnaCuenta("externo", gasto);
+  return [`${abreviar(m.tokens)} tokens`, ...(e.tokens > 0 ? [`ext. ${abreviar(e.tokens)}`] : [])].join(" · ");
+}

@@ -827,7 +827,7 @@ export interface OpcionesDeMontaje {
    * distinto de «nadie». Los dobles de test que no la implementan ejercitan justo ese caso.
    */
   corredorDeTareas?: Pick<Corredor, "corriendoAqui" | "cortar"> &
-    Partial<Pick<Corredor, "ejecutaOtroProceso" | "mirar" | "dejarDeMirar">>;
+    Partial<Pick<Corredor, "ejecutaOtroProceso" | "mirar" | "dejarDeMirar" | "gastoEnCurso">>;
   /** El tope de concurrencia vigente, para el mensaje `tareas`. Ausente = `CONCURRENCIA_POR_OMISION`. */
   concurrenciaDeTareas?: () => number;
   /** Cambia el tope de concurrencia del corredor. Ausente = Ajustes no puede tocarlo. */
@@ -2403,7 +2403,13 @@ export function montarRutas(
     const esperas = corriendoAqui ? esperasPorPersonas(vestibulo.proyectosAbiertos(), lista, vestibulo.obrasEnCurso()) : new Map();
     return {
       clase: "tareas",
-      lista: lista.map((t) => filaDeTarea(t, t.estado === "nuevo" ? esperas.get(t.proyecto.raiz) : undefined)),
+      lista: lista.map((t) =>
+        filaDeTarea(
+          t,
+          t.estado === "nuevo" ? esperas.get(t.proyecto.raiz) : undefined,
+          t.estado === "en-proceso" ? opciones.corredorDeTareas?.gastoEnCurso?.(t.id) : undefined
+        )
+      ),
       concurrencia: opciones.concurrenciaDeTareas?.() ?? CONCURRENCIA_POR_OMISION,
       corriendoAqui,
       // Ausente = no se sabe, y no se sintetiza: con `false` a la mínima, la pantalla diría
@@ -6017,6 +6023,8 @@ export function montarRutas(
   const relojDelGastoEnCurso = setInterval(() => {
     const trabajando = [...vestibulo.proyectosAbiertos(), ...vestibulo.tareasAbiertas()].some((c) => c.turnoEnVuelo);
     if (trabajando) void anunciarAlta().catch(contar);
+    // Y las tareas, que llevan lo que va gastando cada una en marcha (`TareaDelCable.gastoEnCurso`).
+    if (vestibulo.tareasAbiertas().some((c) => c.turnoEnVuelo)) emitirTareas();
   }, INTERVALO_DEL_GASTO_EN_CURSO_MS);
   relojDelGastoEnCurso.unref?.();
 

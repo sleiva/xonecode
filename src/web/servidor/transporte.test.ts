@@ -71,8 +71,9 @@ const DECISIONES: Readonly<Record<string, readonly string[]>> = {
   adjuntos: ["adjuntos"],
   // `reencolable` sale del estado (y de que no tenga ticket): lo DECIDE el servidor, y la pantalla solo lo ofrece.
   // Y `esperaPorTi`: por qué una `nuevo` espera a una persona (IXCODE-61). No sale de la tarea
-  // sola sino de las consolas abiertas, así que lo pasa quien la compone.
-  estado: ["estado", "reencolable", "esperaPorTi"],
+  // sola sino de las consolas abiertas, así que lo pasa quien la compone. Y `gastoEnCurso`, lo que lleva gastado una
+  // `en-proceso`: lo mide el corredor, que es quien sabe qué traía su sesión al empezar.
+  estado: ["estado", "reencolable", "esperaPorTi", "gastoEnCurso"],
   motivo: ["motivo"],
   sesion: ["sesion"],
   // Viaja: la pestaña Tareas dice «espera a: <título de la anterior>» de una encadenada.
@@ -146,8 +147,12 @@ describe("filaDeTarea", () => {
     // `reencolable` es la excepción: solo sale SIN ticket, y la completa lo lleva. Y `esperaPorTi`
     // solo si quien compone la fila lo pasa.
     expect(Object.keys(filaDeTarea(TAREA_COMPLETA)).sort()).toEqual(
-      producidos.filter((c) => c !== "reencolable" && c !== "esperaPorTi")
+      producidos.filter((c) => c !== "reencolable" && c !== "esperaPorTi" && c !== "gastoEnCurso")
     );
+    const gasto = { modelo: { entrada: 5, salida: 1, cache: 0 }, externo: { entrada: 0, salida: 0, cache: 0 } };
+    expect(filaDeTarea({ ...TAREA_COMPLETA, estado: "en-proceso" }, undefined, gasto).gastoEnCurso).toEqual(gasto);
+    // Solo en marcha: el de una que ya no trabaja sería una cifra vieja.
+    expect("gastoEnCurso" in filaDeTarea({ ...TAREA_COMPLETA, estado: "terminada" }, undefined, gasto)).toBe(false);
     const espera = { motivo: "tu conversación en este proyecto está trabajando", ceder: false };
     expect(filaDeTarea(TAREA_COMPLETA, espera).esperaPorTi).toEqual(espera);
     const { ticket: _t, ...sinTicket } = TAREA_COMPLETA;
