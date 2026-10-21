@@ -120,6 +120,60 @@ describe("la caché de Anthropic viaja en la petición", () => {
   });
 });
 
+/**
+ * El RAZONAMIENTO de Anthropic, que viaja en el `message_delta` del SSE (`usage.output_tokens_details.thinking_tokens`) y
+ * `@langchain/anthropic` 1.5.2 tira: al trozo solo pasa `output_tokens`. Medido el 21-10-2026 contra la API con
+ * `claude-sonnet-5-5`. Sin esto la traza no puede decir cuánto de la salida fue pensar.
+ */
+describe("el razonamiento de Anthropic llega al uso del mensaje", () => {
+  const anterior = process.env.ANTHROPIC_API_KEY;
+  const fetchAnterior = globalThis.fetch;
+  beforeEach(() => {
+    process.env.ANTHROPIC_API_KEY = "sk-ant-de-pega";
+  });
+  afterEach(() => {
+    globalThis.fetch = fetchAnterior;
+    if (anterior === undefined) delete process.env.ANTHROPIC_API_KEY;
+    else process.env.ANTHROPIC_API_KEY = anterior;
+  });
+
+  const sse = (eventos: Record<string, unknown>[]) =>
+    new Response(eventos.map((e) => `event: ${String(e["type"])}\ndata: ${JSON.stringify(e)}\n\n`).join(""), {
+      status: 200,
+      headers: { "content-type": "text/event-stream" },
+    });
+  const conversacion = (detalles?: Record<string, unknown>) => [
+    { type: "message_start", message: { id: "msg_1", type: "message", role: "assistant", model: "claude-sonnet-5-5", content: [], stop_reason: null, stop_sequence: null, usage: { input_tokens: 41, output_tokens: 0 } } },
+    { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } },
+    { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "17" } },
+    { type: "content_block_stop", index: 0 },
+    { type: "message_delta", delta: { stop_reason: "end_turn", stop_sequence: null }, usage: { output_tokens: 1500, ...(detalles === undefined ? {} : { output_tokens_details: detalles }) } },
+    { type: "message_stop" },
+  ];
+  const acumulado = async (eventos: Record<string, unknown>[]) => {
+    globalThis.fetch = (async () => sse(eventos)) as typeof fetch;
+    const cliente = new Modelos({ bandera: "anthropic/claude-sonnet-5-5" }).paraPapel("trabajo") as {
+      stream: (m: unknown) => Promise<AsyncIterable<{ concat: (o: unknown) => unknown }>>;
+    };
+    let total: { concat: (o: unknown) => unknown } | undefined;
+    for await (const t of await cliente.stream([{ role: "user", content: "hola" }])) total = total === undefined ? t : (total.concat(t) as typeof t);
+    return total as unknown as { usage_metadata?: { output_tokens?: number; output_token_details?: { reasoning?: number } }; additional_kwargs: Record<string, unknown> };
+  };
+
+  it("los `thinking_tokens` del `message_delta` van a `output_token_details.reasoning`, y no se quedan en el mensaje", async () => {
+    const m = await acumulado(conversacion({ thinking_tokens: 1234 }));
+    expect(m.usage_metadata?.output_tokens).toBe(1500);
+    expect(m.usage_metadata?.output_token_details?.reasoning).toBe(1234);
+    expect(Object.keys(m.additional_kwargs).some((k) => k.includes("thinking"))).toBe(false);
+  });
+
+  it("si el proveedor no lo dice, no se inventa: ausente, no cero", async () => {
+    const m = await acumulado(conversacion());
+    expect(m.usage_metadata?.output_tokens).toBe(1500);
+    expect(m.usage_metadata?.output_token_details?.reasoning).toBeUndefined();
+  });
+});
+
 describe("el esfuerzo, contra el invocationParams de cada cliente", () => {
   const guardadas = { ...process.env };
   beforeEach(() => {

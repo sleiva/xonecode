@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { ChatOpenAI } from "@langchain/openai";
 import { ChatAnthropic } from "@langchain/anthropic";
+import type { AIMessageChunk } from "@langchain/core/messages";
 import { ChatOllama } from "@langchain/ollama";
 import type { ModelosPort, Papel } from "../../core/ports.js";
 import {
@@ -237,6 +238,54 @@ function construirCompatibleOpenAi(
   });
 }
 
+/** Dónde viaja, dentro de UNA llamada, el razonamiento del evento crudo hasta su trozo. No sale de esta clase. */
+const RAZONAMIENTO_DEL_DELTA = "__xonecode_thinking_tokens";
+
+/**
+ * **`ChatAnthropic` con el RAZONAMIENTO en el uso**, donde ya lo lee la traza (`output_token_details.reasoning`, como
+ * DeepSeek). Anthropic lo manda en el `message_delta` del SSE (`usage.output_tokens_details.thinking_tokens`) y
+ * `@langchain/anthropic` 1.5.2 lo tira: al trozo solo pasa `output_tokens`. Medido el 21-10-2026 con `claude-sonnet-5-5`.
+ *
+ * Dos ganchos y ninguna copia de su código: el stream crudo apunta el dato en el `delta` del evento —que la dependencia
+ * extiende en `additional_kwargs` del MISMO trozo— y el trozo lo saca de ahí y lo pone en su uso. Todo dentro de la
+ * llamada, sin estado compartido, así que dos llamadas en paralelo sobre el mismo cliente no se cruzan. Solo streaming,
+ * que es como llaman los dos motores.
+ */
+class ChatAnthropicConRazonamiento extends ChatAnthropic {
+  override async createStreamWithRetry(...args: Parameters<ChatAnthropic["createStreamWithRetry"]>) {
+    const stream = await super.createStreamWithRetry(...args);
+    return new Proxy(stream, {
+      get(objetivo, clave, receptor) {
+        if (clave !== Symbol.asyncIterator) return Reflect.get(objetivo, clave, receptor);
+        return async function* () {
+          for await (const evento of objetivo) {
+            if (evento.type !== "message_delta") {
+              yield evento;
+              continue;
+            }
+            const pensado = (evento.usage as { output_tokens_details?: { thinking_tokens?: unknown } }).output_tokens_details?.thinking_tokens;
+            yield typeof pensado === "number" ? { ...evento, delta: { ...evento.delta, [RAZONAMIENTO_DEL_DELTA]: pensado } } : evento;
+          }
+        };
+      },
+    });
+  }
+
+  override async *_streamResponseChunks(...args: Parameters<ChatAnthropic["_streamResponseChunks"]>) {
+    for await (const trozo of super._streamResponseChunks(...args)) {
+      const mensaje = trozo.message as AIMessageChunk;
+      const pensado = mensaje.additional_kwargs[RAZONAMIENTO_DEL_DELTA];
+      if (typeof pensado === "number") {
+        delete mensaje.additional_kwargs[RAZONAMIENTO_DEL_DELTA];
+        if (mensaje.usage_metadata !== undefined) {
+          mensaje.usage_metadata = { ...mensaje.usage_metadata, output_token_details: { ...mensaje.usage_metadata.output_token_details, reasoning: pensado } };
+        }
+      }
+      yield trozo;
+    }
+  }
+}
+
 /** El cliente de un `{proveedor, modelo}`, venga de un papel o de la elección de un agente. */
 function construirModelo(
   { proveedor, modelo }: { proveedor: Proveedor; modelo: string },
@@ -311,7 +360,7 @@ function construirModelo(
         // `claude-sonnet-5`—, que en un harness que escribe ficheros corta a media
         // escritura; y omitir `thinking` corre sin pensar en la generación 4.6-4.8,
         // mientras que pedirlo a Haiku o a lo anterior a 4.6 sería un 400.
-        return new ChatAnthropic({
+        return new ChatAnthropicConRazonamiento({
           model: modelo,
           apiKey: process.env.ANTHROPIC_API_KEY,
           // La CACHÉ de Anthropic se PIDE: sin `cache_control` no cachea nada, al revés que Gemini o DeepSeek (implícita).
