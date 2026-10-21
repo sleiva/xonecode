@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Acto } from "./actos.js";
-import { avisoDeReparto, motivoDePropuestaInaceptable, propuestaPendiente, tareasEncadenadas, TAREAS_PARA_RECORDAR_EL_REPARTO, TOPE_DE_TAREAS_PROPUESTAS } from "./repartoDeEncargo.js";
+import { TOPE_DE_PANTALLAS_POR_TAREA, avisoDeReparto, motivoDePropuestaInaceptable, propuestaPendiente, tareasEncadenadas, TAREAS_PARA_RECORDAR_EL_REPARTO, TOPE_DE_TAREAS_PROPUESTAS } from "./repartoDeEncargo.js";
 
 const dos = {
   motivo: "son dos pantallas independientes",
@@ -99,5 +99,20 @@ describe("avisoDeReparto", () => {
   it("uno pequeño, o ninguno, no dice nada", () => {
     expect(avisoDeReparto([{ ruta: "/planes/x/TASKS.md", tareas: TAREAS_PARA_RECORDAR_EL_REPARTO - 1 }])).toBeUndefined();
     expect(avisoDeReparto([])).toBeUndefined();
+  });
+});
+
+/** Petición suya (21-10-2026): cada tarea de FONDO propuesta, como mucho dos pantallas de Stitch. */
+describe("como mucho dos pantallas por tarea propuesta", () => {
+  const conPantallas = (n: number) =>
+    ["MAQUETAS (proyecto Stitch «Maset», projects/839):", ...Array.from({ length: n }, (_, i) => `${i + 1}. «Paso ${i + 1}» — .../screens/p${i}`)].join("\n");
+
+  it("con tres o más, se rechaza diciendo cuál y que la parta; con dos, vale", () => {
+    const tarea = (peticion: string) => ({ titulo: "Entrega", peticion });
+    const otra = { titulo: "Listado", peticion: "haz el listado" };
+    expect(motivoDePropuestaInaceptable({ motivo: "grande", tareas: [tarea(conPantallas(2)), otra] })).toBeUndefined();
+    const motivo = motivoDePropuestaInaceptable({ motivo: "grande", tareas: [tarea(conPantallas(4)), otra] });
+    expect(motivo).toContain("la tarea 1 («Entrega») lleva 4 pantallas de Stitch");
+    expect(motivo).toContain(`como mucho ${String(TOPE_DE_PANTALLAS_POR_TAREA)} por tarea`);
   });
 });

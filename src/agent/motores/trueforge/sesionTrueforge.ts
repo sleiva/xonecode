@@ -191,9 +191,9 @@ const BUCLE_DE_CALIDAD = [
  * (`agentesEnDisco.ts#PLAN_DE_DESARROLLO`) y al repartir en tareas de fondo (`proponerTareas.ts#REPARTIR_EN_TAREAS`).
  */
 export const UNA_VENTANA_POR_ENCARGO = [
-  "UNA VENTANA POR ENCARGO: cada encargo a developer-xone es, como MUCHO, UNA ventana de la app (una colección con su pantalla;",
-  "sus pestañas y diálogos cuentan como la misma). Con varias, un encargo por ventana y en orden, aunque el plan las agrupe en",
-  "una tarea: con más, se le acaba el presupuesto de llamadas a mitad y devuelve el trabajo a medias.",
+  "UNA VENTANA POR ENCARGO: cada encargo a developer-xone es, como MUCHO, UNA ventana de la app y DOS pantallas de su diseño",
+  "(una pestaña o un paso con su propia pantalla cuenta aparte). Con más, un encargo por cada una o dos, en orden, aunque el plan",
+  "las agrupe en una tarea: con más, se le acaba el presupuesto de llamadas a mitad y devuelve el trabajo a medias.",
 ].join("\n");
 
 export const PLAN_PRIMERO = [

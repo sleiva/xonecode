@@ -162,6 +162,9 @@ corre solo y escribe sin aprobación. Cuatro estados; `requiere-atencion` = **es
 - **Lo que el encargo CITA, lo trae el corredor** (`core/stitch.ts#pantallasCitadasEnElEncargo`): sin
   `pantallasDeStitch` elegidas, los `projects/…/screens/…` del encargo se traen antes del primer turno como si
   lo fueran (`diseno/`, `diseno/2/`…). Medido en Maset: un encargo decía «ya está en `/artefactos/diseno/`» y no estaba.
+- **Cada tarea de FONDO propuesta, como mucho `TOPE_DE_PANTALLAS_POR_TAREA` pantallas de Stitch** (las que cita su
+  petición, `pantallasCitadasEnElEncargo`): más se RECHAZA en `motivoDePropuestaInaceptable` y se le pide partirla. No son
+  las tareas del `TASKS.md`, que son más finas.
 - **El agente solo PROPONE** (`core/repartoDeEncargo.ts`, `proponerTareas.ts`,
   `PropuestaDeTareas.tsx`); crea el clic, TAMBIÉN en autónomo. Solo el raíz de TrueForge en
   consola de PERSONA web (`Consola.proponeTareas`). `TASKS.md` con varias

@@ -1,6 +1,7 @@
 import type { Acto } from "./actos.js";
 import { nombreDeAdjuntoAceptable } from "./adjuntos.js";
 import { tituloDeTarea, type Tarea } from "./tareas.js";
+import { pantallasCitadasEnElEncargo } from "./stitch.js";
 
 /**
  * Repartir un encargo GRANDE en tareas de fondo que corren EN ORDEN (petición de la persona, 06-10-2026: «cuando le doy
@@ -15,6 +16,13 @@ import { tituloDeTarea, type Tarea } from "./tareas.js";
 export const NOMBRE_PROPONER_TAREAS = "proponer_tareas";
 /** Un reparto de más tareas es otro plan, no un encargo repartido. */
 export const TOPE_DE_TAREAS_PROPUESTAS = 6;
+/**
+ * **Como mucho DOS pantallas de Stitch por tarea** (petición suya, 21-10-2026: «cada tarea como máximo una pantalla o dos»).
+ * Medido en Maset: con la regla de «una ventana» las pestañas contaban como una, y «Entrega (pestañas del albarán)» salió
+ * con cuatro pantallas en una tarea; una tarea de varias agota el presupuesto de quien la ejecuta. Se cuentan los `name`
+ * que cita su petición (`pantallasCitadasEnElEncargo`), que es con lo que la tarea las trae.
+ */
+export const TOPE_DE_PANTALLAS_POR_TAREA = 2;
 /** El mismo tope que el encargo aumentado (`agent/tareas/aumentador.ts#TOPE_DE_ENCARGO`). */
 export const TOPE_DE_PETICION = 8000;
 
@@ -50,6 +58,10 @@ export function motivoDePropuestaInaceptable(p: PropuestaDeTareas): string | und
     if (t.titulo.trim() === "") return `la tarea ${i + 1} no tiene título`;
     if (t.peticion.trim() === "") return `la tarea ${i + 1} no tiene petición`;
     if (t.peticion.length > TOPE_DE_PETICION) return `la petición de la tarea ${i + 1} pasa de ${TOPE_DE_PETICION} caracteres`;
+    const pantallas = pantallasCitadasEnElEncargo(t.peticion).length;
+    if (pantallas > TOPE_DE_PANTALLAS_POR_TAREA) {
+      return `la tarea ${i + 1} («${t.titulo.trim()}») lleva ${pantallas} pantallas de Stitch: como mucho ${TOPE_DE_PANTALLAS_POR_TAREA} por tarea, pártela en varias (una pestaña o un paso con su pantalla también cuenta)`;
+    }
     for (const a of t.adjuntos ?? []) {
       if (!nombreDeAdjuntoAceptable(nombreDeAdjuntoPropuesto(a))) return `«${a}» no es un adjunto de esta conversación (tarea ${i + 1})`;
     }
