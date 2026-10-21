@@ -9,7 +9,7 @@ import type { DetalleDeLinea } from "../../../core/actos.js";
 import type { ModelosPort, PeticionExterna } from "../../../core/ports.js";
 import { ConectoresEnMemoria } from "../../../core/ports.js";
 import { TOPE_DE_LLAMADA_MS } from "../../../core/conectores.js";
-import { abrirSesionTrueforge, LIMITE_DE_LLAMADAS_DEL_RAIZ, notaDeDelegacion, PLAN_PRIMERO, textoDelBucle } from "./sesionTrueforge.js";
+import { abrirSesionTrueforge, LIMITE_DE_LLAMADAS_DEL_RAIZ, notaDeDelegacion, PLAN_PRIMERO, textoDelBucle, TOPE_DE_ENCARGOS_AL_DESARROLLADOR } from "./sesionTrueforge.js";
 import { TOPE_DE_LLAMADAS_DEL_ESPECIALISTA } from "../../turno/resumenDeContexto.js";
 import { falloDelMotorDe, topeAgotadoDe, traducirEvento } from "./eventosTrueforge.js";
 import { cargarMemoria, interpretarFoto, rutaDeMemoria } from "./memoriaTrueforge.js";
@@ -3777,4 +3777,47 @@ describe("falloDelMotorDe", () => {
     expect(falloDelMotorDe({ type: "internal.agent.done", status: "ok" })).toBeUndefined();
     expect(falloDelMotorDe({ type: "internal.agent.context.append" })).toBeUndefined();
   });
+});
+
+/** Petición suya (21-10-2026): en una TAREA, como mucho N encargos al desarrollador; el siguiente no arranca y manda cerrar. */
+describe("el tope de encargos al desarrollador en una tarea", () => {
+  const delega = (id: string) =>
+    new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id, name: "create_sub_agent", args: JSON.stringify({ name: "developer-xone", input: "otra vuelta" }) }] });
+
+  it("el cuarto encargo no arranca: el orquestador recibe la orden de cerrar con lo que hay", async () => {
+    const raiz = proyecto();
+    const { m, vistos } = modelosConGuion([
+      [delega("d1")],
+      [new AIMessageChunk({ content: "vuelta 1" })],
+      [delega("d2")],
+      [new AIMessageChunk({ content: "vuelta 2" })],
+      [delega("d3")],
+      [new AIMessageChunk({ content: "vuelta 3" })],
+      [delega("d4")],
+      [new AIMessageChunk({ content: "Cierro con lo que hay." })],
+    ]);
+    const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, bucleDelDesarrollador: true, trabajoSinPersona: true });
+    const r = piel();
+    await s.turno("rediseña la ventana", r.p);
+    const ultima = vistos.at(-1)!.join("\n");
+    expect(ultima).toContain(`ya van ${String(TOPE_DE_ENCARGOS_AL_DESARROLLADOR)} encargos suyos en esta tarea`);
+    expect(r.tokens.join("")).toContain("Cierro con lo que hay.");
+    // Ocho llamadas al modelo: cuatro del raíz y TRES del desarrollador; la cuarta no llegó a arrancar.
+    expect(vistos).toHaveLength(8);
+  }, 30_000);
+
+  it("con persona delante no hay tope: el cuarto arranca", async () => {
+    const raiz = proyecto();
+    const { m, vistos } = modelosConGuion([
+      [delega("d1")], [new AIMessageChunk({ content: "1" })],
+      [delega("d2")], [new AIMessageChunk({ content: "2" })],
+      [delega("d3")], [new AIMessageChunk({ content: "3" })],
+      [delega("d4")], [new AIMessageChunk({ content: "4" })],
+      [new AIMessageChunk({ content: "Hecho." })],
+    ]);
+    const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, bucleDelDesarrollador: true });
+    await s.turno("rediseña la ventana", piel().p);
+    expect(vistos).toHaveLength(9);
+    expect(vistos.at(-1)!.join("\n")).not.toContain("encargos suyos en esta tarea");
+  }, 30_000);
 });

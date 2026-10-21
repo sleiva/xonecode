@@ -69,7 +69,10 @@ Ante una discrepancia con el código, **el código manda**.
 - **Las capturas se cuentan** (`COMANDO_DE_CAPTURA`, `UMBRALES_DE_CAPTURAS`), con o sin bucle.
 - **Maquetador externo con shell: el bucle es SUYO** (`textoDeMaquetadorExterno`): todo en un encargo, crítico una vez,
   otra vuelta solo por algo bloqueante.
-- **Sale con el CRITERIO DE ACEPTACIÓN medible** del encargo, tope de tres vueltas.
+- **Sale con el CRITERIO DE ACEPTACIÓN medible** del encargo, tope de tres vueltas. **En una TAREA, como mucho
+  `TOPE_DE_ENCARGOS_AL_DESARROLLADOR` encargos del orquestador a developer-xone por turno**: el siguiente no arranca
+  (`hiloQueNoArranca` con `textoDeTopeDeEncargos`) y manda cerrar con lo que falta en «Por arreglar» / «No se puede en
+  XOne». Medido: siete «últimas vueltas» persiguiendo un crítico en rojo. Con persona delante no aplica.
 - **UNA VENTANA por encargo y por tarea del plan** (`UNA_VENTANA_POR_ENCARGO`, `PLAN_DE_DESARROLLO`, `REPARTIR_EN_TAREAS`,
   skill `xone-plan-builder`): con varias, el developer agota su presupuesto a mitad. Es redacción, no guarda.
 - **Traspasos acotados** (`toolsDeFichero.ts`, `informesDeHijos.ts`): `write_file` solo CREA un `.xne`/`.js`/`.css`

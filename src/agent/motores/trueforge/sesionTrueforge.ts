@@ -272,6 +272,14 @@ export const SIN_HABLAR_DEL_HARNESS =
   "DE ANÁLISIS…), la foto o el contexto que te llega al empezar, ni lo que vas a medir o no: cuéntale lo que encontraste, " +
   "lo que hiciste en su proyecto y lo que necesitas de él. Si pregunta cómo trabajas, entonces sí.";
 
+/**
+ * **Como mucho N encargos a developer-xone en un turno de TAREA** (petición suya, 21-10-2026). Medido en Maset
+ * («Albaranes pendientes»): siete encargos en 70 min —«Última vuelta», «Cierre», «Última prueba», «la ÚLTIMA vía»…—
+ * persiguiendo un crítico en rojo por iconos que XOne no pintaba en una fila. Al siguiente no se lanza: se le devuelve al
+ * orquestador la orden de cerrar (`textoDeTopeDeEncargos`). Con persona delante no aplica: ella decide si sigue.
+ */
+export const TOPE_DE_ENCARGOS_AL_DESARROLLADOR = 3;
+
 /** Lo que recibe el agente en modo autónomo cuando pregunta sin marcar ninguna opción como recomendada. */
 /**
  * Al raíz de una TAREA DE FONDO (`trabajoSinPersona`). Preguntar no está prohibido —la pregunta se contesta sola con su
@@ -291,7 +299,19 @@ export const TRABAJO_SIN_PERSONA = [
   "  que se ve distinto del diseño o falla), «No es un defecto» (un dato de ejemplo de la maqueta —una versión, una",
   "  cifra, un nombre—, el estado en que la pinta —un campo relleno— o una medida que se equivoca, cada uno con su",
   "  porqué), «Sin comprobar» (lo que nadie probó, primero lo que podría romper la app) y «No se puede en XOne».",
+  `- Como MUCHO ${String(TOPE_DE_ENCARGOS_AL_DESARROLLADOR)} encargos a developer-xone en la tarea: si con eso la pantalla no respeta el diseño, cierra con`,
+  "  lo que hay y pon lo que falta en «Por arreglar» o «No se puede en XOne», con lo que se midió. Otra «última vuelta» no la arregla.",
 ].join("\n");
+
+
+/** Lo que recibe el orquestador en lugar de un encargo más al desarrollador, pasado el tope. */
+export function textoDeTopeDeEncargos(tope: number): string {
+  return (
+    `developer-xone NO HA ARRANCADO: ya van ${String(tope)} encargos suyos en esta tarea, que es el tope. CIERRA AHORA con lo que hay: ` +
+    "lo hecho y medido, y lo que falta en «Por arreglar» o «No se puede en XOne», cada cosa con lo que se midió, para que la " +
+    "persona decida. No vuelvas a llamar a developer-xone en este turno."
+  );
+}
 
 /**
  * Lo aprendido, para el ORQUESTADOR: lo que hay apuntado y cuándo apuntar él. Le toca sobre todo lo que le cuente un
@@ -374,8 +394,10 @@ function hiloQueNoArranca(
 ): AgentThread {
   const padre = params.parent as { tool_call_id?: string };
   const texto =
-    `${nombre} NO HA ARRANCADO: espera a que termine ${esperados.join(", ")}, que sigue trabajando y produce lo que ${nombre} necesita. ` +
-    `Cuando ${esperados.join(", ")} te devuelva su informe, vuelve a llamar a ${nombre} con ese informe dentro del encargo.`;
+    esperados.length === 0
+      ? textoDeTopeDeEncargos(TOPE_DE_ENCARGOS_AL_DESARROLLADOR)
+      : `${nombre} NO HA ARRANCADO: espera a que termine ${esperados.join(", ")}, que sigue trabajando y produce lo que ${nombre} necesita. ` +
+        `Cuando ${esperados.join(", ")} te devuelva su informe, vuelve a llamar a ${nombre} con ese informe dentro del encargo.`;
   return new AgentThread({
     definition: { modelClient: modelo, iterationLimit: 1 } as never,
     threadId: params.threadId,
@@ -956,6 +978,8 @@ export async function abrirSesionTrueforge(
   let capturasDelTurno: Artefacto[] = [];
   /** Lo que dieron las comprobaciones visuales del turno, una línea cada una, para el juez de QA (`ResultadoDeTurno`). */
   let comprobacionesDelTurno: string[] = [];
+  /** Cuántos encargos ha hecho el orquestador a developer-xone en este turno (`TOPE_DE_ENCARGOS_AL_DESARROLLADOR`). */
+  let encargosAlDesarrolladorDelTurno = 0;
   /** El fallo del motor en el RAÍZ durante este turno (`ResultadoDeTurno.falloDelMotor`). */
   let falloDelMotorDelTurno: string | undefined;
   let bloqueantesVisualesDelTurno: string[] = [];
@@ -1540,6 +1564,15 @@ export async function abrirSesionTrueforge(
       diagnostico?.memoria?.(agente.nombre, "arranca-sin", `espera a ${debeEsperar.join(", ")}`);
       return hiloQueNoArranca(agente.nombre, debeEsperar, params, llm, logger);
     }
+    // Pasado el tope de encargos al desarrollador en una TAREA, no arranca: el orquestador recibe la orden de cerrar.
+    if (opciones.trabajoSinPersona === true && agente?.nombre === "developer-xone" && (params.parent as { thread_id?: string } | undefined)?.thread_id === HILO_RAIZ) {
+      if (encargosAlDesarrolladorDelTurno >= TOPE_DE_ENCARGOS_AL_DESARROLLADOR) {
+        anotarPaso("trueforge.tope-de-encargos", `developer-xone: ${String(encargosAlDesarrolladorDelTurno)} encargos, no arranca otro`)();
+        diagnostico?.memoria?.(agente.nombre, "arranca-sin", "tope de encargos al desarrollador");
+        return hiloQueNoArranca(agente.nombre, [], params, llm, logger);
+      }
+      encargosAlDesarrolladorDelTurno += 1;
+    }
     detencion.nacio(params.threadId);
     // El conductor tiene el suyo, más corto: medido, sin él se fue a 150 llamadas investigando (`presupuesto.ts`).
     const presupuestoDelHijo = agente?.ejecucion === true ? TOPE_DE_LLAMADAS_DEL_CONDUCTOR : TOPE_DE_LLAMADAS_DEL_ESPECIALISTA;
@@ -2074,6 +2107,7 @@ export async function abrirSesionTrueforge(
       capturasDelTurno = [];
       comprobacionesDelTurno = [];
       falloDelMotorDelTurno = undefined;
+      encargosAlDesarrolladorDelTurno = 0;
       bloqueantesVisualesDelTurno = [];
       pantallasNoEncontradasDelTurno = [];
       horaDeLaUltimaCritica = undefined;
