@@ -323,14 +323,17 @@ describe("editar el encargo (IXCODE-52)", () => {
       />
     );
     fireEvent.click(screen.getByRole("button", { name: "Editar la tarea" }));
-    expect(screen.getByRole("button", { name: "Adjuntar imagen…" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Añadir imagen o arrástrala aquí/ })).toBeTruthy();
+    expect(screen.getByText("Sin cambios todavía")).toBeTruthy();
     const entrada = container.ownerDocument.querySelector('input[type="file"]') as HTMLInputElement;
     await act(async () => {
       fireEvent.change(entrada, { target: { files: [new File(["x"], "nueva.png", { type: "image/png" })] } });
     });
     expect(subir).toHaveBeenCalledWith(expect.any(String), "nueva.png", expect.any(File));
     const borrador = (subir.mock.calls[0] as unknown as [string])[0];
-    fireEvent.click(within(screen.getByRole("list", { name: "Adjuntos que ya tiene" })).getByRole("button", { name: "Quitar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Quitar vieja.png" }));
+    expect(screen.getByText("se quitará al guardar")).toBeTruthy();
+    expect(screen.getByText("Al guardar: 1 imagen nueva · 1 se quita")).toBeTruthy();
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
     });

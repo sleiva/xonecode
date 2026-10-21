@@ -1,5 +1,5 @@
 import { useContext, useEffect, useRef, useState } from "react";
-import { ListaDeAdjuntos, useAdjuntosDeBorrador, type AdjuntosDelBorrador } from "./adjuntosDeBorrador.js";
+import { useAdjuntosDeBorrador, type AdjuntosDelBorrador } from "./adjuntosDeBorrador.js";
 import { DisenoDeTareasContexto } from "../disenoContexto.js";
 import { ListaDePantallas, SelectorDePantalla } from "./DisenoDelProyecto.js";
 import { Modal, Button } from "@deepseek-ai/dsh-client-ui-primitives";
@@ -429,6 +429,17 @@ function EditarEncargo({
     ? undefined
     : { ...(algunoListo ? { borrador } : {}), ...(quitadas.length > 0 ? { quitar: quitadas } : {}) };
   const pegar = adjuntosDelBorrador === undefined ? {} : { onPaste: alPegar };
+  // Lo que pasará al guardar, al pie (su lienzo): solo lo que cambió; sin cambios, lo dice.
+  const nuevasListas = nuevas.filter((a) => a.estado === "listo").length;
+  const resumenDeCambios = (() => {
+    const partes = [
+      ...(limpioCambiado(texto, t.encargo) || limpioCambiado(peticion, t.peticion) ? ["el texto"] : []),
+      ...(pantallaCambiada ? ["el diseño"] : []),
+      ...(nuevasListas > 0 ? [nuevasListas === 1 ? "1 imagen nueva" : `${nuevasListas} imágenes nuevas`] : []),
+      ...(quitadas.length > 0 ? [quitadas.length === 1 ? "1 se quita" : `${quitadas.length} se quitan`] : []),
+    ];
+    return partes.length === 0 ? "Sin cambios todavía" : `Al guardar: ${partes.join(" · ")}`;
+  })();
   const limpio = texto.trim();
   const pedido = peticion.trim();
   const sinCambios = limpio === t.encargo.trim() && pedido === t.peticion.trim() && !pantallaCambiada && !adjuntosCambiados;
@@ -541,13 +552,80 @@ function EditarEncargo({
             {...pegar}
           />
           {adjuntosDelBorrador === undefined ? null : (
-            <>
-              <div className={estilos.filaDeAdjuntos}>
-                <span className={modal.etiqueta}>Imágenes (pega una captura en el texto, o elígela)</span>
-                <Button type="button" variant="outline" className={modal.accion} disabled={apagado || ocupado} onClick={() => entradaDeFicheros.current?.click()}>
-                  Adjuntar imagen…
-                </Button>
+            /* Las IMÁGENES en miniaturas (su lienzo, 21-10-2026): las que ya tenía —sin vista: el servidor no las sirve,
+               así que van con su icono y su nombre— y las nuevas con la suya, más una casilla para añadir que también
+               recibe lo que se ARRASTRA. Pegar sigue valiendo en los dos textos. */
+            <section
+              className={estilos.imagenes}
+              aria-label="Imágenes"
+              onDragOver={(e) => {
+                if (e.dataTransfer.types.includes("Files")) e.preventDefault();
+              }}
+              onDrop={(e) => {
+                if (e.dataTransfer.files.length === 0) return;
+                e.preventDefault();
+                void añadir(e.dataTransfer.files);
+              }}
+            >
+              <div className={estilos.cabeceraDeImagenes}>
+                <span className={modal.etiqueta}>{`Imágenes · ${deAntes.length + nuevas.length}`}</span>
+                <span className={estilos.notaDeImagenes}>Las verá el agente en /adjuntos/, de solo lectura</span>
               </div>
+              <ul className={estilos.rejillaDeImagenes}>
+                {t.adjuntos.map((a) => {
+                  const fuera = quitadas.includes(a.nombre);
+                  return (
+                    <li key={`antes-${a.nombre}`} className={estilos.imagen} data-quitado={fuera ? "" : undefined}>
+                      <span className={estilos.sinVista} aria-hidden="true">
+                        <IconoDeImagen />
+                      </span>
+                      <span className={estilos.nombreDeImagen}>{a.nombre}</span>
+                      <span className={estilos.estadoDeImagen}>{fuera ? "se quitará al guardar" : "ya la tenía"}</span>
+                      <button
+                        type="button"
+                        className={estilos.quitarImagen}
+                        aria-label={fuera ? `Volver a poner ${a.nombre}` : `Quitar ${a.nombre}`}
+                        disabled={apagado || ocupado}
+                        onClick={() => setQuitadas((q) => (fuera ? q.filter((n) => n !== a.nombre) : [...q, a.nombre]))}
+                      >
+                        {fuera ? "↺" : "×"}
+                      </button>
+                    </li>
+                  );
+                })}
+                {nuevas.map((a) => (
+                  <li key={`nueva-${a.id}`} className={estilos.imagen} data-nueva="" data-estado={a.estado}>
+                    {a.vista === undefined ? (
+                      <span className={estilos.sinVista} aria-hidden="true">
+                        <IconoDeImagen />
+                      </span>
+                    ) : (
+                      <img className={estilos.vista} src={a.vista} alt="" />
+                    )}
+                    <span className={estilos.nombreDeImagen}>{a.nombre}</span>
+                    <span className={estilos.estadoDeImagen}>
+                      {a.quitando ? "quitando…" : a.estado === "subiendo" ? "subiendo…" : a.estado === "listo" ? (a.motivo ?? "nueva") : (a.motivo ?? "no se pudo subir")}
+                    </span>
+                    {a.estado === "listo" && !puedeQuitar ? null : (
+                      <button
+                        type="button"
+                        className={estilos.quitarImagen}
+                        aria-label={`Quitar ${a.nombre}`}
+                        disabled={a.estado === "subiendo" || a.quitando === true}
+                        onClick={() => void quitar(a.id)}
+                      >
+                        ×
+                      </button>
+                    )}
+                  </li>
+                ))}
+                <li>
+                  <button type="button" className={estilos.anadirImagen} disabled={apagado || ocupado} onClick={() => entradaDeFicheros.current?.click()}>
+                    <span aria-hidden="true">+</span>
+                    Añadir imagen o arrástrala aquí
+                  </button>
+                </li>
+              </ul>
               <input
                 ref={entradaDeFicheros}
                 hidden
@@ -558,28 +636,8 @@ function EditarEncargo({
                   e.target.value = "";
                 }}
               />
-              {deAntes.length === 0 && quitadas.length === 0 ? null : (
-                <ul className={estilos.adjuntosDeAntes} aria-label="Adjuntos que ya tiene">
-                  {t.adjuntos.map((a) => {
-                    const fuera = quitadas.includes(a.nombre);
-                    return (
-                      <li key={a.nombre} data-quitado={fuera ? "" : undefined}>
-                        <span>{a.nombre}</span>
-                        <button
-                          type="button"
-                          className={estilos.boton}
-                          disabled={apagado || ocupado}
-                          onClick={() => setQuitadas((q) => (fuera ? q.filter((n) => n !== a.nombre) : [...q, a.nombre]))}
-                        >
-                          {fuera ? "Volver a ponerlo" : "Quitar"}
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-              <ListaDeAdjuntos adjuntos={nuevas} quitar={quitar} puedeQuitar={puedeQuitar} />
-            </>
+              <p className={estilos.notaDeImagenes}>También puedes pegar una captura en cualquiera de los dos textos.</p>
+            </section>
           )}
               {!conDiseno ? null : (
                 pantallas.length > 1 ? (
@@ -601,7 +659,8 @@ function EditarEncargo({
           {negativa === undefined ? null : (
             <p className={modal.fallo} role="alert">{`No se pudo: ${negativa}`}</p>
           )}
-          <div className={modal.acciones}>
+          <div className={`${modal.acciones} ${estilos.pieDeEditar}`}>
+            <span className={estilos.resumenDeCambios}>{resumenDeCambios}</span>
             <Button type="button" variant="outline" className={modal.accion} disabled={ocupado} onClick={onCancelar}>
               Cancelar
             </Button>
@@ -666,5 +725,18 @@ function FormularioDeFeedback({
         Enviar y continuar
       </button>
     </form>
+  );
+}
+
+const limpioCambiado = (a: string, b: string): boolean => a.trim() !== b.trim();
+
+/** Una imagen sin vista: las que la tarea ya tenía (el servidor no las sirve). Trazo, en el color del texto. */
+function IconoDeImagen() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <circle cx="9" cy="10" r="1.6" />
+      <path d="M21 16l-5-5-8 8" />
+    </svg>
   );
 }
