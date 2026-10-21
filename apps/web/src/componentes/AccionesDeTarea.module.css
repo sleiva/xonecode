@@ -155,3 +155,35 @@
 .pestana {
   composes: pestana from "./Ajustes.module.css";
 }
+
+/* «Editar la tarea»: sus imágenes, como en «Nueva tarea». Las que ya tenía, con su «Quitar» (tachadas si se van). */
+.filaDeAdjuntos {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.adjuntosDeAntes {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+}
+
+.adjuntosDeAntes > li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.adjuntosDeAntes > li[data-quitado] > span {
+  color: var(--dsw-alias-label-tertiary);
+  text-decoration: line-through;
+}

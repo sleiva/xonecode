@@ -609,7 +609,9 @@ export function aplicarEncargo(
   /** También la petición, de la que sale el título (IXCODE-53). Ausente = no se toca. */
   peticion?: string,
   /** Las pantallas de Stitch (ya comprobadas): nuevas, `null` para quitarlas, ausente = no se tocan. */
-  pantallas?: PantallaElegida[] | null
+  pantallas?: PantallaElegida[] | null,
+  /** Los adjuntos tal como quedaron en su carpeta tras editarlos (`adjuntosEditados`). Ausente = no se tocan. */
+  adjuntos?: Tarea["adjuntos"]
 ): ResultadoDeFeedback {
   const tareas = disco.listar();
   const actual = tareas.find((t) => t.id === id);
@@ -620,8 +622,33 @@ export function aplicarEncargo(
   } catch (error) {
     return { hecho: false, motivo: error instanceof Error ? error.message : String(error) };
   }
+  if (adjuntos !== undefined) siguiente = { ...siguiente, adjuntos };
   disco.guardar(tareas.map((t) => (t.id === id ? siguiente : t)));
   return { hecho: true };
+}
+
+/**
+ * Los adjuntos de una tarea que se EDITA (petición suya, 21-10-2026: «en editar las tareas, que se pueda anexar y pegar
+ * imágenes como en Nueva tarea»): los del `borrador` se copian a su carpeta —uno con el mismo nombre lo sustituye— y los
+ * de `quitar` se borran; el borrador se descarta. Devuelve los que quedan. Solo se llama con la edición YA comprobada
+ * (`conEncargo`): una negativa no puede dejar la carpeta tocada.
+ */
+export function adjuntosEditados(
+  cola: Pick<TareasEnDisco, "guardarAdjunto" | "quitarAdjunto" | "listarAdjuntos" | "borrarTarea" | "carpetaDeAdjuntos">,
+  id: string,
+  borrador: string | undefined,
+  quitar: readonly string[]
+): Tarea["adjuntos"] {
+  for (const nombre of quitar) cola.quitarAdjunto(id, nombre);
+  if (borrador !== undefined) {
+    const desde = cola.carpetaDeAdjuntos(borrador);
+    for (const a of desde === undefined ? [] : cola.listarAdjuntos(borrador)) {
+      const ruta = join(desde!, a.nombre);
+      if (existsSync(ruta)) cola.guardarAdjunto(id, a.nombre, readFileSync(ruta));
+    }
+    cola.borrarTarea(borrador);
+  }
+  return cola.listarAdjuntos(id);
 }
 
 /**

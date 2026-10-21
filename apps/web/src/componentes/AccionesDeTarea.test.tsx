@@ -310,6 +310,35 @@ describe("editar el encargo (IXCODE-52)", () => {
     expect(screen.queryByLabelText("Encargo")).toBeNull();
   });
 
+  /** Petición suya (21-10-2026): editar deja anexar y pegar imágenes como «Nueva tarea», y quitar las que ya tenía. */
+  it("con imágenes: sube las nuevas a su borrador, quita las de antes, y manda las dos cosas al guardar", async () => {
+    const alEditarEncargo = vi.fn(async () => undefined as string | undefined);
+    const subir = vi.fn(async () => ({ ok: true }));
+    const descartar = vi.fn();
+    const { container } = render(
+      <AccionesDeTarea
+        tarea={TAREA({ estado: "nuevo", motivo: undefined, encargo: "el de antes", adjuntos: [{ nombre: "vieja.png", bytes: 3 }] })}
+        alEditarEncargo={alEditarEncargo}
+        adjuntosDelBorrador={{ subir, descartar }}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Editar la tarea" }));
+    expect(screen.getByRole("button", { name: "Adjuntar imagen…" })).toBeTruthy();
+    const entrada = container.ownerDocument.querySelector('input[type="file"]') as HTMLInputElement;
+    await act(async () => {
+      fireEvent.change(entrada, { target: { files: [new File(["x"], "nueva.png", { type: "image/png" })] } });
+    });
+    expect(subir).toHaveBeenCalledWith(expect.any(String), "nueva.png", expect.any(File));
+    const borrador = (subir.mock.calls[0] as unknown as [string])[0];
+    fireEvent.click(within(screen.getByRole("list", { name: "Adjuntos que ya tiene" })).getByRole("button", { name: "Quitar" }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
+    });
+    expect(alEditarEncargo).toHaveBeenCalledWith("t1", "el de antes", "Arregla el login", undefined, { borrador, quitar: ["vieja.png"] });
+    // Guardado: el borrador es ya de la tarea, y cerrar no lo descarta.
+    expect(descartar).not.toHaveBeenCalled();
+  });
+
   it("la lista del proyecto lo hace llegar hasta la fila: una prop opcional olvidada por el camino no da error", () => {
     const alEditarEncargo = vi.fn(async () => undefined);
     render(

@@ -1,4 +1,5 @@
-import { useContext, useEffect, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
+import { ListaDeAdjuntos, useAdjuntosDeBorrador, type AdjuntosDelBorrador } from "./adjuntosDeBorrador.js";
 import { DisenoDeTareasContexto } from "../disenoContexto.js";
 import { ListaDePantallas, SelectorDePantalla } from "./DisenoDelProyecto.js";
 import { Modal, Button } from "@deepseek-ai/dsh-client-ui-primitives";
@@ -77,6 +78,7 @@ export function AccionesDeTarea({
   alContinuar,
   alArrancarAhora,
   alEditarEncargo,
+  adjuntosDelBorrador,
   alRegenerarEncargo,
   alParar,
   puedeArrancar,
@@ -102,7 +104,15 @@ export function AccionesDeTarea({
   /** «Arrancar ahora» una `nuevo`: la persona cede el proyecto (se cierra su consola de ahí) y la tarea arranca. */
   alArrancarAhora?: (id: string) => Promise<string | undefined>;
   /** Cambiar el encargo de una que nunca ha arrancado (IXCODE-52). Devuelve el motivo si el servidor se negó. */
-  alEditarEncargo?: (id: string, encargo: string, peticion: string, pantallas?: { name: string; titulo: string }[] | null) => Promise<string | undefined>;
+  alEditarEncargo?: (
+    id: string,
+    encargo: string,
+    peticion: string,
+    pantallas?: { name: string; titulo: string }[] | null,
+    adjuntos?: CambiosDeAdjuntos
+  ) => Promise<string | undefined>;
+  /** Subir, quitar y descartar las imágenes nuevas al editar (como «Nueva tarea»). Ausente = el diálogo no ofrece adjuntar. */
+  adjuntosDelBorrador?: AdjuntosDelBorrador;
   /** Volver a preparar el encargo desde la petición, SIN guardarlo (IXCODE-53). Ausente = no se ofrece. */
   alRegenerarEncargo?: (id: string, peticion: string) => Promise<{ encargo: string } | { motivo: string }>;
   /**
@@ -205,10 +215,13 @@ export function AccionesDeTarea({
               tarea={t}
               apagado={apagado}
               onCancelar={() => setEditando(false)}
-              onGuardar={async (encargo, peticion, pantallas) => {
-                const motivo = await (pantallas === undefined
-                  ? alEditarEncargo!(t.id, encargo, peticion)
-                  : alEditarEncargo!(t.id, encargo, peticion, pantallas)
+              {...(adjuntosDelBorrador === undefined ? {} : { adjuntosDelBorrador })}
+              onGuardar={async (encargo, peticion, pantallas, adjuntos) => {
+                const motivo = await (adjuntos !== undefined
+                  ? alEditarEncargo!(t.id, encargo, peticion, pantallas, adjuntos)
+                  : pantallas === undefined
+                    ? alEditarEncargo!(t.id, encargo, peticion)
+                    : alEditarEncargo!(t.id, encargo, peticion, pantallas)
                 ).catch(() => "el envío falló");
                 if (motivo === undefined) setEditando(false);
                 return motivo;
@@ -327,18 +340,31 @@ function ConfirmarDescarte({
  * NO cierra hasta que el servidor dice que sí; una negativa (la tarea arrancó entre medias) se
  * enseña dentro, con lo escrito intacto.
  */
+/** Lo que cambió en los adjuntos al editar: las imágenes nuevas (bajo un borrador) y las que ya tenía y se quitan. */
+export interface CambiosDeAdjuntos {
+  borrador?: string;
+  quitar?: string[];
+}
+
 function EditarEncargo({
   tarea: t,
   apagado,
   onCancelar,
   onGuardar,
   onRegenerar,
+  adjuntosDelBorrador,
 }: {
   tarea: TareaDelCable;
   apagado: boolean;
   onCancelar: () => void;
-  /** `pantallas`: las nuevas, `null` si se quitaron todas, ausente si no cambiaron. */
-  onGuardar: (encargo: string, peticion: string, pantallas?: { name: string; titulo: string }[] | null) => Promise<string | undefined>;
+  /** `pantallas`: las nuevas, `null` si se quitaron todas, ausente si no cambiaron. `adjuntos`: ausente si no cambiaron. */
+  onGuardar: (
+    encargo: string,
+    peticion: string,
+    pantallas?: { name: string; titulo: string }[] | null,
+    adjuntos?: CambiosDeAdjuntos
+  ) => Promise<string | undefined>;
+  adjuntosDelBorrador?: AdjuntosDelBorrador;
   /** Vuelve a preparar el encargo desde la petición. Ausente = no se ofrece. */
   onRegenerar?: (peticion: string) => Promise<{ encargo: string } | { motivo: string }>;
 }) {
@@ -366,10 +392,47 @@ function EditarEncargo({
   // Cambia si cambia la LISTA o su ORDEN: el orden dice qué maqueta va a `diseno/` y cuáles a `diseno/2/`…
   const pantallaCambiada =
     pantallas.map((p) => p.name).join("\n") !== (t.pantallasDeStitch ?? []).map((p) => p.name).join("\n");
+  /**
+   * Las IMÁGENES (petición suya, 21-10-2026: «como en Nueva tarea»): las nuevas se suben a un borrador de este diálogo
+   * —pegadas en cualquiera de los dos textos, o elegidas— y las que ya tenía se pueden quitar. Cerrar sin guardar
+   * descarta el borrador, como «Nueva tarea» al cancelar.
+   */
+  const [borrador] = useState(() => crypto.randomUUID());
+  const [quitadas, setQuitadas] = useState<string[]>([]);
+  const entradaDeFicheros = useRef<HTMLInputElement>(null);
+  const deAntes = t.adjuntos.map((a) => a.nombre).filter((n) => !quitadas.includes(n));
+  const { adjuntos: nuevas, añadir, quitar, alPegar, enVuelo, algunoFalló, algunoListo, puedeQuitar } = useAdjuntosDeBorrador({
+    alSubir: (fichero, nombre) =>
+      adjuntosDelBorrador === undefined ? Promise.resolve({ ok: false, motivo: "aquí no se pueden adjuntar ficheros" }) : adjuntosDelBorrador.subir(borrador, nombre, fichero),
+    ...(adjuntosDelBorrador?.quitar === undefined ? {} : { alQuitar: (nombre: string) => adjuntosDelBorrador.quitar!(borrador, nombre) }),
+    ocupados: deAntes,
+  });
+  const pendienteDeBorrar = useRef(false);
+  pendienteDeBorrar.current = algunoListo;
+  /**
+   * Mientras se GUARDA, el borrador no se descarta al desmontar: al guardar bien, quien abrió el diálogo lo cierra ANTES de
+   * que esta promesa vuelva, y el servidor ya lo adoptó. Si la respuesta es una negativa con el diálogo ya cerrado, se
+   * descarta entonces.
+   */
+  const guardandoBorrador = useRef(false);
+  const montado = useRef(true);
+  const descartar = adjuntosDelBorrador?.descartar;
+  useEffect(
+    () => () => {
+      montado.current = false;
+      if (pendienteDeBorrar.current && !guardandoBorrador.current) descartar?.(borrador);
+    },
+    [borrador, descartar]
+  );
+  const adjuntosCambiados = algunoListo || quitadas.length > 0;
+  const cambiosDeAdjuntos: CambiosDeAdjuntos | undefined = !adjuntosCambiados
+    ? undefined
+    : { ...(algunoListo ? { borrador } : {}), ...(quitadas.length > 0 ? { quitar: quitadas } : {}) };
+  const pegar = adjuntosDelBorrador === undefined ? {} : { onPaste: alPegar };
   const limpio = texto.trim();
   const pedido = peticion.trim();
-  const sinCambios = limpio === t.encargo.trim() && pedido === t.peticion.trim() && !pantallaCambiada;
-  const ocupado = guardando || regenerando;
+  const sinCambios = limpio === t.encargo.trim() && pedido === t.peticion.trim() && !pantallaCambiada && !adjuntosCambiados;
+  const ocupado = guardando || regenerando || enVuelo;
   return (
     <Modal open onClose={onCancelar} title="Editar la tarea" headless className={modal.capa}>
       <div
@@ -382,12 +445,25 @@ function EditarEncargo({
           className={`${modal.ventana} ${estilos.ventanaAncha}`}
           onSubmit={(evento) => {
             evento.preventDefault();
-            if (limpio === "" || pedido === "" || sinCambios || apagado || ocupado) return;
+            if (limpio === "" || pedido === "" || sinCambios || apagado || ocupado || algunoFalló) return;
             setGuardando(true);
             setNegativa(undefined);
-            void (pantallaCambiada ? onGuardar(limpio, pedido, pantallas.length === 0 ? null : pantallas) : onGuardar(limpio, pedido)).then((motivo) => {
+            const lasPantallas = pantallaCambiada ? (pantallas.length === 0 ? null : pantallas) : undefined;
+            guardandoBorrador.current = cambiosDeAdjuntos?.borrador !== undefined;
+            void (cambiosDeAdjuntos !== undefined
+              ? onGuardar(limpio, pedido, lasPantallas, cambiosDeAdjuntos)
+              : lasPantallas !== undefined
+                ? onGuardar(limpio, pedido, lasPantallas)
+                : onGuardar(limpio, pedido)
+            ).then((motivo) => {
+              if (motivo === undefined) return; // Guardado: el borrador ya es de la tarea (el servidor lo copió y lo descartó).
+              guardandoBorrador.current = false;
+              if (!montado.current) {
+                if (pendienteDeBorrar.current) descartar?.(borrador);
+                return;
+              }
               setGuardando(false);
-              if (motivo !== undefined) setNegativa(motivo);
+              setNegativa(motivo);
             });
           }}
         >
@@ -427,6 +503,7 @@ function EditarEncargo({
             value={peticion}
             disabled={apagado || ocupado}
             onChange={(evento) => setPeticion(evento.target.value)}
+            {...pegar}
           />
           {onRegenerar === undefined ? null : (
             <div className={estilos.regenerar}>
@@ -461,7 +538,49 @@ function EditarEncargo({
             value={texto}
             disabled={apagado || ocupado}
             onChange={(evento) => setTexto(evento.target.value)}
+            {...pegar}
           />
+          {adjuntosDelBorrador === undefined ? null : (
+            <>
+              <div className={estilos.filaDeAdjuntos}>
+                <span className={modal.etiqueta}>Imágenes (pega una captura en el texto, o elígela)</span>
+                <Button type="button" variant="outline" className={modal.accion} disabled={apagado || ocupado} onClick={() => entradaDeFicheros.current?.click()}>
+                  Adjuntar imagen…
+                </Button>
+              </div>
+              <input
+                ref={entradaDeFicheros}
+                hidden
+                type="file"
+                multiple
+                onChange={(e) => {
+                  void añadir(e.target.files);
+                  e.target.value = "";
+                }}
+              />
+              {deAntes.length === 0 && quitadas.length === 0 ? null : (
+                <ul className={estilos.adjuntosDeAntes} aria-label="Adjuntos que ya tiene">
+                  {t.adjuntos.map((a) => {
+                    const fuera = quitadas.includes(a.nombre);
+                    return (
+                      <li key={a.nombre} data-quitado={fuera ? "" : undefined}>
+                        <span>{a.nombre}</span>
+                        <button
+                          type="button"
+                          className={estilos.boton}
+                          disabled={apagado || ocupado}
+                          onClick={() => setQuitadas((q) => (fuera ? q.filter((n) => n !== a.nombre) : [...q, a.nombre]))}
+                        >
+                          {fuera ? "Volver a ponerlo" : "Quitar"}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+              <ListaDeAdjuntos adjuntos={nuevas} quitar={quitar} puedeQuitar={puedeQuitar} />
+            </>
+          )}
               {!conDiseno ? null : (
                 pantallas.length > 1 ? (
                   <div className={modal.nota} data-diseno="">
@@ -478,6 +597,7 @@ function EditarEncargo({
           )}
           {pedido === "" ? <p className={modal.fallo}>Lo que pediste no puede quedar vacío.</p> : null}
           {limpio === "" ? <p className={modal.fallo}>El encargo no puede quedar vacío.</p> : null}
+          {algunoFalló ? <p className={modal.fallo}>Una imagen no se pudo subir: quítala o vuelve a elegirla.</p> : null}
           {negativa === undefined ? null : (
             <p className={modal.fallo} role="alert">{`No se pudo: ${negativa}`}</p>
           )}
@@ -489,7 +609,7 @@ function EditarEncargo({
               type="submit"
               variant="primary"
               className={`${modal.accion} ${modal.principal}`}
-              disabled={limpio === "" || pedido === "" || sinCambios || apagado || ocupado}
+              disabled={limpio === "" || pedido === "" || sinCambios || apagado || ocupado || algunoFalló}
             >
               {guardando ? "Guardando…" : "Guardar"}
             </Button>

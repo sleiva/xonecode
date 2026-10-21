@@ -3,7 +3,7 @@ import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync, existsSync, readFileSync, renameSync, statSync, linkSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { aplicarEncargo, aplicarFeedback, crearTareasEnDisco } from "./tareasEnDisco.js";
+import { adjuntosEditados, aplicarEncargo, aplicarFeedback, crearTareasEnDisco } from "./tareasEnDisco.js";
 import type { Tarea } from "../../core/tareas.js";
 
 /**
@@ -585,5 +585,33 @@ describe("aplicarFeedback", () => {
     expect(aplicarFeedback(disco, "t1", "segundo").hecho).toBe(true);
     const textos = disco.listar()[0]!.feedback!.map((f) => f.texto);
     expect(textos).toEqual(["primero", "segundo"]);
+  });
+});
+
+/** Petición suya (21-10-2026): al EDITAR una tarea se pueden añadir y quitar imágenes, como en «Nueva tarea». */
+describe("adjuntosEditados", () => {
+  let base: string;
+  beforeEach(() => {
+    base = mkdtempSync(join(tmpdir(), "xonecode-editar-"));
+  });
+  afterEach(() => {
+    rmSync(base, { recursive: true, force: true });
+  });
+
+  it("copia las del borrador, quita las pedidas, descarta el borrador y devuelve las que quedan", () => {
+    const disco = crearTareasEnDisco({ base });
+    disco.guardar([{ ...TAREA, estado: "nuevo" }]);
+    disco.guardarAdjunto("t1", "vieja.png", Buffer.from("v"));
+    disco.guardarAdjunto("t1", "sigue.png", Buffer.from("s"));
+    disco.guardarAdjunto("borr", "nueva.png", Buffer.from("n"));
+    const carpetaDelBorrador = disco.carpetaDeAdjuntos("borr")!;
+    expect(existsSync(carpetaDelBorrador)).toBe(true);
+    const quedan = adjuntosEditados(disco, "t1", "borr", ["vieja.png"]);
+    expect(quedan.map((a) => a.nombre).sort()).toEqual(["nueva.png", "sigue.png"]);
+    expect(readFileSync(join(disco.carpetaDeAdjuntos("t1")!, "nueva.png"), "utf8")).toBe("n");
+    expect(existsSync(carpetaDelBorrador)).toBe(false);
+    // Y con eso, la tarea los lleva (`aplicarEncargo` con adjuntos).
+    expect(aplicarEncargo(disco, "t1", "el encargo", undefined, undefined, quedan)).toEqual({ hecho: true });
+    expect(disco.listar()[0]!.adjuntos.map((a) => a.nombre).sort()).toEqual(["nueva.png", "sigue.png"]);
   });
 });

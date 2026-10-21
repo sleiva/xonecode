@@ -183,3 +183,10 @@ export function ListaDeAdjuntos({
     </ul>
   );
 }
+
+/** Subir, quitar y descartar las imágenes NUEVAS de un formulario bajo su borrador (Reencolar, Editar la tarea). */
+export interface AdjuntosDelBorrador {
+  subir: (borrador: string, nombre: string, fichero: File) => Promise<{ ok: boolean; motivo?: string }>;
+  quitar?: (borrador: string, nombre: string) => Promise<{ ok: boolean; motivo?: string }>;
+  descartar: (borrador: string) => void;
+}

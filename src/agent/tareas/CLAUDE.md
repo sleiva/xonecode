@@ -143,7 +143,9 @@ corre solo y escribe sin aprobación. Cuatro estados; `requiere-atencion` = **es
   condiciones de PARADA, una duda va con su opción recomendada.
 - **Editable mientras no arrancó NUNCA** (`#conEncargo`, `puedeEditarEncargo`); el corredor manda
   el RELEÍDO; una reintentada vuelve a `nuevo` pero recibe su hilo; la `peticion` se edita aparte.
-  «Regenerar» (`regenerarEncargo`) contesta SIN guardar, no por `augmentado`.
+  «Regenerar» (`regenerarEncargo`) contesta SIN guardar, no por `augmentado`. **Y sus IMÁGENES**, como «Nueva tarea»: las
+  nuevas a un `borrador`, las de antes por nombre (`quitarAdjuntos`); se comprueba todo antes de tocar la carpeta
+  (`tareasEnDisco.ts#adjuntosEditados`), y el diálogo no descarta el borrador mientras guarda.
 
 ## Encadenadas
 

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ListaDePantallas } from "./DisenoDelProyecto.js";
-import { ListaDeAdjuntos, useAdjuntosDeBorrador } from "./adjuntosDeBorrador.js";
+import { ListaDeAdjuntos, useAdjuntosDeBorrador, type AdjuntosDelBorrador } from "./adjuntosDeBorrador.js";
+export type { AdjuntosDelBorrador } from "./adjuntosDeBorrador.js";
 import ventana from "./NuevaTarea.module.css";
 
 /** El diálogo de «Reencolar» solo se cierra con sus botones: lo escrito y lo adjuntado no se pierden por un clic fuera. */
@@ -12,7 +13,7 @@ function enOrdenDeArbol(nodos: readonly NodoDeTarea[], profundidad = 0): { tarea
   return nodos.flatMap((n) => [{ tarea: n.tarea, profundidad }, ...enOrdenDeArbol(n.hijas, profundidad + 1)]);
 }
 import { puedeArrancarYa, type Acto, type TareaDelCable } from "../tipos.js";
-import { AccionesDeTarea } from "./AccionesDeTarea.js";
+import { AccionesDeTarea, type CambiosDeAdjuntos } from "./AccionesDeTarea.js";
 import { EntregaDeTarea } from "./EntregaDeTarea.js";
 import { MirarTarea } from "./MirarTarea.js";
 import { QuienEjecutaTareas } from "./QuienEjecutaTareas.js";
@@ -123,7 +124,13 @@ export function TareasDelProyecto({
   alContinuar?: (id: string) => Promise<string | undefined>;
   alArrancarAhora?: (id: string) => Promise<string | undefined>;
   /** Cambiar el encargo de una que nunca ha arrancado (IXCODE-52): devuelve el motivo si el servidor se negó. */
-  alEditarEncargo?: (id: string, encargo: string, peticion: string, pantallas?: { name: string; titulo: string }[] | null) => Promise<string | undefined>;
+  alEditarEncargo?: (
+    id: string,
+    encargo: string,
+    peticion: string,
+    pantallas?: { name: string; titulo: string }[] | null,
+    adjuntos?: CambiosDeAdjuntos
+  ) => Promise<string | undefined>;
   /** Volver a preparar el encargo desde la petición, sin guardarlo (IXCODE-53). */
   alRegenerarEncargo?: (id: string, peticion: string) => Promise<{ encargo: string } | { motivo: string }>;
   /** Parar una en marcha sin borrarla (IXCODE-50): devuelve el motivo si el servidor se negó. */
@@ -408,6 +415,7 @@ export function TareasDelProyecto({
                       {...(alParar === undefined ? {} : { alParar })}
                       puedeArrancar={puedeArrancarYa(t, tareas)}
                       {...(clave === "cola" ? { enCola: enLaCola(t, i) } : {})}
+                      {...(adjuntosDelBorrador === undefined ? {} : { adjuntosDelBorrador })}
                       {...(t.sesion !== undefined && t.sesion === sesionAbierta ? { enTuChat: trabajandoEnElChat === true ? "trabajando" : "abierta" } : {})}
                       {...(alMirar === undefined ? {} : { alMirar })}
                       {...(alIrAlChat === undefined ? {} : { alIrAlChat })}
@@ -735,13 +743,6 @@ export interface RevertirTarea {
   hacer: (id: string) => Promise<string | undefined>;
 }
 
-/** Las capturas nuevas de «Reencolar», bajo el borrador del formulario: los mismos caminos que «Nueva tarea». */
-export interface AdjuntosDelBorrador {
-  subir: (borrador: string, nombre: string, fichero: File) => Promise<{ ok: boolean; motivo?: string }>;
-  quitar?: (borrador: string, nombre: string) => Promise<{ ok: boolean; motivo?: string }>;
-  descartar: (borrador: string) => void;
-}
-
 /**
  * El texto de «Reencolar lo pendiente» (lo propone el SERVIDOR, editable) y su «Encolar»: una tarea NUEVA en el hilo de
  * esta. No se cierra si el servidor se niega: dice por qué.
@@ -902,6 +903,7 @@ function Fila({
   mirando,
   mirada,
   enCola,
+  adjuntosDelBorrador,
 }: {
   tarea: TareaDelCable;
   /** La tarea a la que ESPERA (`tras`), si sigue en la cola. Una que ya no está —descartada— no
@@ -916,7 +918,13 @@ function Fila({
   alContinuar?: (id: string) => Promise<string | undefined>;
   alArrancarAhora?: (id: string) => Promise<string | undefined>;
   /** Cambiar el encargo de una que nunca ha arrancado (IXCODE-52): devuelve el motivo si el servidor se negó. */
-  alEditarEncargo?: (id: string, encargo: string, peticion: string, pantallas?: { name: string; titulo: string }[] | null) => Promise<string | undefined>;
+  alEditarEncargo?: (
+    id: string,
+    encargo: string,
+    peticion: string,
+    pantallas?: { name: string; titulo: string }[] | null,
+    adjuntos?: CambiosDeAdjuntos
+  ) => Promise<string | undefined>;
   /** Volver a preparar el encargo desde la petición, sin guardarlo (IXCODE-53). */
   alRegenerarEncargo?: (id: string, peticion: string) => Promise<{ encargo: string } | { motivo: string }>;
   /** Parar una en marcha sin borrarla (IXCODE-50): devuelve el motivo si el servidor se negó. */
@@ -934,6 +942,8 @@ function Fila({
   mirada?: { tarea: string; actos: readonly Acto[] };
   /** Su sitio en la cola y cómo moverla (petición suya, 21-10-2026). Ausente = no se ordena (la que trabaja, una aparcada). */
   enCola?: EnLaCola;
+  /** Las imágenes nuevas al editarla, como «Nueva tarea». Ausente = editar no ofrece adjuntar. */
+  adjuntosDelBorrador?: AdjuntosDelBorrador;
 }) {
   const [verEncargo, setVerEncargo] = useState(false);
   return (
@@ -1043,6 +1053,7 @@ function Fila({
           {...(alRegenerarEncargo === undefined ? {} : { alRegenerarEncargo })}
           {...(alParar === undefined ? {} : { alParar })}
           {...(puedeArrancar === undefined ? {} : { puedeArrancar })}
+          {...(adjuntosDelBorrador === undefined ? {} : { adjuntosDelBorrador })}
         />
       </div>
     </li>

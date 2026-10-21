@@ -2711,8 +2711,26 @@ export function App({
       alContinuar={async (id: string) => negativaOFalloDe(await enviar({ clase: "tarea", accion: "continuar", id }))}
       alArrancarAhora={async (id: string) => negativaOFalloDe(await enviar({ clase: "tarea", accion: "arrancarAhora", id }))}
       // Editar el encargo de una que todavía no ha arrancado (IXCODE-52): la ventana no se cierra si el servidor se niega.
-      alEditarEncargo={async (id: string, encargo: string, peticion: string, pantallas?: { name: string; titulo: string }[] | null) =>
-        negativaOFalloDe(await enviar({ clase: "tarea", accion: "encargo", id, encargo, peticion, ...(pantallas === undefined ? {} : { pantallasDeStitch: pantallas }) }))
+      // Y sus imágenes (petición suya, 21-10-2026): las nuevas, subidas a un borrador; las que tenía, por nombre si se quitan.
+      alEditarEncargo={async (
+        id: string,
+        encargo: string,
+        peticion: string,
+        pantallas?: { name: string; titulo: string }[] | null,
+        adjuntos?: { borrador?: string; quitar?: string[] }
+      ) =>
+        negativaOFalloDe(
+          await enviar({
+            clase: "tarea",
+            accion: "encargo",
+            id,
+            encargo,
+            peticion,
+            ...(pantallas === undefined ? {} : { pantallasDeStitch: pantallas }),
+            ...(adjuntos?.borrador === undefined ? {} : { borrador: adjuntos.borrador }),
+            ...(adjuntos?.quitar === undefined ? {} : { quitarAdjuntos: adjuntos.quitar }),
+          })
+        )
       }
       // Volver a preparar el encargo desde la petición editada (IXCODE-53): contesta en la propia
       // respuesta y no guarda nada; lo guarda «Guardar».

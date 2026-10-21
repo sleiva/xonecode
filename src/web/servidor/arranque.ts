@@ -249,6 +249,7 @@ import {
 } from "./corredorDeTareas.js";
 import {
   CONCURRENCIA_POR_OMISION,
+  conEncargo,
   conEstado,
   darPorBuenaAMano,
   porSitioEnLaCola,
@@ -263,7 +264,7 @@ import {
   type Tarea,
   type TicketDeTarea,
 } from "../../core/tareas.js";
-import { aplicarEncargo, aplicarFeedback, TOPE_DE_ADJUNTO, type TareasEnDisco } from "../../agent/tareas/tareasEnDisco.js";
+import { adjuntosEditados, aplicarEncargo, aplicarFeedback, TOPE_DE_ADJUNTO, type TareasEnDisco } from "../../agent/tareas/tareasEnDisco.js";
 import { nombreDeAdjuntoAceptable } from "../../core/adjuntos.js";
 import {
   copiarAdjuntosDeSesion,
@@ -7958,12 +7959,44 @@ export function montarRutas(
             return;
           }
         }
+        /**
+         * Las IMÁGENES (petición suya, 21-10-2026: «que se pueda anexar y pegar imágenes como en Nueva tarea»): las nuevas
+         * llegan subidas a un `borrador`, y `quitarAdjuntos` nombra las que ya tenía y se van. Todo se COMPRUEBA antes de
+         * tocar la carpeta: la edición (`conEncargo`), un borrador libre y que lo que se quita sea suyo.
+         */
+        const crudoBorrador = (mensaje as { borrador?: unknown }).borrador;
+        const crudoQuitar = (mensaje as { quitarAdjuntos?: unknown }).quitarAdjuntos;
+        const conAdjuntos = crudoBorrador !== undefined || crudoQuitar !== undefined;
+        let adjuntos: Tarea["adjuntos"] | undefined;
+        if (conAdjuntos) {
+          const negar = (motivo: string): void => {
+            respuesta.writeHead(409, { "content-type": "application/json" });
+            respuesta.end(JSON.stringify({ motivo }));
+          };
+          const lista = opciones.colaDeTareas.listar();
+          const tarea = lista.find((x) => x.id === mensaje.id);
+          if (tarea === undefined) return negar("la tarea ya no está en la cola");
+          try {
+            conEncargo(tarea, typeof mensaje.encargo === "string" ? mensaje.encargo : "", typeof peticion === "string" ? peticion : undefined);
+          } catch (error) {
+            return negar(error instanceof Error ? error.message : String(error));
+          }
+          if (crudoBorrador !== undefined && (typeof crudoBorrador !== "string" || !esBorradorLibre(crudoBorrador, lista))) {
+            return negar("ese borrador de adjuntos no vale (o ya es una tarea)");
+          }
+          const quitar = Array.isArray(crudoQuitar) ? crudoQuitar.filter((x): x is string => typeof x === "string") : [];
+          if (quitar.some((n) => !tarea.adjuntos.some((a) => a.nombre === n))) return negar("uno de los adjuntos que se quitan no es de esa tarea");
+          const cola = opciones.colaDeTareas;
+          if (cola.carpetaDeAdjuntos === undefined) return negar("esta ejecución no puede cambiar los adjuntos de una tarea");
+          adjuntos = adjuntosEditados({ ...cola, carpetaDeAdjuntos: cola.carpetaDeAdjuntos }, mensaje.id, typeof crudoBorrador === "string" ? crudoBorrador : undefined, quitar);
+        }
         const resultado = aplicarEncargo(
           opciones.colaDeTareas,
           mensaje.id,
           typeof mensaje.encargo === "string" ? mensaje.encargo : "",
           typeof peticion === "string" ? peticion : undefined,
-          pantallas
+          pantallas,
+          adjuntos
         );
         if (!resultado.hecho) {
           respuesta.writeHead(409, { "content-type": "application/json" });
