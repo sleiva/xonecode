@@ -76,6 +76,17 @@ export function topeAgotadoDe(evento: unknown): number | undefined {
 }
 
 /**
+ * Si el evento es el RAÍZ acabando con error que no es su tope: el detalle del fallo del motor (`ResultadoDeTurno.falloDelMotor`).
+ * Quien llama decide si el hilo es el raíz; aquí solo se lee el evento.
+ */
+export function falloDelMotorDe(evento: unknown): string | undefined {
+  const e = evento as { type?: string; status?: string; error?: unknown };
+  if (e?.type !== "internal.agent.done" || e.status !== "error") return undefined;
+  if (topeAgotadoDe(evento) !== undefined) return undefined;
+  return typeof e.error === "string" ? e.error : "error del motor";
+}
+
+/**
  * El especialista de un hilo hijo, si se sabe: lo contesta la sesión (`quienEs`), que es quien
  * sabe qué hilo abrió cada delegación.
  */

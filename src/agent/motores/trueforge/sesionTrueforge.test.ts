@@ -11,7 +11,7 @@ import { ConectoresEnMemoria } from "../../../core/ports.js";
 import { TOPE_DE_LLAMADA_MS } from "../../../core/conectores.js";
 import { abrirSesionTrueforge, LIMITE_DE_LLAMADAS_DEL_RAIZ, notaDeDelegacion, PLAN_PRIMERO, textoDelBucle } from "./sesionTrueforge.js";
 import { TOPE_DE_LLAMADAS_DEL_ESPECIALISTA } from "../../turno/resumenDeContexto.js";
-import { topeAgotadoDe, traducirEvento } from "./eventosTrueforge.js";
+import { falloDelMotorDe, topeAgotadoDe, traducirEvento } from "./eventosTrueforge.js";
 import { cargarMemoria, interpretarFoto, rutaDeMemoria } from "./memoriaTrueforge.js";
 import { RESUMEN_DE_RELLENO, textoDeDetencionParaHijo, textoDeDetencionParaRaiz } from "./detencion.js";
 import { RONDAS_VISUALES } from "./medidaAutomatica.js";
@@ -3766,5 +3766,15 @@ describe("una ventana por encargo", () => {
   it("el analista lo escribe en TASKS.md", () => {
     const analista = AGENTES_DE_SERIE.find((a) => a.nombre === "analyst-xone")!;
     expect(analista.instrucciones).toContain("cada tarea, como MUCHO, UNA ventana");
+  });
+});
+
+/** El raíz que acaba con error es un fallo del MOTOR (el corredor lo deja reanudable); su tope agotado, no. */
+describe("falloDelMotorDe", () => {
+  it("lee el error de un `done` con error, y no el del tope ni el de un `done` bueno", () => {
+    expect(falloDelMotorDe({ type: "internal.agent.done", status: "error", error: "terminated" })).toBe("terminated");
+    expect(falloDelMotorDe({ type: "internal.agent.done", status: "error" })).toBe("error del motor");
+    expect(falloDelMotorDe({ type: "internal.agent.done", status: "ok" })).toBeUndefined();
+    expect(falloDelMotorDe({ type: "internal.agent.context.append" })).toBeUndefined();
   });
 });

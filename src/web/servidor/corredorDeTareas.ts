@@ -149,6 +149,10 @@ export function revisionConGit(
  * contradicción solo se veía leyéndolos juntos. Por eso el motivo se compone DESPUÉS de
  * saber si el hilo se olvidó, y no antes: quien lo escribe es el único que lo sabe.
  */
+/** El motivo de una tarea cuyo turno se cortó porque el MOTOR falló (sin red, el Mac dormido, el proveedor). */
+export const motivoDeMotorCaido = (detalle: string): string =>
+  `el modelo dejó de contestar a mitad del turno (${detalle}): lo hecho hasta ahí está en el disco y en su conversación`;
+
 /** La marca de «se pidió parar» solo vale para decidir la reanudación: una aparcada no la lleva. */
 const sinParadaPedida = (t: Tarea): Tarea => {
   const { paradaPedida: _p, ...resto } = t;
@@ -1227,6 +1231,15 @@ export function crearCorredorDeTareas(opciones: {
      * se le pasa al juez, que dictaba «no escribió nada» (Maset). La respuesta llega como feedback, en su hilo.
      */
     if (motivo === undefined && resultado?.preguntaPendiente !== undefined) motivo = motivoDePreguntaPendiente(resultado.preguntaPendiente);
+    /**
+     * **El motor cayó a mitad** (`ResultadoDeTurno.falloDelMotor`): el turno devolvió «limpio» pero no acabó nada. No pasa
+     * por el juez ni suelta la cadena: se deja como una CORTADA, reanudable una vez en su hilo (`reanudadaTrasCorte`).
+     */
+    let motorCaido = false;
+    if (motivo === undefined && resultado?.falloDelMotor !== undefined) {
+      motorCaido = true;
+      motivo = motivoDeMotorCaido(resultado.falloDelMotor);
+    }
     if (motivo === undefined) {
       const entrega = await puertaDeEntrega(tarea, hilo, entrada, resultado, consola.esperarMarca?.bind(consola));
       /**
@@ -1293,7 +1306,7 @@ export function crearCorredorDeTareas(opciones: {
             ? conEstado(conLoQueQuede(actual), "terminada")
             : undefined
         );
-      } else if (cortadaAMitad && parando && entrada.pausaPedida !== true) {
+      } else if (((cortadaAMitad && parando) || motorCaido) && entrada.pausaPedida !== true) {
         /**
          * Cortada porque el proceso se va: se deja REANUDABLE ya, con la misma regla que la reconciliación del arranque
          * (`reanudadaTrasCorte`: una vez, en su hilo, con el aviso de mirar antes de rehacer). Sin esto quedaba aparcada

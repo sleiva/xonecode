@@ -3523,3 +3523,33 @@ describe("el gasto de la tarea", () => {
     await corredor.parar();
   });
 });
+
+/**
+ * Medido en Maset (21-10-2026): el Mac se durmió con la tapa cerrada a mitad de una llamada al modelo; al despertar llegó
+ * «terminated», el turno devolvió «limpio» y la tarea quedó TERMINADA en rojo («no hizo el trabajo») y la cadena siguió.
+ */
+describe("el MOTOR cae a mitad del turno", () => {
+  it("no pasa por el juez: queda reanudable en su hilo, una vez; la segunda, aparcada diciéndolo", async () => {
+    const { disco, estado } = discoDeMentira([TAREA()]);
+    const p = proyectoDeMentira();
+    const juez = juezQueDice({ veredicto: "rojo", resumen: "la sesión no escribió ningún fichero" });
+    const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE, juez, disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 1 });
+    await corredor.arrancar();
+    await corredor.asentar();
+    p.acabar({ verificador: "no-corrio", pendientes: 0, falloDelMotor: "terminated" });
+    await corredor.asentar();
+    expect(juez.casos).toEqual([]);
+    // Reanudada en el acto, en SU hilo y con el aviso de mirar antes de rehacer: ni veredicto ni cadena soltada.
+    expect(estado()[0]).toMatchObject({ estado: "en-proceso", reanudaciones: 1, sesion: "hilo-/w/A" });
+    expect(estado()[0]!.veredicto).toBeUndefined();
+    expect(estado()[0]!.feedback?.at(-1)).toMatchObject({ texto: TEXTO_DE_REANUDACION, consumido: true });
+    // Y vuelve a caer: ya no sigue, y lo dice.
+    p.acabar({ verificador: "no-corrio", pendientes: 0, falloDelMotor: "terminated" });
+    await corredor.asentar();
+    expect(estado()[0]!.estado).toBe("requiere-atencion");
+    expect(estado()[0]!.motivo).toContain("el modelo dejó de contestar a mitad del turno (terminated)");
+    expect(estado()[0]!.motivo).toContain("ya se reanudó sola una vez");
+    expect(juez.casos).toEqual([]);
+    await corredor.parar();
+  });
+});

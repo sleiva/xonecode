@@ -758,6 +758,7 @@ export function crearEjecutorReal(
       pendientes: resultado.pendientes,
       ...(resultado.topeAgotado === undefined ? {} : { topeAgotado: resultado.topeAgotado }),
       ...(resultado.preguntaPendiente === undefined ? {} : { preguntaPendiente: resultado.preguntaPendiente }),
+      ...(resultado.falloDelMotor === undefined ? {} : { falloDelMotor: resultado.falloDelMotor }),
       ...(resultado.bloqueantesVisuales === undefined ? {} : { bloqueantesVisuales: resultado.bloqueantesVisuales }),
       ...(resultado.omisionesExplicadas === undefined ? {} : { omisionesExplicadas: resultado.omisionesExplicadas }),
       ...(resultado.bloqueantesDesfasados === undefined ? {} : { bloqueantesDesfasados: resultado.bloqueantesDesfasados }),

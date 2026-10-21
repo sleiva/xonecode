@@ -157,6 +157,7 @@ describe("el ejecutor real DEVUELVE lo que el turno informó", () => {
       pendientes: 3,
       topeAgotado: 50,
       preguntaPendiente: "¿Rehago la pantalla entera o solo la lista?",
+      falloDelMotor: "terminated",
       bloqueantesVisuales: ["«=» queda TAPADO por la barra de navegación"],
       omisionesExplicadas: ["«Turno de Día» de la maqueta NO está en el aparato"],
       bloqueantesDesfasados: ["«pend.» de la maqueta NO está en el aparato"],

@@ -84,7 +84,7 @@ import { accionDelJuez, type HechosDelTurno, type VeredictoDelTurno } from "../.
 import type { Entorno } from "../../config/entorno.js";
 import { modeloParaTrueforge } from "./modeloLangchain.js";
 import { NOMBRE_EJECUTAR_SCRIPT, TOOLS_DE_LECTURA, type BackendDeFicheros } from "./toolsDeFichero.js";
-import { topeAgotadoDe, traducirEvento, type PensamientoPorHilo } from "./eventosTrueforge.js";
+import { falloDelMotorDe, topeAgotadoDe, traducirEvento, type PensamientoPorHilo } from "./eventosTrueforge.js";
 import { anuncioDeSkills } from "./skillsTrueforge.js";
 import {
   capabilitiesDe,
@@ -956,6 +956,8 @@ export async function abrirSesionTrueforge(
   let capturasDelTurno: Artefacto[] = [];
   /** Lo que dieron las comprobaciones visuales del turno, una línea cada una, para el juez de QA (`ResultadoDeTurno`). */
   let comprobacionesDelTurno: string[] = [];
+  /** El fallo del motor en el RAÍZ durante este turno (`ResultadoDeTurno.falloDelMotor`). */
+  let falloDelMotorDelTurno: string | undefined;
   let bloqueantesVisualesDelTurno: string[] = [];
   /**
    * Las pantallas de Stitch pedidas por título que NO aparecieron en este turno, menos las que una traída posterior
@@ -1993,6 +1995,7 @@ export async function abrirSesionTrueforge(
         }
       }
       // El corte por PRESUPUESTO cierra bien (con su resumen), así que la librería no lo dice: se dice aquí.
+      if (deHilo === HILO_RAIZ) falloDelMotorDelTurno ??= falloDelMotorDe(evento);
       const tope = topeAgotadoDe(evento) ?? (evento.type === "internal.agent.done" ? presupuesto.agotado(deHilo) : undefined);
       if (tope !== undefined) diagnostico?.corte?.(quienEs.get(deHilo) ?? deHilo, tope);
       const { eventos, uso } = traducirEvento(evento, (h) => especialistaDeHilo.get(h), pensamientos);
@@ -2070,6 +2073,7 @@ export async function abrirSesionTrueforge(
       externosDelTurno = 0;
       capturasDelTurno = [];
       comprobacionesDelTurno = [];
+      falloDelMotorDelTurno = undefined;
       bloqueantesVisualesDelTurno = [];
       pantallasNoEncontradasDelTurno = [];
       horaDeLaUltimaCritica = undefined;
@@ -2600,6 +2604,7 @@ export async function abrirSesionTrueforge(
         ...(cortadoPorTope ? { topeAgotado: tope } : {}),
         // La pregunta que deja ESTE turno: la de un turno anterior se consume al empezar (`enEspera`).
         ...(preguntaEnEspera === undefined ? {} : { preguntaPendiente: consultaDe(preguntaEnEspera.args).pregunta }),
+        ...(falloDelMotorDelTurno === undefined ? {} : { falloDelMotor: falloDelMotorDelTurno }),
         ...(comprobacionesDelTurno.length === 0 ? {} : { comprobacionesVisuales: comprobacionesDelTurno }),
         ...(pantallasNoEncontradasDelTurno.length === 0 ? {} : { pantallasNoEncontradas: [...pantallasNoEncontradasDelTurno] }),
         // Lo que su respuesta final EXPLICA (lo nombra) no es crítico: va aparte (`omisionExplicada`).
