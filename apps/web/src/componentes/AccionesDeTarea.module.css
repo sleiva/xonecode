@@ -288,7 +288,7 @@
   padding: 10px;
   border: 1px dashed var(--dsw-alias-border-l2);
   border-radius: 10px;
-  background: transparent;
+  background: none;
   color: var(--dsw-alias-label-secondary);
   font: inherit;
   font-size: 12px;
