@@ -14,6 +14,7 @@ import type {
   MapeoDeEstados,
   MensajeDelCliente,
   PlanDelCable,
+  TareaDelCable,
   TareaDelGestor,
   VinculoDelCable,
 } from "../tipos.js";
@@ -122,6 +123,7 @@ export function PanelDelProyecto({
   copia,
   tareasEnFondo,
   tareasEnCurso,
+  tareas,
   sincronizacion,
   ejecutar,
   gestor,
@@ -155,6 +157,8 @@ export function PanelDelProyecto({
   /** Cuántas tareas de fondo del proyecto se están ejecutando: la pestaña Tareas lo dice sin tener que abrirla.
    *  Ausente o cero = no se pinta nada. */
   tareasEnCurso?: number;
+  /** Las tareas de fondo de ESTE proyecto, para la tarjeta del Resumen. Ausente = la cola no ha llegado. */
+  tareas?: readonly TareaDelCable[];
   /**
    * La pestaña «Sincronización»: Subir / Actualizar repo local, las últimas subidas y TODO lo
    * pendiente de subir con su diff contra CloudStudio. Subir es del PROYECTO, no de un chat, así
@@ -374,9 +378,8 @@ export function PanelDelProyecto({
       <div className={estilos.cuerpo} role="tabpanel">
         {pestana === "resumen" || sinCopia ? (
           <>
-            {/* Los planes, LO PRIMERO (petición suya, 21-10-2026: «los planes no salen desde un inicio en el resumen»): son
-                lo que dice por dónde va el trabajo, y debajo de la copia y del gasto había que bajar a buscarlos. */}
-            {sinCopia ? null : <Resumen {...(planes === undefined ? {} : { planes })} />}
+            {/* Sin las piezas de la copia (una consola que no las trae), los planes solos. */}
+            {copia === undefined && !sinCopia ? <Resumen {...(planes === undefined ? {} : { planes })} /> : null}
             {copia === undefined ? null : (
               <ResumenDeProyecto
                 proyecto={copia.proyecto}
@@ -390,6 +393,11 @@ export function PanelDelProyecto({
                 {...(copia.subida === undefined ? {} : { subida: copia.subida })}
                 {...(copia.marcaDeSubida === undefined ? {} : { marcaDeSubida: copia.marcaDeSubida })}
                 {...(sincronizacion === undefined ? {} : { alVerPendientes: () => setPestana("sincronizacion") })}
+                // En TARJETAS (petición suya, 21-10-2026): las cifras arriba y, justo debajo, los planes —«no salen desde un
+                // inicio»—, cada uno en la suya.
+                {...(planes === undefined ? {} : { planes: planes.filter(esPlanCompleto) })}
+                {...(tareas === undefined ? {} : { tareas })}
+                debajoDeLasCifras={sinCopia ? null : <Resumen {...(planes === undefined ? {} : { planes })} />}
               />
             )}
             {sinCopia ? (
@@ -490,14 +498,16 @@ function Resumen({ planes: todos }: { planes?: PlanDelCable[] }) {
       {planes === undefined || planes.length === 0 ? null : (
         <section className={estilos.seccion} aria-label="Planes">
           <h2 className={estilos.titulo}>Planes</h2>
-          <ul className={estilos.lista}>
+          {/* Una TARJETA por plan (petición suya, 21-10-2026: el Resumen en tarjetas). El abierto ocupa la fila entera. */}
+          <ul className={estilos.tarjetasDePlanes}>
             {planes.map((p) => {
               const tareas = p.tareas?.tareas ?? [];
               // La misma condición que la pestaña Planes: sin el progreso de TODAS, el resumen
               // contaría como pendientes las que simplemente no dicen nada.
               const conProgreso = tareas.length > 0 && tareas.every((t) => t.progreso !== undefined);
+              const de = (estado: string) => tareas.filter((t) => t.progreso === estado).length;
               return (
-                <li key={p.nombre} className={estilos.plan}>
+                <li key={p.nombre} className={estilos.plan} data-abierto={abierto === p.nombre ? "" : undefined}>
                   <button
                     type="button"
                     className={estilos.nombreDePlan}
@@ -512,8 +522,21 @@ function Resumen({ planes: todos }: { planes?: PlanDelCable[] }) {
                     </div>
                   ) : conProgreso ? (
                     <>
-                      <span className={estilos.nota}>{resumenDelPlan(tareas)}</span>
                       <BarraDeProgreso tareas={tareas} />
+                      <dl className={estilos.cifrasDePlan} title={resumenDelPlan(tareas)}>
+                        <div>
+                          <dt>finalizadas</dt>
+                          <dd>{`${de("finalizada")} / ${tareas.length}`}</dd>
+                        </div>
+                        <div>
+                          <dt>sin comprobar</dt>
+                          <dd data-tono={de("implementada") > 0 ? "aviso" : undefined}>{de("implementada")}</dd>
+                        </div>
+                        <div>
+                          <dt>pendientes</dt>
+                          <dd>{de("pendiente") + de("en-curso")}</dd>
+                        </div>
+                      </dl>
                     </>
                   ) : null}
                 </li>

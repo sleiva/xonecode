@@ -7,8 +7,10 @@ import { GastoDelProyecto } from "./GastoDelProyecto.js";
 import { gastoDelProyecto } from "../gastoDelProyecto.js";
 import { BotonSubir, type EstadoDeSubida } from "./BotonSubir.js";
 import { GiroDeCarga } from "./GiroDeCarga.js";
-import type { ConsumoDeTurno, FotoDelResumen, ModoDeEscritura } from "../tipos.js";
+import type { ConsumoDeTurno, FotoDelResumen, ModoDeEscritura, PlanDelCable, TareaDelCable } from "../tipos.js";
 import { Desplegable } from "./Desplegable.js";
+import { abreviar } from "../cifras.js";
+import { EnMarcha } from "./TareasDelProyecto.js";
 
 /** Lo que el gasto necesita de una sesión: su id, su título y su acumulado. NO es una lista
  *  de sesiones para abrirlas —esas son de la barra—: es la serie del gráfico. */
@@ -110,7 +112,19 @@ export function ResumenDeProyecto({
   subida,
   marcaDeSubida,
   alVerPendientes,
-}: { proyecto: ProyectoDelResumen; conectado?: boolean } & AccionesDeLaCopia) {
+  planes,
+  tareas,
+  debajoDeLasCifras,
+}: {
+  proyecto: ProyectoDelResumen;
+  conectado?: boolean;
+  /** Los planes COMPLETOS del proyecto, para su tarjeta de cifras. Ausente o vacío = sin tarjeta. */
+  planes?: readonly PlanDelCable[];
+  /** Las tareas de fondo de ESTE proyecto. Ausente = la cola no ha llegado: sin tarjeta, que no es «ninguna». */
+  tareas?: readonly TareaDelCable[];
+  /** Lo que va entre la fila de cifras y el gráfico de gasto: las tarjetas de los planes, que monta el panel. */
+  debajoDeLasCifras?: React.ReactNode;
+} & AccionesDeLaCopia) {
   const apagado = conectado === false;
   const [confirmando, setConfirmando] = useState(false);
   const [negativa, setNegativa] = useState<string | undefined>(undefined);
@@ -146,101 +160,119 @@ export function ResumenDeProyecto({
   }, [marcaDeSubida]);
   const vigente = medida?.proyecto === proyecto.id ? medida : undefined;
 
-  return (
-    <>
-      <div className={estilos.cabecera} role="group" aria-label="Copia local">
-        <div className={estilos.pastillas}>
-          {proyecto.local === true ? (
-            <span className={estilos.pastilla} data-estado="local">
-              <IconCheckOutline16 size={14} />
-              en tu equipo
-            </span>
-          ) : (
-            <span className={estilos.pastilla} data-estado="sin-descargar">
-              <IconDownloadOutline16 size={14} />
-              sin descargar
-            </span>
-          )}
-          {proyecto.compartido === true ? (
-            <span className={estilos.pastilla} data-estado="compartido">
-              <IconoCompartido size={14} />
-              compartido contigo
-            </span>
-          ) : null}
-        </div>
-        {/* Abrir carpeta y borrar son de la COPIA, así que solo existen con ella: sin copia no
-            hay carpeta que enseñar ni nada que borrar, y en su sitio va «Descargar». Con el
-            proyecto trabajando siguen pintadas: quien dice por qué no se puede borrar es el
-            servidor, en la ventana. */}
+  // La copia, con su ventana de borrar: arriba, junto a las conversaciones nuevas, y lo único que hay sin ella.
+  const copia = (
+    <section className={`${estilos.bloque} ${estilos.copia}`} role="group" aria-label="Copia local">
+      <h2 className={estilos.tituloDeBloque}>Copia local</h2>
+      <div className={estilos.pastillas}>
         {proyecto.local === true ? (
-          <div className={estilos.acciones}>
-            <button
-              type="button"
-              className={estilos.secundario}
-              disabled={apagado}
-              title="Abre la carpeta del proyecto en el explorador de ficheros de este equipo"
-              onClick={async () => {
-                setNegativa(undefined);
-                setNegativa(await alAbrirCarpeta(proyecto.id).catch(() => "no se pudo hablar con el servidor"));
-              }}
-            >
-              Abrir carpeta
-            </button>
-            <button type="button" className={estilos.borrar} disabled={apagado} onClick={() => setConfirmando(true)}>
-              Borrar copia local
-            </button>
-          </div>
+          <span className={estilos.pastilla} data-estado="local">
+            <IconCheckOutline16 size={14} />
+            en tu equipo
+          </span>
         ) : (
-          // Sin copia, su única acción: bajarla. Abre la MISMA ventana que el «+» —rama de
-          // origen y aviso de la descarga—, que es donde esa decisión se toma.
-          <div className={estilos.acciones}>
-            <button type="button" className={estilos.primario} disabled={apagado} onClick={alDescargar}>
-              Descargar
-            </button>
-          </div>
+          <span className={estilos.pastilla} data-estado="sin-descargar">
+            <IconDownloadOutline16 size={14} />
+            sin descargar
+          </span>
         )}
+        {proyecto.compartido === true ? (
+          <span className={estilos.pastilla} data-estado="compartido">
+            <IconoCompartido size={14} />
+            compartido contigo
+          </span>
+        ) : null}
       </div>
-
+      {/* Abrir carpeta y borrar son de la COPIA, así que solo existen con ella: sin copia no
+          hay carpeta que enseñar ni nada que borrar, y en su sitio va «Descargar». Con el
+          proyecto trabajando siguen pintadas: quien dice por qué no se puede borrar es el
+          servidor, en la ventana. */}
+      {proyecto.local === true ? (
+        <div className={estilos.acciones}>
+          <button
+            type="button"
+            className={estilos.secundario}
+            disabled={apagado}
+            title="Abre la carpeta del proyecto en el explorador de ficheros de este equipo"
+            onClick={async () => {
+              setNegativa(undefined);
+              setNegativa(await alAbrirCarpeta(proyecto.id).catch(() => "no se pudo hablar con el servidor"));
+            }}
+          >
+            Abrir carpeta
+          </button>
+          <button type="button" className={estilos.borrar} disabled={apagado} onClick={() => setConfirmando(true)}>
+            Borrar copia local
+          </button>
+        </div>
+      ) : (
+        // Sin copia, su única acción: bajarla. Abre la MISMA ventana que el «+» —rama de
+        // origen y aviso de la descarga—, que es donde esa decisión se toma.
+        <div className={estilos.acciones}>
+          <button type="button" className={estilos.primario} disabled={apagado} onClick={alDescargar}>
+            Descargar
+          </button>
+        </div>
+      )}
       {negativa === undefined ? null : (
         <p className={estilos.negativa} role="alert">
           No se ha abierto la carpeta: {negativa}
         </p>
       )}
+    </section>
+  );
 
-      {/* Sin copia no hay nada que subir, ni sesiones de las que contar gasto. */}
+  /**
+   * **En TARJETAS, tipo dashboard** (petición suya, 21-10-2026, la opción A de su lienzo): arriba la copia y las
+   * conversaciones nuevas (también petición suya), luego una fila de cifras —lo que queda por subir, las tareas, el gasto
+   * y los planes—, las tarjetas de los planes y el gráfico del gasto. Sin copia no hay nada que medir: solo la copia.
+   */
+  return (
+    <>
       {proyecto.local === true ? (
         <>
-          <TiraDePendientes
-            medida={vigente}
-            apagado={apagado}
-            alActualizar={pedir}
-            {...(subida === undefined ? {} : { subida })}
-            {...(alVerPendientes === undefined ? {} : { alVerPendientes })}
-          />
-          {vigente?.foto?.modoDeEscritura === undefined || alFijarModoDelProyecto === undefined ? null : (
-            <ModoDelProyecto
-              guardado={vigente.foto.modoDeEscritura.proyecto}
-              {...(modoGlobal === undefined ? {} : { modoGlobal })}
+          <div className={estilos.pie}>
+            {copia}
+            {vigente?.foto?.modoDeEscritura === undefined || alFijarModoDelProyecto === undefined ? null : (
+              <ModoDelProyecto
+                guardado={vigente.foto.modoDeEscritura.proyecto}
+                {...(modoGlobal === undefined ? {} : { modoGlobal })}
+                apagado={apagado}
+                alFijar={async (modo) => {
+                  const id = proyecto.id;
+                  const r = await alFijarModoDelProyecto(id, modo).catch(() => ({ motivo: "no se pudo hablar con el servidor" }));
+                  if ("guardado" in r && enVista.current === id) {
+                    // Lo que dijo el SERVIDOR que quedó, no lo que se pidió.
+                    setMedida((m) =>
+                      m?.proyecto !== id || m.foto === undefined ? m : { ...m, foto: { ...m.foto, modoDeEscritura: r.guardado } }
+                    );
+                  }
+                  return "motivo" in r ? r.motivo : undefined;
+                }}
+              />
+            )}
+          </div>
+          <div className={estilos.cifras}>
+            <TiraDePendientes
+              medida={vigente}
               apagado={apagado}
-              alFijar={async (modo) => {
-                const id = proyecto.id;
-                const r = await alFijarModoDelProyecto(id, modo).catch(() => ({ motivo: "no se pudo hablar con el servidor" }));
-                if ("guardado" in r && enVista.current === id) {
-                  // Lo que dijo el SERVIDOR que quedó, no lo que se pidió.
-                  setMedida((m) =>
-                    m?.proyecto !== id || m.foto === undefined ? m : { ...m, foto: { ...m.foto, modoDeEscritura: r.guardado } }
-                  );
-                }
-                return "motivo" in r ? r.motivo : undefined;
-              }}
+              alActualizar={pedir}
+              {...(subida === undefined ? {} : { subida })}
+              {...(alVerPendientes === undefined ? {} : { alVerPendientes })}
             />
-          )}
+            {tareas === undefined ? null : <TarjetaDeTareas tareas={tareas} />}
+            <TarjetaDeGasto sesiones={proyecto.sesiones ?? []} />
+            {planes === undefined || planes.length === 0 ? null : <TarjetaDePlanes planes={planes} />}
+          </div>
+          {debajoDeLasCifras}
           <section className={estilos.bloque} aria-label="Gasto del proyecto">
-            <h2 className={estilos.tituloDeBloque}>Gasto</h2>
+            <h2 className={estilos.tituloDeBloque}>Gasto por sesión</h2>
             <BloqueDeGasto sesiones={proyecto.sesiones ?? []} />
           </section>
         </>
-      ) : null}
+      ) : (
+        copia
+      )}
 
       {confirmando ? (
         <BorrarCopiaLocal
@@ -254,6 +286,93 @@ export function ResumenDeProyecto({
         />
       ) : null}
     </>
+  );
+}
+
+/** El rótulo de una tarjeta de cifras: letra de máquina en versalitas, como las pastillas. */
+function Rotulo({ children }: { children: React.ReactNode }) {
+  return <span className={estilos.rotulo}>{children}</span>;
+}
+
+/**
+ * Las tareas de fondo del proyecto: cuántas trabajan y cuántas esperan, y la que trabaja con cuánto lleva y cuánto
+ * gasta (la MISMA línea que la pestaña Tareas, `EnMarcha`). Con varias en marcha, la primera y el número.
+ */
+function TarjetaDeTareas({ tareas }: { tareas: readonly TareaDelCable[] }) {
+  const enCurso = tareas.filter((t) => t.estado === "en-proceso");
+  const enCola = tareas.filter((t) => t.estado === "nuevo").length;
+  const primera = enCurso[0];
+  return (
+    <section className={estilos.tarjeta} aria-label="Tareas">
+      <Rotulo>Tareas</Rotulo>
+      <p className={estilos.linea}>
+        <strong className={estilos.cifra} data-tono="acento">
+          {enCurso.length}
+        </strong>{" "}
+        en curso · {enCola} en cola
+      </p>
+      {primera === undefined ? (
+        <p className={estilos.detalle}>Ninguna trabajando ahora.</p>
+      ) : (
+        <>
+          <p className={estilos.nombre}>{primera.titulo}</p>
+          {primera.empezada === undefined ? null : <EnMarcha empezada={primera.empezada} gasto={primera.gastoEnCurso} />}
+        </>
+      )}
+    </section>
+  );
+}
+
+/** El total del gasto, con la MISMA cuenta que el gráfico (`gastoDelProyecto`): las dos cuentas no se suman. */
+function TarjetaDeGasto({ sesiones }: { sesiones: readonly SesionDelResumen[] }) {
+  const { total, conGasto } = gastoDelProyecto(sesiones);
+  return (
+    <section className={estilos.tarjeta} aria-label="Gasto">
+      <Rotulo>Gasto</Rotulo>
+      {conGasto === 0 ? (
+        <p className={estilos.detalle}>Sin gasto que conste.</p>
+      ) : (
+        <>
+          <p className={estilos.linea}>
+            <strong className={estilos.cifra}>{abreviar(total.modelo.tokens)}</strong> tokens
+          </p>
+          <p className={estilos.detalle}>
+            {total.modelo.cache > 0 ? `${abreviar(total.modelo.cache)} de caché · ` : ""}
+            de {conGasto} {conGasto === 1 ? "sesión" : "sesiones"}
+          </p>
+          {total.externo.tokens > 0 ? <p className={estilos.detalle}>{`agente externo ${abreviar(total.externo.tokens)} tokens`}</p> : null}
+        </>
+      )}
+    </section>
+  );
+}
+
+/**
+ * Los planes en cifras, sumando sus tareas con la MISMA regla que cada plan (`Planes.tsx#resumenDelPlan`): solo los que
+ * dan el progreso de TODAS sus tareas cuentan, porque uno sin progreso contaría como pendiente lo que no dice nada.
+ */
+function TarjetaDePlanes({ planes }: { planes: readonly PlanDelCable[] }) {
+  const tareas = planes
+    .map((p) => p.tareas?.tareas ?? [])
+    .filter((ts) => ts.length > 0 && ts.every((t) => t.progreso !== undefined))
+    .flat();
+  const de = (p: string) => tareas.filter((t) => t.progreso === p).length;
+  return (
+    <section className={estilos.tarjeta} aria-label="Planes del proyecto">
+      <Rotulo>Planes</Rotulo>
+      <p className={estilos.linea}>
+        <strong className={estilos.cifra} data-tono="bien">
+          {planes.length}
+        </strong>{" "}
+        {planes.length === 1 ? "plan" : "planes"}
+      </p>
+      {tareas.length === 0 ? null : (
+        <>
+          <p className={estilos.detalle}>{`${de("finalizada")} de ${tareas.length} tareas finalizadas`}</p>
+          <p className={estilos.detalle}>{`${de("implementada")} implementadas sin comprobar · ${de("pendiente")} pendientes`}</p>
+        </>
+      )}
+    </section>
   );
 }
 
@@ -366,16 +485,18 @@ function TiraDePendientes({
     estado = "pendientes";
     contenido = (
       <span title="Ficheros distintos de lo que consta en CloudStudio. Un renombrado cuenta como dos; un fichero nuevo que git aún no sigue no cuenta.">
-        <strong>
-          {sync.pendientes} {sync.pendientes === 1 ? "fichero" : "ficheros"}
+        <strong className={estilos.cifra} data-tono="aviso">
+          {sync.pendientes}
         </strong>{" "}
-        con cambios sin subir{sync.rama === undefined ? "" : ` a «${sync.rama}»`}
+        {sync.pendientes === 1 ? "fichero" : "ficheros"} con cambios sin subir{sync.rama === undefined ? "" : ` a «${sync.rama}»`}
       </span>
     );
   }
   return (
-    <div className={estilos.tira} data-estado={estado} role="status">
+    <div className={`${estilos.tarjeta} ${estilos.tira}`} data-estado={estado} role="status">
+      <Rotulo>Sin subir</Rotulo>
       <span className={estilos.textoDeTira}>{contenido}</span>
+      <div className={estilos.botones}>
       {/* «Subir» solo con pendientes MEDIDOS: con cero no llevaría a ninguna parte, y sin
           cifra la tarjeta no sabe si hay algo (la banda de Revisión, que sí lo ofrece entonces,
           sigue ahí). Mientras espera se queda aunque la medida se rehaga debajo. */}
@@ -398,6 +519,7 @@ function TiraDePendientes({
         {medida?.respondida === false ? <GiroDeCarga /> : null}
         Actualizar
       </button>
+      </div>
     </div>
   );
 }

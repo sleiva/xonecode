@@ -6,17 +6,6 @@
    Son las piezas de la COPIA en la pestaña Resumen del panel del proyecto
    (`PanelDelProyecto.tsx`): el nombre ya lo pone el panel, aquí van sus pastillas y acciones. */
 
-/* Las pastillas a la izquierda, las acciones pegadas a la derecha. Envuelve: en una ventana
-   estrecha las acciones bajan a su propia línea. */
-.cabecera {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px 16px;
-  margin-bottom: 20px;
-}
-
 .pastillas {
   display: flex;
   flex-wrap: wrap;
@@ -85,46 +74,133 @@
   font-size: 12px;
 }
 
-/* ── Lo que queda por subir ──────────────────────────────────────────────────────────────
-   Una tira con borde, la forma de la del entorno en el escritorio: es un dato de ESTE
-   proyecto al mismo nivel que su nombre. La cifra va en tinta de texto; lo que cambia con el
-   estado es el filo de la izquierda, y el estado se dice además con palabras. */
-.tira {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+/* ── La fila de CIFRAS (dashboard, opción A de su lienzo, 21-10-2026) ─────────────────────
+   Cuatro tarjetas iguales que se reparten el ancho y bajan de línea en una ventana estrecha. La
+   superficie es la de los paneles del escritorio («Tu equipo»), compuesta y no copiada. */
+.cifras {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 12px;
   margin: 0 0 20px;
-  padding: 10px 14px;
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-left-width: 3px;
-  border-radius: 10px;
-  background: var(--dsw-alias-bg-layer-2);
+}
+
+.tarjeta {
+  composes: equipo from "./Equipo.module.css";
+}
+
+.tarjeta.tarjeta {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  min-width: 0;
+  padding: 14px 16px;
+}
+
+/* Letra de máquina en versalitas, como las pastillas: marca lo que es rótulo de un dato. */
+.rotulo {
+  color: var(--dsw-alias-label-tertiary);
+  font-family: var(--ds-font-family-code);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.linea {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+}
+
+/* La cifra grande. El tono solo donde dice algo: lo pendiente en naranja (el filo de siempre),
+   los planes en el verde de «hecho». El cian es acento, no texto: lo demás en tinta. */
+.cifra {
+  color: var(--dsw-alias-label-primary);
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+
+.cifra[data-tono="aviso"] {
+  color: var(--xonecode-naranja);
+}
+
+.cifra[data-tono="bien"] {
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.detalle {
+  margin: 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+}
+
+.nombre {
+  margin: 0;
+  overflow: hidden;
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Lo que queda por subir: la primera tarjeta ─────────────────────────────────────────
+   La cifra es la MISMA que la banda de Revisión. El estado se dice con palabras y con el filo
+   de arriba. */
+.tira.tira {
+  border-top-width: 3px;
   color: var(--dsw-alias-label-secondary);
   font-size: 13px;
 }
 
 .tira[data-estado="pendientes"] {
-  border-left-color: var(--xonecode-naranja);
+  border-top-color: var(--xonecode-naranja);
   color: var(--dsw-alias-label-primary);
 }
 
 .tira[data-estado="al-dia"] {
-  border-left-color: var(--dsw-alias-state-success-primary);
+  border-top-color: var(--dsw-alias-state-success-primary);
 }
 
 .tira[data-estado="error"] {
-  border-left-color: var(--dsw-alias-state-error-primary);
+  border-top-color: var(--dsw-alias-state-error-primary);
 }
 
-/* `margin-right: auto` se come el hueco libre: con «Subir» la tira tiene TRES hijos, y el
-   `space-between` dejaba el botón en medio en vez de junto a «Actualizar». */
 .textoDeTira {
   display: inline-flex;
-  align-items: center;
-  gap: 8px;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 6px;
   min-width: 0;
-  margin-right: auto;
+}
+
+.botones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: auto;
+  padding-top: 6px;
+}
+
+/* ── Arriba: la copia y las conversaciones nuevas, lado a lado ──────────────────────────── */
+.pie {
+  margin: 0 0 20px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+  align-items: stretch;
+}
+
+.pie > .bloque.bloque {
+  margin: 0;
+}
+
+.copia {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .girando {

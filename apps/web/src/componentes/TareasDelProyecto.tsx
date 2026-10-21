@@ -1009,7 +1009,7 @@ export function tiempoQueLleva(ms: number): string {
  * `empezada` (la hora del SERVIDOR); el gasto lo manda el servidor (`gastoEnCurso`), que lo reemite mientras trabaja.
  * Sin gasto que conste no se pinta la cifra: ausente no es cero.
  */
-function EnMarcha({ empezada, gasto }: { empezada: string; gasto: TareaDelCable["gastoEnCurso"] }) {
+export function EnMarcha({ empezada, gasto }: { empezada: string; gasto: TareaDelCable["gastoEnCurso"] }) {
   const [ahora, setAhora] = useState(() => Date.now());
   useEffect(() => {
     const reloj = setInterval(() => setAhora(Date.now()), 1000);

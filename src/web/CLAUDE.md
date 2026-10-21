@@ -58,8 +58,9 @@ Ante una discrepancia con el código, **el código manda**.
   (la MISMA pestaña de la conversación, `App.tsx#pestanaDeEjecutar`, IXCODE-58), Tareas, Soporte, Conectores. El proyecto YA abierto enseña el panel SIN mandar `sesion`; «+» y una sesión de la
   barra llevan al chat. **Una sola fila marcada** (`proyectoEnResumen` manda); con panel delante
   ningún chat va marcado.
-- **Resumen** (`ResumenDeProyecto.tsx`): los PLANES primero, luego la COPIA (pastillas, Descargar, «Abrir carpeta», «Borrar
-  copia local»), lo pendiente y el gasto. **Sin copia el panel abre SOLO el Resumen** (`App.tsx#panelSinCopia`) sin abrir nada en el
+- **Resumen** (`ResumenDeProyecto.tsx`), en TARJETAS: arriba la COPIA (pastillas, Descargar, «Abrir carpeta», «Borrar
+  copia local») y las conversaciones nuevas, una fila de cifras (sin subir, tareas, gasto, planes), las tarjetas de los
+  PLANES (`debajoDeLasCifras`) y el gasto por sesión. Sin cola llegada, sin tarjeta de tareas. **Sin copia el panel abre SOLO el Resumen** (`App.tsx#panelSinCopia`) sin abrir nada en el
   servidor, y dice por qué faltan Tareas y Conectores. «Abrir carpeta» (`accion: "abrirCarpeta"`)
   lo lanza el SERVIDOR (`comandoParaAbrirDirectorio`); **límite**: por un túnel abre en su máquina.
 - **Lo pendiente de subir es UNA foto** (`accion: "resumen"`, `FotoDelResumen`) en la respuesta del

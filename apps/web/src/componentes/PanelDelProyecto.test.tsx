@@ -116,7 +116,8 @@ describe("PanelDelProyecto", () => {
     expect(screen.queryByRole("region", { name: "Sesiones" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Nueva sesión" })).toBeNull();
     expect(screen.getByText("Plan de visitas")).toBeTruthy();
-    expect(screen.getByText("Según el plan: 1 de 2 finalizadas · 1 pendientes.")).toBeTruthy();
+    // En tarjeta: las tres cifras, y la frase entera en su título.
+    expect(screen.getByTitle("Según el plan: 1 de 2 finalizadas · 1 pendientes.").textContent).toBe("finalizadas1 / 2sin comprobar0pendientes1");
     expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe("50");
     // Se mudó a la pestaña Tareas: Resumen ya no la enseña, aunque la ranura venga montada.
     expect(screen.queryByText("la ranura de tareas")).toBeNull();
@@ -1159,7 +1160,7 @@ describe("PanelDelProyecto: lo de la copia en el Resumen", () => {
     expect(sinCopia.container.querySelector("header img")).toBeNull();
   });
 
-  it("con copia: los planes PRIMERO, y debajo pastillas y acciones, lo que queda por subir y el gasto", async () => {
+  it("con copia, en tarjetas: la copia arriba, las cifras, los planes y el gasto por sesión", async () => {
     const c = copia(true);
     montar({ copia: c, planes: [PLAN] });
     await act(async () => {});
@@ -1171,9 +1172,11 @@ describe("PanelDelProyecto: lo de la copia en el Resumen", () => {
     expect(screen.getByRole("status").textContent).toMatch(/2 ficheros con cambios sin subir a «main»/);
     const gasto = screen.getByRole("region", { name: "Gasto del proyecto" });
     const planes = screen.getByRole("region", { name: "Planes" });
-    // El orden de la decisión (21-10-2026: «los planes no salen desde un inicio»): los planes arriba, luego la copia y el gasto.
-    expect(planes.compareDocumentPosition(grupo) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(grupo.compareDocumentPosition(gasto) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // En TARJETAS (21-10-2026, opción A de su lienzo): la copia arriba, las cifras, los planes y el gasto por sesión.
+    const cifras = screen.getByRole("status");
+    expect(grupo.compareDocumentPosition(cifras) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(cifras.compareDocumentPosition(planes) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(planes.compareDocumentPosition(gasto) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     // Sin sesiones que abrir: el gasto no es una lista de sesiones.
     expect(screen.queryByRole("region", { name: "Últimas sesiones" })).toBeNull();
     expect(screen.queryByRole("button", { name: /Menú/ })).toBeNull();

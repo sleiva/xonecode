@@ -584,3 +584,58 @@
   color: var(--dsw-alias-label-secondary);
   font-weight: 600;
 }
+
+/* ── Los planes del Resumen, en TARJETAS (21-10-2026) ───────────────────────────────────────
+   La rejilla se reparte el ancho; el plan ABIERTO ocupa la fila entera, que su detalle no cabe en una columna. La
+   superficie, la de los paneles del escritorio. */
+.tarjetasDePlanes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tarjetasDePlanes > .plan {
+  gap: 10px;
+  padding: 14px 16px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 12px;
+  background: var(--dsw-alias-bg-layer-2);
+  min-width: 0;
+}
+
+.tarjetasDePlanes > .plan[data-abierto] {
+  grid-column: 1 / -1;
+}
+
+.cifrasDePlan {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.cifrasDePlan > div {
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 2px;
+}
+
+.cifrasDePlan dt {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+}
+
+.cifrasDePlan dd {
+  margin: 0;
+  color: var(--dsw-alias-label-primary);
+  font-size: 18px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.cifrasDePlan dd[data-tono="aviso"] {
+  color: var(--xonecode-naranja);
+}

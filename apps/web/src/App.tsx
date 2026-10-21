@@ -3509,6 +3509,8 @@ export function App({
               {...((tareasEnCursoPorProyecto.get(proyectoActivoId ?? "") ?? 0) > 0
                 ? { tareasEnCurso: tareasEnCursoPorProyecto.get(proyectoActivoId ?? "")! }
                 : {})}
+              // Las de ESTE proyecto, para la tarjeta del Resumen; sin cola llegada, nada (ausente no es «ninguna»).
+              {...(estado.tareas?.lista === undefined ? {} : { tareas: estado.tareas.lista.filter((t) => t.proyecto === proyectoActivoId) })}
               {...(entornoDelEscritorio === undefined ? {} : { entorno: entornoDelEscritorio.nombre })}
               // La rama solo si ya se midió (`sync`): no se pide aquí una medida para pintarla.
               {...(estado.sync?.rama === undefined ? {} : { rama: estado.sync.rama })}

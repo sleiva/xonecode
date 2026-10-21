@@ -1,7 +1,7 @@
 import { render, screen, fireEvent, cleanup, act, within } from "@testing-library/react";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { ResumenDeProyecto, type ProyectoDelResumen } from "./ResumenDeProyecto.js";
-import type { FotoDelResumen } from "../tipos.js";
+import type { FotoDelResumen, PlanDelCable, TareaDelCable } from "../tipos.js";
 
 /*
  * Lo de la COPIA arriba de la pestaña Resumen del panel del proyecto. Las sesiones y las tareas
@@ -17,6 +17,8 @@ function montar(
     conectado?: boolean;
     alAbrirCarpeta?: (p: string) => Promise<string | undefined>;
     alPedirResumen?: (p: string) => Promise<FotoDelResumen | undefined>;
+    tareas?: readonly TareaDelCable[];
+    planes?: readonly PlanDelCable[];
   } = {}
 ) {
   const alDescargar = vi.fn();
@@ -31,6 +33,8 @@ function montar(
       alAbrirCarpeta={alAbrirCarpeta}
       alBorrarCopia={alBorrarCopia}
       alPedirResumen={alPedirResumen}
+      {...(extra.tareas === undefined ? {} : { tareas: extra.tareas })}
+      {...(extra.planes === undefined ? {} : { planes: extra.planes })}
     />
   );
   return { alDescargar, alBorrarCopia, alAbrirCarpeta, alPedirResumen, vista };
@@ -352,5 +356,48 @@ describe("«Subir» en la tarjeta de lo pendiente", () => {
     vista.rerender(<ResumenDeProyecto {...props} marcaDeSubida="2026-10-02T10:00:00.000Z" />);
     await asentar();
     expect(props.alPedirResumen).toHaveBeenCalledTimes(2);
+  });
+});
+
+/** En TARJETAS (petición suya, 21-10-2026): la fila de cifras con las tareas y los planes. */
+describe("las tarjetas de cifras", () => {
+  const tarea = (t: Partial<TareaDelCable>): TareaDelCable =>
+    ({ id: "t", proyecto: "p1", proyectoNombre: "Tienda", titulo: "T", peticion: "", encargo: "", adjuntos: [], estado: "nuevo", creada: "2026-10-21T10:00:00Z", ...t }) as TareaDelCable;
+
+  it("tareas: cuántas en curso y en cola, y la que trabaja con cuánto lleva y gasta", async () => {
+    const gastoEnCurso = { modelo: { entrada: 1_500_000, salida: 60_000, cache: 1_300_000 }, externo: { entrada: 0, salida: 0, cache: 0 } };
+    montar(
+      { id: "p1", nombre: "Tienda", local: true },
+      { tareas: [tarea({ id: "a", titulo: "Listados", estado: "en-proceso", empezada: new Date(Date.now() - 90_000).toISOString(), gastoEnCurso }), tarea({ id: "b" }), tarea({ id: "c" })] }
+    );
+    await asentar();
+    const tarjeta = screen.getByRole("region", { name: "Tareas" });
+    expect(tarjeta.textContent).toContain("1 en curso · 2 en cola");
+    expect(tarjeta.textContent).toContain("Listados");
+    expect(tarjeta.textContent).toMatch(/Lleva 1 min \d\d s · 260k tokens/);
+  });
+
+  it("sin la cola llegada no hay tarjeta de tareas (ausente no es «ninguna»); con la cola vacía, lo dice", async () => {
+    montar({ id: "p1", nombre: "Tienda", local: true });
+    await asentar();
+    expect(screen.queryByRole("region", { name: "Tareas" })).toBeNull();
+    cleanup();
+    montar({ id: "p1", nombre: "Tienda", local: true }, { tareas: [] });
+    await asentar();
+    expect(screen.getByRole("region", { name: "Tareas" }).textContent).toContain("Ninguna trabajando ahora.");
+  });
+
+  it("planes: cuántos, y sus tareas sumadas solo de los que dan el progreso de todas", async () => {
+    const tp = (progreso: string) => ({ id: "1", titulo: "x", criterios: { hechos: 0, total: 1 }, progreso });
+    const planes = [
+      { nombre: "a", ficheros: ["PLAN.md", "TASKS.md"], tareas: { titulo: "A", tareas: [tp("finalizada"), tp("implementada"), tp("pendiente")] } },
+      { nombre: "b", ficheros: ["PLAN.md", "TASKS.md"], tareas: { titulo: "B", tareas: [{ id: "1", titulo: "x", criterios: { hechos: 0, total: 1 } }] } },
+    ] as unknown as PlanDelCable[];
+    montar({ id: "p1", nombre: "Tienda", local: true }, { planes });
+    await asentar();
+    const tarjeta = screen.getByRole("region", { name: "Planes del proyecto" });
+    expect(tarjeta.textContent).toContain("2 planes");
+    expect(tarjeta.textContent).toContain("1 de 3 tareas finalizadas");
+    expect(tarjeta.textContent).toContain("1 implementadas sin comprobar · 1 pendientes");
   });
 });
