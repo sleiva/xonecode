@@ -70,6 +70,8 @@ Ante una discrepancia con el código, **el código manda**.
 - **Maquetador externo con shell: el bucle es SUYO** (`textoDeMaquetadorExterno`): todo en un encargo, crítico una vez,
   otra vuelta solo por algo bloqueante.
 - **Sale con el CRITERIO DE ACEPTACIÓN medible** del encargo, tope de tres vueltas.
+- **UNA VENTANA por encargo y por tarea del plan** (`UNA_VENTANA_POR_ENCARGO`, `PLAN_DE_DESARROLLO`, `REPARTIR_EN_TAREAS`,
+  skill `xone-plan-builder`): con varias, el developer agota su presupuesto a mitad. Es redacción, no guarda.
 - **Traspasos acotados** (`toolsDeFichero.ts`, `informesDeHijos.ts`): `write_file` solo CREA un `.xne`/`.js`/`.css`
   (sobre uno existente, error → `edit_file`); `read_file` hasta `LINEAS_POR_LECTURA`/`CARACTERES_POR_LECTURA` y dice por
   dónde seguir; al terminar un hijo, quien lo llamó recibe en UN mensaje lo que ESCRIBIÓ (sin contenido; binarios

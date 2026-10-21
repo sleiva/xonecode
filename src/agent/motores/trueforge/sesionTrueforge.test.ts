@@ -3753,3 +3753,18 @@ describe("el plan sale de las pantallas de Stitch", () => {
     expect(PLAN_PRIMERO).toMatch(/manda la maqueta/);
   });
 });
+
+/** Petición suya (21-10-2026): cada encargo y cada tarea del plan, como MUCHO una ventana. Y el developer prueba con sus scripts. */
+describe("una ventana por encargo", () => {
+  it("el orquestador lo lee junto al plan, y sabe que el developer prueba con sus scripts, no con device-controller", () => {
+    const nota = notaDeDelegacion(AGENTES_DE_SERIE, { conComparacion: true, conBucle: true });
+    expect(nota).toContain("UNA VENTANA POR ENCARGO");
+    expect(nota).toContain("developer-xone prueba lo que escribe él mismo, con los scripts de sus skills");
+    expect(nota).not.toContain("llamando a device-controller");
+  });
+
+  it("el analista lo escribe en TASKS.md", () => {
+    const analista = AGENTES_DE_SERIE.find((a) => a.nombre === "analyst-xone")!;
+    expect(analista.instrucciones).toContain("cada tarea, como MUCHO, UNA ventana");
+  });
+});

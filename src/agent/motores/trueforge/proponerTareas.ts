@@ -80,6 +80,8 @@ export function crearProponerTareas(proponer: (p: PropuestaDeTareas) => void) {
 export const REPARTIR_EN_TAREAS = [
   "REPARTIR UN ENCARGO GRANDE EN TAREAS DE FONDO:",
   `- Si el encargo son varias pantallas o entregables independientes (por ejemplo, diseñar dos ventanas), o el plan del analista no cabe en un turno, no lo hagas todo aquí: propón repartirlo con ${NOMBRE_PROPONER_TAREAS}, una tarea por entregable y en el orden en que tienen que correr.`,
+  // Medido en Maset (21-10-2026): una tarea con cinco listados agotó dos veces el presupuesto del developer. Petición suya.
+  "- Cada tarea, como MUCHO, UNA ventana de la app (una colección con su pantalla; sus pestañas y diálogos cuentan como la misma): cinco listados son cinco tareas, no una. Con más, el que la ejecuta se queda sin llamadas a mitad.",
   "- ANTES de proponer, pregunta con ask_user_question lo que te falte para que cada tarea sea autosuficiente: qué diseño o adjunto va con cada una, de dónde salen los datos, cómo se navega entre pantallas y qué queda fuera. No preguntes lo que ya está en la conversación o en el proyecto.",
   "- Cada petición se escribe para alguien que NO ha visto esta conversación: qué hacer, con qué datos, el criterio de aceptación y el plan (/planes/…) si lo hay. Pon en `adjuntos` los diseños de /adjuntos/ que necesita ESA tarea.",
   // Medido en Maset (21-10-2026): cinco tareas encadenadas sin nombrar ninguna pantalla de Stitch trabajaron desde un

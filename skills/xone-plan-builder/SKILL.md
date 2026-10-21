@@ -107,6 +107,10 @@ El orden de ejecución sigue las dependencias del framework:
 9. Comprobación en el aparato               (device-controller; el verificador del arnés corre solo)
 ```
 
+### Tamaño de una tarea: como MUCHO una ventana
+
+Cada tarea de `TASKS.md` cubre, como mucho, **una ventana** de la app: una colección con su pantalla (sus pestañas y diálogos cuentan como la misma). Varias pantallas —cinco listados, los cuatro pasos de un flujo— son varias tareas, una por ventana, encadenadas por sus dependencias. Medido: una tarea de varias ventanas agota el presupuesto de llamadas de quien la ejecuta y se entrega a medias.
+
 ### Reglas de secuenciación
 
 - **`mappings.xne` primero.** Empresas y Usuarios deben existir antes que cualquier coll de negocio que haga combo a Empresas.
@@ -199,6 +203,7 @@ Ver [TASKS-FORMAT.md](references/TASKS-FORMAT.md) para la plantilla completa. Re
 Antes de entregar `TASKS.md`:
 
 - [ ] Cada tarea es un corte vertical completo y verificable.
+- [ ] Ninguna tarea cubre más de UNA ventana (sus pestañas y diálogos cuentan como la misma).
 - [ ] Cada tarea declara sus dependencias correctamente.
 - [ ] El orden de ejecución respeta las dependencias naturales de XOne (mappings → colls → pantallas → integraciones → estilo → validación).
 - [ ] No hay tareas que dependan de cosas que el spec no especifica —o están marcadas como notas.

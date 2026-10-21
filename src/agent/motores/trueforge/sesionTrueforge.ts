@@ -184,6 +184,18 @@ const BUCLE_DE_CALIDAD = [
  * nota («llama tú al diseñador… antes del desarrollador»), contra el «contéstala tú» y contra el «Cómo empezar» del
  * encargo. Va en el prompt y no como guarda: quien reparte sigue siendo el orquestador (decisión suya, «no fuerces nada»).
  */
+/**
+ * **Una VENTANA por encargo** (petición suya, 21-10-2026: «cada tarea del plan como máximo una ventana, porque los
+ * encargos se quedan sin iteraciones»). Medido en Maset: «Listados y liquidación» llevaba cinco ventanas y el developer
+ * agotó su presupuesto de llamadas dos veces seguidas («paro aquí», «cierre parcial»). Lo mismo en el plan del analista
+ * (`agentesEnDisco.ts#PLAN_DE_DESARROLLO`) y al repartir en tareas de fondo (`proponerTareas.ts#REPARTIR_EN_TAREAS`).
+ */
+export const UNA_VENTANA_POR_ENCARGO = [
+  "UNA VENTANA POR ENCARGO: cada encargo a developer-xone es, como MUCHO, UNA ventana de la app (una colección con su pantalla;",
+  "sus pestañas y diálogos cuentan como la misma). Con varias, un encargo por ventana y en orden, aunque el plan las agrupe en",
+  "una tarea: con más, se le acaba el presupuesto de llamadas a mitad y devuelve el trabajo a medias.",
+].join("\n");
+
 export const PLAN_PRIMERO = [
   "PLAN PRIMERO: un desarrollo LARGO (varias pantallas o ficheros, una funcionalidad nueva) y CREAR o REDISEÑAR una pantalla a",
   "partir de un DISEÑO (una pantalla de Stitch, una maqueta adjunta) empiezan por `analyst-xone` con el PLAN. Dile qué hay que",
@@ -538,7 +550,7 @@ export function notaDeDelegacion(
     "especialista no ve esta conversación—. Donde estas instrucciones dicen `task` o `subagent_type`,",
     "entiende `create_sub_agent` y `name`. Las fichas de los especialistas:",
     ...agentes.map((a) => `- ${a.nombre}: ${fichaDeAgente(a, opciones)}`),
-    ...(agentes.some((a) => a.nombre === "analyst-xone") && agentes.some((a) => a.nombre === "developer-xone") ? ["", PLAN_PRIMERO] : []),
+    ...(agentes.some((a) => a.nombre === "analyst-xone") && agentes.some((a) => a.nombre === "developer-xone") ? ["", PLAN_PRIMERO, "", UNA_VENTANA_POR_ENCARGO] : []),
     ...(opciones.conComparacion === true ? ["", BUCLE_DE_CALIDAD] : []),
     // Si quien maqueta corre en Claude Code con su shell, el bucle es SUYO: el orquestador no lo repite encima.
     ...(opciones.conComparacion === true && externos.length > 0 ? ["", textoDeMaquetadorExterno(externos)] : []),
@@ -563,7 +575,7 @@ export function notaDeDelegacion(
                 "el mismo encaje en la pantalla, y sin diferencias de DISEÑO (los detalles se dicen, no obligan). Escrito así, sin nombres de herramientas. No se puede pedir",
               ]
             : [
-                "BUCLE DEL DESARROLLADOR: developer-xone prueba lo que escribe él mismo, llamando a device-controller (despliega, toca y lee",
+                `BUCLE DEL DESARROLLADOR: developer-xone prueba lo que escribe él mismo, ${agentes.find((a) => a.nombre === "developer-xone")?.scripts === true ? "con los scripts de sus skills" : "llamando a device-controller"} (despliega, toca y lee`,
                 "el log), maqueta y arregla lo visual él mismo —designer-xone solo le hace iconos y fondos SVG—, y corrige hasta cumplir el CRITERIO DE ACEPTACIÓN que le des. Por eso",
                 "cada encargo a developer-xone lleva el CRITERIO ESCRITO y MEDIBLE: qué casillas del plan tiene que dejar comprobadas, qué",
                 "tiene que hacer la app, y, si hay diseño, que la distancia de `comparar_capturas` quede por debajo del 10 % en vertical y en",
