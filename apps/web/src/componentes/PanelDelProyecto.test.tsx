@@ -122,6 +122,30 @@ describe("PanelDelProyecto", () => {
     expect(screen.queryByText("la ranura de tareas")).toBeNull();
   });
 
+  /** Petición suya (21-10-2026): «me gustaría ver el detalle del plan cuando le damos al plan». La MISMA vista de la pestaña Planes. */
+  it("Resumen: pulsar un plan despliega su detalle —tareas y PLAN.md— y pulsarlo otra vez lo pliega", () => {
+    const conDetalle: PlanDelCable = {
+      ...PLAN,
+      plan: { texto: "# Plan de visitas\n\nEl objetivo.", recortado: false },
+      tareas: { ...PLAN.tareas!, tareas: PLAN.tareas!.tareas.map((t) => ({ ...t, cuerpo: `Cuerpo de la tarea ${t.titulo}` })) },
+    };
+    montar({ planes: [conDetalle] });
+    const boton = screen.getByRole("button", { name: /Plan de visitas/ });
+    expect(boton.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByRole("button", { name: "Ver PLAN.md" })).toBeNull();
+    fireEvent.click(boton);
+    expect(boton.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByText("/planes/visitas/")).toBeTruthy();
+    // Las tareas, desplegables como en la pestaña Planes.
+    fireEvent.click(screen.getByRole("button", { name: /02\s*B/ }));
+    expect(screen.getByText("Cuerpo de la tarea B")).toBeTruthy();
+    // Y el PLAN.md.
+    fireEvent.click(screen.getByRole("button", { name: "Ver PLAN.md" }));
+    expect(screen.getByText("El objetivo.")).toBeTruthy();
+    fireEvent.click(boton);
+    expect(screen.queryByText("/planes/visitas/")).toBeNull();
+  });
+
   it("Resumen: solo los planes con PLAN.md Y TASKS.md; uno a medias no sale", () => {
     montar({
       planes: [

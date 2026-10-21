@@ -153,6 +153,33 @@
 
 .nombreDePlan {
   font-weight: 600;
+  /* Un botón que se lee como el título: pulsarlo despliega el detalle del plan. */
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.nombreDePlan:hover {
+  text-decoration: underline;
+}
+
+.nombreDePlan::before {
+  content: "▸ ";
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.nombreDePlan[aria-expanded="true"]::before {
+  content: "▾ ";
+}
+
+.detalleDePlan {
+  padding: 8px 0 4px;
 }
 
 .busqueda {

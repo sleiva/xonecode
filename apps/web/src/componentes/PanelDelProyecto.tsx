@@ -22,7 +22,7 @@ import { IconoDeApp } from "./IconosDeProyecto.js";
 import { IconoDeActualizar, IconoDeEnlaceExterno } from "./IconosDelVisor.js";
 import { useEsperaDeRefresco } from "../esperaDeRefresco.js";
 import giro from "./GiroDeCarga.module.css";
-import { BarraDeProgreso, resumenDelPlan } from "./Planes.js";
+import { BarraDeProgreso, Planes, resumenDelPlan } from "./Planes.js";
 import { TarjetaDeEmpezar } from "./TarjetaDeJira.js";
 import { ResumenDeProyecto, type AccionesDeLaCopia, type ProyectoDelResumen } from "./ResumenDeProyecto.js";
 import { SoporteDelProyecto } from "./SoporteDelProyecto.js";
@@ -481,6 +481,9 @@ export function PanelDelProyecto({
  */
 function Resumen({ planes: todos }: { planes?: PlanDelCable[] }) {
   const planes = todos?.filter(esPlanCompleto);
+  // El plan desplegado (petición suya: «ver el detalle del plan cuando le damos al plan»): la MISMA vista de la pestaña
+  // Planes —tareas desplegables y «Ver PLAN.md»—, no una copia.
+  const [abierto, setAbierto] = useState<string | undefined>(undefined);
   return (
     <>
       {planes === undefined || planes.length === 0 ? null : (
@@ -494,8 +497,19 @@ function Resumen({ planes: todos }: { planes?: PlanDelCable[] }) {
               const conProgreso = tareas.length > 0 && tareas.every((t) => t.progreso !== undefined);
               return (
                 <li key={p.nombre} className={estilos.plan}>
-                  <span className={estilos.nombreDePlan}>{p.tareas?.titulo ?? p.nombre}</span>
-                  {conProgreso ? (
+                  <button
+                    type="button"
+                    className={estilos.nombreDePlan}
+                    aria-expanded={abierto === p.nombre}
+                    onClick={() => setAbierto((a) => (a === p.nombre ? undefined : p.nombre))}
+                  >
+                    {p.tareas?.titulo ?? p.nombre}
+                  </button>
+                  {abierto === p.nombre ? (
+                    <div className={estilos.detalleDePlan}>
+                      <Planes planes={[p]} />
+                    </div>
+                  ) : conProgreso ? (
                     <>
                       <span className={estilos.nota}>{resumenDelPlan(tareas)}</span>
                       <BarraDeProgreso tareas={tareas} />
