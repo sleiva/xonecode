@@ -104,8 +104,14 @@ const TAREA = (extra: Partial<Tarea> = {}): Tarea => ({
   ...extra,
 });
 
-/** Una consola de proyecto de mentira: apunta el encargo y deja controlar el final. */
-function proyectoDeMentira() {
+/**
+ * Una consola de proyecto de mentira: apunta el encargo y deja controlar el final.
+ *
+ * `alCerrar`: qué hace el turno cuando se cierra su consola. Por omisión RECHAZA (`AbortError`); con `"devuelve"` resuelve
+ * limpio, que es lo que hace TrueForge en producción —medido en Maset (21-10-2026): al parar xonecode la tarea quedó «el
+ * turno acabó; reintenta para que el juez la mire» y no se reanudó—. El doble que solo rechazaba escondía ese camino.
+ */
+function proyectoDeMentira(alCerrar: "rechaza" | "devuelve" = "rechaza") {
   const encargos: string[] = [];
   const cierres: string[] = [];
   const aparcadores: ((motivo: string) => void)[] = [];
@@ -159,7 +165,8 @@ function proyectoDeMentira() {
           // Cerrar la consola ABORTA el turno: en producción `ConsolaDeProyecto.cerrar`
           // aborta el stream del grafo y `ejecutarTurno` rechaza. Un doble que resolviera
           // limpio esconderia justo el caso que `parar()` tiene que saber contar.
-          viva?.rechazar(Object.assign(new Error("The operation was aborted"), { name: "AbortError" }));
+          if (alCerrar === "devuelve") viva?.resolver({ verificador: "verde", pendientes: 0 });
+          else viva?.rechazar(Object.assign(new Error("The operation was aborted"), { name: "AbortError" }));
         },
       };
     },
@@ -503,11 +510,13 @@ describe("lo que una tarea AUTORIZÓ se guarda con su estado", () => {
     await corredor.asentar();
     p.autorizar(["/app.xne"]);
     await corredor.parar();
+    // Cortada por el cierre: vuelve a la cola para reanudarse (21-10-2026), y lo autorizado se queda.
     expect(estado()[0]).toMatchObject({
-      estado: "requiere-atencion",
-      motivo: MOTIVO_CORTADA_POR_CIERRE,
+      estado: "nuevo",
+      reanudaciones: 1,
       autorizadas: ["app.xne"],
     });
+    expect(estado()[0]!.feedback?.at(-1)?.texto).toBe(TEXTO_DE_REANUDACION);
   });
 });
 
@@ -1893,13 +1902,15 @@ describe("crearCorredorDeTareas", () => {
     const d = discoDeMentira([TAREA()]);
     const p = proyectoDeMentira();
     const juez = juezQueDice({ veredicto: "verde", resumen: "bien" });
+    // La revisión de git tarda hasta que se suelta: es la ventana de la entrega en la que llega el Ctrl-C.
+    let soltarRevision: () => void = () => {};
     const corredor = crearCorredorDeTareas({
       disco: d.disco,
       abrirParaTarea: p.abrir,
       pid: 1,
       concurrencia: () => 1,
       juez,
-      revisable: async () => ({ revisable: true, escribio: true }),
+      revisable: () => new Promise((r) => (soltarRevision = () => r({ revisable: true, escribio: true }))),
     });
     await corredor.arrancar();
     await corredor.asentar();
@@ -1909,14 +1920,45 @@ describe("crearCorredorDeTareas", () => {
      * pone `parando` de forma SÍNCRONA antes de su primer `await`, así que `correr` sigue
      * con `terminoLimpio` y `parando` a la vez — la ventana exacta que la guarda cubre.
      */
+    /**
+     * El turno ACABA y el corredor lo ve acabar; el Ctrl-C llega DESPUÉS, durante la entrega. (Acabar y parar en el mismo
+     * tick no se distingue de un CORTE —parar cierra la consola y eso hace que el turno devuelva—, y ese caso es el
+     * test siguiente.)
+     */
     p.acabar();
-    await corredor.parar();
+    await new Promise((r) => setTimeout(r, 0));
+    const parada = corredor.parar();
+    soltarRevision();
+    await parada;
     expect(d.estado()[0]!.estado).toBe("requiere-atencion");
     expect(d.estado()[0]!.motivo).toContain("antes de evaluar la entrega");
     // Y NO el de la reconciliación, que aquí mentiría: la conversación sí se guardó.
     expect(d.estado()[0]!.motivo).not.toContain(MOTIVO_CORTADA_POR_CIERRE);
     // Al juez no se le preguntó: el proceso se va, y una llamada de modelo que nadie va a
     // esperar es tiempo y dinero por nada.
+    expect(juez.casos).toHaveLength(0);
+  });
+
+  /**
+   * **Parar CORTA el turno, aunque el turno devuelva** (Maset, 21-10-2026): en producción cerrar la consola hace que el
+   * turno de TrueForge devuelva limpio, y la tarea quedaba aparcada con «el turno acabó» —falso— y sin reanudarse al
+   * arrancar. Ahora es una cortada a mitad, y se deja REANUDABLE: vuelve a la cola con el aviso en su hilo.
+   */
+  it("un turno que devuelve PORQUE se paró es una cortada, y queda para reanudarse sola", async () => {
+    const d = discoDeMentira([TAREA()]);
+    const p = proyectoDeMentira("devuelve");
+    const juez = juezQueDice({ veredicto: "verde", resumen: "bien" });
+    const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE, disco: d.disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 1, juez });
+    await corredor.arrancar();
+    await corredor.asentar();
+    expect(d.estado()[0]!.estado).toBe("en-proceso");
+    await corredor.parar();
+    const t = d.estado()[0]!;
+    expect(t.motivo ?? "").not.toContain("antes de evaluar la entrega");
+    // Vuelve a la cola con el aviso de reanudar, una vez: el arranque siguiente la coge.
+    expect(t.estado).toBe("nuevo");
+    expect(t.reanudaciones).toBe(1);
+    expect(t.feedback?.at(-1)).toMatchObject({ texto: TEXTO_DE_REANUDACION, consumido: false });
     expect(juez.casos).toHaveLength(0);
   });
 
@@ -1965,7 +2007,9 @@ describe("crearCorredorDeTareas", () => {
     // grafo): el doble rechaza al cerrar, como el de verdad.
     await corredor.parar();
     expect(p.cierres).toEqual(["/w/A"]);
-    expect(d.estado()[0]).toMatchObject({ estado: "requiere-atencion", motivo: MOTIVO_CORTADA_POR_CIERRE });
+    // Cortada a mitad, y REANUDABLE (21-10-2026): la misma regla que la reconciliación del arranque, que ya reanudaba
+    // una tarea que el proceso dejó «en proceso». Antes un Ctrl-C la dejaba esperando a una persona, y con ella la cadena.
+    expect(d.estado()[0]).toMatchObject({ estado: "nuevo", reanudaciones: 1 });
     expect(d.soltados()).toBe(1);
   });
 });

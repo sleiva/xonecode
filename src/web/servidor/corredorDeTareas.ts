@@ -1122,6 +1122,13 @@ export function crearCorredorDeTareas(opciones: {
             (ficheros) => void entrada.autorizadas?.push(...ficheros)
           )) ?? undefined;
         terminoLimpio = true;
+        /**
+         * **Si el proceso ya se estaba PARANDO cuando el turno devolvió, lo devolvió el CORTE**: `parar()` cierra la
+         * consola, y en producción el turno de TrueForge DEVUELVE al cerrarse en vez de lanzar. Medido en Maset
+         * (21-10-2026): la tarea quedó «el turno acabó; reintenta para que el juez la mire» —falso— y no se reanudó al
+         * arrancar. Un Ctrl-C que llega DESPUÉS de que el turno devolviera (durante la entrega) sí es «el turno acabó».
+         */
+        if (parando) cortadaAMitad = true;
       }
     } catch (error) {
       // El `motivo ??=` conserva el primero: la consola de tarea aparca ANTES de lanzar, así
@@ -1169,6 +1176,7 @@ export function crearCorredorDeTareas(opciones: {
       cortadaAMitad = true;
       motivo = MOTIVO_CORTADA_POR_CIERRE;
     }
+    if (motivo === undefined && cortadaAMitad) motivo = MOTIVO_CORTADA_POR_CIERRE;
     // Una PAUSA nunca pasa por la entrega: aunque el turno devolviera limpio al cerrarle la
     // consola, no acabó — lo pararon. Y lo que la explica es la pausa, no un corte ni un fallo.
     if (entrada.pausaPedida === true) {
@@ -1254,6 +1262,21 @@ export function crearCorredorDeTareas(opciones: {
             ? conEstado(conLoQueQuede(actual), "terminada")
             : undefined
         );
+      } else if (cortadaAMitad && parando && entrada.pausaPedida !== true) {
+        /**
+         * Cortada porque el proceso se va: se deja REANUDABLE ya, con la misma regla que la reconciliación del arranque
+         * (`reanudadaTrasCorte`: una vez, en su hilo, con el aviso de mirar antes de rehacer). Sin esto quedaba aparcada
+         * esperando a una persona, y las encadenadas detrás de ella con ella.
+         */
+        const corte = motivo;
+        escribirSiSigueSiendoNuestra(tarea.id, (actual) => {
+          if (actual.estado !== "en-proceso" || actual.pid !== pid) return undefined;
+          const base = conLoQueQuede(actual);
+          return (
+            reanudadaTrasCorte(base, corte) ??
+            conEstado(base, "requiere-atencion", base.sesion !== undefined && (actual.reanudaciones ?? 0) >= TOPE_DE_REANUDACIONES ? motivoTrasReanudar(corte) : corte)
+          );
+        });
       } else {
         aparcar(tarea.id, motivo, conLoQueQuede);
       }
