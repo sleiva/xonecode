@@ -105,7 +105,9 @@ Todas **reaplican `puedeLeerRuta` a mano** (una tool de xonecode no pasa por el 
 - **`comparar_capturas`** (`compararCapturas.ts`, `core/compararCapturas.ts`), solo TrueForge, al raíz:
   ESTRUCTURA por aritmética de píxeles, sin modelo (no ve texto cortado, forma ni color; **no cuenta teclas**); **la otra mitad de `xone_critica_visual`, no su sustituta**, y el
   informe lo dice. Rutas bajo `/artefactos/` comprobadas ANTES de abrir. `decodificarImagen.ts` **comprueba
-  dimensiones ANTES de descomprimir**. De un error solo cruza el `code`.
+  dimensiones ANTES de descomprimir**. De un error solo cruza el `code`. **Una LISTA no exige lo vertical**
+  (`Comparacion.lista`, `filasDeLista`: controles repetidos en la geometría de la captura): ni distancia vertical
+  ni borde de abajo, y lo horizontal por su FORMA. La misma regla en la medida automática (`cumpleElCriterio`).
 - **`diferencia_de_capturas`** (`diferenciaDeCapturas.ts`, `#medirCambio`), solo TrueForge, a quien EJECUTA:
   ¿cambió una ZONA? Un «igual» da las DOS explicaciones sin decidir.
 - **El crítico visual MIDE antes de opinar** (`core/geometriaDePantalla.ts`, `cajasDeMaqueta.ts`, dentro de

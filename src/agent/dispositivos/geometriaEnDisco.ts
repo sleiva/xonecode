@@ -107,6 +107,11 @@ export function geometriaPorContenido(carpetaDeHotswap: string, nombreDeCaptura:
 }
 
 export async function geometriaDeCaptura(carpetaDeHotswap: string, nombreDeCaptura: string, busqueda?: BusquedaPorContenido): Promise<unknown> {
+  return geometriaDeCapturaYa(carpetaDeHotswap, nombreDeCaptura, busqueda);
+}
+
+/** Lo mismo, síncrono: para quien mide en un camino que no espera (`medidaAutomatica.ts`). */
+export function geometriaDeCapturaYa(carpetaDeHotswap: string, nombreDeCaptura: string, busqueda?: BusquedaPorContenido): unknown {
   const porNombre = leerGeometria(join(carpetaDeHotswap, nombreDeGeometria(nombreDeCaptura)));
   if (porNombre !== undefined || busqueda === undefined) return porNombre;
   return geometriaPorContenido(carpetaDeHotswap, nombreDeCaptura, busqueda);

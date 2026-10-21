@@ -35,6 +35,8 @@ corre solo y escribe sin aprobación. Cuatro estados; `requiere-atencion` = **es
   juez. **El veredicto anterior se retira al empezar otro ciclo.**
 - **Cortada por el tope de rondas lo DICE** (`topeAgotado`, `#motivoDeTopeAgotado`). Juez sin JSON →
   recortado a la traza de errores (`juezDeTarea#juzgar`).
+- **El juez ve los PLANES**, que git no ve (`planesDelProyecto.ts`, por omisión en `crearJuezDeTarea`): carpeta,
+  ficheros y antigüedad, nunca contenido. Sus hallazgos se cortan por palabra con «…».
 - **Al juez solo los ERRORES del verificador** (`#parrafoDelVerificador`), y las comprobaciones
   VISUALES del turno (`comprobacionesVisuales`, `CasoDeJuez`, `lineaDeComprobacion`,
   `TOPE_DE_COMPROBACIONES_AL_JUEZ`); sin ninguna, el prompt dice que no hubo.

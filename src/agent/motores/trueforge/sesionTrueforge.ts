@@ -117,7 +117,7 @@ import { anotarPaso } from "../../../core/trazaDeErrores.js";
 import { entornoConDepuracion } from "../../turno/depuracion.js";
 import { detalleDe, parametrosDe } from "../../turno/resumenDeTool.js";
 import { lineaDeComprobacion, omisionExplicada, soloDocumentacion, TOPE_DE_COMPROBACIONES_AL_JUEZ } from "../../../core/entrega.js";
-import { bloqueantesDelInforme } from "../../../core/geometriaDePantalla.js";
+import { bloqueantesDelInforme, filasDeListaDeGeometria } from "../../../core/geometriaDePantalla.js";
 import { apartarMemoria, cargarMemoria, fotoSaneada, guardarMemoria, saldarColgadas, textoDeInterrupcion, textoDeMemoriaDescartada, type FotoDeHilo } from "./memoriaTrueforge.js";
 import { crearNota, sobrantes, type Nota } from "./notas.js";
 import { crearMemoriaDeEspecialistas } from "./memoriaDeEspecialistas.js";
@@ -147,7 +147,7 @@ import { crearAtributosXone, NOMBRE_ATRIBUTOS_XONE } from "../../grafo/atributos
 import { crearDiferenciaDeCapturas } from "../../grafo/diferenciaDeCapturas.js";
 import { crearLectorDeReferencias, crearLocalizadorDeHtmlDeMaqueta } from "../../grafo/lectorDeReferencias.js";
 import { cajasDeMaqueta, medidasDeImagen, viewportDeMaqueta } from "../../dispositivos/cajasDeMaqueta.js";
-import { geometriaDeCaptura } from "../../dispositivos/geometriaEnDisco.js";
+import { geometriaDeCaptura, geometriaDeCapturaYa } from "../../dispositivos/geometriaEnDisco.js";
 import { decodificarImagen } from "../../dispositivos/decodificarImagen.js";
 import { crearDescribirImagen } from "../../grafo/describirImagen.js";
 import { crearTraerDeLaMaquina } from "../../grafo/traerDeLaMaquina.js";
@@ -454,6 +454,8 @@ export function textoDelBucle(llama: readonly string[], opciones: { conCritica?:
     "de la tarea en el `TASKS.md` comprobadas, (2) la app arranca y hace lo que pide, y (3) con diseño, la distancia que mide",
     "`comparar_capturas` por debajo del 10 % en vertical y en horizontal, que ENCAJE en la pantalla (cada borde del contenido a",
     "un 3 % o menos del de la maqueta: que llegue a los lados y abajo como ella), y el crítico sin diferencias de forma ni de estructura.",
+    // Medido en Maset (liquidaciones): 5 filas reales frente a 3 de muestra daban «abajo +11 %» y la tarea no cerraba.
+    "En una LISTA con datos reales lo vertical no cuenta (cuántas filas tenga no es del diseño): `comparar_capturas` lo dice y no lo exige.",
     // Con el puerto de fuentes la tipografía SÍ se reproduce: se trae a `fonts/` (`fuentesDeGoogle.ts`). Sin él, sigue fuera.
     ...(opciones.conFuentes === true
       ? [
@@ -517,7 +519,8 @@ export function notaDeDelegacion(
                 "el log), maqueta y arregla lo visual él mismo —designer-xone solo le hace iconos y fondos SVG—, y corrige hasta cumplir el CRITERIO DE ACEPTACIÓN que le des. Por eso",
                 "cada encargo a developer-xone lleva el CRITERIO ESCRITO y MEDIBLE: qué casillas del plan tiene que dejar comprobadas, qué",
                 "tiene que hacer la app, y, si hay diseño, que la distancia de `comparar_capturas` quede por debajo del 10 % en vertical y en",
-                "horizontal, que ENCAJE en la pantalla (cada borde a un 3 % o menos del de la maqueta) y que el crítico no señale diferencias de forma o de estructura (di dónde está la maqueta). No se puede pedir",
+                "horizontal, que ENCAJE en la pantalla (cada borde a un 3 % o menos del de la maqueta) y que el crítico no señale diferencias de forma o de estructura (di dónde está la maqueta);",
+                "en una LISTA con datos reales, lo vertical no (depende de cuántas filas haya). No se puede pedir",
               ]),
           opciones.conFuentes === true
             ? "lo que XOne no reproduce —el desenfoque de fondo, las animaciones—; la tipografía del diseño sí (sus .ttf a `fonts/`). Sin criterio, devolverá el"
@@ -1110,7 +1113,11 @@ export async function abrirSesionTrueforge(
             },
           }),
           // Medir la estructura contra la maqueta: la otra mitad del crítico, con el raíz como él.
-          crearCompararCapturas({ leerArtefacto: async (nombre) => readFileSync(join(carpeta, nombre)), leerReferencia: lectorDeReferencias }),
+          crearCompararCapturas({
+            leerArtefacto: async (nombre) => readFileSync(join(carpeta, nombre)),
+            leerReferencia: lectorDeReferencias,
+            leerGeometria: async (nombre) => geometriaDeCaptura(carpetaDeHotswap(carpeta), nombre, { carpetaDeArtefactos: carpeta, decodificar: decodificarImagen }),
+          }),
         ] as unknown as ToolDeLangchain[]);
   // ¿Existe este atributo en este nodo? A todos, como la navegación: es de lectura y contesta desde la skill del paquete.
   const atributos = crearAtributosXone() as unknown as ToolDeLangchain;
@@ -1770,7 +1777,9 @@ export async function abrirSesionTrueforge(
     const captura = ultimaCaptura(carpeta, nacimientoDeHilo.get(deHilo) ?? Date.now());
     if (maquetas.length === 0 || captura === undefined) return undefined;
     try {
-      const { maqueta, comparacion } = medirContraLaMasParecida(join(carpeta, captura), maquetas);
+      // Si la captura es una LISTA, lo vertical no se exige (`Comparacion.lista`): su geometría lo dice.
+      const filasDeLista = filasDeListaDeGeometria(geometriaDeCapturaYa(carpetaDeHotswap(carpeta), captura, { carpetaDeArtefactos: carpeta, decodificar: decodificarImagen }));
+      const { maqueta, comparacion } = medirContraLaMasParecida(join(carpeta, captura), maquetas, filasDeLista);
       ultimaMedidaDeHilo.set(hiloPadre, resumenDeMedida(comparacion, captura));
       const ronda = (rondasVisualesDeHilo.get(hiloPadre) ?? 0) + 1;
       rondasVisualesDeHilo.set(hiloPadre, ronda);

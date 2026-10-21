@@ -30,6 +30,9 @@ export const METODO_DE_COMPARACION_VISUAL = [
   "Los VALORES de la maqueta son datos de ejemplo: números (un 12, un 0…), versiones, fechas, nombres, códigos y lo que",
   "haya escrito en un campo, también los puntos de una contraseña. Que el valor sea OTRO no es una diferencia y no lo",
   "digas, ni que un campo de entrada esté vacío; de un valor compara solo su estilo (color, letra, tamaño).",
+  // Medido en Maset (liquidaciones): «en la captura hay 5 filas y en la maqueta 3, y la fila con «1 albarán» usa el singular».
+  "Tampoco CUÁNTAS filas tiene una lista (la maqueta pinta unas pocas de muestra y la app, las reales), ni un singular",
+  "o un plural que cambia con ese valor: de una lista se compara cómo es UNA fila y cómo se colocan.",
   "Pero que su SITIO esté vacío, o que en su lugar haya otra cosa, sí es una diferencia. Ignora la barra de estado del teléfono (hora, batería),",
   // Medido en Maset (Entradas/Salidas): «junto a Volver no aparece el 09:41 de la maqueta», y era el reloj de la barra
   // que Stitch dibuja arriba de cada maqueta.

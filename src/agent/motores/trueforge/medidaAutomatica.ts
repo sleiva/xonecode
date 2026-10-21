@@ -15,7 +15,7 @@
 import { CARPETA_DE_DISENO, carpetaDeMaqueta, rutaDeMaqueta, TOPE_DE_PANTALLAS_ELEGIDAS } from "../../../core/stitch.js";
 import { readdirSync, readFileSync, statSync, existsSync } from "node:fs";
 import { join, relative, sep } from "node:path";
-import { compararPantallas, desajusteDeEncaje, informeDeComparacion, TOLERANCIA_DE_ENCAJE, type Comparacion } from "../../../core/compararCapturas.js";
+import { compararPantallas, desajusteQueCuenta, informeDeComparacion, TOLERANCIA_DE_ENCAJE, type Comparacion } from "../../../core/compararCapturas.js";
 import { decodificarImagen } from "../../dispositivos/decodificarImagen.js";
 
 /**
@@ -118,13 +118,15 @@ export function ultimaCaptura(carpeta: string, desdeMs: number): string | undefi
  */
 export function medirContraLaMasParecida(
   captura: string,
-  maquetas: readonly { virtual: string; disco: string }[]
+  maquetas: readonly { virtual: string; disco: string }[],
+  /** Las filas de la lista que pinta la captura (`filasDeLista`), si lo es. */
+  filasDeLista?: number
 ): { maqueta: { virtual: string; disco: string }; comparacion: Comparacion } {
   let mejor: { maqueta: { virtual: string; disco: string }; comparacion: Comparacion } | undefined;
   let ultimoError: unknown;
   for (const maqueta of maquetas) {
     try {
-      const comparacion = medirContraMaqueta(captura, maqueta.disco);
+      const comparacion = medirContraMaqueta(captura, maqueta.disco, filasDeLista);
       const distancia = comparacion.distanciaVertical + comparacion.distanciaHorizontal;
       if (mejor === undefined || distancia < mejor.comparacion.distanciaVertical + mejor.comparacion.distanciaHorizontal) {
         mejor = { maqueta, comparacion };
@@ -138,24 +140,28 @@ export function medirContraLaMasParecida(
 }
 
 /** Mide una captura contra la maqueta. Lanza si alguna no se puede abrir o decodificar: quien llama lo traga. */
-export function medirContraMaqueta(captura: string, maqueta: string): Comparacion {
-  return compararPantallas(decodificarImagen(readFileSync(maqueta)), decodificarImagen(readFileSync(captura)));
+export function medirContraMaqueta(captura: string, maqueta: string, filasDeLista?: number): Comparacion {
+  return compararPantallas(decodificarImagen(readFileSync(maqueta)), decodificarImagen(readFileSync(captura)), filasDeLista === undefined ? {} : { filasDeLista });
 }
 
 const pct = (x: number): string => `${Math.round(x * 100)} %`;
 
-/** ¿Cumple el criterio? En las DOS direcciones Y encajando en la pantalla: cada borde del contenido cerca del de la maqueta. */
-export function cumpleElCriterio(c: Pick<Comparacion, "distanciaVertical" | "distanciaHorizontal" | "encaje">): boolean {
+/**
+ * ¿Cumple el criterio? En las DOS direcciones Y encajando en la pantalla: cada borde del contenido cerca del de la maqueta.
+ * En una LISTA (`Comparacion.lista`) lo vertical no cuenta: depende de cuántas filas tenga.
+ */
+export function cumpleElCriterio(c: Pick<Comparacion, "distanciaVertical" | "distanciaHorizontal" | "encaje" | "lista">): boolean {
   return (
-    c.distanciaVertical < CRITERIO_DE_DISTANCIA &&
+    (c.lista !== undefined || c.distanciaVertical < CRITERIO_DE_DISTANCIA) &&
     c.distanciaHorizontal < CRITERIO_DE_DISTANCIA &&
-    desajusteDeEncaje(c.encaje) <= TOLERANCIA_DE_ENCAJE
+    desajusteQueCuenta(c) <= TOLERANCIA_DE_ENCAJE
   );
 }
 
 /** La cifra corta, para el informe al orquestador. */
-export function resumenDeMedida(c: Pick<Comparacion, "distanciaVertical" | "distanciaHorizontal" | "encaje">, captura: string): string {
-  return `vertical ${pct(c.distanciaVertical)}, horizontal ${pct(c.distanciaHorizontal)}, encaje ${pct(desajusteDeEncaje(c.encaje))} en el peor borde (${cumpleElCriterio(c) ? "cumple" : "NO cumple"} el ${pct(CRITERIO_DE_DISTANCIA)} y el ${pct(TOLERANCIA_DE_ENCAJE)} de encaje; captura /artefactos/${captura})`;
+export function resumenDeMedida(c: Pick<Comparacion, "distanciaVertical" | "distanciaHorizontal" | "encaje" | "lista">, captura: string): string {
+  const lista = c.lista === undefined ? "" : `; lista de ${c.lista} filas: la vertical no cuenta`;
+  return `vertical ${pct(c.distanciaVertical)}, horizontal ${pct(c.distanciaHorizontal)}, encaje ${pct(desajusteQueCuenta(c))} en el peor borde (${cumpleElCriterio(c) ? "cumple" : "NO cumple"} el ${pct(CRITERIO_DE_DISTANCIA)} y el ${pct(TOLERANCIA_DE_ENCAJE)} de encaje${lista}; captura /artefactos/${captura})`;
 }
 
 /** El mensaje para quien llamó a quien ejecuta. `pedirCritica`: no ha pasado el crítico desde su última escritura. */

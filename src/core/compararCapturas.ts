@@ -90,6 +90,18 @@ export interface Comparacion {
   encaje: { arriba: number; abajo: number; izquierda: number; derecha: number };
   hallazgos: string[];
   veredicto: Veredicto;
+  /**
+   * La captura es una LISTA de tantas filas (`geometriaDePantalla.ts#filasDeLista`): lo vertical —la distancia, el borde
+   * de abajo, las franjas del alto— depende de cuántas filas haya, y la maqueta pinta las suyas de muestra, así que no
+   * cuenta. Medido en Maset (liquidaciones): con 5 filas reales frente a 3, «abajo +11 %» y el juez dio rojo.
+   */
+  lista?: number;
+}
+
+/** Opciones de la comparación que no salen de los píxeles. */
+export interface OpcionesDeComparacion {
+  /** Cuántas filas pinta la captura si es una lista (0 o ausente: no lo es). */
+  filasDeLista?: number;
 }
 
 const pct = (n: number): string => `${Math.round(n * 100)} %`;
@@ -348,8 +360,13 @@ export function desajusteDeEncaje(e: Comparacion["encaje"]): number {
   return Math.max(Math.abs(e.arriba), Math.abs(e.abajo), Math.abs(e.izquierda), Math.abs(e.derecha));
 }
 
+/** El peor borde de los que CUENTAN: en una lista, el de abajo no (depende de cuántas filas tenga). */
+export function desajusteQueCuenta(c: Pick<Comparacion, "encaje" | "lista">): number {
+  return c.lista === undefined ? desajusteDeEncaje(c.encaje) : desajusteDeEncaje({ ...c.encaje, abajo: 0 });
+}
+
 /** Un hallazgo por borde que se sale de la tolerancia, dicho como lo que hay que hacer para que ocupe la pantalla como la maqueta. */
-function hallazgosDeEncaje(e: Comparacion["encaje"], ref: MedidaDePantalla, cap: MedidaDePantalla): string[] {
+function hallazgosDeEncaje(e: Comparacion["encaje"], ref: MedidaDePantalla, cap: MedidaDePantalla, esLista = false): string[] {
   const salida: string[] = [];
   const fuera = (d: number): boolean => Math.abs(d) > TOLERANCIA_DE_ENCAJE;
   if (fuera(e.derecha)) {
@@ -363,7 +380,7 @@ function hallazgosDeEncaje(e: Comparacion["encaje"], ref: MedidaDePantalla, cap:
       `ENCAJE a la izquierda: el contenido empieza al ${pct(cap.izquierdaDelContenido)} del ancho y en la maqueta al ${pct(ref.izquierdaDelContenido)}`
     );
   }
-  if (fuera(e.abajo)) {
+  if (fuera(e.abajo) && !esLista) {
     salida.push(
       `ENCAJE abajo: el contenido acaba al ${pct(cap.finDelContenido)} del alto útil y en la maqueta al ${pct(ref.finDelContenido)} ` +
         (e.abajo < 0 ? `(queda una banda vacía de ${pct(-e.abajo)}: el contenido tiene que llegar abajo como en la maqueta)` : `(se pasa ${pct(e.abajo)})`)
@@ -376,9 +393,20 @@ function hallazgosDeEncaje(e: Comparacion["encaje"], ref: MedidaDePantalla, cap:
 }
 
 /** Compara dos pantallas ya medidas. Puro: los números salen de `medirPantalla`. */
-export function compararMedidas(referencia: MedidaDePantalla, captura: MedidaDePantalla): Comparacion {
+export function compararMedidas(referencia: MedidaDePantalla, captura: MedidaDePantalla, opciones: OpcionesDeComparacion = {}): Comparacion {
+  const lista = (opciones.filasDeLista ?? 0) >= 2 ? opciones.filasDeLista : undefined;
   const dv = distancia(referencia.filas, captura.filas);
-  const dh = distancia(referencia.columnas, captura.columnas);
+  /**
+   * En una lista, lo HORIZONTAL se compara por su FORMA: la ocupación de cada columna se mide a lo alto, así que más filas
+   * llenan más todas las columnas a la vez, y sin normalizar una lista de 5 filas contra una maqueta de 3 salía a un 20 %
+   * de distancia horizontal con las filas idénticas. Normalizado por su máximo, dice DÓNDE hay contenido a lo ancho.
+   */
+  const forma = (v: readonly number[]): number[] => {
+    const max = Math.max(...v);
+    return max > 0 ? v.map((x) => x / max) : [...v];
+  };
+  const [colRef, colCap] = lista === undefined ? [referencia.columnas, captura.columnas] : [forma(referencia.columnas), forma(captura.columnas)];
+  const dh = distancia(colRef, colCap);
   const hallazgos: string[] = [];
 
   const encaje = {
@@ -387,12 +415,13 @@ export function compararMedidas(referencia: MedidaDePantalla, captura: MedidaDeP
     izquierda: captura.izquierdaDelContenido - referencia.izquierdaDelContenido,
     derecha: captura.derechaDelContenido - referencia.derechaDelContenido,
   };
-  hallazgos.push(...hallazgosDeEncaje(encaje, referencia, captura));
-  hallazgos.push(...describirRangos("alto", referencia.filas, captura.filas));
-  hallazgos.push(...describirRangos("ancho", referencia.columnas, captura.columnas));
+  hallazgos.push(...hallazgosDeEncaje(encaje, referencia, captura, lista !== undefined));
+  if (lista === undefined) hallazgos.push(...describirRangos("alto", referencia.filas, captura.filas));
+  hallazgos.push(...describirRangos("ancho", colRef, colCap));
 
-  const parecida = dv <= DISTANCIA_PARECIDA && dh <= DISTANCIA_PARECIDA && hallazgos.length === 0;
+  const parecida = (lista !== undefined || dv <= DISTANCIA_PARECIDA) && dh <= DISTANCIA_PARECIDA && hallazgos.length === 0;
   return {
+    ...(lista === undefined ? {} : { lista }),
     referencia,
     captura,
     distanciaVertical: dv,
@@ -404,8 +433,8 @@ export function compararMedidas(referencia: MedidaDePantalla, captura: MedidaDeP
 }
 
 /** Medir las dos y compararlas. */
-export function compararPantallas(referencia: ImagenRgba, captura: ImagenRgba): Comparacion {
-  return compararMedidas(medirPantalla(referencia), medirPantalla(captura));
+export function compararPantallas(referencia: ImagenRgba, captura: ImagenRgba, opciones: OpcionesDeComparacion = {}): Comparacion {
+  return compararMedidas(medirPantalla(referencia), medirPantalla(captura), opciones);
 }
 
 /**
@@ -418,7 +447,12 @@ export function informeDeComparacion(c: Comparacion): string[] {
   const filas = (m: MedidaDePantalla): string => m.filas.map((f) => String(Math.round(f * 100)).padStart(3)).join("");
   const lineas = [
     `Estructura ${c.veredicto === "parecida" ? "PARECIDA" : "DISTINTA"} (distancia vertical ${pct(c.distanciaVertical)}, horizontal ${pct(c.distanciaHorizontal)}; se da por parecida bajo ${pct(DISTANCIA_PARECIDA)}).`,
-    `Encaje de los bordes del contenido frente a la maqueta (tolerancia ${pct(TOLERANCIA_DE_ENCAJE)} por lado): arriba ${pp(c.encaje.arriba)}, abajo ${pp(c.encaje.abajo)}, izquierda ${pp(c.encaje.izquierda)}, derecha ${pp(c.encaje.derecha)} → ${desajusteDeEncaje(c.encaje) <= TOLERANCIA_DE_ENCAJE ? "ENCAJA" : "NO ENCAJA"}.`,
+    ...(c.lista === undefined
+      ? []
+      : [
+          `La captura es una LISTA de ${c.lista} filas: lo vertical (la distancia vertical, el borde de abajo y las franjas del alto) depende de cuántas filas tenga, y la maqueta pinta las suyas de muestra, así que NO cuenta. Cuentan arriba, los lados y lo horizontal.`,
+        ]),
+    `Encaje de los bordes del contenido frente a la maqueta (tolerancia ${pct(TOLERANCIA_DE_ENCAJE)} por lado): arriba ${pp(c.encaje.arriba)}, abajo ${pp(c.encaje.abajo)}${c.lista === undefined ? "" : " (no cuenta)"}, izquierda ${pp(c.encaje.izquierda)}, derecha ${pp(c.encaje.derecha)} → ${desajusteQueCuenta(c) <= TOLERANCIA_DE_ENCAJE ? "ENCAJA" : "NO ENCAJA"}.`,
     `Ocupación por franjas del alto, de arriba abajo (%):`,
     `  referencia:${filas(c.referencia)}`,
     `  captura:   ${filas(c.captura)}`,

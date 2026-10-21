@@ -27,5 +27,6 @@ describe("los valores de la maqueta son de ejemplo", () => {
     expect(METODO_DE_COMPARACION_VISUAL).toMatch(/versiones/);
     expect(METODO_DE_COMPARACION_VISUAL).toMatch(/puntos de una contraseña/);
     expect(METODO_DE_COMPARACION_VISUAL).toMatch(/SITIO esté vacío/);
+    expect(METODO_DE_COMPARACION_VISUAL).toMatch(/CUÁNTAS filas tiene una lista/);
   });
 });

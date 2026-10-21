@@ -7,6 +7,7 @@ import {
   rutaRelativaDeArtefacto,
 } from "../../core/artefactos.js";
 import { compararPantallas, informeDeComparacion } from "../../core/compararCapturas.js";
+import { filasDeListaDeGeometria } from "../../core/geometriaDePantalla.js";
 import { imagenReferida, type ImagenReferida } from "../../core/referenciasDeImagen.js";
 import { decodificarImagen } from "../dispositivos/decodificarImagen.js";
 
@@ -48,6 +49,12 @@ export interface DependenciasDeComparacion {
    * venir de `/artefactos/`, que es lo que hacía antes y lo que sigue haciendo el motor legacy.
    */
   leerReferencia?: (imagen: ImagenReferida) => Promise<Buffer>;
+  /**
+   * La GEOMETRÍA de la captura (`<captura>.geometria.json`), la MISMA que lee el crítico. Con ella se sabe si la pantalla
+   * es una LISTA (`filasDeLista`), y entonces lo vertical no se exige: depende de cuántas filas tenga. Sin ella, se mide
+   * como siempre.
+   */
+  leerGeometria?: (nombreDeCaptura: string) => Promise<unknown>;
 }
 
 function comprobar(ruta: string, que: string): string | undefined {
@@ -101,8 +108,10 @@ export function crearCompararCapturas(deps: DependenciasDeComparacion) {
       if (typeof ref === "string") return ref;
       const cap = await abrir(entrada.captura, deps);
       if (typeof cap === "string") return cap;
+      // La geometría es un dato de MÁS: que no esté o no se lea deja la medida de siempre.
+      const filasDeLista = deps.leerGeometria === undefined ? 0 : filasDeListaDeGeometria(await deps.leerGeometria(nombreDeArtefacto(entrada.captura)).catch(() => undefined));
       try {
-        return informeDeComparacion(compararPantallas(ref, cap)).join("\n");
+        return informeDeComparacion(compararPantallas(ref, cap, { filasDeLista })).join("\n");
       } catch (error) {
         return `No se pudo medir: ${error instanceof Error ? error.message : "fallo desconocido"}.`;
       }

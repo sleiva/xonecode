@@ -1,3 +1,6 @@
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   ErrorDelJuezDeTarea,
@@ -346,6 +349,21 @@ describe("el texto del modelo se ACOTA antes de guardarse", () => {
     expect(v.resumen).not.toContain("\n");
   });
 
+  /**
+   * Medido en Maset (liquidaciones): los hallazgos se cortaban a media palabra y sin aviso («…fuera del control de git, no»,
+   * «…no cubre el compo»), y la persona no sabía si faltaba algo.
+   */
+  it("un hallazgo largo se corta por PALABRA y lo dice con «…»", async () => {
+    const largo = `El diff de git no incluye ningún fichero bajo /planes/liquidaciones-lista/ ${"y sigue explicando el motivo ".repeat(20)}componente`;
+    const juez = crearJuezDeTarea({ invocar: async () => JSON.stringify({ veredicto: "rojo", resumen: "mal", hallazgos: [largo, "corto"] }) });
+    const [h, corto] = (await juez.juzgar({ encargo: "x", raiz: RAIZ, autorizadas: [] })).hallazgos!;
+    expect(h!.endsWith("…")).toBe(true);
+    expect(h!.slice(0, -1)).toMatch(/\S$/);
+    expect(largo.startsWith(h!.slice(0, -1))).toBe(true);
+    expect(largo.charAt(h!.length - 1)).toBe(" ");
+    expect(corto).toBe("corto");
+  });
+
   it("los hallazgos se acotan en número, y lo que no es texto se descarta", async () => {
     const juez = crearJuezDeTarea({
       invocar: async () =>
@@ -436,5 +454,41 @@ describe("que el juez no se pueda usar es fallo del ENTORNO", () => {
     expect(
       await conContenido([{ type: "thinking", thinking: "mmm" }, { type: "text", text: "hola" }])("afilado", "p", RAIZ)
     ).toBe("hola");
+  });
+});
+
+/**
+ * Los PLANES viven en `.xonecode/planes/`, fuera de git, así que nunca salen en «lo que cambió según git». Medido en Maset
+ * (liquidaciones, 21-10-2026): el juez dijo «el diff no incluye ningún plan en /planes/liquidaciones-lista/» con PLAN.md,
+ * DISENO.md y TASKS.md escritos por la tarea.
+ */
+describe("el juez ve qué planes hay, sin su contenido", () => {
+  const conPlan = (): string => {
+    const raiz = mkdtempSync(join(tmpdir(), "juez-planes-"));
+    const plan = join(raiz, ".xonecode", "planes", "liquidaciones-lista");
+    mkdirSync(plan, { recursive: true });
+    for (const f of ["PLAN.md", "DISENO.md", "TASKS.md"]) writeFileSync(join(plan, f), "SECRETO-DEL-PLAN\n", "utf8");
+    return raiz;
+  };
+  const prompt = async (raiz: string): Promise<string> => {
+    let visto = "";
+    await crearJuezDeTarea({ invocar: async (_papel, p) => ((visto = p), JSON.stringify({ veredicto: "verde", resumen: "ok" })) }).juzgar({
+      encargo: "rediseña la lista de liquidaciones; empieza por el plan /planes/liquidaciones-lista/",
+      raiz,
+      autorizadas: [],
+      cambiados: ["ContentLiquidacionesLista.xne"],
+    });
+    return visto;
+  };
+
+  it("nombra la carpeta y sus ficheros, dice que están fuera de git, y no lleva su contenido", async () => {
+    const p = await prompt(conPlan());
+    expect(p).toMatch(/\/planes\/liquidaciones-lista\/: DISENO\.md, PLAN\.md, TASKS\.md/);
+    expect(p).toMatch(/fuera de git/);
+    expect(p).not.toContain("SECRETO-DEL-PLAN");
+  });
+
+  it("sin carpeta de planes lo dice: entonces «no hay plan» sí es la verdad", async () => {
+    expect(await prompt(mkdtempSync(join(tmpdir(), "juez-sin-planes-")))).toContain("No hay ningún plan en /planes/.");
   });
 });

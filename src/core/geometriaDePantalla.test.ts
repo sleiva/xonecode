@@ -5,6 +5,7 @@ import {
   compararConMaqueta,
   controlesDelArbol,
   emparejar,
+  filasDeLista,
   hallazgosDeGeometria,
   hallazgosDelAparato,
   informeDeGeometria,
@@ -514,5 +515,29 @@ describe("lo que en el aparato va dentro de otro texto no falta (pie del login d
   it("pero sin esa etiqueta, la columna sigue faltando", () => {
     const sinPie: GeometriaDelAparato = { ...aparatoLogin, controles: aparatoLogin.controles.filter((c) => c.nombre !== "MAP_VERSIONAPP") };
     expect(compararConMaqueta(maquetaLogin, sinPie).bloqueantes.join("\n")).toMatch(/Aplicación/);
+  });
+});
+
+/**
+ * Las filas de una LISTA del aparato: en XOne cada fila repite los MISMOS controles (Maset, liquidaciones: `CODIGO`,
+ * `MAP_LLIMPORTE`, `MAP_LLFECHA`… ×5 con cinco liquidaciones reales).
+ */
+describe("filasDeLista: cuántas filas pinta una lista del aparato", () => {
+  const control = (nombre: string, y: number) => ({ nombre, texto: nombre, tipo: "prop", clase: "L", caja: { x: 10, y, ancho: 100, alto: 40 } });
+  const fila = (i: number) => [control("CODIGO", 300 + i * 200), control("MAP_LLIMPORTE", 300 + i * 200), control("MAP_LLFECHA", 340 + i * 200)];
+
+  it("cinco filas de tres controles repetidos son una lista de 5", () => {
+    expect(filasDeLista([control("MAP_TIT", 100), ...[0, 1, 2, 3, 4].flatMap(fila)])).toBe(5);
+  });
+
+  it("sin repetidos, o con un único control repetido (dos iconos iguales), no hay lista", () => {
+    expect(filasDeLista([control("MAP_TIT", 100), control("Entrar", 200)])).toBe(0);
+    expect(filasDeLista([control("ICONO", 100), control("ICONO", 200), control("MAP_TIT", 300)])).toBe(0);
+  });
+
+  it("el login y la calculadora reales no son listas", () => {
+    const login = JSON.parse(readFileSync(new URL("./__oro__/geometria/login-maset.geometria.json", import.meta.url), "utf8"));
+    expect(filasDeLista(controlesDelArbol(login.arbol))).toBe(0);
+    expect(filasDeLista(aparato.controles)).toBe(0);
   });
 });

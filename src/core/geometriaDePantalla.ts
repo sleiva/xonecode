@@ -293,6 +293,26 @@ export function tieneLetras(texto: string): boolean {
 }
 
 /**
+ * Cuántas FILAS pinta una lista del aparato, o 0 si no hay lista. En XOne cada fila de una lista repite los MISMOS
+ * controles: medido en Maset (liquidaciones), `CODIGO`, `MAP_LLIMPORTE`, `MAP_LLFECHA`… ×5 con cinco liquidaciones.
+ * Hace falta que se repitan al menos DOS nombres el mismo número de veces —una fila con un solo control repetido son dos
+ * iconos iguales, no una lista— y se toma la cuenta más alta. Pura.
+ */
+export function filasDeLista(controles: readonly ControlDelAparato[]): number {
+  const veces = new Map<string, number>();
+  for (const c of controles) if (c.nombre !== undefined) veces.set(c.nombre, (veces.get(c.nombre) ?? 0) + 1);
+  const nombresPorCuenta = new Map<number, number>();
+  for (const n of veces.values()) if (n >= 2) nombresPorCuenta.set(n, (nombresPorCuenta.get(n) ?? 0) + 1);
+  return Math.max(0, ...[...nombresPorCuenta].filter(([, nombres]) => nombres >= 2).map(([n]) => n));
+}
+
+/** Lo mismo desde la geometría EN CRUDO de una captura (`<captura>.geometria.json`): 0 si no trae árbol. */
+export function filasDeListaDeGeometria(crudo: unknown): number {
+  const arbol = crudo !== null && typeof crudo === "object" ? (crudo as { arbol?: unknown }).arbol : undefined;
+  return arbol === undefined ? 0 : filasDeLista(controlesDelArbol(arbol));
+}
+
+/**
  * ¿Va `texto` DENTRO de `contenedor`, como palabras enteras y en orden, sin ser el mismo texto? Lo que la maqueta pinta en
  * piezas sueltas, la app lo escribe a menudo en UN control que rellena su código: medido en Maset (login), el pie de la
  * maqueta eran tres filas («Aplicación:», «Framework:», «Versión Code:» con su valor) y el aparato, una etiqueta con las

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  compararPantallas, informeDeCambio, sinMarcoLateral, informeDeComparacion, medirCambio, medirPantalla, FRANJAS_DE_COLUMNAS, FRANJAS_DE_FILAS,
+  compararPantallas, desajusteQueCuenta, informeDeCambio, sinMarcoLateral, informeDeComparacion, medirCambio, medirPantalla, FRANJAS_DE_COLUMNAS, FRANJAS_DE_FILAS,
   type ImagenRgba,
 } from "./compararCapturas.js";
 
@@ -201,5 +201,38 @@ describe("el marco lateral de una maqueta", () => {
   it("un fondo liso a sangre tampoco es un marco", () => {
     const lisa = pantalla(400, 400, [{ x0: 0.1, x1: 0.9, y0: 0.2, y1: 0.8, color: BLANCO }], CLARO);
     expect(sinMarcoLateral(lisa)).toBe(lisa);
+  });
+});
+
+/**
+ * Una LISTA con datos reales (Maset, liquidaciones): la maqueta pinta 3 filas de muestra y la app las que haya. Medido: con
+ * 5 filas «abajo +11 %» y «distancia vertical 11 %», y el juez dio rojo. Lo vertical depende de cuántas filas haya.
+ */
+describe("una lista: lo vertical no cuenta", () => {
+  const filas = (n: number): Caja[] =>
+    [...Array(n).keys()].map((i) => ({ x0: 0.05, x1: 0.95, y0: 0.2 + i * 0.13, y1: 0.2 + i * 0.13 + 0.1, color: GRIS }));
+  const maqueta = pantalla(390, 844, [{ x0: 0.05, x1: 0.95, y0: 0.05, y1: 0.15, color: GRIS }, ...filas(3)]);
+  const app = pantalla(1080, 2337, [{ x0: 0.05, x1: 0.95, y0: 0.05, y1: 0.15, color: GRIS }, ...filas(5)]);
+
+  it("sin saber que es una lista, sale DISTINTA y NO ENCAJA abajo", () => {
+    const c = compararPantallas(maqueta, app);
+    expect(c.veredicto).toBe("distinta");
+    expect(informeDeComparacion(c).join("\n")).toMatch(/NO ENCAJA/);
+  });
+
+  it("sabiendo que la captura es una lista de 5 filas: PARECIDA, ENCAJA, y lo dice", () => {
+    const c = compararPantallas(maqueta, app, { filasDeLista: 5 });
+    expect(c.lista).toBe(5);
+    expect(c.veredicto).toBe("parecida");
+    expect(desajusteQueCuenta(c)).toBeLessThanOrEqual(0.03);
+    const informe = informeDeComparacion(c).join("\n");
+    expect(informe).toMatch(/LISTA de 5 filas/);
+    expect(informe).toMatch(/→ ENCAJA/);
+    expect(informe).not.toMatch(/ENCAJE abajo/);
+  });
+
+  it("y lo horizontal sigue contando: una lista estrecha no encaja", () => {
+    const estrecha = pantalla(1080, 2337, [{ x0: 0.05, x1: 0.6, y0: 0.05, y1: 0.15, color: GRIS }, ...filas(5).map((f) => ({ ...f, x1: 0.6 }))]);
+    expect(informeDeComparacion(compararPantallas(maqueta, estrecha, { filasDeLista: 5 })).join("\n")).toMatch(/NO ENCAJA/);
   });
 });

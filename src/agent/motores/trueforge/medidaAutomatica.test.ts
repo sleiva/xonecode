@@ -128,3 +128,15 @@ describe("varias maquetas", () => {
   });
 });
 
+
+describe("la medida automática de una LISTA", () => {
+  it("con la captura marcada como lista, lo vertical no tumba el criterio, y el resumen lo dice", () => {
+    const dir = mkdtempSync(join(tmpdir(), "xc-lista-"));
+    writeFileSync(join(dir, "maqueta.png"), pngConBloque(0.1, 0.9));
+    writeFileSync(join(dir, "larga.png"), pngConBloque(0.1, 0.5));
+    expect(cumpleElCriterio(medirContraMaqueta(join(dir, "larga.png"), join(dir, "maqueta.png")))).toBe(false);
+    const lista = medirContraMaqueta(join(dir, "larga.png"), join(dir, "maqueta.png"), 5);
+    expect(cumpleElCriterio(lista)).toBe(true);
+    expect(resumenDeMedida(lista, "l.png")).toMatch(/lista de 5 filas: la vertical no cuenta/);
+  });
+});

@@ -27,6 +27,7 @@ import { soloDocumentacion } from "../../core/entrega.js";
 import type { HallazgoDelTurno } from "../../core/events.js";
 import type { VeredictoDeTarea } from "../../core/entrega.js";
 import { textoDe } from "../turno/puente.js";
+import { planesDelProyecto, type PlanEnDisco } from "./planesDelProyecto.js";
 
 /** El papel del juez, y solo del juez. Ver `core/modelos.ts`. */
 export const PAPEL_DEL_JUEZ: Papel = "afilado";
@@ -42,7 +43,7 @@ export const TOPE_DE_RESUMEN = 400;
 
 /** Cuántos hallazgos del juez se guardan, y cuánto cada uno. Por lo mismo de arriba. */
 export const TOPE_DE_HALLAZGOS = 10;
-const TOPE_DE_HALLAZGO = 200;
+const TOPE_DE_HALLAZGO = 300;
 
 /**
  * No se pudo PREGUNTAR: no hay modelo, no hay clave, no hay red.
@@ -302,6 +303,25 @@ const parrafoDeLoEscrito = (caso: CasoDeJuez): string[] => {
   ];
 };
 
+/** Cuántos planes se nombran: los más recientes, que son los de esta tarea; los demás se cuentan. */
+export const TOPE_DE_PLANES_PARA_EL_JUEZ = 6;
+
+/**
+ * Los PLANES, que git no ve (`planesDelProyecto`). Solo nombres y cuándo se tocaron: con eso «no hay plan» deja de poder
+ * afirmarse en falso, y el juez puede casar la carpeta que nombra el encargo con la que existe.
+ */
+const parrafoDeLosPlanes = (planes: readonly PlanEnDisco[]): string[] => {
+  if (planes.length === 0) return ["No hay ningún plan en /planes/."];
+  const hace = (m: number) => (m < 60 ? `hace ${m} min` : m < 48 * 60 ? `hace ${Math.round(m / 60)} h` : `hace ${Math.round(m / 1440)} días`);
+  const vistos = planes.slice(0, TOPE_DE_PLANES_PARA_EL_JUEZ);
+  return [
+    "LOS PLANES DEL PROYECTO (viven en /planes/, fuera de git: por eso no salen en la lista de git, y que no salgan ahí no",
+    "significa que no existan). Los más recientes primero:",
+    ...vistos.map((p) => `- ${p.carpeta}: ${p.ficheros.join(", ")} — tocado ${hace(p.minutos)}`),
+    ...(planes.length > vistos.length ? [`- y ${planes.length - vistos.length} más antiguos.`] : []),
+  ];
+};
+
 /**
  * El prompt del juez.
  *
@@ -311,7 +331,7 @@ const parrafoDeLoEscrito = (caso: CasoDeJuez): string[] => {
  * `readFile` aquí). Lo que sí se le dice es que no se invente: es la misma cláusula que
  * lleva la petición de reparación, y por el mismo motivo.
  */
-function promptDelJuez(caso: CasoDeJuez): string {
+function promptDelJuez(caso: CasoDeJuez, planes: readonly PlanEnDisco[]): string {
   return [
     "Eres el QA de un equipo que desarrolla aplicaciones XOne. Otro agente ha ejecutado un",
     "encargo de forma autónoma, sin que ninguna persona revisara sus escrituras. Tu trabajo",
@@ -322,6 +342,8 @@ function promptDelJuez(caso: CasoDeJuez): string {
     caso.encargo,
     "",
     ...parrafoDeLoEscrito(caso),
+    "",
+    ...parrafoDeLosPlanes(planes),
     "",
     ...parrafoDelVerificador(caso),
     "",
@@ -344,6 +366,7 @@ function promptDelJuez(caso: CasoDeJuez): string {
     "",
     "Contesta SOLO con este JSON y nada más:",
     '{"veredicto":"verde"|"rojo","resumen":"una o dos frases","hallazgos":["lo que falta, uno por entrada"]}',
+    "Cada hallazgo, UNA frase corta (menos de 200 caracteres): se lee en una tarjeta.",
     "«verde» = el encargo está cubierto. «rojo» = falta algo, o lo hecho no es lo que se pedía.",
     "Un aviso del verificador, o un defecto que ya estaba en el proyecto, no es motivo de «rojo»:",
     "lo que se juzga es ESTE encargo y ESTE trabajo, no el estado general del proyecto.",
@@ -358,12 +381,20 @@ function promptDelJuez(caso: CasoDeJuez): string {
  * disfraza lo que venga detrás», y este texto acaba en el `motivo` de la tarea, que se
  * pinta en una tarjeta y viaja por el cable.
  */
-const unaFrase = (texto: string, tope: number): string =>
-  texto
+const unaFrase = (texto: string, tope: number): string => {
+  const limpio = texto
     .replace(/[\u0000-\u001F\u007F]+/g, " ")
     .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, tope);
+    .trim();
+  if (limpio.length <= tope) return limpio;
+  /**
+   * Cortado se DICE, y por palabra: medido en Maset (liquidaciones), los hallazgos acababan «…fuera del control de git,
+   * no» y «…no cubre el compo», y no se sabía si faltaba algo. El «…» cuenta dentro del tope.
+   */
+  const cabe = limpio.slice(0, tope - 1);
+  const espacio = cabe.lastIndexOf(" ");
+  return `${(espacio > tope / 2 ? cabe.slice(0, espacio) : cabe).replace(/[\s,;:.—-]+$/, "")}…`;
+};
 
 /**
  * El JSON de la respuesta, tolerando la valla de código.
@@ -415,12 +446,17 @@ export function veredictoDeTexto(texto: string): VeredictoDeTarea {
   return { veredicto: dicho, resumen, ...(hallazgos.length === 0 ? {} : { hallazgos }) };
 }
 
-export function crearJuezDeTarea(opciones: { invocar: InvocarModelo }): JuezDeTareaPort {
+export function crearJuezDeTarea(opciones: {
+  invocar: InvocarModelo;
+  /** Qué planes hay. Por omisión el lector REAL: un opcional que nadie pasa es el patrón de fallo de este repo. */
+  planes?: (raiz: string) => readonly PlanEnDisco[];
+}): JuezDeTareaPort {
+  const planes = opciones.planes ?? planesDelProyecto;
   return {
     juzgar: async (caso) => {
       let texto: string;
       try {
-        texto = await opciones.invocar(PAPEL_DEL_JUEZ, promptDelJuez(caso), caso.raiz);
+        texto = await opciones.invocar(PAPEL_DEL_JUEZ, promptDelJuez(caso, planes(caso.raiz)), caso.raiz);
       } catch (error) {
         // Lo que ya viene envuelto se deja: `invocarConModelos` distingue el fallo de
         // CONSTRUIR (cuyo mensaje es el accionable) del de LLAMAR (cuyo cuerpo no se

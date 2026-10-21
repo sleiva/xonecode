@@ -125,3 +125,25 @@ describe("comparar_capturas con la maqueta del PROYECTO o de los ADJUNTOS", () =
     expect(r).toMatch(/no es una captura de esta sesión|Solo puedo/);
   });
 });
+
+/** Con la geometría de la captura, la tool sabe si es una LISTA y no exige lo vertical (Maset, liquidaciones). */
+describe("comparar_capturas con la geometría de una lista", () => {
+  const fila = (i: number) => ["CODIGO", "MAP_LLIMPORTE"].map((name) => ({ name, text: `${name} ${i}`, type: "prop", propType: "L", bounds: { left: 100, top: 700 + i * 300, width: 800, height: 120 } }));
+  const geometria = { pantalla: { ancho: 1080, alto: 2400 }, arbol: [0, 1, 2, 3, 4].flatMap(fila) };
+  const conGeometria = (g: unknown) =>
+    crearCompararCapturas({ leerArtefacto: async (n) => archivos[n]!, leerGeometria: async () => g }).invoke({
+      referencia: "/artefactos/maqueta.png",
+      captura: "/artefactos/corta.png",
+    } as never) as Promise<string>;
+
+  it("una lista de 5 filas: lo dice, y abajo deja de contar", async () => {
+    const r = await conGeometria(geometria);
+    expect(r).toMatch(/LISTA de 5 filas/);
+    expect(r).not.toMatch(/ENCAJE abajo/);
+  });
+
+  it("sin geometría, o sin filas repetidas, mide como siempre", async () => {
+    expect(await conGeometria(undefined)).toMatch(/ENCAJE abajo/);
+    expect(await conGeometria({ pantalla: { ancho: 1080, alto: 2400 }, arbol: fila(0) })).toMatch(/ENCAJE abajo/);
+  });
+});
