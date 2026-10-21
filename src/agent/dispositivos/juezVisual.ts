@@ -33,7 +33,7 @@ import { createHash } from "node:crypto";
 import type { Papel } from "../../core/ports.js";
 import { interpretarDescripcion, promptDescribirPantalla, type PantallaDescrita } from "../../core/descripcionDePantalla.js";
 import { objetoDe } from "../tareas/juezDeTarea.js";
-import { METODO_DE_COMPARACION_VISUAL, PASADAS_DE_COMPARACION, unirObservaciones } from "../../core/metodoDeComparacionVisual.js";
+import { confirmadas, METODO_DE_COMPARACION_VISUAL, PASADAS_DE_COMPARACION, unirObservaciones } from "../../core/metodoDeComparacionVisual.js";
 
 /** El papel del juez, el mismo que el de tareas. `core/modelos.ts` lo reserva para esto. */
 export const PAPEL_DEL_JUEZ_VISUAL: Papel = "afilado";
@@ -116,6 +116,13 @@ export interface VeredictoVisual {
    * Vacía y nunca ausente: quien la lea no tiene que distinguir dos formas de «nada».
    */
   necesito: string[];
+  /**
+   * Con maqueta, las diferencias de DISEÑO que vieron TODAS las pasadas (`confirmadas`): son las que ponen el rojo. Y los
+   * DETALLES —más lo de diseño que vio una sola—, que se dicen y no lo ponen. `observaciones` es las dos juntas, diseño
+   * primero. Sin maqueta, ausentes.
+   */
+  diseno?: string[];
+  detalles?: string[];
 }
 
 /**
@@ -178,7 +185,10 @@ export const PROMPT_VISUAL_CON_REFERENCIA = [
   "1) la MAQUETA: cómo tiene que verse.",
   "2) la CAPTURA del aparato: cómo se ve de verdad.",
   "",
-  "Tu trabajo es encontrar TODAS las diferencias que se ven.",
+  // El veredicto responde a «¿respeta el diseño?», no a «¿hay diferencias?»: medido el 21-10-2026, las 31 críticas con
+  // maqueta del workspace eran rojas. Y la maqueta no sabe nada de la app: sus datos son de muestra.
+  "Tu trabajo es decir qué diferencias hay con el DISEÑO de la maqueta, cada una en su clase.",
+  "La maqueta usa datos inventados —textos, cifras, cuántas filas—: lo que cambia porque el dato es otro no es una diferencia.",
   METODO_DE_COMPARACION_VISUAL,
   "",
   "No diagnostiques la causa ni digas cómo arreglarlo: describe lo que se ve. Una frase por diferencia, nombrando el",
@@ -186,13 +196,13 @@ export const PROMPT_VISUAL_CON_REFERENCIA = [
   "LIQUIDACIÓN; en la maqueta están en la misma vertical»). El COLOR se compara con la maqueta; de gustos, nada.",
   "No toda diferencia es un error —una app nativa no da todo lo que da un navegador—: di lo que VES distinto.",
   "",
-  "Si no ves ninguna diferencia que merezca contarse, dilo con la lista vacía.",
+  "Si no ves ninguna diferencia que merezca contarse, deja las listas vacías.",
   "",
   "Si para dictaminar necesitas ver OTRA pantalla, pídela en `necesito` por el NOMBRE de su",
   "colección y nada más (por ejemplo «Productos»), no con una frase. Alguien irá a por ella.",
   "Si con lo que tienes te basta, déjalo vacío.",
   "",
-  'Contesta SOLO este JSON: {"veredicto":"verde"|"rojo","hallazgos":["lo que se ve", …],"necesito":["Coleccion", …]}',
+  'Contesta SOLO este JSON: {"diseno":["diferencia de DISEÑO", …],"detalles":["DETALLE", …],"necesito":["Coleccion", …]}',
 ].join("\n");
 
 export interface ContextoVisual {
@@ -251,6 +261,7 @@ export async function juzgarPantalla(
   }
   const leidos = textos.map(leerVeredicto).filter((v): v is VeredictoLeido => v !== undefined);
   if (leidos.length === 0) return { veredicto: "indeterminado", observaciones: [], necesito: [] };
+  if (referencia !== undefined) return veredictoConMaqueta(leidos);
   const observaciones = unirObservaciones(...leidos.map((l) => l.observaciones)).slice(0, TOPE_DE_OBSERVACIONES);
   const necesito = [...new Set(leidos.flatMap((l) => l.necesito))].slice(0, TOPE_DE_PETICIONES);
   /**
@@ -274,20 +285,45 @@ interface VeredictoLeido {
   dicho: unknown;
   observaciones: string[];
   necesito: string[];
+  /** Con maqueta: las dos listas. Una respuesta con el contrato VIEJO (`hallazgos`) lo lleva todo en `diseno`. */
+  diseno: string[];
+  detalles: string[];
 }
+
+const textosDe = (valor: unknown): string[] =>
+  (Array.isArray(valor) ? valor : [])
+    .filter((o): o is string => typeof o === "string" && o.trim() !== "")
+    .slice(0, TOPE_DE_OBSERVACIONES)
+    .map((o) => (o.length > TOPE_DE_OBSERVACION ? `${o.slice(0, TOPE_DE_OBSERVACION - 1)}…` : o));
 
 function leerVeredicto(texto: string): VeredictoLeido | undefined {
   const objeto = objetoDe(texto);
   if (objeto === undefined) return undefined;
-  const observaciones = (Array.isArray(objeto["hallazgos"]) ? objeto["hallazgos"] : [])
-    .filter((o): o is string => typeof o === "string" && o.trim() !== "")
-    .slice(0, TOPE_DE_OBSERVACIONES)
-    .map((o) => (o.length > TOPE_DE_OBSERVACION ? `${o.slice(0, TOPE_DE_OBSERVACION - 1)}…` : o));
+  const observaciones = textosDe(objeto["hallazgos"]);
   const necesito = (Array.isArray(objeto["necesito"]) ? objeto["necesito"] : [])
     .filter((n): n is string => typeof n === "string" && NOMBRE_DE_PANTALLA.test(n.trim()))
     .map((n) => n.trim())
     .slice(0, TOPE_DE_PETICIONES);
-  return { dicho: objeto["veredicto"], observaciones, necesito };
+  const clasificado = Array.isArray(objeto["diseno"]) || Array.isArray(objeto["detalles"]);
+  // Sin las dos listas, lo visto cuenta como DISEÑO: ante la duda no se regala el verde.
+  const diseno = clasificado ? textosDe(objeto["diseno"]) : observaciones;
+  const detalles = clasificado ? textosDe(objeto["detalles"]) : [];
+  return { dicho: objeto["veredicto"], observaciones: clasificado ? [...diseno, ...detalles] : observaciones, necesito, diseno, detalles };
+}
+
+/**
+ * **Con maqueta, el color lo decide el CÓDIGO, no el modelo**: rojo si alguna diferencia de DISEÑO la vieron todas las
+ * pasadas (`confirmadas`); verde si no, con los detalles —y lo de diseño que vio una sola— dichos. Un verde que aún pide
+ * otra pantalla no es verde. Medido el 21-10-2026: con «rojo si se ve cualquier cosa», las 31 críticas con maqueta del
+ * workspace eran rojas, también las de pantallas que respetaban el diseño.
+ */
+function veredictoConMaqueta(leidos: readonly VeredictoLeido[]): VeredictoVisual {
+  const { confirmadas: diseno, sueltas } = confirmadas(leidos.map((l) => l.diseno));
+  const detalles = unirObservaciones(sueltas, ...leidos.map((l) => l.detalles)).slice(0, TOPE_DE_OBSERVACIONES);
+  const necesito = [...new Set(leidos.flatMap((l) => l.necesito))].slice(0, TOPE_DE_PETICIONES);
+  const observaciones = [...diseno, ...detalles];
+  const veredicto = diseno.length > 0 ? "rojo" : necesito.length > 0 ? "indeterminado" : "verde";
+  return { veredicto, observaciones, necesito, diseno, detalles };
 }
 
 /** Las pantallas ya descritas, por la huella de la imagen y de la estructura dada: una maqueta no cambia entre rondas. */

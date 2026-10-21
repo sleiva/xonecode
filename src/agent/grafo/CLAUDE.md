@@ -129,7 +129,12 @@ Todas **reaplican `puedeLeerRuta` a mano** (una tool de xonecode no pasa por el 
   sitio = estado o TRADUCCIÓN: NOTA, no rojo. **Texto de la maqueta DENTRO de otro del aparato no falta**
   (`contieneTexto`, en los dos emparejamientos): una NOTA por control. **Los VALORES de la maqueta son de ejemplo**
   (versiones, cifras, un campo relleno): el método no los señala; su SITIO vacío, sí. **El informe abre con un
-  RESUMEN contado de su propio cuerpo** (`resumenDelInforme`): es lo que lee el juez. Recorte solo sin fondo propio. Informe en `.critica.txt`; un
+  RESUMEN contado de su propio cuerpo** (`resumenDelInforme`): es lo que lee el juez. **Con maqueta, el veredicto
+  responde a «¿respeta el diseño?»**: rojo solo por un bloqueante medido, un texto que falta o recortado, o una
+  diferencia de DISEÑO que vieron las DOS miradas (`confirmadas`); el resto son DETALLES y no ponen rojo. La frontera,
+  en el método (forma de CATEGORÍA, color de lo IMPORTANTE, disposición; el GRADO es detalle). **Lo medido del ESTILO no
+  pone rojo** (`hayQueArreglar`: falsos positivos medidos), y un texto que EMPIEZA donde otro de la maqueta es «otro
+  texto en su sitio», no un bloqueante. Recorte solo sin fondo propio. Informe en `.critica.txt`; un
   rojo va a `developer-xone` (el diseñador solo escribe en `icons/` y `fonts/`). **ENCAJE y BLOQUES** (`ENCAJE`, `compararBloques`, solo lo emparejado). Foto de
   UN control sin geometría (`esCapturaDeUnControl`). **Tamaño de IMAGEN respecto a su pantalla**
   (`FACTOR_DE_TAMAÑO_DE_IMAGEN`), nunca bloqueante.

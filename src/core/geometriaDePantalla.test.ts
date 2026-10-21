@@ -541,3 +541,63 @@ describe("filasDeLista: cuántas filas pinta una lista del aparato", () => {
     expect(filasDeLista(aparato.controles)).toBe(0);
   });
 });
+
+/**
+ * Un texto con OTRO contenido no mide nada de la estructura (Maset, liquidaciones): «5 albaranes» de la maqueta y «1 albarán»
+ * de la app ocupan distinto y pueden saltar de línea, y salía «van en la MISMA fila; en el aparato en otra» y «las filas
+ * acaban en el 61 % del ancho (en la maqueta, 55 %)». De un texto con otro dato cuentan su sitio y su estilo, no su ancho.
+ */
+describe("un texto con otro dato no mide filas ni anchos", () => {
+  const maqueta: MaquetaMedida = {
+    ancho: 400,
+    alto: 800,
+    elementos: [
+      { texto: "LIQUIDACIONES", caja: { x: 40, y: 60, ancho: 140, alto: 16 } },
+      { texto: "07/10/2016", caja: { x: 80, y: 420, ancho: 70, alto: 12 } },
+      { texto: "5 albaranes", caja: { x: 160, y: 420, ancho: 60, alto: 12 } },
+    ],
+  };
+  const aparato: GeometriaDelAparato = {
+    pantalla: { ancho: 1000, alto: 2000 },
+    controles: [
+      { nombre: "MAP_TIT", texto: "LIQUIDACIONES", tipo: "prop", clase: "L", caja: { x: 100, y: 150, ancho: 350, alto: 40 } },
+      { nombre: "MAP_LLFECHA", texto: "07/10/2016", tipo: "prop", clase: "L", caja: { x: 200, y: 1050, ancho: 180, alto: 30 } },
+      { nombre: "MAP_LLNALB", texto: "1 albarán", tipo: "prop", clase: "L", caja: { x: 330, y: 1080, ancho: 290, alto: 30 } },
+    ],
+  };
+
+  it("lo dice como nota, pero no saca de él la fila ni el ancho", () => {
+    const h = compararConMaqueta(maqueta, aparato);
+    expect(h.notas.some((n) => n.includes("«5 albaranes»") && n.includes("otro texto en su sitio"))).toBe(true);
+    expect(h.diferencias.join("\n")).not.toMatch(/MISMA fila|ANCHO/);
+  });
+});
+
+/**
+ * «Otro texto en su sitio» se empareja por dónde EMPIEZA, no por su centro: el centro se mueve con la largura del texto.
+ * Medido en Maset (consola): «Protocolo seguro TLS 1.3 activo» de la maqueta frente a «URL de sincronización» de la app,
+ * los dos empezando en el mismo sitio, salía como BLOQUEANTE «NO está en el aparato».
+ */
+describe("otro texto en su sitio se empareja por su INICIO", () => {
+  const maqueta: MaquetaMedida = {
+    ancho: 390,
+    alto: 884,
+    elementos: [
+      { texto: "PUNTO DE ENLACE MASET", caja: { x: 50, y: 196, ancho: 170, alto: 14 } },
+      { texto: "Protocolo seguro TLS 1.3 activo", caja: { x: 28, y: 258, ancho: 190, alto: 14 } },
+    ],
+  };
+  const aparato: GeometriaDelAparato = {
+    pantalla: { ancho: 1080, alto: 2400 },
+    controles: [
+      { nombre: "MAP_TLENLACE", texto: "PUNTO DE ENLACE MASET", tipo: "prop", clase: "L", caja: { x: 138, y: 630, ancho: 470, alto: 40 } },
+      { nombre: "MAP_URLSUB", texto: "URL de sincronización", tipo: "prop", clase: "L", caja: { x: 76, y: 785, ancho: 330, alto: 40 } },
+    ],
+  };
+
+  it("no es un bloqueante: es otro texto en su sitio", () => {
+    const h = compararConMaqueta(maqueta, aparato);
+    expect(h.bloqueantes).toEqual([]);
+    expect(h.notas.some((n) => n.includes("«Protocolo seguro TLS 1.3 activo»") && n.includes("otro texto en su sitio"))).toBe(true);
+  });
+});

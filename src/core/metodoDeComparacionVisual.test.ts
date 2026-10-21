@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { METODO_DE_COMPARACION_VISUAL, unirObservaciones } from "./metodoDeComparacionVisual.js";
+import { confirmadas, METODO_DE_COMPARACION_VISUAL, unirObservaciones } from "./metodoDeComparacionVisual.js";
 
 describe("las observaciones de dos pasadas, sin las repetidas", () => {
   it("las dos pasadas reales de Maset: se queda una por diferencia", () => {
@@ -28,5 +28,49 @@ describe("los valores de la maqueta son de ejemplo", () => {
     expect(METODO_DE_COMPARACION_VISUAL).toMatch(/puntos de una contraseña/);
     expect(METODO_DE_COMPARACION_VISUAL).toMatch(/SITIO esté vacío/);
     expect(METODO_DE_COMPARACION_VISUAL).toMatch(/CUÁNTAS filas tiene una lista/);
+  });
+});
+
+/**
+ * DISEÑO o DETALLE: el veredicto responde a «¿respeta el diseño?», no a «¿hay diferencias?». Medido el 21-10-2026: las 31
+ * críticas con maqueta del workspace eran rojas, porque el verde exigía CERO diferencias entre un render web y una app.
+ */
+describe("la frontera entre diseño y detalle", () => {
+  it("el método la escribe, con el color de lo IMPORTANTE como diseño", () => {
+    expect(METODO_DE_COMPARACION_VISUAL).toMatch(/DISEÑO/);
+    expect(METODO_DE_COMPARACION_VISUAL).toMatch(/DETALLE/);
+    expect(METODO_DE_COMPARACION_VISUAL).toMatch(/esquinas rectas donde la maqueta las redondea/);
+    // El GRADO es detalle: medido contra el ojo, «más redondeada» o «borde en vez de sombra» daban rojo en falso.
+    expect(METODO_DE_COMPARACION_VISUAL).toMatch(/un radio algo mayor o menor, una sombra cambiada por un borde fino/);
+    // Petición suya: una etiqueta importante con otro color es diseño; un texto secundario, detalle.
+    expect(METODO_DE_COMPARACION_VISUAL).toMatch(/color de un texto IMPORTANTE/);
+    expect(METODO_DE_COMPARACION_VISUAL).toMatch(/secundario/);
+  });
+});
+
+/**
+ * Una diferencia de DISEÑO solo pone rojo si la ven las DOS miradas: lo que sale en una sí y en otra no es ruido. Las dos
+ * pasadas describen lo mismo con palabras distintas (Maset, liquidaciones, dos pasadas reales).
+ */
+describe("confirmadas: lo que vieron las dos pasadas", () => {
+  it("la misma diferencia contada con otras palabras se confirma", () => {
+    const a = ["Las filas de la lista no tienen esquinas redondeadas ni sombra: son rectángulos planos de borde recto."];
+    const b = ["Las tarjetas de la lista son rectángulos planos, sin las esquinas redondeadas ni la sombra suave de la maqueta."];
+    expect(confirmadas([a, b])).toEqual({ confirmadas: a, sueltas: [] });
+  });
+
+  it("lo que solo vio una se queda suelto, y dos distintas no se confirman entre sí", () => {
+    const a = ["Las filas de la lista no tienen esquinas redondeadas ni sombra.", "El botón «Entrar» es gris y en la maqueta es rojo."];
+    const b = ["Las tarjetas de la lista son rectángulos sin esquinas redondeadas."];
+    expect(confirmadas([a, b])).toEqual({ confirmadas: [a[0]], sueltas: [a[1]] });
+  });
+
+  it("con UNA sola pasada legible no hay con qué contrastar: vale lo que dijo", () => {
+    const a = ["El botón «Entrar» es gris y en la maqueta es rojo."];
+    expect(confirmadas([a])).toEqual({ confirmadas: a, sueltas: [] });
+  });
+
+  it("y lo que la otra pasada vio y la primera no, también queda suelto", () => {
+    expect(confirmadas([[], ["El logo es más pequeño."]])).toEqual({ confirmadas: [], sueltas: ["El logo es más pequeño."] });
   });
 });

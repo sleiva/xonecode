@@ -37,6 +37,23 @@ export const METODO_DE_COMPARACION_VISUAL = [
   // Medido en Maset (Entradas/Salidas): «junto a Volver no aparece el 09:41 de la maqueta», y era el reloj de la barra
   // que Stitch dibuja arriba de cada maqueta.
   "también la que la MAQUETA dibuja arriba: su hora («09:41») no es un dato de la pantalla y no falta.",
+  "",
+  // Medido el 21-10-2026: las 31 críticas con maqueta del workspace eran rojas, porque cualquier diferencia pesaba igual.
+  // La frontera es SUYA, y el color de lo importante también: «una etiqueta con otro color y que sea un elemento
+  // importante es una diferencia».
+  "4. CLASIFICA cada diferencia en DISEÑO o DETALLE.",
+  // Validado contra el ojo con cinco pantallas de Maset: el modelo llamaba diseño a «más redondeada», «borde en vez de
+  // sombra» o «otra tipografía», y daba rojo a pantallas que respetaban el diseño. La FORMA es de categoría; el grado, no.
+  "   - DISEÑO es lo que cambia cómo se ve la pantalla a primera vista: falta o sobra una pieza; otra FORMA de",
+  "     categoría (esquinas rectas donde la maqueta las redondea o al revés, un elemento PLANO —sin sombra ni borde—",
+  "     donde la maqueta tiene una tarjeta, una píldora donde hay un rectángulo); otro color de un texto IMPORTANTE",
+  "     (un título, el importe principal, el texto de un botón, una cabecera), de un fondo o de un botón; otra",
+  "     DISPOSICIÓN (algo en otro sitio o en otro orden).",
+  "   - DETALLE es el GRADO de lo que ya está: un radio algo mayor o menor, una sombra cambiada por un borde fino, unos",
+  "     píxeles de tamaño, de alto, de margen o de separación, otra tipografía o grosor, el espacio entre letras, un",
+  "     icono macizo donde la maqueta lo dibuja de contorno, un texto en una línea donde la maqueta lo parte en dos, y la",
+  "     letra o el color de un texto secundario (una etiqueta pequeña, un valor del pie).",
+  "   - Lo que viene de los DATOS no es ni lo uno ni lo otro: no lo digas.",
 ].join("\n");
 
 /** Cuántas pasadas del modelo por crítica con maqueta: una sola variaba mucho (medido: de 4 a 8 diferencias). */
@@ -71,6 +88,47 @@ function repetidas(a: Observacion, b: Observacion): boolean {
   if (menor === 0) return a.texto.trim() === b.texto.trim();
   if (comunes(a.palabras, b.palabras) / menor >= PARECIDO_PARA_REPETIDA) return true;
   return comunes(a.controles, b.controles) >= 1 && comunes(a.citas, b.citas) >= 2;
+}
+
+/** Palabras que salen en cualquier observación y no dicen DE QUÉ habla. */
+const VACIAS = new Set(
+  "maqueta captura pantalla tiene tienen como esta estan donde mientras sobre entre mucho poco algo cada todo todos todas otra otro otras otros mismo misma aparece aparecen queda quedan pero hacia tambien".split(" ")
+);
+const significativas = (texto: string): Set<string> => new Set([...palabrasDe(texto)].filter((p) => !VACIAS.has(p)));
+
+/** Lo que dos observaciones de PASADAS DISTINTAS tienen que compartir para hablar de lo mismo, con otras palabras. */
+export const PARECIDO_PARA_CONFIRMAR = 0.34;
+
+/**
+ * ¿Hablan de LO MISMO dos observaciones de pasadas distintas? Más laxo que `repetidas`, a propósito: cada mirada cuenta la
+ * misma diferencia con sus palabras («filas sin esquinas redondeadas ni sombra» / «tarjetas planas, sin sombra»), y un
+ * emparejado estricto bajaría a detalle una diferencia real. Basta una cita «» o un control en común, o una parte de las
+ * palabras que dicen de qué habla (`VACIAS` fuera).
+ */
+function hablanDeLoMismo(a: string, b: string): boolean {
+  const oa = { texto: a, palabras: palabrasDe(a), controles: controlesDe(a), citas: citasDe(a) };
+  const ob = { texto: b, palabras: palabrasDe(b), controles: controlesDe(b), citas: citasDe(b) };
+  if (repetidas(oa, ob) || comunes(oa.citas, ob.citas) >= 1 || comunes(oa.controles, ob.controles) >= 1) return true;
+  const sa = significativas(a);
+  const sb = significativas(b);
+  const menor = Math.min(sa.size, sb.size);
+  return menor > 0 && comunes(sa, sb) / menor >= PARECIDO_PARA_CONFIRMAR;
+}
+
+/**
+ * **Las diferencias de DISEÑO que vieron TODAS las pasadas**, y las que no (`sueltas`). Una diferencia de diseño solo pone
+ * el rojo si la ven las dos miradas: lo que sale en una sí y en otra no —o se contradice— es ruido, y baja a detalle. Con
+ * una sola pasada legible no hay con qué contrastar y vale lo que dijo. Puro.
+ */
+export function confirmadas(listas: readonly (readonly string[])[]): { confirmadas: string[]; sueltas: string[] } {
+  if (listas.length <= 1) return { confirmadas: [...(listas[0] ?? [])], sueltas: [] };
+  const [primera, ...resto] = listas as [readonly string[], ...(readonly string[])[]];
+  const vistas = primera.filter((o) => resto.every((l) => l.some((x) => hablanDeLoMismo(o, x))));
+  const sueltas = unirObservaciones(
+    primera.filter((o) => !vistas.includes(o)),
+    ...resto.map((l) => l.filter((x) => !vistas.some((c) => hablanDeLoMismo(c, x))))
+  );
+  return { confirmadas: unirObservaciones(vistas), sueltas };
 }
 
 /**

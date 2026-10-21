@@ -453,7 +453,8 @@ export function textoDelBucle(llama: readonly string[], opciones: { conCritica?:
     "NO TERMINAS hasta que se cumpla el CRITERIO DE ACEPTACIÓN de tu encargo. Si el encargo no lo trae, es: (1) todas las casillas",
     "de la tarea en el `TASKS.md` comprobadas, (2) la app arranca y hace lo que pide, y (3) con diseño, la distancia que mide",
     "`comparar_capturas` por debajo del 10 % en vertical y en horizontal, que ENCAJE en la pantalla (cada borde del contenido a",
-    "un 3 % o menos del de la maqueta: que llegue a los lados y abajo como ella), y el crítico sin diferencias de forma ni de estructura.",
+    "un 3 % o menos del de la maqueta: que llegue a los lados y abajo como ella), y el crítico en VERDE: que respete el diseño. Sus DETALLES",
+    "no obligan a otra vuelta; dilos al devolver.",
     // Medido en Maset (liquidaciones): 5 filas reales frente a 3 de muestra daban «abajo +11 %» y la tarea no cerraba.
     "En una LISTA con datos reales lo vertical no cuenta (cuántas filas tenga no es del diseño): `comparar_capturas` lo dice y no lo exige.",
     // Con el puerto de fuentes la tipografía SÍ se reproduce: se trae a `fonts/` (`fuentesDeGoogle.ts`). Sin él, sigue fuera.
@@ -512,14 +513,14 @@ export function notaDeDelegacion(
                 "log), maqueta y arregla lo visual él mismo —designer-xone solo le hace iconos y fondos SVG—, y corrige hasta cumplir el CRITERIO DE ACEPTACIÓN que le des. Por eso",
                 "cada encargo a developer-xone lleva el CRITERIO ESCRITO y COMPROBABLE: qué casillas del plan tiene que dejar comprobadas, qué",
                 "tiene que hacer la app, y, si hay diseño, que su captura coincida con la maqueta (di su ruta): ninguna pieza que falte,",
-                "el mismo encaje en la pantalla, y sin diferencias de forma ni de estructura. Escrito así, sin nombres de herramientas. No se puede pedir",
+                "el mismo encaje en la pantalla, y sin diferencias de DISEÑO (los detalles se dicen, no obligan). Escrito así, sin nombres de herramientas. No se puede pedir",
               ]
             : [
                 "BUCLE DEL DESARROLLADOR: developer-xone prueba lo que escribe él mismo, llamando a device-controller (despliega, toca y lee",
                 "el log), maqueta y arregla lo visual él mismo —designer-xone solo le hace iconos y fondos SVG—, y corrige hasta cumplir el CRITERIO DE ACEPTACIÓN que le des. Por eso",
                 "cada encargo a developer-xone lleva el CRITERIO ESCRITO y MEDIBLE: qué casillas del plan tiene que dejar comprobadas, qué",
                 "tiene que hacer la app, y, si hay diseño, que la distancia de `comparar_capturas` quede por debajo del 10 % en vertical y en",
-                "horizontal, que ENCAJE en la pantalla (cada borde a un 3 % o menos del de la maqueta) y que el crítico no señale diferencias de forma o de estructura (di dónde está la maqueta);",
+                "horizontal, que ENCAJE en la pantalla (cada borde a un 3 % o menos del de la maqueta) y que el crítico dé VERDE: sin diferencias de DISEÑO, los detalles no obligan (di dónde está la maqueta);",
                 "en una LISTA con datos reales, lo vertical no (depende de cuántas filas haya). No se puede pedir",
               ]),
           opciones.conFuentes === true

@@ -582,6 +582,26 @@ export function compararConMaqueta(m: MaquetaMedida, g: GeometriaDelAparato, mod
     franjasDeLista.some((f) => e.caja.y >= f.desde && e.caja.y <= f.hasta);
   const relojDeLaBarra = (e: ElementoDeMaqueta): boolean =>
     HORA.test(textoParaEmparejar(e.texto)) && e.caja.y + e.caja.alto <= FRANJA_DE_LA_BARRA_DE_ESTADO * m.alto;
+  /**
+   * **Antes de decir que un texto NO está, se mira dónde EMPIEZA**: el emparejado «por sitio» compara centros, y el centro
+   * se mueve con la largura —un texto con otro dato tiene otra—. Medido en Maset (consola): «Protocolo seguro TLS 1.3
+   * activo» y «URL de sincronización» empiezan en el mismo sitio y salían como BLOQUEANTE. Solo para lo que iba a ser
+   * bloqueante, y contra textos del aparato que nadie emparejó.
+   */
+  const libres = new Set(
+    g.controles.filter((c) => c.texto !== undefined && tieneLetras(textoParaEmparejar(c.texto)) && !parejas.some((p) => p.aparato === c) && ![...dentroDe.keys()].includes(c))
+  );
+  const textoQueEmpiezaAhi = (e: ElementoDeMaqueta): ControlDelAparato | undefined => {
+    if (!tieneLetras(textoParaEmparejar(e.texto))) return undefined;
+    const [, my] = centro(e.caja, m.ancho, m.alto);
+    let mejor: { c: ControlDelAparato; d: number } | undefined;
+    for (const c of libres) {
+      const [, ay] = centro(c.caja, g.pantalla.ancho, g.pantalla.alto);
+      const d = Math.abs(e.caja.x / m.ancho - c.caja.x / g.pantalla.ancho) + Math.abs(my - ay);
+      if (d <= DISTANCIA_PARA_ICONOS && (mejor === undefined || d < mejor.d)) mejor = { c, d };
+    }
+    return mejor?.c;
+  };
   for (const e of sinPareja) {
     if (deLista.has(e)) continue;
     const candidata =
@@ -606,7 +626,14 @@ export function compararConMaqueta(m: MaquetaMedida, g: GeometriaDelAparato, mod
       diferencias.push(
         `${etiqueta(e)} de ${laMaqueta}, dentro de las filas de su lista, no está en ${elAparato}: si depende del dato de cada fila, no falta; si es una pieza fija de la fila, sí.`
       );
-    } else bloqueantes.push(`${etiqueta(e)} de ${laMaqueta} NO está en ${elAparato} (ningún control con ese texto).`);
+    } else {
+      const enSuSitio = textoQueEmpiezaAhi(e);
+      if (enSuSitio === undefined) bloqueantes.push(`${etiqueta(e)} de ${laMaqueta} NO está en ${elAparato} (ningún control con ese texto).`);
+      else {
+        libres.delete(enSuSitio);
+        notas.push(`${etiqueta(e)} de ${laMaqueta} dice «${textoVisible(enSuSitio.texto ?? "")}» en ${elAparato}: otro texto en su sitio (empieza donde él), no falta.`);
+      }
+    }
   }
   if (enImagen.length > 0) {
     notas.push(`dibujado dentro de una imagen (no falta): ${enImagen.slice(0, 5).join(", ")}${enImagen.length > 5 ? "…" : ""}.`);
@@ -646,13 +673,19 @@ export function compararConMaqueta(m: MaquetaMedida, g: GeometriaDelAparato, mod
     }
   }
 
-  if (parejas.length < 2) {
+  /**
+   * **La ESTRUCTURA se mide con lo que dice LO MISMO** (21-10-2026): un texto con otro dato («5 albaranes» → «1 albarán»)
+   * ocupa distinto y puede saltar de línea, y salía «van en la MISMA fila; en el aparato en otra» y «las filas acaban en el
+   * 61 % del ancho». La maqueta no sabe nada de los datos: de ese texto cuentan su sitio y su estilo, no filas ni anchos.
+   */
+  const medibles = parejas.filter((p) => p.otroTexto !== true);
+  if (medibles.length < 2) {
     notas.push("con menos de dos controles emparejados no hay filas ni tamaños que comparar.");
     return { bloqueantes, diferencias, notas };
   }
 
-  const filaM = filas(parejas.map((p) => p.maqueta.caja));
-  const filaA = filas(parejas.map((p) => p.aparato.caja));
+  const filaM = filas(medibles.map((p) => p.maqueta.caja));
+  const filaA = filas(medibles.map((p) => p.aparato.caja));
 
   // FILAS: lo que en la maqueta va junto y en el aparato no (o al revés), dicho por fila de la maqueta.
   const porFilaM = new Map<number, number[]>();
@@ -663,17 +696,17 @@ export function compararConMaqueta(m: MaquetaMedida, g: GeometriaDelAparato, mod
     for (const i of indices) enAparato.set(filaA[i]!, [...(enAparato.get(filaA[i]!) ?? []), i]);
     const nombres = indices
       .slice()
-      .sort((a, b) => parejas[a]!.maqueta.caja.x - parejas[b]!.maqueta.caja.x)
-      .map((i) => etiqueta(parejas[i]!.maqueta));
+      .sort((a, b) => medibles[a]!.maqueta.caja.x - medibles[b]!.maqueta.caja.x)
+      .map((i) => etiqueta(medibles[i]!.maqueta));
     if (enAparato.size > 1) {
       // La parte más grande es «la fila»; lo demás, lo que se ha ido a otra.
       const grupos = [...enAparato.values()].sort((a, b) => b.length - a.length);
-      const fuera = grupos.slice(1).flat().map((i) => etiqueta(parejas[i]!.maqueta));
+      const fuera = grupos.slice(1).flat().map((i) => etiqueta(medibles[i]!.maqueta));
       diferencias.push(`${mayuscula(`en ${laMaqueta}`)} ${nombres.join(", ")} van en la MISMA fila; en ${elAparato} ${fuera.join(", ")} va${fuera.length > 1 ? "n" : ""} en otra.`);
       continue;
     }
     // Misma fila en los dos: el ORDEN de izquierda a derecha.
-    const ordenA = indices.slice().sort((a, b) => parejas[a]!.aparato.caja.x - parejas[b]!.aparato.caja.x).map((i) => etiqueta(parejas[i]!.maqueta));
+    const ordenA = indices.slice().sort((a, b) => medibles[a]!.aparato.caja.x - medibles[b]!.aparato.caja.x).map((i) => etiqueta(medibles[i]!.maqueta));
     if (ordenA.join("|") !== nombres.join("|")) diferencias.push(`En la fila ${nombres.join(", ")} el ORDEN cambia: en ${elAparato} va ${ordenA.join(", ")}.`);
   }
 
@@ -685,12 +718,12 @@ export function compararConMaqueta(m: MaquetaMedida, g: GeometriaDelAparato, mod
     for (const indices of porFilaM.values()) {
       if (indices.length < 2) continue;
       const borde = (lado: "maqueta" | "aparato", ancho: number) => ({
-        izq: Math.min(...indices.map((i) => parejas[i]![lado].caja.x)) / ancho,
-        der: Math.max(...indices.map((i) => parejas[i]![lado].caja.x + parejas[i]![lado].caja.ancho)) / ancho,
+        izq: Math.min(...indices.map((i) => medibles[i]![lado].caja.x)) / ancho,
+        der: Math.max(...indices.map((i) => medibles[i]![lado].caja.x + medibles[i]![lado].caja.ancho)) / ancho,
       });
       const bm = borde("maqueta", m.ancho);
       const ba = borde("aparato", g.pantalla.ancho);
-      const primera = etiqueta(parejas[indices.slice().sort((a, b) => parejas[a]!.maqueta.caja.x - parejas[b]!.maqueta.caja.x)[0]!]!.maqueta);
+      const primera = etiqueta(medibles[indices.slice().sort((a, b) => medibles[a]!.maqueta.caja.x - medibles[b]!.maqueta.caja.x)[0]!]!.maqueta);
       const partes: string[] = [];
       if (Math.abs(ba.izq - bm.izq) > ENCAJE) partes.push(`empieza{n} en el ${porcentaje(ba.izq)} del ancho (en ${laMaqueta}, en el ${porcentaje(bm.izq)})`);
       if (Math.abs(ba.der - bm.der) > ENCAJE) partes.push(`acaba{n} en el ${porcentaje(ba.der)} del ancho (en ${laMaqueta}, en el ${porcentaje(bm.der)})`);
@@ -706,14 +739,14 @@ export function compararConMaqueta(m: MaquetaMedida, g: GeometriaDelAparato, mod
   // entre BOTONES e imágenes: la caja de una etiqueta es el hueco que le da el layout, no lo que se pinta,
   // y medido sobre la calculadora, «• DEG» salía «2,7 veces el ancho» sin verse distinto.
   const comparable = (i: number): boolean => {
-    const clase = parejas[i]!.aparato.clase;
+    const clase = medibles[i]!.aparato.clase;
     return clase === undefined || clase === "B" || clase === "IMG";
   };
   for (const todos of porFilaM.values()) {
-    const indices = todos.filter((i) => comparable(i) && parejas[i]!.maqueta.sinAncho !== true);
+    const indices = todos.filter((i) => comparable(i) && medibles[i]!.maqueta.sinAncho !== true);
     if (indices.length < 2) continue;
-    const anchosM = indices.map((i) => parejas[i]!.maqueta.caja.ancho);
-    const anchosA = indices.map((i) => parejas[i]!.aparato.caja.ancho);
+    const anchosM = indices.map((i) => medibles[i]!.maqueta.caja.ancho);
+    const anchosA = indices.map((i) => medibles[i]!.aparato.caja.ancho);
     const medM = mediana(anchosM);
     const medA = mediana(anchosA);
     if (medM <= 0 || medA <= 0) continue;
@@ -721,7 +754,7 @@ export function compararConMaqueta(m: MaquetaMedida, g: GeometriaDelAparato, mod
       const rm = anchosM[k]! / medM;
       const ra = anchosA[k]! / medA;
       if (Math.abs(ra / rm - 1) > CAMBIO_DE_TAMAÑO) {
-        diferencias.push(`${etiqueta(parejas[i]!.maqueta)} mide ${veces(ra)} veces el ancho de las de su fila; en ${laMaqueta}, ${veces(rm)}.`);
+        diferencias.push(`${etiqueta(medibles[i]!.maqueta)} mide ${veces(ra)} veces el ancho de las de su fila; en ${laMaqueta}, ${veces(rm)}.`);
       }
     });
   }
@@ -740,7 +773,7 @@ export function compararConMaqueta(m: MaquetaMedida, g: GeometriaDelAparato, mod
   // mandó otra vuelta al desarrollador por ello.
   if (aproximada) return { bloqueantes, diferencias, notas };
   const yaDichos = new Set(diferencias.filter((d) => d.includes("veces el ancho")).map((d) => d.split(" mide ")[0]));
-  parejas.forEach((p, i) => {
+  medibles.forEach((p, i) => {
     if (!comparable(i) || yaDichos.has(etiqueta(p.maqueta)) || p.maqueta.boton !== true) return;
     const pm = p.maqueta.caja.alto / p.maqueta.caja.ancho;
     const pa = p.aparato.caja.alto / p.aparato.caja.ancho;

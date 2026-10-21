@@ -405,41 +405,39 @@ function medirEstilo(
  * —lo medido antes del bloque de ESTILO, la opinión después—, así que no puede decir otra cosa que lo que va debajo. Puro.
  */
 export function resumenDelInforme(cuerpo: readonly string[], final: string): string[] {
-  const bloqueantes: string[] = [];
-  let medidas = 0;
-  let menores = 0;
+  /**
+   * Cada sección dice qué es lo suyo: de lo MEDIDO, un bloqueante, un texto que falta o un recorte y una forma, un fondo o
+   * el color de un texto importante son DISEÑO; filas, anchos y proporciones de la geometría, y lo que la comparación
+   * marca como detalle, son DETALLE. Del modelo, sus dos listas; sin clasificar (sin maqueta), lo que ve es defecto.
+   */
+  type Seccion = "geometria" | "comparacion" | "recortes" | "diseno" | "detalles" | "opinion" | undefined;
+  const diseno: string[] = [];
+  let detalles = 0;
   let notas = 0;
-  let opiniones = 0;
-  let enOpinion = false;
+  let seccion: Seccion;
   for (const l of cuerpo) {
-    if (l.startsWith("ESTILO, lo que dice") || l.startsWith("Lo que dice que ve")) enOpinion = true;
-    if (!l.startsWith("- ")) continue;
-    if (enOpinion) opiniones++;
-    else if (l.startsWith(`- ${MARCA_DE_BLOQUEANTE}`)) bloqueantes.push(l.slice(2 + MARCA_DE_BLOQUEANTE.length));
-    else if (l.startsWith("- (nota)")) notas++;
-    else if (l.startsWith("- (menor")) menores++;
-    // Lo que dice que no hay nada, y lo que se ENSEÑA sin contar para el veredicto (lo que no es un control).
-    else if (!/^- (Nada|Ningún texto recortado|Lo que se ve y no es un control)/.test(l)) medidas++;
+    if (l.startsWith("GEOMETRÍA")) seccion = "geometria";
+    else if (l.startsWith("COMPARACIÓN")) seccion = "comparacion";
+    else if (l.startsWith("MEDIDO en los píxeles")) seccion = "recortes";
+    else if (l.startsWith("DISEÑO, lo que")) seccion = "diseno";
+    else if (l.startsWith("DETALLES, se notan")) seccion = "detalles";
+    else if (l.startsWith("ESTILO, lo que dice") || l.startsWith("Lo que dice que ve")) seccion = "opinion";
+    if (!l.startsWith("- ") || /^- (Nada|Ningún texto recortado|Lo que se ve y no es un control)/.test(l)) continue;
+    if (l.startsWith("- (nota)")) notas++;
+    else if (l.startsWith("- (detalle") || l.startsWith("- (menor") || l.startsWith("- (posible") || seccion === "detalles") detalles++;
+    else if (seccion === "geometria" && !l.startsWith(`- ${MARCA_DE_BLOQUEANTE}`)) detalles++;
+    else diseno.push(l.slice(2).replace(MARCA_DE_BLOQUEANTE, ""));
   }
   const plural = (n: number, una: string, varias: string) => `${n} ${n === 1 ? una : varias}`;
   const porQue =
-    bloqueantes.length > 0
-      ? `rojo por lo MEDIDO, ${plural(bloqueantes.length, "bloqueante", "bloqueantes")}: ${bloqueantes[0]}${bloqueantes.length > 1 ? " (y más abajo, el resto)" : ""}`
-      : final === "rojo" && medidas > 0
-        ? `rojo por ${plural(medidas, "diferencia MEDIDA", "diferencias MEDIDAS")} con la maqueta.`
-        : final === "rojo"
-          ? "rojo por lo que VE el modelo (una opinión); lo medido no tiene nada en rojo."
-          : final === "verde"
-            ? "verde, nada que arreglar."
-            : `${final}.`;
+    final === "rojo" && diseno.length > 0
+      ? `rojo, no respeta el diseño en ${plural(diseno.length, "cosa", "cosas")}: ${diseno[0]}${diseno.length > 1 ? " (y más abajo, el resto)" : ""}`
+      : final === "verde"
+        ? "verde, respeta el diseño."
+        : `${final}.`;
   const resumen = [`EN RESUMEN: ${porQue}`];
-  if (bloqueantes.length + medidas + opiniones > 0) {
-    resumen.push(
-      `Por arreglar o mirar: ${bloqueantes.length > 0 ? `${plural(bloqueantes.length, "bloqueante", "bloqueantes")}, ` : ""}` +
-        `${plural(medidas, "diferencia medida", "diferencias medidas")}` +
-        `${menores > 0 ? ` (y ${plural(menores, "menor", "menores")}, no hace falta)` : ""}` +
-        ` y ${plural(opiniones, "observación de estilo", "observaciones de estilo")} (una opinión: míralas tú).`
-    );
+  if (detalles > 0) {
+    resumen.push(`Detalles que se notan al comparar: ${detalles}. No ponen rojo ni hace falta otra vuelta por ellos, salvo que el encargo pida pulirlos.`);
   }
   if (notas > 0) resumen.push(`No cuentan: ${plural(notas, "nota", "notas")} (datos de ejemplo, textos traducidos o juntos en un control).`);
   return resumen;
@@ -590,13 +588,25 @@ export function crearCriticaVisual(deps: DependenciasDeCritica) {
          * diagnostique no lo evitó. A dónde apunta sí acertó las seis veces. Sin esta línea,
          * el desarrollador se pone a buscar una rotación que no existe.
          */
-        lineas.push(
-          geometria === undefined
-            ? "Lo que dice que ve (la REDACCIÓN no es fiable: describe mal la causa. Fíate de QUÉ"
-            : "ESTILO, lo que dice el modelo que ve (una OPINIÓN; la redacción no es fiable: fíate de QUÉ",
-          "control señala, no de su explicación, y míralo tú):"
-        );
-        for (const o of veredicto.observaciones) lineas.push(`- ${o}`);
+        if (veredicto.diseno !== undefined && veredicto.detalles !== undefined) {
+          // Con maqueta, las DOS listas: lo que cambia el diseño —visto por las dos miradas— y lo que solo se nota comparando.
+          if (veredicto.diseno.length > 0) {
+            lineas.push("DISEÑO, lo que vieron las dos miradas del modelo (cambia cómo se ve: pone el rojo; fíate de QUÉ señala y míralo tú):");
+            for (const o of veredicto.diseno) lineas.push(`- ${o}`);
+          }
+          if (veredicto.detalles.length > 0) {
+            lineas.push("DETALLES, se notan al comparar y NO ponen rojo (opinión del modelo):");
+            for (const o of veredicto.detalles) lineas.push(`- ${o}`);
+          }
+        } else {
+          lineas.push(
+            geometria === undefined
+              ? "Lo que dice que ve (la REDACCIÓN no es fiable: describe mal la causa. Fíate de QUÉ"
+              : "ESTILO, lo que dice el modelo que ve (una OPINIÓN; la redacción no es fiable: fíate de QUÉ",
+            "control señala, no de su explicación, y míralo tú):"
+          );
+          for (const o of veredicto.observaciones) lineas.push(`- ${o}`);
+        }
       }
       // El resumen va DEBAJO del veredicto y ANTES de todo lo demás: es lo que se lee primero.
       lineas.splice(1, 0, ...resumenDelInforme(lineas.slice(1), final));

@@ -183,13 +183,32 @@ describe("lo MENOR no pone el rojo", () => {
     expect(hayQueArreglar(vecina)).toBe(false);
     // El caso de las teclas de la calculadora: radio parecido, 1,2:1 frente a 1,0:1. Se ve.
     const teclas = compararDescripciones({ filas: [{ controles: [medido("7", "redondeada", 1.2, 0.48)] }], extras: [] }, { filas: [{ controles: [medido("7", "circulo", 1.0, 0.5)] }], extras: [] });
-    expect(hayQueArreglar(teclas)).toBe(true);
+    // Se dice como posible diferencia de diseño, pero lo medido del ESTILO no pone el rojo (21-10-2026: falsos positivos).
+    expect(teclas.diferencias.join("\n")).toMatch(/forma redondeada/);
+    expect(hayQueArreglar(teclas)).toBe(false);
   });
 
-  it("la letra de UN solo control que discrepa es un glifo (menor); la de varios, el tamaño (mayor)", () => {
+  /** La frontera de 21-10-2026: el TAMAÑO de la letra es un detalle, de uno o de varios controles. Se dice y no pone rojo. */
+  it("la letra, de uno o de varios controles, es DETALLE: se dice y no pone el rojo", () => {
     const fila = (alturas: number[]) => ({ filas: [{ controles: alturas.map((a, i) => ({ ...medido(String(i + 1), "redondeada", 1.2, 0.3, a), centro: { x: i / 4, y: 0.5 } })) }], extras: [] });
     expect(hayQueArreglar(compararDescripciones(fila([0.05, 0.05, 0.05]), fila([0.09, 0.05, 0.05])))).toBe(false);
-    expect(hayQueArreglar(compararDescripciones(fila([0.05, 0.05, 0.05]), fila([0.035, 0.035, 0.035])))).toBe(true);
+    const varios = compararDescripciones(fila([0.05, 0.05, 0.05]), fila([0.035, 0.035, 0.035]));
+    expect(hayQueArreglar(varios)).toBe(false);
+    expect(varios.menores?.join("\n")).toMatch(/letra/);
+  });
+
+  /** Petición suya: «una etiqueta con un color diferente y que sea un elemento importante es una diferencia». */
+  it("el color de un texto IMPORTANTE (letra grande) es DISEÑO; el de uno secundario, DETALLE", () => {
+    const texto = (t: string, alturaDeLetra: number, colorTexto: string, x: number): ControlVisto => ({ texto: t, alturaDeLetra, colorTexto, centro: { x, y: 0.5 } });
+    const pantalla = (cTitulo: string, cEtiqueta: string) => ({
+      filas: [{ controles: [texto("ENTREGAS", 0.08, cTitulo, 0.2), texto("pend.", 0.04, cEtiqueta, 0.5), texto("hoy", 0.04, "#808080", 0.8)] }],
+      extras: [],
+    });
+    const titulo = compararDescripciones(pantalla("#F0F0F0", "#808080"), pantalla("#A0A0A0", "#808080"));
+    expect(titulo.diferencias.join("\n")).toMatch(/color del texto .* en «ENTREGAS»/);
+    const etiqueta = compararDescripciones(pantalla("#F0F0F0", "#808080"), pantalla("#F0F0F0", "#E02020"));
+    expect(hayQueArreglar(etiqueta)).toBe(false);
+    expect(etiqueta.menores?.join("\n")).toMatch(/color del texto .* en «pend\.»/);
   });
 
   it("un texto TRADUCIDO en su sitio va como nota y no pone el rojo; su estilo sí se compara", () => {
@@ -205,7 +224,8 @@ describe("lo MENOR no pone el rojo", () => {
       { filas: [{ controles: [en("COPY", "#E0C0B0")] }], extras: [] },
       { filas: [{ controles: [en("COPIAR", "#202020")] }], extras: [] }
     );
-    expect(otroColor.diferencias.join("\n")).toContain("color del texto");
+    // Su estilo se compara: el color de un texto sale (aquí es el único, así que es detalle: no hay con qué decir que destaca).
+    expect([...otroColor.diferencias, ...(otroColor.menores ?? [])].join("\n")).toContain("color del texto");
   });
 
   it("una cifra no es la traducción de una palabra: «19» no empareja con «COPY»", () => {
@@ -234,5 +254,19 @@ describe("compararDescripciones: lo que va dentro de otro texto de la captura no
   it("sin esa línea, sí falta", () => {
     const sola: PantallaDescrita = { filas: [fila("pie", "PIE")], extras: [] };
     expect(compararDescripciones(maqueta, sola).faltan).toEqual(["«Framework:»"]);
+  });
+});
+
+/**
+ * **Lo medido del ESTILO no pone el rojo** (21-10-2026, validado con cinco pantallas de Maset contra el ojo): el bloque
+ * de arriba emparejado con otro, el color de una flecha tomado por el de «Volver», un borde dorado que «no tiene» la
+ * maqueta… Se dice como POSIBLE diferencia de diseño. Lo que sí pone el rojo: un texto que FALTA o que se ve RECORTADO.
+ */
+describe("hayQueArreglar: solo lo que falta o se ve recortado", () => {
+  it("un texto que falta pone el rojo; una forma o un color medidos, no", () => {
+    const c = (faltan: string[], diferencias: string[]) => ({ diferencias, faltan, recortes: [], extras: { maqueta: [], captura: [] } });
+    expect(hayQueArreglar(c(["«Limpiar»"], []))).toBe(true);
+    expect(hayQueArreglar(c([], ["forma recta → píldora en «Entrar»."]))).toBe(false);
+    expect(informeDeComparacion(c([], ["forma recta → píldora en «Entrar»."])).join("\n")).toMatch(/posible diseño, medido/);
   });
 });

@@ -239,6 +239,9 @@ const MUY_CERCA = 0.06;
 const conLetras = (t: string): boolean => /[0-9A-Za-zÁÉÍÓÚáéíóúÑñ]/.test(textoParaEmparejar(t));
 const decimal = (x: number, d = 1): string => x.toFixed(d).replace(".", ",");
 
+/** Cuántas veces la letra mediana de la maqueta tiene que medir un texto para ser IMPORTANTE (un título, un importe). */
+export const IMPORTANTE_POR_LETRA = 1.3;
+
 export interface ComparacionDeDescripciones {
   /** «forma píldora → círculo en «7», «8»…»: una línea por diferencia, con los controles que la tienen. */
   diferencias: string[];
@@ -339,6 +342,15 @@ export function compararDescripciones(maqueta: PantallaDescrita, captura: Pantal
   });
   const antes = new Set(pareja.keys());
   emparejar(otroTexto);
+  /**
+   * **Un texto IMPORTANTE**: su letra destaca sobre la de la maqueta (`IMPORTANTE_POR_LETRA` veces la mediana) o se describe
+   * grande. El color de uno así es DISEÑO —petición suya: «una etiqueta con un color diferente y que sea un elemento
+   * importante es una diferencia»—; el de un texto secundario, DETALLE.
+   */
+  const alturas = ms.map(({ c }) => c.alturaDeLetra).filter((a): a is number => a !== undefined).sort((a, b) => a - b);
+  const mediana = alturas.length === 0 ? undefined : alturas[Math.floor(alturas.length / 2)]!;
+  const importante = (c: ControlVisto): boolean =>
+    c.letra === "grande" || c.letra === "enorme" || (c.alturaDeLetra !== undefined && mediana !== undefined && c.alturaDeLetra >= mediana * IMPORTANTE_POR_LETRA);
   const notas: string[] = [];
   for (const i of pareja.keys()) {
     if (antes.has(i)) continue;
@@ -374,14 +386,14 @@ export function compararDescripciones(maqueta: PantallaDescrita, captura: Pantal
         const veces = a.alturaDeLetra / m.alturaDeLetra;
         if (veces > 1.3 || veces < 0.77) anotarLetra(`letra ${decimal(veces)} veces la de la maqueta`, m);
       } else if (m.letra !== undefined && a.letra !== undefined && m.letra !== a.letra) {
-        anotar(`letra ${NOMBRE_DE_LETRA[m.letra]} → ${NOMBRE_DE_LETRA[a.letra]}`, m);
+        anotarMenor(`letra ${NOMBRE_DE_LETRA[m.letra]} → ${NOMBRE_DE_LETRA[a.letra]}`, m);
       }
     }
     if (m.borde !== undefined && a.borde !== undefined && m.borde !== a.borde) anotar(a.borde ? "lleva un BORDE que la maqueta no tiene" : "le falta el borde de la maqueta", m);
-    if (m.alineacion !== undefined && a.alineacion !== undefined && m.alineacion !== a.alineacion) anotar(`texto alineado a ${m.alineacion} → a ${a.alineacion}`, m);
+    if (m.alineacion !== undefined && a.alineacion !== undefined && m.alineacion !== a.alineacion) anotarMenor(`texto alineado a ${m.alineacion} → a ${a.alineacion}`, m);
     if (m.fondo !== undefined && a.fondo !== undefined && distanciaDeColor(m.fondo, a.fondo) > DISTANCIA_DE_COLOR) anotar(`fondo ${redondo(m.fondo)} → ${redondo(a.fondo)}`, m);
     if (m.colorTexto !== undefined && a.colorTexto !== undefined && distanciaDeColor(m.colorTexto, a.colorTexto) > DISTANCIA_DE_COLOR) {
-      anotar(`color del texto ${redondo(m.colorTexto)} → ${redondo(a.colorTexto)}`, m);
+      (importante(m) ? anotar : anotarMenor)(`color del texto ${redondo(m.colorTexto)} → ${redondo(a.colorTexto)}`, m);
     }
   });
   // Un BORDE en la captura cuando la maqueta no tiene ninguno: también en lo que no tiene pareja (el visor).
@@ -391,8 +403,8 @@ export function compararDescripciones(maqueta: PantallaDescrita, captura: Pantal
     });
   }
 
-  const deLetra = [...gruposDeLetra.values()].reduce((n, q) => n + q.length, 0);
-  for (const [que, quienes] of gruposDeLetra) (deLetra > 1 ? grupos : gruposMenores).set(que, quienes);
+  // El TAMAÑO de la letra es un DETALLE (21-10-2026), de uno o de varios controles: se dice y no pone el rojo.
+  for (const [que, quienes] of gruposDeLetra) gruposMenores.set(que, quienes);
   const lineas = (g: Map<string, string[]>) =>
     [...g.entries()].sort((x, y) => y[1].length - x[1].length).map(([que, quienes]) => `${que} en ${quienes.join(", ")}${quienes.length > 3 ? ` (${quienes.length} controles)` : ""}.`);
   const menores = lineas(gruposMenores);
@@ -424,7 +436,7 @@ export function informeDeComparacion(c: ComparacionDeDescripciones, como: "medid
   ];
   for (const r of c.recortes) lineas.push(`- ${r}`);
   if (c.faltan.length > 0) lineas.push(`- No los encuentro en la captura: ${c.faltan.join(", ")}.`);
-  for (const d of c.diferencias) lineas.push(`- ${d}`);
+  for (const d of c.diferencias) lineas.push(`- (posible diseño, medido: compruébalo) ${d}`);
   if (c.extras.captura.length > 0) {
     lineas.push(
       `- Lo que se ve y no es un control, en la captura: ${c.extras.captura.join("; ")}.` +
@@ -432,10 +444,16 @@ export function informeDeComparacion(c: ComparacionDeDescripciones, como: "medid
     );
   }
   if (lineas.length === 1) lineas.push(c.menores === undefined ? "- Nada: cada control se ve como en la maqueta." : "- Nada que arreglar.");
-  for (const m of c.menores ?? []) lineas.push(`- (menor, no hace falta arreglarlo) ${m}`);
+  for (const m of c.menores ?? []) lineas.push(`- (detalle, no pone rojo) ${m}`);
   for (const n of c.notas ?? []) lineas.push(`- (nota) ${n}`);
   return lineas;
 }
 
-/** Hay algo que arreglar según la comparación. */
-export const hayQueArreglar = (c: ComparacionDeDescripciones): boolean => c.recortes.length + c.faltan.length + c.diferencias.length > 0;
+/**
+ * Hay algo que arreglar según la comparación: un texto que FALTA o que se ve RECORTADO. **Lo medido del ESTILO no pone el
+ * rojo** —forma, fondo, borde, color, bloques—: validado el 21-10-2026 con cinco pantallas de Maset contra el ojo, daba
+ * falsos positivos (el bloque de arriba emparejado con otro, el color de una flecha tomado por el de «Volver», un borde
+ * dorado que la maqueta «no tenía»). Se enseña como POSIBLE diferencia de diseño, y el rojo de estilo lo pone lo que
+ * vieron las dos miradas del modelo.
+ */
+export const hayQueArreglar = (c: ComparacionDeDescripciones): boolean => c.recortes.length + c.faltan.length > 0;

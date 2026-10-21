@@ -407,7 +407,9 @@ describe("xone_critica_visual con la GEOMETRÍA medida (MyAllXOne, la calculador
       pantalla: "DemoCalculadora",
       referencia: "/adjuntos/stitch/screen.png",
     });
-    expect(salida.indexOf("GEOMETRÍA, MEDIDA")).toBeLessThan(salida.indexOf("ESTILO, lo que dice el modelo"));
+    // Con maqueta, la opinión va en sus dos listas; una respuesta sin clasificar cuenta como DISEÑO.
+    expect(salida.indexOf("GEOMETRÍA, MEDIDA")).toBeGreaterThan(-1);
+    expect(salida.indexOf("GEOMETRÍA, MEDIDA")).toBeLessThan(salida.indexOf("DISEÑO, lo que vieron las dos miradas"));
   });
 
   it("una maqueta que es SOLO un PNG: comprueba lo del aparato y lo dice", async () => {
@@ -520,7 +522,7 @@ describe("el resumen del informe del crítico", () => {
     "",
     "COMPARACIÓN CONTROL A CONTROL, MEDIDA en los píxeles de cada control (la caja del árbol en la captura, la del code.html en la maqueta; en cada línea, maqueta → aparato):",
     "- No los encuentro en la captura: «Framework:», «Versión Code:».",
-    "- (menor, no hace falta arreglarlo) letra 1,3 veces la de la maqueta en «Bodegas Maset © 2026».",
+    "- (detalle, no pone rojo) letra 1,3 veces la de la maqueta en «Bodegas Maset © 2026».",
     "",
     "ESTILO, lo que dice el modelo que ve (una OPINIÓN; la redacción no es fiable: fíate de QUÉ",
     "control señala, no de su explicación, y míralo tú):",
@@ -528,17 +530,32 @@ describe("el resumen del informe del crítico", () => {
     "- En la píldora «LOGÍSTICA & REPARTO» el icono del camión queda muy separado del texto.",
   ];
 
-  it("dice POR QUÉ es rojo y cuánto hay de cada clase, en tres líneas", () => {
+  it("dice POR QUÉ es rojo —lo que no respeta el diseño— y cuántos detalles y notas hay", () => {
     expect(resumenDelInforme(cuerpo, "rojo")).toEqual([
-      "EN RESUMEN: rojo por lo MEDIDO, 1 bloqueante: la columna de la lista de la maqueta («Aplicación:», «Framework:», «Versión Code:») NO está en el aparato: ninguna fila lleva texto en ese sitio.",
-      "Por arreglar o mirar: 1 bloqueante, 2 diferencias medidas (y 1 menor, no hace falta) y 2 observaciones de estilo (una opinión: míralas tú).",
+      "EN RESUMEN: rojo, no respeta el diseño en 4 cosas: la columna de la lista de la maqueta («Aplicación:», «Framework:», «Versión Code:») NO está en el aparato: ninguna fila lleva texto en ese sitio. (y más abajo, el resto)",
+      "Detalles que se notan al comparar: 2. No ponen rojo ni hace falta otra vuelta por ellos, salvo que el encargo pida pulirlos.",
       "No cuentan: 1 nota (datos de ejemplo, textos traducidos o juntos en un control).",
     ]);
   });
 
-  it("un rojo que solo dice el modelo se dice así, y un verde sin nada no lleva cola", () => {
-    const soloEstilo = cuerpo.slice(9);
-    expect(resumenDelInforme(soloEstilo, "rojo")[0]).toBe("EN RESUMEN: rojo por lo que VE el modelo (una opinión); lo medido no tiene nada en rojo.");
-    expect(resumenDelInforme(["GEOMETRÍA, MEDIDA (…):", "- Nada: ningún control tapado."], "verde")).toEqual(["EN RESUMEN: verde, nada que arreglar."]);
+  it("con las dos listas del modelo: lo de DISEÑO cuenta para el rojo y los DETALLES no", () => {
+    const clasificado = [
+      "GEOMETRÍA, MEDIDA (…):",
+      "- Nada: ningún control tapado.",
+      "DISEÑO, lo que vieron las dos miradas del modelo (cambia cómo se ve: pone el rojo; fíate de QUÉ señala y míralo tú):",
+      "- Las filas no tienen esquinas redondeadas ni sombra.",
+      "DETALLES, se notan al comparar y NO ponen rojo (opinión del modelo):",
+      "- La flecha queda algo más a la izquierda.",
+      "- «RECAUDACIÓN ACUMULADA» es algo más grande.",
+    ];
+    expect(resumenDelInforme(clasificado, "rojo")[0]).toBe("EN RESUMEN: rojo, no respeta el diseño en 1 cosa: Las filas no tienen esquinas redondeadas ni sombra.");
+    expect(resumenDelInforme(clasificado.slice(0, 2).concat(clasificado.slice(4)), "verde")).toEqual([
+      "EN RESUMEN: verde, respeta el diseño.",
+      "Detalles que se notan al comparar: 2. No ponen rojo ni hace falta otra vuelta por ellos, salvo que el encargo pida pulirlos.",
+    ]);
+  });
+
+  it("un verde sin nada no lleva cola", () => {
+    expect(resumenDelInforme(["GEOMETRÍA, MEDIDA (…):", "- Nada: ningún control tapado."], "verde")).toEqual(["EN RESUMEN: verde, respeta el diseño."]);
   });
 });

@@ -246,9 +246,13 @@ describe("el crítico con una maqueta delante", () => {
     expect(PROMPT_VISUAL_CON_REFERENCIA).toMatch(/No diagnostiques la causa/);
     // El gusto sigue fuera.
     expect(PROMPT_VISUAL_CON_REFERENCIA).toMatch(/de gustos, nada/);
-    // Y el mismo contrato de salida que sin ella: `objetoDe` lee lo mismo.
-    expect(PROMPT_VISUAL_CON_REFERENCIA).toContain('"hallazgos"');
+    // Con maqueta, las diferencias van en DOS listas: el color lo decide el código con las de diseño.
+    expect(PROMPT_VISUAL_CON_REFERENCIA).toContain('"diseno"');
+    expect(PROMPT_VISUAL_CON_REFERENCIA).toContain('"detalles"');
     expect(PROMPT_VISUAL_CON_REFERENCIA).toContain('"necesito"');
+    // Y la frontera, con los datos fuera.
+    expect(PROMPT_VISUAL_CON_REFERENCIA).toMatch(/CLASIFICA/);
+    expect(PROMPT_VISUAL_CON_REFERENCIA).toMatch(/datos inventados/);
   });
 
   /**
@@ -257,17 +261,47 @@ describe("el crítico con una maqueta delante", () => {
    * proveedor las numere, y eso es una suposición, no un contrato. Si se invirtieran, el
    * crítico contaría las diferencias al revés y se leerían igual de bien.
    */
-  it("con maqueta mira DOS veces a la vez y junta lo visto: lo que vio una pasada no lo tapa un verde de la otra", async () => {
+  /**
+   * **El veredicto responde a «¿respeta el diseño?»** (21-10-2026): las 31 críticas con maqueta del workspace eran rojas,
+   * porque el verde exigía CERO diferencias. Rojo solo con una diferencia de DISEÑO que vean las DOS miradas; lo que ve una
+   * sola, o es detalle, se dice y no pone rojo.
+   */
+  const dos = (a: object, b: object) => {
     let n = 0;
-    const v = await juzgarPantalla(PANTALLA, { pantalla: "X" }, async () =>
-      ++n === 1
-        ? JSON.stringify({ veredicto: "verde", hallazgos: [] })
-        : JSON.stringify({ veredicto: "rojo", hallazgos: ["Las flechas de ENTREGAS e INCIDENCIAS no están en la misma vertical que las demás."] }),
-      PANTALLA,
-    );
-    expect(n).toBe(2);
+    return juzgarPantalla(PANTALLA, { pantalla: "X" }, async () => JSON.stringify(++n === 1 ? a : b), PANTALLA);
+  };
+  const FILAS_A = "Las filas de la lista no tienen esquinas redondeadas ni sombra: son rectángulos planos.";
+  const FILAS_B = "Las tarjetas de la lista son rectángulos planos, sin las esquinas redondeadas ni la sombra de la maqueta.";
+
+  it("con maqueta mira DOS veces: una diferencia de DISEÑO que ven las dos es ROJO", async () => {
+    const v = await dos({ diseno: [FILAS_A], detalles: ["La flecha queda algo más a la izquierda."] }, { diseno: [FILAS_B], detalles: [] });
     expect(v.veredicto).toBe("rojo");
-    expect(v.observaciones).toHaveLength(1);
+    expect(v.diseno).toEqual([FILAS_A]);
+    expect(v.detalles).toEqual(["La flecha queda algo más a la izquierda."]);
+    expect(v.observaciones).toEqual([FILAS_A, "La flecha queda algo más a la izquierda."]);
+  });
+
+  it("lo que ve UNA sola mirada baja a detalle: VERDE, y se dice", async () => {
+    const v = await dos({ diseno: [FILAS_A], detalles: [] }, { diseno: [], detalles: [] });
+    expect(v.veredicto).toBe("verde");
+    expect(v.diseno).toEqual([]);
+    expect(v.detalles).toEqual([FILAS_A]);
+  });
+
+  it("solo detalles es VERDE con sus detalles: el diseño se respeta", async () => {
+    const v = await dos({ diseno: [], detalles: ["«RECAUDACIÓN ACUMULADA» es algo más grande."] }, { diseno: [], detalles: ["El hueco sobre el pie es mayor."] });
+    expect(v.veredicto).toBe("verde");
+    expect(v.detalles).toHaveLength(2);
+  });
+
+  it("si aún pide otra pantalla y nada de diseño está confirmado, es INDETERMINADO", async () => {
+    const v = await dos({ diseno: [], detalles: [], necesito: ["Productos"] }, { diseno: [], detalles: [] });
+    expect(v.veredicto).toBe("indeterminado");
+  });
+
+  it("una pasada con el contrato VIEJO (`hallazgos`) cuenta como diseño: ante la duda, no se regala el verde", async () => {
+    const v = await dos({ veredicto: "rojo", hallazgos: [FILAS_A] }, { diseno: [FILAS_B], detalles: [] });
+    expect(v.veredicto).toBe("rojo");
   });
 
   it("con maqueta, si una pasada falla y la otra contesta, vale la que contestó", async () => {
