@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, it, expect } from "vitest";
 import type { Acto } from "./actos.js";
-import { conLineaDeTool, acumularTotales, consumoDeLosActos, restarPorModelo, SIN_DESGLOSE, sumarConsumo, type ConsumoDeTurno } from "./actos.js";
+import { conLineaDeTool, acumularTotales, consumoDeLosActos, gastoEntre, restarPorModelo, SIN_DESGLOSE, sumarConsumo, tokensDelGasto, type ConsumoDeTurno } from "./actos.js";
 
 describe("core/actos", () => {
   it("no importa nada de cli/: el acto es de dominio, no de una piel", () => {
@@ -174,5 +174,30 @@ describe("el consumo POR MODELO", () => {
     const antes = { a: { cuenta: "modelo" as const, entrada: 10, salida: 1, cache: 5 }, b: { cuenta: "modelo" as const, entrada: 3, salida: 0, cache: 0 } };
     const despues = { a: { cuenta: "modelo" as const, entrada: 25, salida: 3, cache: 9 }, b: antes.b, c: { cuenta: "externo" as const, entrada: 1, salida: 1, cache: 0 } };
     expect(restarPorModelo(despues, antes)).toEqual({ a: { cuenta: "modelo", entrada: 15, salida: 2, cache: 4 }, c: { cuenta: "externo", entrada: 1, salida: 1, cache: 0 } });
+  });
+});
+
+/**
+ * El gasto de UNA tarea: lo que creció el acumulado de su sesión entre que empezó y que acabó (petición suya, 21-10-2026:
+ * «en el resumen final de la tarea también quiero que pongas cuánto ha gastado»). Una continuación comparte el hilo de su
+ * madre, así que el acumulado entero contaría lo de la madre.
+ */
+describe("gastoEntre y tokensDelGasto", () => {
+  const c = (entrada: number, salida: number, cache: number, externo = { entrada: 0, salida: 0, cache: 0 }): ConsumoDeTurno => ({
+    modelo: { entrada, salida, cache },
+    externo,
+  });
+
+  it("la diferencia entre el antes y el después; sin antes, el después entero", () => {
+    expect(gastoEntre(c(1000, 100, 800), c(1500, 160, 1100))).toEqual(c(500, 60, 300));
+    expect(gastoEntre(undefined, c(1500, 160, 1100))).toEqual(c(1500, 160, 1100));
+  });
+
+  it("sin después no consta: ausente, no cero", () => {
+    expect(gastoEntre(c(10, 1, 0), undefined)).toBeUndefined();
+  });
+
+  it("los tokens con la convención de cada cuenta: el grafo lleva la caché DENTRO de su entrada, el externo no", () => {
+    expect(tokensDelGasto(c(1000, 200, 800, { entrada: 300, salida: 50, cache: 100 }))).toEqual({ tokens: 200 + 200 + 300 + 50, cache: 900 });
   });
 });

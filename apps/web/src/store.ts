@@ -1103,6 +1103,7 @@ function sonSesiones(
   deTarea?: unknown;
   trabajando?: unknown;
   consumo?: unknown;
+  consumoEnCurso?: unknown;
   ticket?: unknown;
   ticketConector?: unknown;
 }[] {
@@ -1822,6 +1823,8 @@ export function crearStoreDelCliente(): {
                   ...(t["terminadaAMano"] === true ? { terminadaAMano: true } : {}),
                   // Lo crítico y las observaciones del cierre: solo listas de textos; lo demás no entra.
                   ...cierreDeTarea(t["cierre"]),
+                  // Lo que GASTÓ: la misma lectura que el consumo de una sesión; lo que no se entiende es «no consta».
+                  ...((g) => (g === undefined ? {} : { gasto: g }))(consumoDeSesion(t["gasto"])),
                   // El ticket del gestor: solo con clave Y conector de texto (sin ellos no hay ni qué enseñar ni a quién
                   // nombrar). Un `url` se queda solo si es http(s): va a un `href`.
                   ...ticketDeTarea(t["ticket"]),
@@ -2359,6 +2362,8 @@ export function crearStoreDelCliente(): {
                       // son dos cosas distintas —una sesión anterior a esto y una que salió
                       // gratis— y solo la segunda se pinta.
                       const consumo = consumoDeSesion(s.consumo);
+                      // Y lo del turno EN CURSO, con la misma lectura: lo que no se entiende es «no consta».
+                      const consumoEnCurso = consumoDeSesion(s.consumoEnCurso);
                       return {
                         id: s.id,
                         titulo: s.titulo,
@@ -2372,6 +2377,7 @@ export function crearStoreDelCliente(): {
                         // trabaja, y con ella un indicador de actividad que nunca se apaga.
                         ...(s.trabajando === true ? { trabajando: true as const } : {}),
                         ...(consumo === undefined ? {} : { consumo }),
+                        ...(consumoEnCurso === undefined ? {} : { consumoEnCurso }),
                         // La clave del ticket, IXCODE-11: solo si es texto no vacío. Como
                         // `ultimoTurno` y no como `deTarea` —no es un booleano de verdad ni
                         // el peligro de tomar un truthy por cierto—, pero igual se filtra:

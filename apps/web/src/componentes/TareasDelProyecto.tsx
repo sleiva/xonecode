@@ -17,6 +17,7 @@ import { EntregaDeTarea } from "./EntregaDeTarea.js";
 import { MirarTarea } from "./MirarTarea.js";
 import { QuienEjecutaTareas } from "./QuienEjecutaTareas.js";
 import { selloDeFecha } from "../selloDeFecha.js";
+import { textoDelGastoDeTarea } from "../gastoDelProyecto.js";
 import { Button, MarkdownText, Modal } from "@deepseek-ai/dsh-client-ui-primitives";
 import { protegerDolares } from "../protegerDolares.js";
 import { ETIQUETAS_DE_CODIGO } from "../etiquetasDeCodigo.js";
@@ -617,6 +618,8 @@ function FilaFinalizada({
             </section>
           ) : null}
           {salvedad === undefined ? null : <p className={estilos.salvedad}>{`Se entregó con una condición menos: ${salvedad}`}</p>}
+          {/* Lo que GASTÓ (petición suya: que el resumen final lo diga). Sin gasto que conste, nada: no es un cero. */}
+          {t.gasto === undefined ? null : <p className={estilos.gasto}>{`Gastó: ${textoDelGastoDeTarea(t.gasto)}`}</p>}
           {conConversacion && alPedirUltimaRespuesta !== undefined ? (
             <section aria-label="Qué hizo">
               <h4 className={estilos.rotuloHizo}>Qué hizo</h4>

@@ -642,3 +642,11 @@ a.ticket:hover {
 .confirmarReversion p {
   margin: 0;
 }
+
+/* Lo que gastó la tarea, al desplegarla: una línea discreta, como la salvedad. */
+.gasto {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}

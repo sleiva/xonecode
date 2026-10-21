@@ -162,6 +162,8 @@ export interface ConsolaWeb {
    * desordenar el `.jsonl`.
    */
   estables(): number;
+  /** Lo que lleva gastado el turno EN CURSO (`PielWeb.consumoEnCurso`), para apuntarlo a mitad (`vestibulo.ts#volcar`). */
+  consumoEnCurso(): ConsumoDeTurno | undefined;
   /** Apunta un acto que no viene ni de la piel ni de un comando: lo que el SERVIDOR resolvió por un
    *  botón (una propuesta de tareas encolada o descartada). Se emite y entra en el transcript. */
   anotar(acto: Acto): void;
@@ -715,6 +717,7 @@ export function crearConsolaWeb(opciones: OpcionesDeConsolaWeb = {}): ConsolaWeb
     },
     actos: () => actos,
     estables: () => (indiceDelUltimoDePiel < 0 ? actos.length : indiceDelUltimoDePiel),
+    consumoEnCurso: () => pielWeb.consumoEnCurso(),
     anotar,
     eventosEmitidos: () => transporte.emitidos(),
     mensajesDeAprobacion: () => (aprobacionEnVuelo === undefined ? [] : [aprobacionEnVuelo.mensaje]),

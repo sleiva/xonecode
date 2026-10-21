@@ -37,6 +37,11 @@ export interface PielWeb {
    * sustituye el último por el nuevo; cualquier otro tipo se añade.
    */
   alActo: (escucha: (acto: Acto) => void) => void;
+  /**
+   * Lo que lleva gastado el turno EN CURSO, sin estampar nada: la misma resta que el `fin`, para apuntarla a mitad de
+   * turno (`sesiones.ts#anotarConsumoEnCurso`). `undefined` = sin lector, o nada gastado todavía.
+   */
+  consumoEnCurso: () => ConsumoDeTurno | undefined;
 }
 
 /**
@@ -195,6 +200,25 @@ export function crearPielWeb(
    * afirmaría una medida que nadie hizo. Ausente ya significa «no consta», y quien lea
    * tiene que poder distinguirlo (es lo que hace `consumoDeLosActos`).
    */
+  /** La resta contra lo último estampado, sin moverlo: la comparten el `fin` y `consumoEnCurso`. */
+  const desdeLoEstampado = (ahora: ConsumoDeTurno): ConsumoDeTurno => {
+    const antes = estampado;
+    return antes === undefined
+      ? ahora
+      : {
+          modelo: restar(ahora.modelo, antes.modelo),
+          externo: restar(ahora.externo, antes.externo),
+          ...(ahora.ventana === undefined ? {} : { ventana: ahora.ventana }),
+          ...(ahora.porModelo === undefined ? {} : { porModelo: restarPorModelo(ahora.porModelo, antes.porModelo ?? {}) }),
+        };
+  };
+  const gastoAlgo = (c: ConsumoDeTurno): boolean => c.modelo.entrada + c.modelo.salida + c.externo.entrada + c.externo.salida > 0;
+  const consumoEnCurso = (): ConsumoDeTurno | undefined => {
+    const ahora = consumoAcumulado?.();
+    if (ahora === undefined) return undefined;
+    const delta = desdeLoEstampado(ahora);
+    return gastoAlgo(delta) ? delta : undefined;
+  };
   const deltaDelTurno = (): { consumo?: ConsumoDeTurno } => {
     const ahora = consumoAcumulado?.();
     if (ahora === undefined) return {};
@@ -471,5 +495,6 @@ export function crearPielWeb(
     alActo: (escucha) => {
       escuchas.push(escucha);
     },
+    consumoEnCurso,
   };
 }

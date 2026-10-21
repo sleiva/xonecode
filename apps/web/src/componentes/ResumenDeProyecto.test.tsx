@@ -137,6 +137,26 @@ describe("el gasto", () => {
     expect(screen.getByRole("img")).toBeTruthy();
     expect(screen.getByText(/1 sin gasto que conste, fuera del total/)).toBeTruthy();
   });
+
+  /** Petición suya (21-10-2026): el gasto de una tarea que trabaja se suma ya, y se dice que está en curso. */
+  it("una sesión con su turno EN CURSO entra en el total y se dice", async () => {
+    montar({
+      id: "p1",
+      nombre: "Tienda",
+      local: true,
+      sesiones: [
+        {
+          id: "tarea",
+          titulo: "",
+          ultimoTurno: "2026-10-21T10:00:00.000Z",
+          consumoEnCurso: { modelo: { entrada: 1500, salida: 500, cache: 1000 }, externo: { entrada: 0, salida: 0, cache: 0 } },
+        },
+      ],
+    });
+    await asentar();
+    expect(screen.getByRole("img")).toBeTruthy();
+    expect(screen.getByText(/1 en curso, sumando mientras trabaja/)).toBeTruthy();
+  });
 });
 
 describe("ResumenDeProyecto", () => {

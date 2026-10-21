@@ -7,6 +7,8 @@
  *
  * Puro: `core/` no importa `@modelcontextprotocol` (`imports.test.ts`).
  */
+import { tokensDelGasto, type ConsumoDeTurno } from "./actos.js";
+
 export type CategoriaDeTarea = "por-hacer" | "en-curso" | "terminada";
 
 export interface Vinculo {
@@ -369,6 +371,8 @@ export interface DatosDeCierre {
   criticos?: readonly string[];
   /** Lo que quedó con problemas o detalles (el juez, el verificador): `## Observaciones`, no crítico. */
   observaciones?: readonly string[];
+  /** Lo que GASTÓ la tarea (`Tarea.gasto`): `## Gasto`. Petición suya (21-10-2026). Ausente = no consta, sin sección. */
+  gasto?: ConsumoDeTurno;
 }
 
 /** Cuánto del resumen entra en el comentario: un ticket no es el sitio del transcript entero. */
@@ -386,6 +390,7 @@ export function comentarioDeCierre(datos: DatosDeCierre): string {
     seccionQueCambio(datos.ficheros, datos.commits, datos.atribucion),
     seccionVerificacion(datos.veredicto),
     ...((datos.observaciones ?? []).length > 0 ? [`## Observaciones\n\n${datos.observaciones!.map((o) => `- ${o}`).join("\n")}`] : []),
+    ...(datos.gasto === undefined ? [] : [`## Gasto\n\n${textoDelGasto(datos.gasto)}`]),
   ];
   if (datos.plan !== undefined && datos.plan.trim() !== "") secciones.push(`## Plan\n\n${datos.plan.trim()}`);
   if (datos.resumen !== undefined && datos.resumen.trim() !== "") {
@@ -396,6 +401,23 @@ export function comentarioDeCierre(datos: DatosDeCierre): string {
   }
   secciones.push("— escrito por xonecode");
   return secciones.join("\n\n");
+}
+
+/** Un entero con sus miles separados por punto, como se escribe en español (1.300.000). */
+const entero = (n: number): string => String(Math.round(Math.max(0, n))).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+
+/**
+ * El gasto en una línea, con las cifras ENTERAS (en el ticket no hay sitio para dudar de un «1,3M»): los tokens que se pueden
+ * acotar, la caché aparte y el agente externo solo si gastó. Las dos cuentas no se suman (`core/actos.ts#tokensDelGasto`).
+ */
+function textoDelGasto(gasto: ConsumoDeTurno): string {
+  const modelo = tokensDelGasto({ ...gasto, externo: { entrada: 0, salida: 0, cache: 0 } });
+  const externo = tokensDelGasto({ ...gasto, modelo: { entrada: 0, salida: 0, cache: 0 } });
+  return [
+    `${entero(modelo.tokens)} tokens`,
+    ...(modelo.cache > 0 ? [`${entero(modelo.cache)} de caché`] : []),
+    ...(externo.tokens > 0 ? [`agente externo ${entero(externo.tokens)} tokens`] : []),
+  ].join(" · ");
 }
 
 /**

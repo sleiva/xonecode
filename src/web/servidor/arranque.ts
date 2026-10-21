@@ -328,6 +328,9 @@ import { ErrorDeDescargaCortada, escribirPaquete, listarSoporte, motivoParaNoExp
 import { nombreDelPaquete } from "../../core/paqueteDeSoporte.js";
 
 /** Las dos rutas del cable. El cliente las tiene escritas en `apps/web/src/conexion.ts`. */
+/** Cada cuánto se reanuncia el alta mientras hay turnos en curso, para que su gasto se vea crecer (`relojDelGastoEnCurso`). */
+export const INTERVALO_DEL_GASTO_EN_CURSO_MS = 30_000;
+
 /**
  * Cuánto se espera al aviso de «lo que ya había sin commitear» antes de anunciar sin él.
  *
@@ -336,6 +339,7 @@ import { nombreDelPaquete } from "../../core/paqueteDeSoporte.js";
  * siguiente flanco de turno lo trae. Bloquear la apertura por un `git status` lento es la
  * definición de que el aviso frena, que es justo lo que su propia regla prohíbe.
  */
+
 export const MS_DE_TRABAJO_AL_ABRIR = 2000;
 
 /**
@@ -1003,6 +1007,8 @@ export async function datosDeCierreDeTarea(tarea: Tarea): Promise<DatosDeCierre>
   const delCierre = {
     ...((tarea.cierre?.criticos ?? []).length > 0 ? { criticos: tarea.cierre!.criticos } : {}),
     ...((tarea.cierre?.observaciones ?? []).length > 0 ? { observaciones: tarea.cierre!.observaciones } : {}),
+    // Y lo que GASTÓ (petición suya, 21-10-2026): su `## Gasto` en el comentario.
+    ...(tarea.gasto === undefined ? {} : { gasto: tarea.gasto }),
   };
   if (tarea.sesion === undefined) return { ficheros: [], commits: [], ...delCierre };
   try {
@@ -3457,6 +3463,8 @@ export function montarRutas(
         ...(s.tarea === undefined ? {} : { deTarea: true as const }),
         ...(trabajando.has(s.id) ? { trabajando: true as const } : {}),
         ...(s.consumo === undefined ? {} : { consumo: s.consumo }),
+        // Y lo que lleva gastado el turno EN CURSO: el Resumen lo suma (petición suya: que el gasto de una tarea larga se vea).
+        ...(s.consumoEnCurso === undefined ? {} : { consumoEnCurso: s.consumoEnCurso }),
         // Solo la CLAVE: el resto del ticket (conector, sitio) se queda en el host hasta
         // que algo lo necesite (`SesionDelCable.ticket`). `?.` y no `===undefined`: un
         // índice tocado a mano puede traer `ticket: null`, y esto no es sitio para tumbar
@@ -5999,6 +6007,18 @@ export function montarRutas(
     return tope === undefined ? { usado } : { usado, tope };
   };
   vestibulo.alCambiarConsumo(() => emitirConsumo());
+
+  /**
+   * **Mientras alguien trabaja, el alta se reanuncia cada `INTERVALO_DEL_GASTO_EN_CURSO_MS`**: lleva lo que va gastando
+   * cada turno en curso (`SesionDelCable.consumoEnCurso`, que el volcado a mitad apunta). Sin esto el gasto del proyecto
+   * solo se movía en los DOS flancos del turno, y una tarea es un turno de una hora (petición suya, 21-10-2026: «el conteo
+   * no me acumula lo que se consume en las tareas»). Sin nadie trabajando no hace nada: no hay nada nuevo que contar.
+   */
+  const relojDelGastoEnCurso = setInterval(() => {
+    const trabajando = [...vestibulo.proyectosAbiertos(), ...vestibulo.tareasAbiertas()].some((c) => c.turnoEnVuelo);
+    if (trabajando) void anunciarAlta().catch(contar);
+  }, INTERVALO_DEL_GASTO_EN_CURSO_MS);
+  relojDelGastoEnCurso.unref?.();
 
   vestibulo.alCambiarTurno(() => {
     // La cola se vuelve a mirar: por aquí pasa también el CIERRE de una consola de segundo

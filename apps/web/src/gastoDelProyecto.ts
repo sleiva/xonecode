@@ -1,3 +1,4 @@
+import { abreviar } from "./cifras.js";
 import { desglosarConsumo, type CuentaDeTokens } from "./consumoPintable.js";
 import { ordenarPorUltimoTurno } from "./componentes/Barra.js";
 import type { ConsumoDeTurno } from "./tipos.js";
@@ -39,6 +40,8 @@ export interface BarraDeGasto {
   ultimoTurno?: string;
   modelo: GastoDeUnaCuenta;
   externo: GastoDeUnaCuenta;
+  /** Su turno está EN CURSO: la barra crece mientras trabaja. Ausente = no. */
+  enCurso?: true;
 }
 
 export interface GastoDelProyecto {
@@ -52,6 +55,8 @@ export interface GastoDelProyecto {
   sinGasto: number;
   /** Si alguna sesión tiene gasto de agente externo: si no, esa serie ni se pinta. */
   hayExterno: boolean;
+  /** Cuántas sesiones tienen un turno EN CURSO con gasto: su parte ya está en el total y crece mientras trabaja. */
+  enCurso: number;
 }
 
 function deUnaCuenta(cuenta: "modelo" | "externo", consumo: ConsumoDeTurno): GastoDeUnaCuenta {
@@ -65,12 +70,21 @@ const sumar = (a: GastoDeUnaCuenta, b: GastoDeUnaCuenta): GastoDeUnaCuenta => ({
   cache: a.cache + b.cache,
 });
 
+/** Las dos medidas de una sesión juntas: lo acumulado y lo del turno EN CURSO (que el `fin` suelta, así que no se repite). */
+function sumarConsumos(a: ConsumoDeTurno | undefined, b: ConsumoDeTurno | undefined): ConsumoDeTurno | undefined {
+  if (a === undefined) return b;
+  if (b === undefined) return a;
+  const cuenta = (x: CuentaDeTokens, y: CuentaDeTokens): CuentaDeTokens => ({ entrada: x.entrada + y.entrada, salida: x.salida + y.salida, cache: x.cache + y.cache });
+  return { modelo: cuenta(a.modelo, b.modelo), externo: cuenta(a.externo, b.externo) };
+}
+
 export function gastoDelProyecto(
-  sesiones: readonly { id: string; titulo: string; ultimoTurno?: string; consumo?: ConsumoDeTurno }[]
+  sesiones: readonly { id: string; titulo: string; ultimoTurno?: string; consumo?: ConsumoDeTurno; consumoEnCurso?: ConsumoDeTurno }[]
 ): GastoDelProyecto {
-  const conConsumo = sesiones.filter(
-    (s): s is typeof s & { consumo: ConsumoDeTurno } => s.consumo !== undefined
-  );
+  // Lo del turno EN CURSO se suma (petición suya, 21-10-2026): una tarea es un turno largo y no constaba hasta el `fin`.
+  const conConsumo = sesiones
+    .map((s) => ({ ...s, consumo: sumarConsumos(s.consumo, s.consumoEnCurso), enCurso: s.consumoEnCurso !== undefined }))
+    .filter((s): s is typeof s & { consumo: ConsumoDeTurno } => s.consumo !== undefined);
   const vacio = { tokens: 0, cache: 0 };
   const total = conConsumo.reduce(
     (acc, s) => ({
@@ -89,6 +103,7 @@ export function gastoDelProyecto(
       ...(s.ultimoTurno === undefined ? {} : { ultimoTurno: s.ultimoTurno }),
       modelo: deUnaCuenta("modelo", s.consumo),
       externo: deUnaCuenta("externo", s.consumo),
+      ...(s.enCurso ? { enCurso: true as const } : {}),
     }));
   return {
     barras,
@@ -96,5 +111,21 @@ export function gastoDelProyecto(
     conGasto: conConsumo.length,
     sinGasto: sesiones.length - conConsumo.length,
     hayExterno: conConsumo.some((s) => deUnaCuenta("externo", s.consumo).tokens > 0),
+    enCurso: conConsumo.filter((s) => s.enCurso).length,
   };
+}
+
+/**
+ * El gasto de UNA tarea en una línea (Finalizadas; petición suya, 21-10-2026: que el resumen final diga cuánto gastó). Con
+ * la MISMA convención que el gráfico (`deUnaCuenta`): las dos cuentas no se suman, y la del agente externo solo sale si
+ * gastó algo.
+ */
+export function textoDelGastoDeTarea(gasto: ConsumoDeTurno): string {
+  const m = deUnaCuenta("modelo", gasto);
+  const e = deUnaCuenta("externo", gasto);
+  return [
+    `${abreviar(m.tokens)} tokens`,
+    ...(m.cache > 0 ? [`${abreviar(m.cache)} de caché`] : []),
+    ...(e.tokens > 0 ? [`agente externo ${abreviar(e.tokens)} tokens`] : []),
+  ].join(" · ");
 }

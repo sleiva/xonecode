@@ -74,6 +74,7 @@ import { asistenteDeModelo, type ResultadoDelAsistente } from "../../cli/wizardI
 import { crearConsolaWeb, type ConsolaWeb, type OpcionesDeConsolaWeb } from "./consolaWeb.js";
 import {
   anotarActo,
+  anotarConsumoEnCurso,
   anotarTicket,
   borrarSesion,
   crearSesion,
@@ -184,7 +185,7 @@ export interface PuertoDeSesiones {
   /** El índice de sesiones de un proyecto ya bajado. Una carpeta que no existe es una
    *  lista vacía, no un error: el proyecto todavía no se ha abierto nunca. `consumo` es el
    *  acumulado de la sesión entera, y ausente es «no consta» — nunca cero. */
-  listar(raiz: string): { id: string; titulo: string; ultimoTurno?: string; tarea?: string; consumo?: ConsumoDeTurno; ticket?: TicketDeSesion }[];
+  listar(raiz: string): { id: string; titulo: string; ultimoTurno?: string; tarea?: string; consumo?: ConsumoDeTurno; consumoEnCurso?: ConsumoDeTurno; ticket?: TicketDeSesion }[];
   /** Da de alta la entrada del índice. `tarea` es el id de la TAREA que abrió la sesión, y
    *  solo lo trae la puerta de las tareas: ausente es «no consta». */
   crear(raiz: string, id?: string, tarea?: string): string;
@@ -219,6 +220,8 @@ export interface PuertoDeSesiones {
   /** Liga una sesión a un ticket de Jira (IXCODE-11). El cuarto de la misma familia, sin
    *  forma de quitarlo todavía —nadie la pidió. */
   anotarTicket?(raiz: string, id: string, ticket: TicketDeSesion): boolean;
+  /** Lo que lleva gastado el turno EN CURSO (`sesiones.ts#anotarConsumoEnCurso`): el volcado a mitad lo apunta. */
+  anotarConsumoEnCurso?(raiz: string, id: string, consumo: ConsumoDeTurno | undefined): boolean;
 }
 
 const SESIONES_EN_DISCO: PuertoDeSesiones = {
@@ -233,6 +236,7 @@ const SESIONES_EN_DISCO: PuertoDeSesiones = {
   anotarMotor,
   elegirModo,
   anotarTicket,
+  anotarConsumoEnCurso,
 };
 
 /**
@@ -774,7 +778,7 @@ export interface Vestibulo {
    *  acumulado de la sesión entera, y ausente es «no consta» — nunca cero. */
   sesionesDe(
     raiz: string
-  ): { id: string; titulo: string; ultimoTurno?: string; tarea?: string; consumo?: ConsumoDeTurno; ticket?: TicketDeSesion }[];
+  ): { id: string; titulo: string; ultimoTurno?: string; tarea?: string; consumo?: ConsumoDeTurno; consumoEnCurso?: ConsumoDeTurno; ticket?: TicketDeSesion }[];
   /**
    * Borra una sesión guardada, con su marca de git.
    *
@@ -1738,6 +1742,9 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       const volcadoAMitad = setInterval(() => {
         try {
           volcar(consolaWeb.estables());
+          // Y lo que lleva gastado, AUNQUE no haya actos nuevos (pensando un rato largo no los hay): una tarea es un turno
+          // largo y su gasto no constaba hasta el `fin` (petición suya, 21-10-2026). El `fin` lo suma y lo suelta.
+          if (anotada) sesiones.anotarConsumoEnCurso?.(raiz, idSesion, consolaWeb.consumoEnCurso());
         } catch {
           // El índice o el disco no dejaron: lo intenta el siguiente, y el del `finally`.
         }

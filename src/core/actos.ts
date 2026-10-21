@@ -421,6 +421,39 @@ export function acumularTotales(a: ConsumoDeTurno | undefined, delta: ConsumoDeT
 }
 
 /**
+ * **Lo que creció un acumulado** entre dos medidas: el gasto de UNA tarea es lo que creció el de su sesión entre que empezó
+ * y que acabó —una continuación comparte el hilo de su madre, y el acumulado entero contaría lo de la madre—. Sin `antes`,
+ * el `despues` entero (la sesión nació con la tarea); sin `despues`, «no consta». Cuenta a cuenta y sin bajar de cero.
+ */
+export function gastoEntre(antes: ConsumoDeTurno | undefined, despues: ConsumoDeTurno | undefined): ConsumoDeTurno | undefined {
+  if (despues === undefined) return undefined;
+  if (antes === undefined) return acumularTotales(undefined, despues);
+  const menos = (a: ConsumoDeTurno["modelo"], b: ConsumoDeTurno["modelo"]) => ({
+    entrada: Math.max(0, a.entrada - b.entrada),
+    salida: Math.max(0, a.salida - b.salida),
+    cache: Math.max(0, a.cache - b.cache),
+  });
+  return {
+    modelo: menos(despues.modelo, antes.modelo),
+    externo: menos(despues.externo, antes.externo),
+    ...(despues.porModelo === undefined ? {} : { porModelo: restarPorModelo(despues.porModelo, antes.porModelo ?? {}) }),
+  };
+}
+
+/**
+ * Un gasto en dos cifras: los tokens que se pueden acotar (entrada NUEVA + salida) y la caché aparte, con la convención de
+ * cada cuenta —el grafo lleva la caché DENTRO de su entrada, un agente externo no—. La misma que el gasto del proyecto
+ * del cliente (`apps/web/src/gastoDelProyecto.ts`).
+ */
+export function tokensDelGasto(c: ConsumoDeTurno): { tokens: number; cache: number } {
+  const nuevaDelModelo = Math.max(0, c.modelo.entrada - c.modelo.cache);
+  return {
+    tokens: nuevaDelModelo + c.modelo.salida + c.externo.entrada + c.externo.salida,
+    cache: c.modelo.cache + c.externo.cache,
+  };
+}
+
+/**
  * Una línea de cierre de racha del colapsador del motor (`core/notify.ts`): «→ lee ×3 — …».
  * Devuelve su prefijo icono+verbo («→ lee»), o undefined si no es un cierre.
  */

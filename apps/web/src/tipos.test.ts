@@ -415,6 +415,7 @@ const FILA_COMPLETA_DE_SESION = {
   deTarea: true as const,
   trabajando: true as const,
   consumo: { modelo: { entrada: 11_000, salida: 200, cache: 9_000 }, externo: { entrada: 7, salida: 3, cache: 0 } },
+  consumoEnCurso: { modelo: { entrada: 3_000, salida: 40, cache: 2_000 }, externo: { entrada: 0, salida: 0, cache: 0 } },
   ticket: "IXCODE-12",
   ticketConector: "jira",
 };
@@ -471,6 +472,7 @@ const FILA_COMPLETA = {
   },
   terminadaAMano: true,
   cierre: { criticos: ["pantalla: falta «Turno de Día»"], observaciones: ["el juez de QA dijo «rojo»"] },
+  gasto: { modelo: { entrada: 1600, salida: 160, cache: 1300 }, externo: { entrada: 0, salida: 0, cache: 0 } },
   ticket: { clave: "KAN-7", conector: "jira", url: "https://x.atlassian.net/browse/KAN-7", aviso: "no se pudo pasar a PROBAR" },
   pantallasDeStitch: [{ name: "projects/1/screens/ab", titulo: "Listado de Entregas", proyecto: "Maset" }],
   reencolable: { texto: "Termina lo pendiente." },

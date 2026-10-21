@@ -51,7 +51,8 @@ import { ErrorDelJuezDeTarea } from "../../agent/tareas/juezDeTarea.js";
 import type { Consola } from "../../cli/consola.js";
 import type { ConsolaDeProyecto } from "./vestibulo.js";
 import type { Sumidero } from "./transporte.js";
-import type { Acto } from "../../core/actos.js";
+import { acumularTotales, gastoEntre, type Acto, type ConsumoDeTurno } from "../../core/actos.js";
+import { listarSesiones } from "./sesiones.js";
 import type { TareasEnDisco } from "../../agent/tareas/tareasEnDisco.js";
 
 /**
@@ -517,8 +518,23 @@ export function crearCorredorDeTareas(opciones: {
    * de `autorizadas` (ver `MedidaDeEntrega.escribio`).
    */
   revisable: (raiz: string, sesion: string, desde?: string) => Promise<RevisionDeSesion>;
+  /**
+   * Lo que lleva gastado una sesión (su acumulado del índice). Con él se mide el GASTO de la tarea: lo que creció entre
+   * que empezó y que acabó (`Tarea.gasto`). Por omisión el lector REAL: un opcional que nadie pasa es el patrón de fallo
+   * de este repo. Lo que no se puede leer es «no consta».
+   */
+  consumoDeSesion?: (raiz: string, sesion: string) => ConsumoDeTurno | undefined;
 }): Corredor {
   const pid = opciones.pid ?? process.pid;
+  const consumoDeSesion =
+    opciones.consumoDeSesion ??
+    ((raiz: string, sesion: string): ConsumoDeTurno | undefined => {
+      try {
+        return listarSesiones(raiz).find((e) => e.id === sesion)?.consumo;
+      } catch {
+        return undefined;
+      }
+    });
   const informar = opciones.informar ?? (() => {});
   let miCerrojo = false;
   /** Ver `Corredor.ejecutaOtroProceso`. Nace sin afirmar nada: todavía no se ha mirado. */
@@ -1013,6 +1029,8 @@ export function crearCorredorDeTareas(opciones: {
     }
 
     const hilo = consola.idDeHilo;
+    /** Lo que ya traía su sesión: el gasto de ESTA pasada es lo que crezca desde aquí (`Tarea.gasto`). */
+    const consumoAlEmpezar = consumoDeSesion(tarea.proyecto.raiz, hilo);
     /**
      * ¿Esto CONTINÚA una conversación, o abre una en blanco? `tarea.sesion` es la única
      * fuente: si estaba puesta, es lo que se le pasó a `abrirParaTarea` para que reabriera
@@ -1207,14 +1225,18 @@ export function crearCorredorDeTareas(opciones: {
     // puede quedarse sin registrar lo que la tarea autorizó. Va sobre la tarea RELEÍDA del
     // disco (`escribirSiSigueSiendoNuestra` le pasa la actual), no sobre la que se despachó,
     // para no pisar lo que el cable cambiara entre medias.
+    // Lo que GASTÓ esta pasada, sumado a lo de las anteriores (petición suya: que el resumen final diga cuánto gastó). Va
+    // en los CUATRO finales, como lo autorizado. El `fin` del turno ya está en el índice: se vuelca antes de devolver.
+    const gastoDeLaPasada = gastoEntre(consumoAlEmpezar, consumoDeSesion(tarea.proyecto.raiz, hilo));
+    const conElGasto = (t: Tarea): Tarea => (gastoDeLaPasada === undefined ? t : { ...t, gasto: acumularTotales(t.gasto, gastoDeLaPasada) });
     let conLoQueQuede: (t: Tarea) => Tarea = (t) => {
-      const base = conVeredicto(conAutorizadas(t, entrada.autorizadas), entrada.veredicto);
+      const base = conElGasto(conVeredicto(conAutorizadas(t, entrada.autorizadas), entrada.veredicto));
       return entrada.cierre === undefined ? base : { ...base, cierre: entrada.cierre };
     };
     try {
       if (await olvidarSiNoSePuedeAbrir(tarea.proyecto.raiz, hilo)) {
         conLoQueQuede = (t) =>
-          sinSesion(conVeredicto(conAutorizadas(t, entrada.autorizadas), entrada.veredicto));
+          sinSesion(conElGasto(conVeredicto(conAutorizadas(t, entrada.autorizadas), entrada.veredicto)));
         // Y ahora sí se sabe: el hilo se ha borrado, así que reintentar no continúa nada.
         if (cortadaAMitad) motivo = entrada.pausaPedida === true ? motivoDePausa(true) : motivoDeCorteAMitad(true);
       }

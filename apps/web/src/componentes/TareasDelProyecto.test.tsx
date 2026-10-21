@@ -449,6 +449,18 @@ describe("TareasDelProyecto: ver lo que hace una tarea en proceso", () => {
       expect(screen.getByText("el juez de QA dijo «rojo»")).toBeTruthy();
     });
 
+    /** Petición suya (21-10-2026): el resumen final de la tarea dice cuánto gastó. Sin gasto que conste, no se pinta nada. */
+    it("al desplegarla dice cuánto GASTÓ, y sin gasto que conste no dice nada", () => {
+      const gasto = { modelo: { entrada: 1_500_000, salida: 60_000, cache: 1_300_000 }, externo: { entrada: 0, salida: 0, cache: 0 } };
+      render(<TareasDelProyecto tareas={[tarea({ id: "x", titulo: "Menú", estado: "terminada", gasto }), tarea({ id: "y", titulo: "Login", estado: "terminada" })]} />);
+      fireEvent.click(screen.getByRole("tab", { name: /Finalizadas/ }));
+      fireEvent.click(filaDe("Menú"));
+      expect(screen.getByText("Gastó: 260k tokens · 1,3M de caché")).toBeTruthy();
+      fireEvent.click(filaDe("Menú"));
+      fireEvent.click(filaDe("Login"));
+      expect(screen.queryByText(/^Gastó:/)).toBeNull();
+    });
+
     /** Reencolar lo pendiente: solo si el SERVIDOR dice que se puede (`reencolable`), con su texto editable. */
     it("«Reencolar lo pendiente» manda el texto editado; si el servidor se niega lo dice y no se cierra", async () => {
       const reencolar = vi.fn(async (_id: string, _texto: string): Promise<string | undefined> => "esa tarea ya no está en el histórico");

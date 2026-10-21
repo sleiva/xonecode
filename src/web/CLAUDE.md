@@ -67,7 +67,9 @@ Ante una discrepancia con el código, **el código manda**.
   medida que la banda (un fichero no seguido no cuenta, un renombrado cuenta dos). Tareas decididas
   por el SERVIDOR (`mismaRuta`).
 - **El gasto va en TOKENS por sesión** (`gastoDelProyecto.ts`, `SESIONES_EN_EL_GASTO`): gráfico, cada
-  cuenta con su convención de caché, sin sumarse; el total dice cuántas no constan. Colores
+  cuenta con su convención de caché, sin sumarse; el total dice cuántas no constan. **Suma lo del turno EN CURSO**
+  (`EntradaIndice.consumoEnCurso`, apuntado por el volcado a mitad; el `fin` lo suelta) y el alta se reanuncia cada
+  `INTERVALO_DEL_GASTO_EN_CURSO_MS` mientras alguien trabaja: una tarea es un turno largo. Colores
   `--xonecode-gasto-*` validados con `dataviz` por MODO; **límite**: no contra los otros temas.
 - **Soporte** (`soporte.ts`, `core/paqueteDeSoporte.ts`, `core/analisisDeSesion.ts`): solo con copia;
   chats (`SESIONES_EN_SOPORTE`) y tareas; **las filas NO abren el chat**. Tres paquetes por `GET /soporte`, raíz del SERVIDOR

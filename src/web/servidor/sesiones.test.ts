@@ -16,6 +16,7 @@ import { tituloDesde,
   elegirModo,
   IndiceDeSesionesRoto,
   marcarTareaDeSesion,
+  anotarConsumoEnCurso,
   sembrarConsumosPendientes,
   SESIONES_A_SEMBRAR,
   TOPE_DE_BYTES_DE_SIEMBRA,
@@ -161,6 +162,34 @@ describe("lo que ha gastado la sesión, estampado en el índice", () => {
     const id = crearSesion(raiz);
     anotarActo(raiz, id, fin(100, 10, 5000));
     expect(listarSesiones(raiz)[0].consumo).toEqual({ modelo: cuenta(100, 10), externo: cuenta(0, 0) });
+  });
+
+  /**
+   * Lo que va gastando el turno EN CURSO (petición suya, 21-10-2026: «el conteo no me acumula lo que se consume en las
+   * tareas»): una tarea es UN turno largo, y su gasto no constaba hasta el `fin`. Se apunta a mitad, aparte del acumulado,
+   * y el `fin` lo suelta: dentro del acumulado ya va su delta.
+   */
+  it("el consumo EN CURSO se apunta aparte y el `fin` lo suelta", () => {
+    const raiz = proyecto();
+    const id = crearSesion(raiz);
+    anotarActo(raiz, id, fin(100, 10));
+    anotarConsumoEnCurso(raiz, id, { modelo: cuenta(40, 4), externo: cuenta(0, 0), ventana: 9000 });
+    expect(listarSesiones(raiz)[0].consumoEnCurso).toEqual({ modelo: cuenta(40, 4), externo: cuenta(0, 0) });
+    expect(listarSesiones(raiz)[0].consumo?.modelo).toEqual(cuenta(100, 10));
+    // Lo que avanza SUSTITUYE, no suma: es el turno en curso, entero, hasta ahora.
+    anotarConsumoEnCurso(raiz, id, { modelo: cuenta(60, 6), externo: cuenta(0, 0) });
+    expect(listarSesiones(raiz)[0].consumoEnCurso?.modelo).toEqual(cuenta(60, 6));
+    anotarActo(raiz, id, fin(70, 7));
+    expect(listarSesiones(raiz)[0].consumoEnCurso).toBeUndefined();
+    expect(listarSesiones(raiz)[0].consumo?.modelo).toEqual(cuenta(170, 17));
+  });
+
+  it("sin nada gastado no se apunta, y una sesión que no existe no se crea", () => {
+    const raiz = proyecto();
+    const id = crearSesion(raiz);
+    expect(anotarConsumoEnCurso(raiz, id, undefined)).toBe(false);
+    expect(anotarConsumoEnCurso(raiz, "fantasma", { modelo: cuenta(1, 1), externo: cuenta(0, 0) })).toBe(false);
+    expect(listarSesiones(raiz).map((s) => s.id)).toEqual([id]);
   });
 
   it("dos `fin` SUMAN: el acumulado es la sesión, no el último turno", () => {

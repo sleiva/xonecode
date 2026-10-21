@@ -8,6 +8,7 @@
 import { tituloDesde } from "./textos.js";
 import type { CierreDeTarea, VeredictoDeTarea } from "./entrega.js";
 import type { MapeoDeEstados } from "./gestorDeTareas.js";
+import type { ConsumoDeTurno } from "./actos.js";
 
 /**
  * Los cuatro estados, y ninguno más.
@@ -172,6 +173,12 @@ export interface Tarea {
    * observaciones, que van al comentario de cierre del ticket. Ausente = se entregó sin nada que decir.
    */
   cierre?: CierreDeTarea;
+  /**
+   * Lo que GASTÓ la tarea: lo que creció el acumulado de su sesión entre que empezó y que acabó cada pasada, sumado entre
+   * pasadas (`corredorDeTareas.ts`, `core/actos.ts#gastoEntre`). No el acumulado entero: una continuación comparte el hilo
+   * de su madre. Petición suya (21-10-2026): que el resumen final diga cuánto gastó. Ausente = no consta.
+   */
+  gasto?: ConsumoDeTurno;
   /**
    * La dio por buena una PERSONA, con el botón «Dar por bueno», en vez de la puerta de
    * entrega (`core/entrega.ts#decisionDeEntrega`).

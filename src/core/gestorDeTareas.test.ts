@@ -300,3 +300,19 @@ describe("el comentario de cierre de una tarea con algo CRÍTICO", () => {
     expect(comentarioDeCierre({ ficheros: [], commits: [] })).not.toContain("CRITICAL");
   });
 });
+
+/** Petición suya (21-10-2026): el resumen final de la tarea dice cuánto gastó, también en el ticket. */
+describe("comentarioDeCierre con el gasto", () => {
+  const sin = { ficheros: [], commits: [] };
+  it("una sección «## Gasto» con las cifras enteras, la caché aparte y el externo solo si gastó", () => {
+    const texto = comentarioDeCierre({
+      ...sin,
+      gasto: { modelo: { entrada: 1_500_000, salida: 60_000, cache: 1_300_000 }, externo: { entrada: 5000, salida: 500, cache: 0 } },
+    });
+    expect(texto).toContain("## Gasto\n\n260.000 tokens · 1.300.000 de caché · agente externo 5.500 tokens");
+  });
+
+  it("sin gasto que conste no hay sección: no es un cero", () => {
+    expect(comentarioDeCierre(sin)).not.toContain("## Gasto");
+  });
+});

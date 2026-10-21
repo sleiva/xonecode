@@ -16,6 +16,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { MS_DE_PREPARACION,
   MS_DE_TRABAJO_AL_ABRIR,
   arrancarConsolaWeb,
+  datosDeCierreDeTarea,
   montarRutas,
   type OpcionesDeMontaje,
   commitDeTurnoCableado,
@@ -14715,5 +14716,24 @@ describe("el diseño vinculado (Stitch), por el cable", () => {
     expect((await t.pedir({ accion: "vincular", vinculo: { proyecto: "../x", nombre: "Maset" } }))?.error).toMatch(/no vale/);
     expect(JSON.stringify(t.config())).toBe(antes);
     await t.limpiar();
+  });
+});
+
+/** Petición suya (21-10-2026): el comentario de cierre del ticket dice cuánto gastó la tarea. */
+describe("datosDeCierreDeTarea con el gasto", () => {
+  it("lleva el `gasto` de la tarea, también sin sesión que leer", async () => {
+    const gasto = { modelo: { entrada: 1600, salida: 160, cache: 1300 }, externo: { entrada: 0, salida: 0, cache: 0 } };
+    const datos = await datosDeCierreDeTarea({
+      id: "t1",
+      proyecto: { id: "p1", raiz: "/no/existe", nombre: "AppDemo" },
+      titulo: "x",
+      peticion: "x",
+      encargo: "x",
+      adjuntos: [],
+      estado: "terminada",
+      creada: "2026-10-21T10:00:00.000Z",
+      gasto,
+    });
+    expect(datos.gasto).toEqual(gasto);
   });
 });

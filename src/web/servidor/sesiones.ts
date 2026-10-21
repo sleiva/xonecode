@@ -182,6 +182,13 @@ export interface EntradaIndice {
    */
   consumo?: ConsumoDeTurno;
   /**
+   * Lo que lleva gastado el turno EN CURSO, aparte de `consumo` (`anotarConsumoEnCurso`). Una tarea es UN turno largo y
+   * su gasto no constaba hasta el `fin` (petición suya, 21-10-2026: «el conteo no me acumula lo que se consume en las
+   * tareas»). El `fin` lo SUELTA: su delta ya va dentro de `consumo`. Ausente = ningún turno en curso, o nada medido.
+   * Sin `ventana`, por lo mismo que `consumo`.
+   */
+  consumoEnCurso?: ConsumoDeTurno;
+  /**
    * El ticket de Jira al que quedó ligada esta sesión (IXCODE-11). Ausente = ninguno.
    *
    * Vive AQUÍ por lo mismo que el dispositivo y el esfuerzo: es un dato DE la sesión, no uno
@@ -395,7 +402,10 @@ export function anotarActo(raiz: string, id: string, acto: Acto): void {
  * sitio donde esa tolerancia puede dejar de estar.
  */
 function anotarConsumoDeActo(raiz: string, id: string, entrada: EntradaIndice, acto: Acto): void {
-  if (acto.tipo !== "fin" || acto.consumo === undefined) return;
+  if (acto.tipo !== "fin") return;
+  // El turno acabó: lo que iba gastando ya va en su delta, y quedarse aquí lo contaría dos veces.
+  delete entrada.consumoEnCurso;
+  if (acto.consumo === undefined) return;
   const bruto =
     entrada.consumo === undefined
       ? consumoDeLosActos(reabrirSesion(raiz, id).actos)
@@ -632,6 +642,21 @@ export function anotarTicket(raiz: string, id: string, ticket: TicketDeSesion): 
   const entrada = entradas.find((e) => e.id === id);
   if (entrada === undefined) return false;
   entrada.ticket = ticket;
+  escribirIndice(raiz, entradas);
+  return true;
+}
+
+/**
+ * Apunta lo que lleva gastado el turno EN CURSO (`EntradaIndice.consumoEnCurso`): lo SUSTITUYE, porque es el turno entero
+ * hasta ahora, no un delta. Lo llama el volcado a mitad de turno (`vestibulo.ts#volcar`). Nada medido no se apunta, y una
+ * sesión que no está en el índice no se crea: ese alta es de `anotarActo`. Devuelve si lo apuntó.
+ */
+export function anotarConsumoEnCurso(raiz: string, id: string, consumo: ConsumoDeTurno | undefined): boolean {
+  if (consumo === undefined) return false;
+  const entradas = leerIndiceOAbortar(raiz);
+  const entrada = entradas.find((e) => e.id === id);
+  if (entrada === undefined) return false;
+  entrada.consumoEnCurso = acumularTotales(undefined, consumo);
   escribirIndice(raiz, entradas);
   return true;
 }

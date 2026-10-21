@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { gastoDelProyecto, SESIONES_EN_EL_GASTO } from "./gastoDelProyecto.js";
+import { gastoDelProyecto, SESIONES_EN_EL_GASTO, textoDelGastoDeTarea } from "./gastoDelProyecto.js";
 import type { ConsumoDeTurno } from "./tipos.js";
 
 const consumo = (
@@ -60,5 +60,52 @@ describe("gastoDelProyecto", () => {
       { id: "s1", titulo: "a", ultimoTurno: "2026-09-21T10:00:00.000Z", consumo: consumo({ entrada: 5, salida: 5, cache: 0 }) },
     ]);
     expect(g.hayExterno).toBe(false);
+  });
+});
+
+/**
+ * Lo que lleva gastado un turno EN CURSO (petición suya, 21-10-2026: «el conteo no me acumula lo que se consume en las
+ * tareas»): una tarea es un turno largo y no constaba hasta el `fin`. Se suma al de la sesión y se dice cuántas están en
+ * curso: el total crece mientras la tarea trabaja.
+ */
+describe("gastoDelProyecto con un turno en curso", () => {
+  it("suma lo del turno en curso al acumulado, también en una sesión que aún no tiene acumulado", () => {
+    const g = gastoDelProyecto([
+      { id: "hola", titulo: "Hola", ultimoTurno: "2026-10-21T09:00:00.000Z", consumo: consumo({ entrada: 1000, salida: 100, cache: 800 }) },
+      {
+        id: "tarea",
+        titulo: "",
+        ultimoTurno: "2026-10-21T10:00:00.000Z",
+        consumoEnCurso: consumo({ entrada: 500, salida: 50, cache: 400 }),
+      },
+      {
+        id: "otra",
+        titulo: "",
+        ultimoTurno: "2026-10-21T10:05:00.000Z",
+        consumo: consumo({ entrada: 100, salida: 10, cache: 0 }),
+        consumoEnCurso: consumo({ entrada: 100, salida: 10, cache: 0 }),
+      },
+    ]);
+    // hola 200+100 · tarea 100+50 · otra (100+10)+(100+10)
+    expect(g.total.modelo).toEqual({ tokens: 300 + 150 + 220, cache: 800 + 400 });
+    expect(g.conGasto).toBe(3);
+    expect(g.enCurso).toBe(2);
+    expect(g.barras.find((b) => b.id === "tarea")?.enCurso).toBe(true);
+  });
+
+  it("sin turnos en curso, `enCurso` es 0 y ninguna barra lo lleva", () => {
+    const g = gastoDelProyecto([{ id: "a", titulo: "a", consumo: consumo({ entrada: 10, salida: 1, cache: 0 }) }]);
+    expect(g.enCurso).toBe(0);
+    expect(g.barras[0]?.enCurso).toBeUndefined();
+  });
+});
+
+/** El gasto de UNA tarea en una línea (Finalizadas): las dos cuentas por separado, como en el gráfico. */
+describe("textoDelGastoDeTarea", () => {
+  it("modelo con su caché; el agente externo solo si gastó", () => {
+    expect(textoDelGastoDeTarea(consumo({ entrada: 1_500_000, salida: 60_000, cache: 1_300_000 }))).toBe("260k tokens · 1,3M de caché");
+    expect(
+      textoDelGastoDeTarea(consumo({ entrada: 1000, salida: 100, cache: 800 }, { entrada: 5000, salida: 500, cache: 0 }))
+    ).toBe("300 tokens · 800 de caché · agente externo 5,5k tokens");
   });
 });

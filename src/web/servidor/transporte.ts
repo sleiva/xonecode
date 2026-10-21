@@ -111,6 +111,8 @@ export interface SesionDelCable {
    * barra pintaría un `↑0 ↓0` que nadie ha medido.
    */
   consumo?: ConsumoDeTurno;
+  /** Lo que lleva gastado el turno EN CURSO, aparte de `consumo` (`EntradaIndice.consumoEnCurso`): el `fin` lo suelta. */
+  consumoEnCurso?: ConsumoDeTurno;
   /**
    * La CLAVE del ticket de Jira al que quedó ligada esta sesión (`"IXCODE-12"`), si tiene
    * uno (`EntradaIndice.ticket`, IXCODE-11). Solo la clave, y no el objeto entero: es lo
@@ -1308,6 +1310,8 @@ export interface TareaDelCable {
    * de cierre del ticket. Ausente = se entregó sin nada que decir (o se cerró antes de que existiera).
    */
   cierre?: { criticos: string[]; observaciones: string[] };
+  /** Lo que GASTÓ la tarea (`Tarea.gasto`): Finalizadas lo enseña. Ausente = no consta. */
+  gasto?: ConsumoDeTurno;
   /**
    * El ticket del gestor de tareas en el que vive (`core/tareas.ts#TicketDeTarea`). Cruzan la CLAVE, el conector (de él
    * sale el nombre que se enseña: «Jira»), el enlace y el aviso de lo último que no se pudo escribir; el `sitio` y el
@@ -1373,6 +1377,7 @@ export function filaDeTarea(t: Tarea, esperaPorTi?: EsperaPorPersona): TareaDelC
         }),
     ...(t.terminadaAMano === undefined ? {} : { terminadaAMano: t.terminadaAMano }),
     ...(t.cierre === undefined ? {} : { cierre: { criticos: [...t.cierre.criticos], observaciones: [...t.cierre.observaciones] } }),
+    ...(t.gasto === undefined ? {} : { gasto: t.gasto }),
     ...(t.ticket === undefined
       ? {}
       : {

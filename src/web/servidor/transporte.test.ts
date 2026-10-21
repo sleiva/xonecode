@@ -97,6 +97,8 @@ const DECISIONES: Readonly<Record<string, readonly string[]>> = {
   pantallasDeStitch: ["pantallasDeStitch"],
   // De qué finalizada es continuación: frena un segundo «Reencolar» y Finalizadas la cuelga de ella (un id, no una ruta).
   continuaDe: ["continuaDe"],
+  // Viaja: Finalizadas y el cierre dicen cuánto gastó (petición suya, 21-10-2026). Son cifras, no rutas.
+  gasto: ["gasto"],
 };
 
 const TAREA_COMPLETA: Required<Tarea> = {
@@ -128,6 +130,7 @@ const TAREA_COMPLETA: Required<Tarea> = {
   ticket: { conector: "jira", sitio: "cloud-1", proyecto: "KAN", clave: "KAN-7", url: "https://x.atlassian.net/browse/KAN-7", aviso: "no se pudo pasar a PROBAR" },
   pantallasDeStitch: [{ name: "projects/1/screens/ab", titulo: "Listado de Entregas", proyecto: "Maset" }],
   continuaDe: "t0",
+  gasto: { modelo: { entrada: 1600, salida: 160, cache: 1300 }, externo: { entrada: 0, salida: 0, cache: 0 } },
 };
 
 describe("filaDeTarea", () => {

@@ -269,6 +269,8 @@ export interface SesionDelCable {
    *  **Ausente es «no consta», nunca cero**: un `{0,0}` afirmaría que la sesión salió gratis,
    *  y sobre él se pintaría un `↑0 ↓0` que nadie ha medido. */
   consumo?: ConsumoDeTurno;
+  /** Lo que lleva gastado el turno EN CURSO, aparte de `consumo`: el `fin` lo suelta. Ver `transporte.ts`. */
+  consumoEnCurso?: ConsumoDeTurno;
   /** La CLAVE del ticket de Jira al que quedó ligada (`"IXCODE-12"`), si tiene uno
    *  (IXCODE-11). Solo la clave: el sitio se queda en el host. */
   ticket?: string;
@@ -1339,6 +1341,8 @@ export interface TareaDelCable {
   terminadaAMano?: boolean;
   /** Lo crítico y las observaciones con que se cerró: el `## CRITICAL` de su comentario de cierre. Ausente = nada. */
   cierre?: { criticos: string[]; observaciones: string[] };
+  /** Lo que GASTÓ la tarea: Finalizadas lo enseña. Ausente = no consta. Ver `transporte.ts`. */
+  gasto?: ConsumoDeTurno;
   /** El ticket del gestor en el que vive (redeclarado de `transporte.ts`): clave, conector, enlace y el último aviso. */
   ticket?: { clave: string; conector: string; url?: string; aviso?: string };
   /** Las pantallas de Stitch elegidas para la tarea, en su orden (`name` y título de cada una). IXCODE-63: eran una. */

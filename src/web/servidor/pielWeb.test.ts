@@ -340,6 +340,21 @@ describe("pielWeb: el coste del turno en el `fin`", () => {
     ]);
   });
 
+  /** A mitad de turno (petición suya: que el gasto de una tarea larga se vea mientras trabaja), sin tocar el `fin`. */
+  it("`consumoEnCurso` dice lo que lleva el turno SIN estampar nada, y el `fin` sigue siendo el delta entero", () => {
+    const l = lector();
+    const { piel, actos, consumoEnCurso } = crearPielWeb(() => 0, l.lee);
+    l.pon(acumulado(100, 10));
+    piel.fin(5);
+    expect(consumoEnCurso()).toBeUndefined();
+    l.pon(acumulado(130, 13, 20));
+    expect(consumoEnCurso()).toEqual({ modelo: cuenta(30, 3, 20), externo: cuenta(0, 0) });
+    expect(consumoEnCurso()).toEqual({ modelo: cuenta(30, 3, 20), externo: cuenta(0, 0) });
+    l.pon(acumulado(150, 15, 40));
+    piel.fin(5);
+    expect(actos()[1]).toEqual({ tipo: "fin", ms: 5, consumo: { modelo: cuenta(50, 5, 40), externo: cuenta(0, 0) } });
+  });
+
   it("el primer `fin` de un proceso estampa lo acumulado ENTERO", () => {
     // No se resta contra ceros por comodidad: hasta aquí no había ningún `fin` en este
     // proceso, así que todo lo acumulado es de este turno. Es exactamente el caso de una

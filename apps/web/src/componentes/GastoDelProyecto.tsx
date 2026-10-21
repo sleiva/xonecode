@@ -26,7 +26,7 @@ import estilos from "./GastoDelProyecto.module.css";
  */
 export function GastoDelProyecto({ datos }: { datos: Datos }) {
   const [enfocada, setEnfocada] = useState<string | undefined>(undefined);
-  const { barras, total, conGasto, sinGasto, hayExterno } = datos;
+  const { barras, total, conGasto, sinGasto, hayExterno, enCurso } = datos;
   const maximo = Math.max(1, ...barras.map((b) => b.modelo.tokens + b.externo.tokens));
   const laEnfocada = barras.find((b) => b.id === enfocada);
 
@@ -57,6 +57,7 @@ export function GastoDelProyecto({ datos }: { datos: Datos }) {
       </dl>
       <p className={estilos.alcance}>
         de {conGasto} {conGasto === 1 ? "sesión" : "sesiones"}
+        {enCurso > 0 ? ` · ${enCurso} en curso, sumando mientras trabaja${enCurso === 1 ? "" : "n"}` : ""}
         {sinGasto > 0 ? ` · ${sinGasto} sin gasto que conste, fuera del total` : ""}
       </p>
 

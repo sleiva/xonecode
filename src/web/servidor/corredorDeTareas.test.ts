@@ -25,7 +25,7 @@ import { crearVestibulo, type ConsolaDeProyecto } from "./vestibulo.js";
 import { cambiosDeSesion, fotoDeApertura } from "../../agent/sesiones/sesionGit.js";
 import { CatalogoModelosEnMemoria } from "../../core/ports.js";
 import type { Consola } from "../../cli/consola.js";
-import type { Acto } from "../../core/actos.js";
+import type { Acto, ConsumoDeTurno } from "../../core/actos.js";
 import type { MensajeAlCliente } from "./transporte.js";
 import { motivoTrasReanudar, tareaReencolada, TEXTO_DE_REANUDACION, TOPE_DE_RONDAS_DE_TAREA, type Tarea } from "../../core/tareas.js";
 import { MAX_APPROVAL_ROUNDS } from "../../vendor/hitl.js";
@@ -3349,6 +3349,52 @@ describe("una tarea que acaba se cierra sin preguntar, y dice lo que quedó", ()
     const t = estado()[0]!;
     expect(t.estado).toBe("terminada");
     expect(t.cierre?.criticos).toEqual(["pantalla: «ENTRADAS/SALIDAS» de la maqueta NO está en el aparato"]);
+    await corredor.parar();
+  });
+});
+
+/**
+ * Lo que GASTÓ la tarea (petición suya, 21-10-2026: «en el resumen final de la tarea también quiero que pongas cuánto ha
+ * gastado»): lo que creció el acumulado de su sesión entre que empezó y que acabó. Una continuación comparte el hilo de
+ * su madre: el acumulado entero contaría lo de la madre.
+ */
+describe("el gasto de la tarea", () => {
+  const consumo = (entrada: number, salida: number, cache: number): ConsumoDeTurno => ({
+    modelo: { entrada, salida, cache },
+    externo: { entrada: 0, salida: 0, cache: 0 },
+  });
+
+  it("es lo que creció su sesión mientras trabajaba, no lo que ya traía", async () => {
+    const { disco, estado } = discoDeMentira([TAREA()]);
+    const p = proyectoDeMentira();
+    let medido: ConsumoDeTurno | undefined = consumo(1000, 100, 800);
+    const corredor = crearCorredorDeTareas({
+      ...ENTREGA_VERDE,
+      disco,
+      abrirParaTarea: p.abrir,
+      pid: 1,
+      concurrencia: () => 1,
+      consumoDeSesion: () => medido,
+    });
+    await corredor.arrancar();
+    await corredor.asentar();
+    medido = consumo(1600, 160, 1300);
+    p.acabar({ verificador: "verde", pendientes: 0 });
+    await corredor.asentar();
+    expect(estado()[0]!.estado).toBe("terminada");
+    expect(estado()[0]!.gasto).toEqual(consumo(600, 60, 500));
+    await corredor.parar();
+  });
+
+  it("sin medida de la sesión no consta: sin campo, no cero", async () => {
+    const { disco, estado } = discoDeMentira([TAREA()]);
+    const p = proyectoDeMentira();
+    const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE, disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 1, consumoDeSesion: () => undefined });
+    await corredor.arrancar();
+    await corredor.asentar();
+    p.acabar({ verificador: "verde", pendientes: 0 });
+    await corredor.asentar();
+    expect("gasto" in estado()[0]!).toBe(false);
     await corredor.parar();
   });
 });

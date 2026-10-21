@@ -17,6 +17,8 @@ export interface SesionDelResumen {
   titulo: string;
   ultimoTurno?: string;
   consumo?: ConsumoDeTurno;
+  /** Lo que lleva gastado su turno EN CURSO: se suma al gasto mientras trabaja. */
+  consumoEnCurso?: ConsumoDeTurno;
 }
 
 /** Lo que el resumen sabe de un proyecto: la misma fila de `alta.proyectos`. */
