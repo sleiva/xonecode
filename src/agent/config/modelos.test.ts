@@ -70,6 +70,40 @@ describe("el cliente de Anthropic, contra su propio invocationParams", () => {
  *
  * Sin red: construir un cliente y preguntarle sus parámetros no llama a nadie.
  */
+/**
+ * La CACHÉ de Anthropic, en el cuerpo que se MANDA. Medido el 21-10-2026 con `claude-sonnet-5-5`: sin `cache_control` la
+ * segunda llamada leía 0 de caché. Aquí no vale `invocationParams()` —su `cache_control` sale de las opciones de cada
+ * llamada y llega `undefined`—: lo que cuenta es la petición HTTP, y se captura con un `fetch` de pega, sin red.
+ */
+describe("la caché de Anthropic viaja en la petición", () => {
+  const anterior = process.env.ANTHROPIC_API_KEY;
+  const fetchAnterior = globalThis.fetch;
+  beforeEach(() => {
+    process.env.ANTHROPIC_API_KEY = "sk-ant-de-pega";
+  });
+  afterEach(() => {
+    globalThis.fetch = fetchAnterior;
+    if (anterior === undefined) delete process.env.ANTHROPIC_API_KEY;
+    else process.env.ANTHROPIC_API_KEY = anterior;
+  });
+
+  it("con `cache_control` automático de primer nivel, en streaming y sin él", async () => {
+    const cuerpos: Record<string, unknown>[] = [];
+    globalThis.fetch = (async (_url: unknown, init?: { body?: unknown }) => {
+      cuerpos.push(JSON.parse(String(init?.body)));
+      // La respuesta mínima de un mensaje: no importa qué dice, solo qué se pidió.
+      return new Response(
+        JSON.stringify({ id: "msg_1", type: "message", role: "assistant", model: "claude-sonnet-5-5", content: [{ type: "text", text: "ok" }], stop_reason: "end_turn", stop_sequence: null, usage: { input_tokens: 1, output_tokens: 1 } }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      );
+    }) as typeof fetch;
+    const cliente = new Modelos({ bandera: "anthropic/claude-sonnet-5-5" }).paraPapel("trabajo") as { invoke: (m: unknown) => Promise<unknown> };
+    await cliente.invoke([{ role: "user", content: "hola" }]).catch(() => undefined);
+    expect(cuerpos.length).toBeGreaterThan(0);
+    expect(cuerpos[0]!["cache_control"]).toEqual({ type: "ephemeral" });
+  });
+});
+
 describe("el esfuerzo, contra el invocationParams de cada cliente", () => {
   const guardadas = { ...process.env };
   beforeEach(() => {

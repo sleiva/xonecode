@@ -313,6 +313,13 @@ function construirModelo(
         return new ChatAnthropic({
           model: modelo,
           apiKey: process.env.ANTHROPIC_API_KEY,
+          // La CACHÉ de Anthropic se PIDE: sin `cache_control` no cachea nada, al revés que Gemini o DeepSeek (implícita).
+          // Medido el 21-10-2026 con `claude-sonnet-5-5` y un prefijo de 9.229 tokens: sin esto, la segunda llamada leía 0
+          // de caché; con esto, 9.229. Es la caché AUTOMÁTICA (`cache_control` de primer nivel): el corte va al último bloque
+          // y avanza con la conversación, que es lo que hace un bucle de agente. Va en `invocationKwargs` porque la
+          // dependencia (1.5.2) lo extiende el ÚLTIMO en las dos peticiones, con y sin streaming; su `cache_control` de
+          // `invocationParams` sale de las opciones de CADA llamada y llegaría `undefined`. TTL de 5 min, el de omisión.
+          invocationKwargs: { cache_control: { type: "ephemeral" } },
           ...(topeDeSalida("anthropic", modelo) === undefined
             ? {}
             : { maxTokens: topeDeSalida("anthropic", modelo) }),
