@@ -123,6 +123,15 @@ export interface Agente {
    */
   ejecucion?: boolean;
   /**
+   * **Corre los SCRIPTS de sus skills sin tener shell** (`scripts: true`): la tool `ejecutar_script`, una llamada a uno de
+   * ellos por su nombre con argumentos que la shell no reinterpreta (la MISMA gramática que la shell estrecha de Claude
+   * Code, `core/comandoExterno.ts`), con el entorno de nuestra shell. A diferencia de `ejecucion`, NO le quita
+   * `write_file`/`edit_file`: un script de una skill no es una shell. Es lo que deja al que maqueta desplegar, capturar y
+   * leer el log él mismo (decisión suya, 21-10-2026: «busquemos lo más eficiente»; medido en Maset, cada prueba por el
+   * de pruebas era un hijo nuevo de ~13 llamadas). Solo TrueForge y `motor: "modelo"`; con `ejecucion` no hace nada.
+   */
+  scripts?: boolean;
+  /**
    * A qué otros especialistas puede LLAMAR él mismo, por nombre (`llama: [device-controller]`). Solo lo honra
    * TrueForge y solo con el interruptor del bucle del desarrollador encendido: es lo que deja que quien escribe
    * pruebe su trabajo sin pasar por el orquestador. Un nombre que no está en esta lista NO se le concede.
@@ -751,6 +760,7 @@ export function leerAgente(
       // cuando es cierto: un `ejecucion: false` en todos los `.md` sería ruido que además
       // invita a cambiarlo a mano sin saber lo que abre.
       ...((campos["ejecucion"] ?? "").trim() === "true" ? { ejecucion: true } : {}),
+      ...((campos["scripts"] ?? "").trim() === "true" ? { scripts: true } : {}),
       // Contra el vocabulario y no contra `string`: lo que se escriba aquí acaba siendo un
       // parámetro de una API, así que un `esfuerzo: mucho` se DESCARTA en silencio —el
       // subagente corre sin él— en vez de viajar y dar un 400 a mitad de turno.
@@ -793,7 +803,7 @@ export function fusionarAgentes<T extends Agente>(global: readonly T[], proyecto
  * —lo único que lo confina a `icons/` y `fonts/`— y cualquier edición del desarrollador le quitaba `llama` y `espera`,
  * el bucle con el de pruebas. El guardado los toma del agente que ya había (`conLoQueLaVentanaNoEdita`).
  */
-export const CAMPOS_FUERA_DE_LA_VENTANA = ["escribeEn", "llama", "espera", "pensamiento"] as const;
+export const CAMPOS_FUERA_DE_LA_VENTANA = ["escribeEn", "llama", "espera", "pensamiento", "scripts"] as const;
 
 /**
  * El agente que llega de la ventana, con los campos que ella no edita tomados del que ya había. Lo que SÍ trae el
@@ -833,6 +843,7 @@ export function escribirAgente(agente: Agente): string {
     ...(agente.pensamiento === undefined ? [] : [`pensamiento: ${agente.pensamiento}`]),
     `soloLectura: ${agente.soloLectura}`,
     ...(agente.ejecucion === true ? ["ejecucion: true"] : []),
+    ...(agente.scripts === true ? ["scripts: true"] : []),
     ...(agente.escribeEn === undefined || agente.escribeEn.length === 0
       ? []
       : [`escribeEn: [${agente.escribeEn.join(", ")}]`]),

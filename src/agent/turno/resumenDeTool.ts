@@ -108,6 +108,8 @@ export const CAMPOS_SEGUROS: Record<string, readonly string[]> = {
    * silencio, que es peor que un límite escrito.
    */
   execute: ["command"],
+  /** El script de una skill que corre quien no tiene shell (`Agente.scripts`): el mismo trato que `execute`, por lo mismo. */
+  ejecutar_script: ["command"],
   /**
    * De un motor externo: QUÉ skill se carga y QUÉ se busca. Nunca los `args` con que se
    * invoca una skill, que pueden llevar contenido del proyecto dentro — el mismo trato que

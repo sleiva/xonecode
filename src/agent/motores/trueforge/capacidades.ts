@@ -20,6 +20,7 @@ import { NOMBRE_TRAER_FUENTE } from "../../../core/fuentes.js";
 import {
   fuenteDeEjecucion,
   fuenteDeFicheros,
+  NOMBRE_EJECUTAR_SCRIPT,
   TOOLS_DE_FICHERO,
   TOOLS_DE_LECTURA,
   TOOLS_QUE_ESCRIBEN,
@@ -115,6 +116,25 @@ export function capacidadDeConectores(conectores: ConectoresDeSesion, clase: Cla
           preload: true,
         }),
       ],
+    },
+  };
+}
+
+/**
+ * `ejecutar_script`: los scripts de sus skills, por su nombre y sin shell, para quien declara `scripts: true` y NO
+ * `ejecucion` (`Agente.scripts`). Mismo backend con shell que `execute` —entorno, carpeta de artefactos, cancelación—;
+ * lo que cambia es la forma del comando. Sin scripts en sus skills no se monta: una tool que siempre dice que no es ruido.
+ */
+export function capacidadDeScripts(
+  conShell: { execute(c: string): unknown; write(ruta: string, contenido: string): unknown },
+  scripts: readonly string[],
+  dispositivo?: () => DispositivoDeLaSesion | undefined
+): Capacidad {
+  return {
+    nombre: "scripts",
+    tools: [NOMBRE_EJECUTAR_SCRIPT],
+    capability: {
+      systemToolSets: [new ToolSet({ source: fuenteDeEjecucion(conShell, dispositivo, scripts) as never, selectors: SIN_APROBACION, preload: true })],
     },
   };
 }
@@ -347,6 +367,8 @@ export interface DependenciasDelEspecialista {
   propias: (agente: Agente) => readonly ToolDeLangchain[];
   /** El backend CON shell, montado solo para quien ejecuta. */
   conShell: () => { execute(c: string): unknown; write(ruta: string, contenido: string): unknown };
+  /** Los scripts de las skills de ESTE agente, para `ejecutar_script` (`Agente.scripts`). */
+  scriptsDe: (agente: Agente) => readonly string[];
   /** El aparato de la sesión para la guarda del `execute` (IXCODE-32). Ausente = ninguno elegido. */
   dispositivo?: () => DispositivoDeLaSesion | undefined;
   /** La cola de notas de la SESIÓN, ya envuelta: la misma instancia para todos los hijos. */
@@ -409,6 +431,9 @@ export function capacidadesDelEspecialista(
         ]
       : []),
     ...(clase === "ejecuta" ? [capacidadDeEjecucion(deps.conShell(), deps.dispositivo)] : []),
+    ...(clase !== "ejecuta" && agente.scripts === true && deps.scriptsDe(agente).length > 0
+      ? [capacidadDeScripts(deps.conShell(), deps.scriptsDe(agente), deps.dispositivo)]
+      : []),
     ...(deps.conectores?.(agente) ?? []),
     ...(deps.puedeLlamar?.(agente) === true ? [capacidadDeSubagentes(), ...(deps.informes === undefined ? [] : [deps.informes])] : []),
     ...(deps.vueltas?.(agente) === undefined ? [] : [deps.vueltas(agente)!]),

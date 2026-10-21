@@ -250,3 +250,55 @@ describe("execute no recorre el disco entero", () => {
     expect(corridos).toBe(2);
   });
 });
+
+/** `ejecutar_script` (`Agente.scripts`): uno de SUS scripts, por su nombre y en la forma estrecha; luego, las guardas de la shell. */
+describe("ejecutar_script: los scripts de sus skills, sin shell", () => {
+  const conScripts = () => {
+    const corridos: string[] = [];
+    const fuente = fuenteDeEjecucion(
+      { execute: (c: string) => { corridos.push(c); return { output: "ok", exitCode: 0 }; }, write: () => ({}) },
+      () => undefined,
+      ["xone-hotswap", "xone-log-android"]
+    );
+    const correr = async (command: string) =>
+      (await fuente.callTool({ name: "ejecutar_script", arguments: { command } })) as unknown as { result: { content: { text: string }[]; isError?: boolean } };
+    return { fuente, corridos, correr };
+  };
+
+  it("se llama `ejecutar_script`, no `execute`, y su descripción nombra los scripts", async () => {
+    const { fuente } = conScripts();
+    const { result } = (await fuente.listTools()) as { result: { tools: { name: string; description: string }[] } };
+    expect(result.tools.map((t) => t.name)).toEqual(["ejecutar_script"]);
+    expect(result.tools[0]!.description).toContain("xone-hotswap, xone-log-android");
+  });
+
+  it("corre uno de sus scripts con argumentos sueltos o entre comillas simples", async () => {
+    const { corridos, correr } = conScripts();
+    expect((await correr("xone-hotswap click name=Entrar -- shot")).result.isError).not.toBe(true);
+    expect((await correr("xone-hotswap fill name=MAP_LOGIN value='08 006'")).result.isError).not.toBe(true);
+    expect(corridos).toEqual(["xone-hotswap click name=Entrar -- shot", "xone-hotswap fill name=MAP_LOGIN value='08 006'"]);
+  });
+
+  it("lo que no es uno de sus scripts, o lleva lo que la shell reinterpreta, vuelve como error y NO se corre", async () => {
+    const { corridos, correr } = conScripts();
+    for (const c of ["ls -la", "adb devices", "xone-hotswap shot; rm -rf /", "xone-log-android --app | grep x", "xone-hotswap shot > /tmp/x", "./xone-hotswap shot"]) {
+      const r = await correr(c);
+      expect(r.result.isError, c).toBe(true);
+    }
+    expect(corridos).toEqual([]);
+  });
+
+  it("y DESPUÉS las guardas de la shell: un SQL que escribe no pasa aunque sea su script", async () => {
+    const { corridos, correr } = conScripts();
+    const r = await correr("xone-hotswap sql Maset 'DELETE FROM gen_usuarios'");
+    expect(r.result.isError).toBe(true);
+    expect(corridos).toEqual([]);
+  });
+
+  it("`execute` no existe aquí: la shell entera sigue siendo solo de quien declara `ejecucion`", async () => {
+    const { fuente, corridos } = conScripts();
+    const r = (await fuente.callTool({ name: "execute", arguments: { command: "xone-hotswap shot" } })) as unknown as { result: { isError?: boolean } };
+    expect(r.result.isError).toBe(true);
+    expect(corridos).toEqual([]);
+  });
+});

@@ -15,6 +15,10 @@ Un `.md` con frontmatter en `.xonecode/agentes/<nombre>.md` (`core/agentes.ts`,
   campo también elige el modelo). Con `motor: "modelo"` y, ESTRECHA, con `claude-code`
   (`admiteEjecucion`); en Codex y OpenCode, cerrada. El comando entero sale como `detalle`
   (`resumenDeTool.ts`); precio: una ruta absoluta del comando viaja por el cable.
+- **`scripts: true` NO es una shell** (`Agente.scripts`, `capacidades.ts#capacidadDeScripts`, solo TrueForge y
+  `motor: "modelo"`): `ejecutar_script`, UNO de los scripts de sus skills por su nombre con la gramática de la shell
+  ESTRECHA (`motivoDeComandoExternoInaceptable`) y DESPUÉS las guardas de `execute`; mismo backend con shell. No le quita
+  `write_file`/`edit_file`; con `ejecucion` no se monta. `developer-xone` lo lleva y ya no llama a `device-controller`.
 - **La shell NO hereda las claves de API** (`core/shellDeAgente.ts`): por la TABLA
   `VARIABLES_POR_PROVEEDOR` más el prefijo de los personalizados. AÑADE `XONECODE_SKILL_<SLUG>` por
   skill y otra para artefactos. **Límite**: un `GITHUB_TOKEN` del usuario sigue.

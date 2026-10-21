@@ -1197,9 +1197,9 @@ export const AGENTES_DE_SERIE: readonly Agente[] = [
       "cortado, descuadrado o del tamaño equivocado—. Los recursos que XOne no trae (iconos, " +
       "fondos SVG) los hace designer-xone. Dale los hechos ya averiguados —no le hagas redescubrirlos— y QUÉ tiene que " +
       "conseguir, no cómo. Si hay un plan en `/planes/<nombre>/`, dale el nombre y la tarea " +
-      "concreta: lo lee y marca ahí lo que deja hecho. Devuelve los ficheros que cambió; cada " +
-      "escritura para el turno y pide aprobación, así que un encargo enorme son muchas " +
-      "paradas: pártelo.",
+      "concreta: lo lee y marca ahí lo que deja hecho. PRUEBA ÉL en el aparato: no mandes después a device-controller " +
+      "a comprobarlo. Devuelve los ficheros que " +
+      "cambió; cada escritura para el turno y pide aprobación, así que un encargo enorme son muchas paradas: pártelo.",
     motor: "modelo",
     soloLectura: false,
     // `artifacts-builder` se queda: escribe documentos e informes. `archify` no, que los
@@ -1208,11 +1208,16 @@ export const AGENTES_DE_SERIE: readonly Agente[] = [
     // `xone-hotswap` de serie, decisión suya (20-10-2026): es quien maqueta y comprueba su pantalla, y la skill le dice cómo
     // se toca, se captura y se recarga en el aparato. Con shell (Claude Code, `ejecucion`) también trae sus scripts.
     skills: ["xone-development", "artifacts-builder", "openui-builder", "xone-hotswap"],
+    // Corre él los scripts de `xone-hotswap` (`Agente.scripts`, `ejecutar_script`) sin tener shell: despliega, toca, lee
+    // el log y captura. Decisión suya (21-10-2026: «busquemos lo más eficiente»): medido en Maset, cada prueba por el de
+    // pruebas era un hijo nuevo de ~13 llamadas que volvía a desplegar y navegar, 25 en una tarea de dos pantallas.
+    scripts: true,
     // A quién puede llamar él mismo (`core/agentes.ts#Agente.llama`): solo lo honra TrueForge y solo con el
-    // interruptor del bucle del desarrollador encendido. El de pruebas para comprobar y el diseñador para los RECURSOS
-    // (iconos y fondos SVG): lo visual de la pantalla es suyo, y devolverlo al orquestador o al diseñador lo rehacía entero.
+    // interruptor del bucle del desarrollador encendido. El diseñador para los RECURSOS (iconos y fondos SVG): lo visual
+    // de la pantalla es suyo, y devolverlo al orquestador o al diseñador lo rehacía entero. El de pruebas ya NO: prueba
+    // él (`scripts`); device-controller queda para quien no escribe (el documentador, una prueba completa).
     // Es el dato; el texto que se lo explica lo pone la sesión.
-    llama: ["device-controller", "designer-xone"],
+    llama: ["designer-xone"],
     // Si el orquestador lo lanza a la vez que al diseñador, espera a que este termine: sin eso escribía el `.xne` antes
     // de que existieran los recursos que ese `.xne` tiene que usar. Solo TrueForge.
     espera: ["designer-xone"],
@@ -1230,7 +1235,7 @@ export const AGENTES_DE_SERIE: readonly Agente[] = [
       "comprobar en vez de deducirlo. Si lo que prueba es una tarea de un plan, dile el plan y la " +
       "tarea: marca en su TASKS.md los criterios que compruebe. PÍDELE una captura solo si lo que hay que comprobar es " +
       "VISUAL: cuesta tokens, y un fallo que el log explica no se ve mejor en una foto. No lo uses para cambiar el proyecto: eso es de " +
-      "developer-xone. Y NO lo uses para algo que se ve LEYENDO —un texto cortado, un " +
+      "developer-xone, que además prueba lo suyo. Y NO lo uses para algo que se ve LEYENDO —un texto cortado, un " +
       "atributo, un error de sintaxis—: arrancar un aparato para eso se come un cuarto del " +
       "turno y no contesta nada que no conteste abrir el fichero.",
     motor: "modelo",

@@ -55,6 +55,7 @@ const ICONO: Record<string, string> = {
   // comando es la que dice qué está pasando de verdad — y no puede leerse igual que una tool
   // cualquiera que no está en la tabla.
   execute: "$",
+  ejecutar_script: "$",
 };
 
 /** El verbo de cada tool conocida, en español. */
@@ -77,6 +78,7 @@ const VERBO: Record<string, string> = {
   validar_fichero_xone: "valida",
   task: "delega en",
   execute: "corre",
+  ejecutar_script: "corre",
 };
 
 /**

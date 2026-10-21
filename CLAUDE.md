@@ -132,7 +132,8 @@ Una línea cada uno; el detalle, en el `CLAUDE.md` de su carpeta (tabla de abajo
   con `virtualMode: true`; los permisos SIEMPRE con `permisosDe(perfil)`, nunca a mano
   (`SubAgent.permissions` reemplaza los del padre); `SubAgent.tools` solo lleva tools propias.
 - **La shell la lleva UNO, declarado en su `.md`** (`ejecucion`, cierto solo con `"true"`), sin
-  `permissions` (deepagents lanza) y sin las claves de API en su entorno.
+  `permissions` (deepagents lanza) y sin las claves de API en su entorno. Quien declara `scripts: true`
+  corre los SCRIPTS de sus skills sin shell (`ejecutar_script`, forma estrecha) y conserva sus escrituras.
 - **El HITL va por NOMBRE de tool en todo lo que escribe** (`write_file`, `edit_file`,
   `incorporar_adjunto`, `traer_fuente`). Lo que no se entiende es RECHAZO (fail-closed), y una
   escritura REMOTA va siempre a una persona, también en modo autónomo.

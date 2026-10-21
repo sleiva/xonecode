@@ -23,6 +23,7 @@ const deps = (): DependenciasDelEspecialista & { shells: number } => {
       d.shells += 1;
       return { execute: () => undefined, write: () => undefined };
     },
+    scriptsDe: () => ["xone-hotswap", "xone-log-android"],
     notas: capacidadDeNotas([]),
   };
   return d;
@@ -43,6 +44,17 @@ describe("qué piezas lleva cada especialista, por lo que declara su `.md`", () 
     expect(tools).toContain("execute");
     expect(tools).not.toContain("write_file");
     expect(d.shells).toBe(1);
+  });
+
+  it("quien declara `scripts`: sus escrituras Y `ejecutar_script`, nunca `execute`; con `ejecucion` o sin scripts, no", () => {
+    const d = deps();
+    const tools = toolsDe(capacidadesDelEspecialista(agente({ scripts: true }), "x", d));
+    expect(tools).toEqual(expect.arrayContaining(["write_file", "edit_file", "ejecutar_script"]));
+    expect(tools).not.toContain("execute");
+    expect(d.shells).toBe(1);
+    expect(toolsDe(capacidadesDelEspecialista(agente({ scripts: true, ejecucion: true }), "x", deps()))).not.toContain("ejecutar_script");
+    expect(toolsDe(capacidadesDelEspecialista(agente({ scripts: true }), "x", { ...deps(), scriptsDe: () => [] }))).not.toContain("ejecutar_script");
+    expect(toolsDe(capacidadesDelEspecialista(agente({}), "x", deps()))).not.toContain("ejecutar_script");
   });
 
   it("quien solo LEE: las seis (su permiso lo confina fuera del proyecto) y sin shell", () => {

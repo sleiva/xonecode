@@ -67,7 +67,7 @@ import type { LineaDeDiff } from "../../../core/diff.js";
 import { createTokenTracker, type TokenTracker } from "../../../vendor/tokenTracking.js";
 import { MAX_APPROVAL_ROUNDS, type Decision } from "../../../vendor/hitl.js";
 import { resumenDelEntorno } from "../../../core/shellDeAgente.js";
-import { artefactosNuevos, backendDeAgente, entornoDeLaShellDelProyecto, fotoDeArtefactos, lectorDelDispositivoDeSesion, scriptsConRuta } from "../../grafo/proyecto.js";
+import { artefactosNuevos, backendDeAgente, entornoDeLaShellDelProyecto, fotoDeArtefactos, lectorDelDispositivoDeSesion, scriptsConRuta, scriptsDeLasSkills } from "../../grafo/proyecto.js";
 import { carpetaDeHotswap } from "../../../core/hotswap.js";
 import { cargarAgentes } from "../../subagentes/agentesEnDisco.js";
 import { bloqueDeAprendido, NOMBRE_APUNTAR_APRENDIZAJE, USO_DE_APRENDIDO_EXTERNO, USO_DE_APUNTAR_APRENDIZAJE } from "../../../core/aprendido.js";
@@ -83,7 +83,7 @@ import type { SesionReal } from "../../turno/sesionReal.js";
 import { accionDelJuez, type HechosDelTurno, type VeredictoDelTurno } from "../../../core/juezDelTurno.js";
 import type { Entorno } from "../../config/entorno.js";
 import { modeloParaTrueforge } from "./modeloLangchain.js";
-import { TOOLS_DE_LECTURA, type BackendDeFicheros } from "./toolsDeFichero.js";
+import { NOMBRE_EJECUTAR_SCRIPT, TOOLS_DE_LECTURA, type BackendDeFicheros } from "./toolsDeFichero.js";
 import { topeAgotadoDe, traducirEvento, type PensamientoPorHilo } from "./eventosTrueforge.js";
 import { anuncioDeSkills } from "./skillsTrueforge.js";
 import {
@@ -342,7 +342,7 @@ export function textoDeVueltas(vueltas: number): string {
   return [
     `LLEVAS ${String(vueltas)} COMPROBACIONES SEGUIDAS con el aparato.`,
     "Si el fallo de la última es de la MISMA FAMILIA que el anterior (la misma excepción, el mismo tipo de control), NO hagas otra",
-    "reescritura: (1) di la hipótesis en una frase, (2) pide al de pruebas UN experimento mínimo —un control, un evento— y lee",
+    "reescritura: (1) di la hipótesis en una frase, (2) haz (o pide al de pruebas) UN experimento mínimo —un control, un evento— y lee",
     "el resultado BRUTO del aparato, (3) con la causa confirmada, aplica el arreglo a TODOS los sitios parecidos de una vez.",
     "Si tras eso el fallo sigue igual, devuelve el trabajo diciendo qué falta y qué mediste, en vez de otra vuelta.",
   ].join("\n");
@@ -413,26 +413,55 @@ export function textoDeLoQueDejaronLosEsperados(raiz: string, esperadas: readonl
  * escribas (aunque recuerde sus encargos anteriores de la sesión), y lo que te devuelve es lo que vio, no un
  * veredicto: decidir si lo que escribiste funciona sigue siendo cosa tuya, con lo que ese hijo te traiga.
  */
-export function textoDelBucle(llama: readonly string[], opciones: { conCritica?: boolean; conFuentes?: boolean } = {}): string {
+export function textoDelBucle(
+  llama: readonly string[],
+  opciones: { conCritica?: boolean; conFuentes?: boolean; pruebaElMismo?: boolean } = {}
+): string {
   const puedeDiseñar = llama.includes("designer-xone");
+  // Quien corre los scripts de sus skills (`Agente.scripts`) prueba ÉL en el aparato: medido en Maset (21-10-2026), cada
+  // prueba por el de pruebas era un hijo nuevo de ~13 llamadas que volvía a desplegar y navegar (25 en una tarea).
+  const elMismo = opciones.pruebaElMismo === true;
   return [
     `PUEDES LLAMAR A: ${llama.join(", ")}, con \`create_sub_agent\` (\`name\` exacto y \`input\` autosuficiente).`,
-    "Tu bucle es: escribe, llama al de pruebas para desplegar y comprobar, lee lo que te devuelve y corrige.",
-    "Dile QUÉ comprobar y qué esperas ver. No lo llames por cada línea que cambies: junta los cambios.",
+    ...(elMismo
+      ? [
+          `Tu bucle es: escribe, prueba TÚ en el aparato con \`${NOMBRE_EJECUTAR_SCRIPT}\` (los scripts de \`xone-hotswap\`), lee lo que sale y corrige.`,
+          "Antes de comprobar nada, `xone-recargar-android` (1-2 s: sube solo lo que cambió); si la app no contesta, `xone-desplegar-android`.",
+          "Junta los cambios antes de recargar: no recargues por cada línea.",
+        ]
+      : [
+          "Tu bucle es: escribe, llama al de pruebas para desplegar y comprobar, lee lo que te devuelve y corrige.",
+          "Dile QUÉ comprobar y qué esperas ver. No lo llames por cada línea que cambies: junta los cambios.",
+        ]),
     "",
     "PRUEBAS FUNCIONALES Y VISUALES, SEPARADAS Y EN ESTE ORDEN:",
     "- Instrumenta tu código con `console.log(\"CALC tecla 8\")`, `console.log(\"CALC resultado \" + r)` en los puntos",
     "  que deciden (tecla, expresión, resultado, error). Nunca `ui.showToast` ni `appData.writeConsoleString` para depurar:",
     "  el aviso no deja rastro y el segundo es legacy y no llega al log de Android.",
-    "- FUNCIONAL: UN encargo con TODOS los casos, como acciones y lo que esperas («teclea 2 + 3 × 4 = → log `CALC resultado",
-    "  14`, display 14»). El de pruebas los hace, lee el log con `xone-log-android --app` y te devuelve cada caso: pasa o falla",
-    "  con lo que salió. SIN capturas. Corrige todos los fallos juntos y repite solo los que fallaron.",
-    "- VISUAL, solo cuando lo funcional pasa: UNA captura por ronda. Con ella el harness te trae la medida contra la maqueta;",
-    `  pasa el crítico, arregla TODAS las diferencias en la misma ronda y solo entonces pide otra captura. ${String(RONDAS_VISUALES)} rondas como mucho.`,
+    ...(elMismo
+      ? [
+          "- FUNCIONAL: `xone-log-android --limpiar`, las acciones con `xone-hotswap` (click, fill, waitForElement… varias en UNA",
+          "  llamada separadas por `--`) y `xone-log-android --app`: cada caso pasa o falla con lo que salió. SIN capturas. Corrige",
+          "  todos los fallos juntos y repite solo los que fallaron.",
+          "- VISUAL, solo cuando lo funcional pasa: UNA captura por ronda (`xone-hotswap shot`, o `xone-captura-android` si hay un",
+          "  diálogo encima). Entre retoques mide con `comparar_capturas` (sin modelo, siempre la misma cifra para las mismas dos",
+          `  imágenes): arregla TODAS las diferencias en la misma ronda y solo entonces otra captura. ${String(RONDAS_VISUALES)} rondas como mucho.`,
+        ]
+      : [
+          "- FUNCIONAL: UN encargo con TODOS los casos, como acciones y lo que esperas («teclea 2 + 3 × 4 = → log `CALC resultado",
+          "  14`, display 14»). El de pruebas los hace, lee el log con `xone-log-android --app` y te devuelve cada caso: pasa o falla",
+          "  con lo que salió. SIN capturas. Corrige todos los fallos juntos y repite solo los que fallaron.",
+          "- VISUAL, solo cuando lo funcional pasa: UNA captura por ronda. Con ella el harness te trae la medida contra la maqueta;",
+          `  pasa el crítico, arregla TODAS las diferencias en la misma ronda y solo entonces pide otra captura. ${String(RONDAS_VISUALES)} rondas como mucho.`,
+        ]),
     "- Una pantalla que se parece a la maqueta con datos de ejemplo fijos NO está terminada: la lógica tiene que funcionar.",
-    "Lo que te devuelva es lo que ha visto, no un permiso para dar el trabajo por bueno: si dice que la app se cae, se cae.",
+    ...(elMismo
+      ? ["Lo que diga el aparato manda sobre lo que crees haber escrito: si el log dice que la app se cae, se cae."]
+      : ["Lo que te devuelva es lo que ha visto, no un permiso para dar el trabajo por bueno: si dice que la app se cae, se cae."]),
     "EMPIEZA POR LO MÍNIMO: no escribas la pantalla entera de una vez. Primero la versión más pequeña que se pueda VER y PULSAR",
-    "—el arranque, el display y UN botón—, y pídele al de pruebas que la arranque y la toque. Solo cuando eso funcione, amplía",
+    elMismo
+      ? "—el arranque, el display y UN botón—, y arráncala y tócala tú. Solo cuando eso funcione, amplía"
+      : "—el arranque, el display y UN botón—, y pídele al de pruebas que la arranque y la toque. Solo cuando eso funcione, amplía",
     "(el teclado, las funciones, el historial). Un fallo de arranque descubierto con la pantalla entera escrita cuesta reescribirla.",
     ...(puedeDiseñar
       ? [
@@ -447,11 +476,21 @@ export function textoDelBucle(llama: readonly string[], opciones: { conCritica?:
       ? [
           "",
           "PARA JUZGAR UNA PANTALLA tienes `xone_critica_visual` (un modelo aparte mira la captura) y `comparar_capturas` (mide la",
-          "estructura contra la maqueta con números). Pídele al de pruebas una captura y que te diga su nombre; pásala con `pantalla` y,",
-          "si hay diseño (/diseno/ o un adjunto), como `referencia`. Lo que digan esas dos herramientas manda sobre tu impresión: no",
-          "lo descartes como «no fiable»; si no estás de acuerdo, dilo con el dato.",
-          "Cada vez que vuelva el de pruebas con una captura, el HARNESS te trae su medida contra la maqueta: no hace falta que",
-          "la pidas tú. El juicio es tuyo: con esa cifra y el crítico decides si sigues; no se lo devuelvas al que te encargó para que juzgue.",
+          ...(elMismo
+            ? [
+                "estructura contra la maqueta con números). La captura la haces tú y su salida dice dónde queda; pásala con `pantalla` y,",
+                "si hay diseño (/diseno/ o un adjunto), como `referencia`. Lo que digan esas dos herramientas manda sobre tu impresión: no",
+                "lo descartes como «no fiable»; si no estás de acuerdo, dilo con el dato.",
+                "El crítico cuesta un minuto y un modelo: pásalo UNA vez al CERRAR cada pantalla (y otra solo si arreglaste lo que dijo),",
+                "no tras cada retoque; para los retoques está `comparar_capturas`. El juicio es tuyo: no se lo devuelvas al que te encargó.",
+              ]
+            : [
+                "estructura contra la maqueta con números). Pídele al de pruebas una captura y que te diga su nombre; pásala con `pantalla` y,",
+                "si hay diseño (/diseno/ o un adjunto), como `referencia`. Lo que digan esas dos herramientas manda sobre tu impresión: no",
+                "lo descartes como «no fiable»; si no estás de acuerdo, dilo con el dato.",
+                "Cada vez que vuelva el de pruebas con una captura, el HARNESS te trae su medida contra la maqueta: no hace falta que",
+                "la pidas tú. El juicio es tuyo: con esa cifra y el crítico decides si sigues; no se lo devuelvas al que te encargó para que juzgue.",
+              ]),
         ]
       : []),
     "",
@@ -1519,6 +1558,8 @@ export async function abrirSesionTrueforge(
             : undefined,
       // El aparato elegido manda también en la shell (IXCODE-32): del MISMO fichero que leen los scripts.
       dispositivo: lectorDelDispositivoDeSesion(opciones.artefactos),
+      // Los de SUS skills, leídos al montar el hijo (`ejecutar_script`, `Agente.scripts`).
+      scriptsDe: (a) => scriptsDeLasSkills(raiz, a.skills),
       conShell: () =>
         montarBackend({
           entorno: conTrazaDelEntorno(entornoDeLaShellDelProyecto(raiz, opciones.artefactos)),
@@ -1551,7 +1592,7 @@ export async function abrirSesionTrueforge(
             nota,
             anuncioDeSkills(agente, catalogo),
             ...(aprendido === undefined ? [] : ["", aprendido]),
-            ...(conBucleDelDesarrollador && (agente.llama?.length ?? 0) > 0 ? ["", textoDelBucle(agente.llama ?? [], { conCritica: carpeta !== undefined, conFuentes: opciones.fuentes !== undefined })] : []),
+            ...(conBucleDelDesarrollador && (agente.llama?.length ?? 0) > 0 ? ["", textoDelBucle(agente.llama ?? [], { conCritica: carpeta !== undefined, conFuentes: opciones.fuentes !== undefined, pruebaElMismo: nombres.includes(NOMBRE_EJECUTAR_SCRIPT) })] : []),
           ]
             .filter((l) => l !== undefined)
             .join("\n")
@@ -1859,8 +1900,13 @@ export async function abrirSesionTrueforge(
               quien
             );
             // Una CAPTURA más de quien ejecuta: es lo que dispara el aviso de capturas (`textoDeCapturas`).
-            if (t.function.name === "execute" && typeof args["command"] === "string" && COMANDO_DE_CAPTURA.test(args["command"])) {
+            if ((t.function.name === "execute" || t.function.name === NOMBRE_EJECUTAR_SCRIPT) && typeof args["command"] === "string" && COMANDO_DE_CAPTURA.test(args["command"])) {
               capturasDeCadaHilo.set(deHilo, (capturasDeCadaHilo.get(deHilo) ?? 0) + 1);
+            }
+            // Una COMPROBACIÓN de quien prueba él mismo (`ejecutar_script`): cada recarga o despliegue, como cada llamada al de
+            // pruebas para quien no lo hace. Es lo que dispara el aviso de vueltas (`textoDeVueltas`).
+            if (t.function.name === NOMBRE_EJECUTAR_SCRIPT && typeof args["command"] === "string" && /^\s*xone-(recargar|desplegar)-android\b/.test(args["command"])) {
+              vueltasDeCadaHilo.set(deHilo, (vueltasDeCadaHilo.get(deHilo) ?? 0) + 1);
             }
             // Qué le pide el orquestador a quién: el encargo, acotado (ver `DiagnosticoDeTools.delegacion`).
             if (t.function.name === "create_sub_agent" && typeof args["name"] === "string" && typeof args["input"] === "string") {

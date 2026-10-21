@@ -401,6 +401,15 @@ describe("ejecucion: la capacidad de correr comandos", () => {
     expect(texto).toContain("ejecucion: true");
     expect((leerAgente("mio", texto, "global") as { agente: Agente }).agente.ejecucion).toBe(true);
   });
+
+  it("`scripts` igual: solo con «true», se escribe solo cuando es cierto y vuelve al leer", () => {
+    const base: Agente = { nombre: "mio", descripcion: "x", motor: "modelo", soloLectura: false, skills: [], instrucciones: "", origen: "global" };
+    expect(escribirAgente(base)).not.toContain("scripts:");
+    const texto = escribirAgente({ ...base, scripts: true });
+    expect(texto).toContain("scripts: true");
+    expect((leerAgente("mio", texto, "global") as { agente: Agente }).agente.scripts).toBe(true);
+    expect((leerAgente("mio", texto.replace("scripts: true", "scripts: sí"), "global") as { agente: Agente }).agente.scripts).toBeUndefined();
+  });
 });
 
 /**
@@ -490,11 +499,11 @@ describe("el campo `espera` de un subagente", () => {
 });
 
 describe("lo que la ventana de Ajustes no edita se conserva al guardar", () => {
-  const previo = { escribeEn: ["/icons/"], llama: ["device-controller"], espera: ["designer-xone"], pensamiento: "apagado" as const, descripcion: "vieja" };
+  const previo = { escribeEn: ["/icons/"], llama: ["device-controller"], espera: ["designer-xone"], pensamiento: "apagado" as const, scripts: true, descripcion: "vieja" };
 
   it("toma del agente de antes los campos que el cable no trae", () => {
     expect(conLoQueLaVentanaNoEdita(previo, { descripcion: "nueva" })).toEqual({
-      escribeEn: ["/icons/"], llama: ["device-controller"], espera: ["designer-xone"], pensamiento: "apagado", descripcion: "nueva",
+      escribeEn: ["/icons/"], llama: ["device-controller"], espera: ["designer-xone"], pensamiento: "apagado", scripts: true, descripcion: "nueva",
     });
   });
 

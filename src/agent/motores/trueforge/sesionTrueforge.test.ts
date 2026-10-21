@@ -21,6 +21,17 @@ import { pintarSesion, resumirTraza } from "../../turno/informeDeTraza.js";
 import { anotarPaso, ponerSumideroDeErrores } from "../../../core/trazaDeErrores.js";
 import type { HechosDelTurno } from "../../../core/juezDelTurno.js";
 import { olvidarAgotamientos } from "../../subagentes/agotamiento.js";
+import { AGENTES_DE_SERIE, guardarAgente } from "../../subagentes/agentesEnDisco.js";
+
+/**
+ * Un desarrollador de PROYECTO que aún llama al de pruebas y no corre scripts: el de serie ya prueba él
+ * (`Agente.scripts`), pero el lazo con un hijo que ejecuta sigue valiendo para quien lo declare así.
+ */
+function conDesarrolladorQueLlamaAlDePruebas(raiz: string): string {
+  const { scripts: _s, ...desarrollador } = AGENTES_DE_SERIE.find((a) => a.nombre === "developer-xone")!;
+  guardarAgente(raiz, { ...desarrollador, llama: ["device-controller", "designer-xone"], origen: "proyecto" });
+  return raiz;
+}
 
 /**
  * Un modelo de pega con el guion de una ESCRITURA delegada: el orquestador delega en
@@ -1369,7 +1380,7 @@ describe("una sesión con el motor TrueForge", () => {
     ];
 
     it("encendido, el desarrollador recibe `create_sub_agent` y el nieto trabaja y responde al desarrollador", async () => {
-      const raiz = proyecto();
+      const raiz = conDesarrolladorQueLlamaAlDePruebas(proyecto());
       const { m, vistos, toolsPorLlamada } = modelosConGuion(guion());
       const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, bucleDelDesarrollador: true });
       const r = piel();
@@ -1383,6 +1394,28 @@ describe("una sesión con el motor TrueForge", () => {
       // Lo que vio el nieto llega al desarrollador, y el turno cierra con la respuesta del raíz.
       expect(vistos[3]!.join("\n")).toContain("Vi la app arrancar.");
       expect(r.tokens.join("")).toContain("Hecho.");
+    }, 30_000);
+
+    it("el de serie PRUEBA ÉL: lleva `ejecutar_script` con sus escrituras, no llama al de pruebas y su bucle se lo dice", async () => {
+      const raiz = proyecto();
+      const { m, vistos, toolsPorLlamada } = modelosConGuion([
+        [delega("d1", "developer-xone", "escribe la calculadora")],
+        [new AIMessageChunk({ content: "Escrito y comprobado." })],
+        [new AIMessageChunk({ content: "Hecho." })],
+      ]);
+      const s = await abrirSesionTrueforge({
+        raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, bucleDelDesarrollador: true,
+        artefactos: mkdtempSync(join(tmpdir(), "xc-tf-scripts-")),
+      });
+      await s.turno("haz la calculadora", piel().p);
+      // Sus scripts SIN shell, y sin perder las de escribir (lo que sí perdería con `ejecucion`).
+      expect(toolsPorLlamada[1]).toEqual(expect.arrayContaining(["ejecutar_script", "write_file", "edit_file"]));
+      expect(toolsPorLlamada[1]).not.toContain("execute");
+      const sistema = vistos[1]!.join("\n");
+      expect(sistema).toContain("PUEDES LLAMAR A: designer-xone,");
+      expect(sistema).toContain("prueba TÚ en el aparato");
+      expect(sistema).toContain("pásalo UNA vez al CERRAR cada pantalla");
+      expect(sistema).not.toContain("llama al de pruebas");
     }, 30_000);
 
     it("encendido y con carpeta de artefactos, el desarrollador recibe el crítico y la medida, y se lo dice; el conductor, no", async () => {
@@ -1532,7 +1565,7 @@ describe("una sesión con el motor TrueForge", () => {
     }, 30_000);
 
     it("tras TRES comprobaciones seguidas al de pruebas, el desarrollador recibe el aviso de cambiar de procedimiento (una sola vez)", async () => {
-      const raiz = proyecto();
+      const raiz = conDesarrolladorQueLlamaAlDePruebas(proyecto());
       const { m, vistos } = modelosConGuion([
         [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "developer-xone", input: "escribe" }) }] })],
         [llama("n1")],

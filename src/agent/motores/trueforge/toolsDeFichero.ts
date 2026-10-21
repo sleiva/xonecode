@@ -29,6 +29,7 @@ import { desalojarSiGrande, MAXIMO_DE_COINCIDENCIAS, truncarSiLargo } from "./re
 import { motivoDeTasksInaceptable, RUTA_DE_TASKS } from "../../../core/tareasDelPlan.js";
 import { motivoDeComandoRechazado, motivoDeOtroAparato } from "../../../core/shellDeAgente.js";
 import type { DispositivoDeLaSesion } from "../../../core/dispositivoDeSesion.js";
+import { motivoDeComandoExternoInaceptable } from "../../../core/comandoExterno.js";
 
 /** El backend de deepagents en su versión nueva, en lo que se usa. */
 export interface BackendDeFicheros {
@@ -335,6 +336,9 @@ export function fuenteDeFicheros(opciones: {
 /** Las que solo LEEN: las que lleva un subagente que no escribe el proyecto. */
 export const TOOLS_DE_LECTURA: readonly ToolDeFichero[] = ["ls", "read_file", "glob", "grep"];
 
+/** La tool de quien corre los scripts de sus skills SIN shell (`Agente.scripts`). */
+export const NOMBRE_EJECUTAR_SCRIPT = "ejecutar_script";
+
 /** Lo que devuelve la shell de deepagents (`ExecuteResponse`), en lo que se usa. */
 interface BackendQueEjecuta {
   execute(comando: string): unknown;
@@ -356,8 +360,15 @@ interface BackendQueEjecuta {
 export function fuenteDeEjecucion(
   backend: BackendQueEjecuta,
   /** El aparato de la sesión, leído en CADA comando (IXCODE-32). Ausente = no hay ninguno elegido. */
-  dispositivo: () => DispositivoDeLaSesion | undefined = () => undefined
+  dispositivo: () => DispositivoDeLaSesion | undefined = () => undefined,
+  /**
+   * ESTRECHA: solo estos scripts de sus skills, por su nombre (`ejecutar_script`, `Agente.scripts`). La misma gramática
+   * que la shell estrecha de Claude Code (`motivoDeComandoExternoInaceptable`), y DESPUÉS las mismas guardas que la
+   * shell entera. Ausente = la shell de quien declara `ejecucion`.
+   */
+  estrecha?: readonly string[]
 ) {
+  const nombre = estrecha === undefined ? "execute" : NOMBRE_EJECUTAR_SCRIPT;
   return {
     name: "shell",
     id: "shell",
@@ -365,9 +376,12 @@ export function fuenteDeEjecucion(
       result: {
         tools: [
           {
-            name: "execute",
+            name: nombre,
             description:
-              "Runs a shell command in the project root and returns its output and exit code. Use the xone-* scripts of your skills.",
+              estrecha === undefined
+                ? "Runs a shell command in the project root and returns its output and exit code. Use the xone-* scripts of your skills."
+                : `Runs ONE script of your skills by its name, in the project root, and returns its output and exit code: ${estrecha.join(", ")}. ` +
+                  "Arguments as plain words or in single quotes; no ;, &&, |, >, $ nor double quotes. Any of them with --help says how it is used.",
             inputSchema: { type: "object" as const, properties: { command: { type: "string" } }, required: ["command"] },
             preload: true,
           },
@@ -377,9 +391,11 @@ export function fuenteDeEjecucion(
     }),
     callTool: async (params: { name: string; arguments?: Record<string, unknown> }) => {
       const comando = params.arguments?.command;
-      if (params.name !== "execute" || typeof comando !== "string" || comando.trim() === "") {
-        return toolResultResponse({ text: "execute necesita un `command`", isError: true });
+      if (params.name !== nombre || typeof comando !== "string" || comando.trim() === "") {
+        return toolResultResponse({ text: `${nombre} necesita un \`command\``, isError: true });
       }
+      const fueraDeForma = estrecha === undefined ? undefined : motivoDeComandoExternoInaceptable(comando, estrecha);
+      if (fueraDeForma !== undefined) return toolResultResponse({ text: fueraDeForma, isError: true });
       // Una búsqueda por el disco entero no se lanza (`motivoDeComandoRechazado`): se devuelve el camino bueno.
       // Y uno que iría a OTRO aparato que el de la sesión (`motivoDeOtroAparato`): el elegido se pasa siempre.
       const rechazo = motivoDeComandoRechazado(comando) ?? motivoDeOtroAparato(comando, dispositivo());
@@ -396,8 +412,8 @@ export function fuenteDeEjecucion(
     },
     toolCallInfo: async (params: { name: string }) => ({
       type: "mcp" as const,
-      mcp_server_id: "shell",
-      mcp_server_name: "shell",
+      mcp_server_id: estrecha === undefined ? "shell" : "scripts",
+      mcp_server_name: estrecha === undefined ? "shell" : "scripts",
       original_tool_name: params.name,
     }),
   };
