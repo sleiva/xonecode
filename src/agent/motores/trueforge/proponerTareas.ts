@@ -7,6 +7,8 @@ import {
   type PropuestaDeTareas,
 } from "../../../core/repartoDeEncargo.js";
 
+import { NOMBRE_TRAER_DE_STITCH } from "./traerDeStitch.js";
+
 export { NOMBRE_PROPONER_TAREAS };
 
 /**
@@ -80,5 +82,8 @@ export const REPARTIR_EN_TAREAS = [
   `- Si el encargo son varias pantallas o entregables independientes (por ejemplo, diseñar dos ventanas), o el plan del analista no cabe en un turno, no lo hagas todo aquí: propón repartirlo con ${NOMBRE_PROPONER_TAREAS}, una tarea por entregable y en el orden en que tienen que correr.`,
   "- ANTES de proponer, pregunta con ask_user_question lo que te falte para que cada tarea sea autosuficiente: qué diseño o adjunto va con cada una, de dónde salen los datos, cómo se navega entre pantallas y qué queda fuera. No preguntes lo que ya está en la conversación o en el proyecto.",
   "- Cada petición se escribe para alguien que NO ha visto esta conversación: qué hacer, con qué datos, el criterio de aceptación y el plan (/planes/…) si lo hay. Pon en `adjuntos` los diseños de /adjuntos/ que necesita ESA tarea.",
+  // Medido en Maset (21-10-2026): cinco tareas encadenadas sin nombrar ninguna pantalla de Stitch trabajaron desde un
+  // DISENO.md que el analista había deducido sin verlas, y rehicieron el login con una tarjeta blanca que la maqueta no tiene.
+  `- Si el diseño está en Stitch, cada petición NOMBRA las pantallas de ESA tarea —su título y su \`name\` (projects/<id>/screens/<id>, de list_screens)— y empieza pidiendo traerlas con ${NOMBRE_TRAER_DE_STITCH} antes de tocar nada: son su maqueta y, si el plan dice otra cosa, manda la maqueta. Sin ellas la tarea trabaja a ciegas.`,
   "- No lo uses para lo que cabe en un turno. Y tras proponer no hagas las tareas: la persona decide si se encolan.",
 ].join("\n");

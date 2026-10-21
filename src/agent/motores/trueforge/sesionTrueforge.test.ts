@@ -9,7 +9,7 @@ import type { DetalleDeLinea } from "../../../core/actos.js";
 import type { ModelosPort, PeticionExterna } from "../../../core/ports.js";
 import { ConectoresEnMemoria } from "../../../core/ports.js";
 import { TOPE_DE_LLAMADA_MS } from "../../../core/conectores.js";
-import { abrirSesionTrueforge, LIMITE_DE_LLAMADAS_DEL_RAIZ, notaDeDelegacion, textoDelBucle } from "./sesionTrueforge.js";
+import { abrirSesionTrueforge, LIMITE_DE_LLAMADAS_DEL_RAIZ, notaDeDelegacion, PLAN_PRIMERO, textoDelBucle } from "./sesionTrueforge.js";
 import { TOPE_DE_LLAMADAS_DEL_ESPECIALISTA } from "../../turno/resumenDeContexto.js";
 import { topeAgotadoDe, traducirEvento } from "./eventosTrueforge.js";
 import { cargarMemoria, interpretarFoto, rutaDeMemoria } from "./memoriaTrueforge.js";
@@ -3706,5 +3706,17 @@ describe("con un maquetador de Claude Code con shell, el bucle es SUYO", () => {
     const suya = notaDeDelegacion([propio as never], { conComparacion: true, conBucle: true });
     expect(suya.slice(suya.indexOf("BUCLE DEL DESARROLLADOR"))).toMatch(/comparar_capturas[\s\S]*device-controller comprobar SU/);
     expect(suya).not.toContain("NO nombres herramientas de xonecode");
+  });
+});
+
+/**
+ * Medido en Maset (21-10-2026): el analista (Claude Code, sin Stitch) escribió el diseño del plan sin ver las pantallas, y
+ * las tareas lo siguieron. Con diseño en Stitch, el orquestador las trae ANTES y el plan se escribe desde ellas.
+ */
+describe("el plan sale de las pantallas de Stitch", () => {
+  it("PLAN_PRIMERO pide traerlas antes del analista, nombrarlas por tarea y que mande la maqueta", () => {
+    expect(PLAN_PRIMERO).toMatch(/TRAE TÚ las pantallas ANTES de llamar al analista/);
+    expect(PLAN_PRIMERO).toMatch(/traer_pantalla_de_stitch/);
+    expect(PLAN_PRIMERO).toMatch(/manda la maqueta/);
   });
 });

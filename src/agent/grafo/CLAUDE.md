@@ -134,7 +134,8 @@ Todas **reaplican `puedeLeerRuta` a mano** (una tool de xonecode no pasa por el 
   diferencia de DISEÑO que vieron las DOS miradas (`confirmadas`); el resto son DETALLES y no ponen rojo. La frontera,
   en el método (forma de CATEGORÍA, color de lo IMPORTANTE, disposición; el GRADO es detalle). **Lo medido del ESTILO no
   pone rojo** (`hayQueArreglar`: falsos positivos medidos), y un texto que EMPIEZA donde otro de la maqueta es «otro
-  texto en su sitio», no un bloqueante. Recorte solo sin fondo propio. Informe en `.critica.txt`; un
+  texto en su sitio», no un bloqueante. **Sin `referencia` y con maqueta en la sesión, compara contra la más parecida**
+  (`maquetaDeLaSesion`, la misma elección que la medida automática) y lo dice: un verde sin comparar no es «respeta». Recorte solo sin fondo propio. Informe en `.critica.txt`; un
   rojo va a `developer-xone` (el diseñador solo escribe en `icons/` y `fonts/`). **ENCAJE y BLOQUES** (`ENCAJE`, `compararBloques`, solo lo emparejado). Foto de
   UN control sin geometría (`esCapturaDeUnControl`). **Tamaño de IMAGEN respecto a su pantalla**
   (`FACTOR_DE_TAMAÑO_DE_IMAGEN`), nunca bloqueante.

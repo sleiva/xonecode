@@ -192,6 +192,11 @@ export const PLAN_PRIMERO = [
   "leído tú los ficheros o que el encargo traiga un «Cómo empezar» NO lo sustituye: el plan es lo que el desarrollador marca y lo",
   "que queda para la tarea siguiente. Después, el diseñador si faltan recursos, y el desarrollador con el NOMBRE del plan. Solo un",
   "retoque (una línea, un color, un texto) va directo.",
+  // Medido en Maset (21-10-2026): el analista corre en Claude Code, no tiene Stitch, y escribió un DISENO.md deducido del
+  // resumen del design system —«las 16 capturas NO están en el proyecto»—; las tareas lo siguieron como «fuente única».
+  "Si el diseño está en Stitch, TRAE TÚ las pantallas ANTES de llamar al analista (traer_pantalla_de_stitch, una por pantalla) y",
+  "dale sus rutas: él no tiene Stitch y, sin verlas, se inventa el diseño. El plan se escribe DESDE esas maquetas, nombra la",
+  "pantalla de Stitch de cada tarea (título y `name`) y, si el plan y una maqueta no coinciden, manda la maqueta.",
 ].join("\n");
 
 /**
@@ -457,6 +462,9 @@ export function textoDelBucle(llama: readonly string[], opciones: { conCritica?:
     "no obligan a otra vuelta; dilos al devolver.",
     // Medido en Maset (liquidaciones): 5 filas reales frente a 3 de muestra daban «abajo +11 %» y la tarea no cerraba.
     "En una LISTA con datos reales lo vertical no cuenta (cuántas filas tenga no es del diseño): `comparar_capturas` lo dice y no lo exige.",
+    // Medido en Maset (21-10-2026): «la maqueta va sobre carbón sin tarjeta por decisión del encargo», y la tarea se dio por hecha.
+    "Si el plan o el encargo describen la pantalla de otra forma que su MAQUETA, manda la maqueta: síguela y di la diferencia. Nunca",
+    "lo resuelvas como «decisión del encargo», salvo que el encargo diga EXPRESAMENTE que se aparte de ella.",
     // Con el puerto de fuentes la tipografía SÍ se reproduce: se trae a `fonts/` (`fuentesDeGoogle.ts`). Sin él, sigue fuera.
     ...(opciones.conFuentes === true
       ? [
@@ -1105,6 +1113,16 @@ export async function abrirSesionTrueforge(
             // La GEOMETRÍA: el árbol guardado con la captura, y las cajas de la maqueta si trae `code.html`.
             // Por nombre y, si se renombró o convirtió (`sips … --out menu.png`), por los PÍXELES de la original (`geometriaEnDisco.ts`).
             leerGeometria: async (nombre) => geometriaDeCaptura(carpetaDeHotswap(carpeta), nombre, { carpetaDeArtefactos: carpeta, decodificar: decodificarImagen }),
+            // Sin `referencia`, la maqueta de la sesión más parecida: la MISMA elección que la medida automática.
+            maquetaDeLaSesion: (capturaRelativa) => {
+              const maquetas = buscarMaquetas(raiz, opciones.adjuntos, carpeta);
+              if (maquetas.length <= 1) return maquetas[0]?.virtual;
+              try {
+                return medirContraLaMasParecida(join(carpeta, capturaRelativa), maquetas).maqueta.virtual;
+              } catch {
+                return maquetas[0]!.virtual;
+              }
+            },
             cajasDeMaqueta: async (imagen, bytes) => {
               const html = localizadorDeHtml(imagen);
               const medidas = medidasDeImagen(bytes);

@@ -196,6 +196,32 @@ describe("xone_critica_visual con una maqueta delante", () => {
     expect(sin).not.toMatch(/comparado con la referencia/);
   });
 
+  /**
+   * **Sin `referencia` y con maquetas en la sesión, usa la más parecida** (Maset, 21-10-2026): el login se dio por bueno
+   * con un crítico sin referencia —«nada roto»— en una tarea que tenía su maqueta, y no se parecía.
+   */
+  it("sin referencia, con maqueta en la sesión, compara contra ella y lo dice", async () => {
+    const referencias: (string | undefined)[] = [];
+    const conMaqueta = crearCriticaVisual({
+      leerArtefacto: async () => Buffer.from([0xff, 0xd8, 0xff]),
+      invocar: async (_papel, _prompt, _imagen, referencia) => {
+        referencias.push(referencia?.base64);
+        return '{"diseno":[],"detalles":[]}';
+      },
+      maquetaDeLaSesion: () => "/artefactos/diseno/screen.png",
+    });
+    const salida = await conMaqueta.invoke({ captura: "/artefactos/c.jpg", pantalla: "X" });
+    expect(salida).toMatch(/comparado con la maqueta de la sesión/);
+    expect(referencias.every((r) => r !== undefined)).toBe(true);
+    // Sin maqueta en la sesión, como siempre: solo busca roturas.
+    const sinMaqueta = crearCriticaVisual({
+      leerArtefacto: async () => Buffer.from([0xff, 0xd8, 0xff]),
+      invocar: invocando('{"veredicto":"verde","hallazgos":[]}'),
+      maquetaDeLaSesion: () => undefined,
+    });
+    expect(await sinMaqueta.invoke({ captura: "/artefactos/c.jpg", pantalla: "X" })).not.toMatch(/comparado con/);
+  });
+
   /** El eco ya lo paga `pantalla`; la ruta de la referencia la acaba de escribir quien llama. */
   it("no devuelve la ruta de la referencia", async () => {
     const salida = await tool('{"veredicto":"verde","hallazgos":[]}').invoke({

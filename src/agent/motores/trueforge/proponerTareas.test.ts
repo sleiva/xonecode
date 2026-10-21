@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { PropuestaDeTareas } from "../../../core/repartoDeEncargo.js";
-import { crearProponerTareas } from "./proponerTareas.js";
+import { crearProponerTareas, REPARTIR_EN_TAREAS } from "./proponerTareas.js";
 
 const dos = {
   motivo: "son dos pantallas independientes",
@@ -33,5 +33,14 @@ describe("proponer_tareas", () => {
     const recibidas: PropuestaDeTareas[] = [];
     await crearProponerTareas((p) => recibidas.push(p)).invoke({ ...dos, tareas: [{ titulo: "A", peticion: "haz A" }, dos.tareas[1]!] });
     expect("adjuntos" in recibidas[0]!.tareas[0]!).toBe(false);
+  });
+});
+
+/** Medido en Maset (21-10-2026): las tareas encadenadas no nombraban sus pantallas de Stitch y trabajaron a ciegas. */
+describe("cada tarea propuesta nombra SUS pantallas de Stitch", () => {
+  it("el texto del reparto lo pide, con la tool que las trae y que la maqueta manda sobre el plan", () => {
+    expect(REPARTIR_EN_TAREAS).toContain("traer_pantalla_de_stitch");
+    expect(REPARTIR_EN_TAREAS).toMatch(/projects\/<id>\/screens\/<id>/);
+    expect(REPARTIR_EN_TAREAS).toMatch(/manda la maqueta/);
   });
 });

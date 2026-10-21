@@ -145,6 +145,9 @@ corre solo y escribe sin aprobación. Cuatro estados; `requiere-atencion` = **es
 
 ## Encadenadas
 
+- **Con diseño en Stitch, cada tarea propuesta NOMBRA sus pantallas** (título y `name`) y pide traerlas antes de nada
+  (`REPARTIR_EN_TAREAS`); el plan se escribe desde las pantallas que el orquestador trae ANTES del analista
+  (`PLAN_PRIMERO`), y si el plan y la maqueta no coinciden, manda la maqueta. Es redacción, no guarda.
 - **El agente solo PROPONE** (`core/repartoDeEncargo.ts`, `proponerTareas.ts`,
   `PropuestaDeTareas.tsx`); crea el clic, TAMBIÉN en autónomo. Solo el raíz de TrueForge en
   consola de PERSONA web (`Consola.proponeTareas`). `TASKS.md` con varias

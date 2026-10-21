@@ -127,6 +127,12 @@ export interface DependenciasDeCritica {
   decodificar?: (bytes: Buffer) => ImagenRgba;
   /** Guarda el informe junto a la captura (`<captura>.critica.txt` en `/hotswap/`), para poder auditar qué se dijo. */
   guardarInforme?: (nombreDeCaptura: string, informe: string) => Promise<void>;
+  /**
+   * La maqueta de la SESIÓN más parecida a esta captura (su ruta virtual), para cuando no le pasan `referencia`. Medido en
+   * Maset (21-10-2026): el login se dio por bueno con un crítico SIN referencia —«nada roto»— en una tarea que tenía su
+   * maqueta, y no se le parecía. `undefined` = la sesión no tiene maqueta, y entonces solo busca roturas, como siempre.
+   */
+  maquetaDeLaSesion?: (capturaRelativa: string) => string | undefined;
 }
 
 /** Lo que la geometría le añade al crítico: el bloque para el agente, los hechos para el modelo y si hay algo bloqueante. */
@@ -447,7 +453,10 @@ export const TABLA_DE_TRADUCCION = "`read_file /skills/xone-development/referenc
 
 export function crearCriticaVisual(deps: DependenciasDeCritica) {
   return tool(
-    async (entrada: Entrada) => {
+    async (pedida: Entrada) => {
+      // Sin referencia y con maqueta en la sesión, la más parecida: un «verde» sin comparar no dice si respeta el diseño.
+      const deLaSesion = pedida.referencia === undefined && esRutaDeArtefacto(pedida.captura) ? deps.maquetaDeLaSesion?.(rutaRelativaDeArtefacto(pedida.captura)) : undefined;
+      const entrada: Entrada = deLaSesion === undefined ? pedida : { ...pedida, referencia: deLaSesion };
       // Se comprueban las DOS antes de abrir ninguna: ver `veredictoDeImagen`.
       const deLaCaptura = veredictoDeImagen(entrada.captura, "una captura");
       if (typeof deLaCaptura === "string") return deLaCaptura;
@@ -553,7 +562,8 @@ export function crearCriticaVisual(deps: DependenciasDeCritica) {
        * que saber cuál le han contestado. Lo segundo porque el argumento lo acaba de escribir
        * quien llama: devolvérselo entero es el eco que ya paga el campo `pantalla`.
        */
-      const comparado = referencia === undefined ? "" : " (comparado con la referencia)";
+      const comparado =
+        referencia === undefined ? "" : deLaSesion !== undefined ? ` (comparado con la maqueta de la sesión más parecida, ${deLaSesion}: no te la pasaron)` : " (comparado con la referencia)";
       /**
        * **Lo medido decide.** Un control tapado, fuera de la pantalla o que falta es rojo aunque el modelo
        * diga verde: lo saca el árbol de controles, no una opinión — y medido, el modelo no vio la «=»
