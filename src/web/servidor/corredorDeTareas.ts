@@ -52,6 +52,7 @@ import type { Consola } from "../../cli/consola.js";
 import type { ConsolaDeProyecto } from "./vestibulo.js";
 import type { Sumidero } from "./transporte.js";
 import { acumularTotales, gastoEntre, type Acto, type ConsumoDeTurno } from "../../core/actos.js";
+import { pantallasCitadasEnElEncargo } from "../../core/stitch.js";
 import { listarSesiones } from "./sesiones.js";
 import type { TareasEnDisco } from "../../agent/tareas/tareasEnDisco.js";
 
@@ -1066,7 +1067,10 @@ export function crearCorredorDeTareas(opciones: {
      * Las pantallas de Stitch ELEGIDAS, traídas a la carpeta de la sesión antes del primer turno (no al reanudar: ya están,
      * y la conversación ya las nombra). Fuera de la escritura CAS de abajo porque es red; su línea se añade dentro.
      */
-    const pantallas = tarea.pantallasDeStitch;
+    // Las ELEGIDAS, o si no las que CITA su encargo (`pantallasCitadasEnElEncargo`): medido en Maset (21-10-2026), una tarea
+    // que nombraba sus maquetas no las trajo, y con la tool cada traída reemplaza la anterior; así quedan todas puestas.
+    const citadas = tarea.pantallasDeStitch === undefined ? pantallasCitadasEnElEncargo(tarea.encargo) : [];
+    const pantallas = tarea.pantallasDeStitch ?? (citadas.length > 0 ? citadas : undefined);
     const sinTraer = (motivo: string): string =>
       textoDePantallasElegidas((pantallas ?? []).map((pantalla) => ({ pantalla, traida: { ok: false as const, motivo } })));
     const lineaDeDiseno =

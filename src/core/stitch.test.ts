@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  pantallasCitadasEnElEncargo,
   casanConNombre,
   conNombreDelLienzo,
   nombresDelLienzo,
@@ -201,3 +202,31 @@ describe("nombres del lienzo", () => {
   });
 });
 
+
+/**
+ * Las pantallas que CITA el encargo de una tarea (Maset, 21-10-2026): las tareas propuestas nombran sus maquetas de Stitch
+ * con título y `name`, pero el agente de B1 no las trajo. El corredor las trae él antes del primer turno, como las
+ * elegidas a mano en «Nueva tarea» —y todas a la vez, en `diseno/`, `diseno/2/`…, cuando la tool reemplaza la anterior—.
+ */
+describe("pantallasCitadasEnElEncargo", () => {
+  const encargo = [
+    "MAQUETAS — tráelas TÚ con `traer_pantalla_de_stitch`:",
+    "1. «Login - Maset Logística» — projects/8393658318620482446/screens/81aed76ba0ef494e9ce9920e45acb558",
+    "2. «Menú Principal - Maset Logística (Rediseño Profesional)» — projects/8393658318620482446/screens/c92f323001b049569936bdd58ecdd85c",
+    "Y otra vez la del login: projects/8393658318620482446/screens/81aed76ba0ef494e9ce9920e45acb558",
+  ].join("\n");
+
+  it("saca cada `name` una vez, en orden, con el título «» de su línea", () => {
+    expect(pantallasCitadasEnElEncargo(encargo)).toEqual([
+      { name: "projects/8393658318620482446/screens/81aed76ba0ef494e9ce9920e45acb558", titulo: "Login - Maset Logística" },
+      { name: "projects/8393658318620482446/screens/c92f323001b049569936bdd58ecdd85c", titulo: "Menú Principal - Maset Logística (Rediseño Profesional)" },
+    ]);
+  });
+
+  it("sin título en su línea, la nombra por su id; sin ninguna, lista vacía; y como mucho el tope", () => {
+    expect(pantallasCitadasEnElEncargo("trae projects/1/screens/abc")[0]).toEqual({ name: "projects/1/screens/abc", titulo: "pantalla abc" });
+    expect(pantallasCitadasEnElEncargo("sin diseño")).toEqual([]);
+    const muchas = Array.from({ length: TOPE_DE_PANTALLAS_ELEGIDAS + 3 }, (_, i) => `projects/1/screens/a${i}`).join("\n");
+    expect(pantallasCitadasEnElEncargo(muchas)).toHaveLength(TOPE_DE_PANTALLAS_ELEGIDAS);
+  });
+});

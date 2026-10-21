@@ -280,6 +280,40 @@ describe("los adjuntos de una tarea llegan a su turno", () => {
     await corredor.parar();
   });
 
+  /**
+   * Medido en Maset (21-10-2026): las tareas propuestas CITABAN sus maquetas (título y `name`) y el agente de la primera no
+   * las trajo. Sin pantallas elegidas, el corredor trae las que cita el encargo, antes del primer turno.
+   */
+  it("sin pantallas ELEGIDAS, trae las que CITA su encargo, con su título", async () => {
+    const encargo = "Rediseña el login.\nMAQUETAS:\n1. «Login - Maset Logística» — projects/9/screens/aa\n2. «Menú» — projects/9/screens/bb";
+    const { disco } = discoDeMentira([TAREA({ encargo })]);
+    const p = conAperturas();
+    const traidas: unknown[] = [];
+    const corredor = crearCorredorDeTareas({
+      ...ENTREGA_VERDE,
+      disco,
+      abrirParaTarea: p.abrir,
+      pid: 1,
+      concurrencia: () => 1,
+      prepararDiseno: async (_raiz, _sesion, pantallas) => {
+        traidas.push(pantallas);
+        return "MAQUETAS TRAÍDAS";
+      },
+    });
+    await corredor.arrancar();
+    await corredor.asentar();
+    expect(traidas).toEqual([
+      [
+        { name: "projects/9/screens/aa", titulo: "Login - Maset Logística" },
+        { name: "projects/9/screens/bb", titulo: "Menú" },
+      ],
+    ]);
+    expect(p.encargos[0]).toContain("MAQUETAS TRAÍDAS");
+    p.acabar();
+    await corredor.asentar();
+    await corredor.parar();
+  });
+
   it("sin quien la traiga (sin conectores), el encargo dice igual qué pantalla es y con qué id traerla", async () => {
     const { disco } = discoDeMentira([TAREA({ pantallasDeStitch: [{ name: "projects/9/screens/aa", titulo: "Listado" }] })]);
     const p = conAperturas();

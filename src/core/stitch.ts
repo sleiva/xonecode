@@ -290,6 +290,28 @@ export function palabrasQueDistinguen(titulo: string, entradas: readonly Entrada
   return [...new Set(palabras(titulo))].filter((p) => !comunes.has(p));
 }
 
+/**
+ * **Las pantallas de Stitch que CITA el encargo de una tarea**, para traerlas antes de su primer turno cuando no trae
+ * pantallas ELEGIDAS (`Tarea.pantallasDeStitch`). Medido en Maset (21-10-2026): las tareas propuestas nombraban sus
+ * maquetas con título y `name`, y aun así el agente de la primera no las trajo; y con la tool cada traída reemplaza la
+ * anterior, mientras que el corredor las deja TODAS (`diseno/`, `diseno/2/`…). Cada `name` una vez y en orden, con el
+ * título «» de su misma línea (o su id), hasta `TOPE_DE_PANTALLAS_ELEGIDAS`. Puro.
+ */
+export function pantallasCitadasEnElEncargo(encargo: string): { name: string; titulo: string }[] {
+  const vistas = new Set<string>();
+  const pantallas: { name: string; titulo: string }[] = [];
+  for (const linea of encargo.split("\n")) {
+    for (const m of linea.matchAll(/projects\/[0-9A-Za-z_-]+\/screens\/[0-9A-Za-z_-]+/g)) {
+      const name = m[0];
+      if (vistas.has(name) || pantallas.length >= TOPE_DE_PANTALLAS_ELEGIDAS) continue;
+      vistas.add(name);
+      const titulo = [...linea.slice(0, m.index).matchAll(/«([^»]+)»/g)].at(-1)?.[1]?.trim();
+      pantallas.push({ name, titulo: titulo !== undefined && titulo !== "" ? titulo : `pantalla ${name.split("/").at(-1)}` });
+    }
+  }
+  return pantallas;
+}
+
 /** El id de un proyecto (`projects/<id>` → `<id>`), que es lo que pide `list_screens`. */
 export function idDeProyecto(name: string): string {
   return name.replace(/^projects\//, "");
