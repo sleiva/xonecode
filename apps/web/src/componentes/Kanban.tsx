@@ -77,6 +77,7 @@ export function Kanban({
   mirando,
   mirada,
   conectado,
+  alPlegar,
 }: {
   cola: {
     lista: readonly TareaDelCable[];
@@ -130,18 +131,30 @@ export function Kanban({
    *  (reintentar, descartar, terminar, feedback) y dice por qué. Ausente = se asume
    *  conectado. */
   conectado?: boolean;
+  /** Volver a las cifras (el Escritorio lo despliega desde su resumen). Ausente = no se ofrece. */
+  alPlegar?: () => void;
 }) {
+  const titulo = (
+    <div className={estilos.cabecera}>
+      <h2 className={estilos.titulo}>Tareas</h2>
+      {alPlegar === undefined ? null : (
+        <button type="button" className={estilos.plegar} onClick={alPlegar}>
+          Ver en cifras
+        </button>
+      )}
+    </div>
+  );
   if (cola.lista.length === 0) {
     return (
       <section className={estilos.kanban} aria-label="Tareas en background">
-        <h2 className={estilos.titulo}>Tareas</h2>
+        {titulo}
         <p className={estilos.vacio}>Ninguna tarea todavía. Se crean desde un proyecto, y se ejecutan solas.</p>
       </section>
     );
   }
   return (
     <section className={estilos.kanban} aria-label="Tareas en background">
-      <h2 className={estilos.titulo}>Tareas</h2>
+      {titulo}
       {/* Quién las ejecuta si no es este proceso, y qué le pasa a una creada aquí: la MISMA
           pieza que la lista del proyecto, porque son tres frases y dos copias divergen. */}
       <QuienEjecutaTareas

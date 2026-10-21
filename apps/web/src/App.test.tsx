@@ -1644,6 +1644,8 @@ describe("App: la tarjeta de tarea «esperando feedback» abre Revisión", () =>
         ],
       })
     );
+    // El Escritorio las enseña en CIFRAS (21-10-2026): para actuar sobre una, se despliega el tablero.
+    fireEvent.click(screen.getByRole("button", { name: "Ver el tablero" }));
     return { store, enviar };
   }
 

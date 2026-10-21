@@ -206,7 +206,7 @@ function TramoDeTrabajo({
   }, [tocado, t.terminado, corto]);
   return (
     <details
-      className={`${vista.flowItem} ${estilos.pensando}`}
+      className={`${vista.flowItem} ${estilos.pensando} ${estilos.tramo}`}
       open={abierto}
       // Al abrirlo, al FINAL: lo último es lo que está pasando, y es lo que se viene a ver.
       onToggle={(e) => {

@@ -1,10 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { Escritorio } from "./Escritorio.js";
+import type { TareaDelCable } from "../tipos.js";
 
 const MANEJADORES = {
   alNuevaSesion: () => {},
   alAbrirAjustes: () => {},
+  // Estos tests miran el TABLERO: nace abierto. El resumen en cifras de por omisión tiene los suyos, al final.
+  tableroAbierto: true,
 };
 
 describe("Escritorio", () => {
@@ -532,5 +535,55 @@ describe("Escritorio: mirar lo que hace una tarea, dentro del kanban", () => {
       />
     );
     expect(screen.queryByRole("button", { name: /dejar de ver|ocultar/i })).toBeNull();
+  });
+});
+
+/** Su lienzo (21-10-2026): las tareas en cifras, el tablero a un clic, y lo que trabaja ahora arriba. */
+describe("Escritorio: tareas en cifras", () => {
+  afterEach(cleanup);
+  const tarea = (t: Partial<TareaDelCable>): TareaDelCable =>
+    ({ id: "t", proyecto: "p1", proyectoNombre: "Tienda", titulo: "T", peticion: "", encargo: "", adjuntos: [], estado: "nuevo", creada: "2026-10-21T10:00:00Z", ...t }) as TareaDelCable;
+  const cola = (lista: TareaDelCable[]) => ({ lista, concurrencia: 1, corriendoAqui: true });
+
+  it("plegado de entrada: cuatro cifras y la lista corta; «Ver el tablero» lo despliega y «Ver en cifras» lo pliega", () => {
+    render(
+      <Escritorio
+        alNuevaSesion={() => {}}
+        alAbrirAjustes={() => {}}
+        proyectos={[{ id: "p1", nombre: "Tienda", local: true }]}
+        tareas={cola([tarea({ id: "a", titulo: "Listados", estado: "en-proceso", empezada: new Date().toISOString(), sesion: "s" }), tarea({ id: "b", titulo: "Entrega" }), tarea({ id: "c", estado: "terminada" })])}
+      />
+    );
+    const resumen = screen.getByRole("region", { name: "Tareas" });
+    expect(resumen.textContent).toContain("en cola1");
+    expect(resumen.textContent).toContain("en marcha1");
+    expect(resumen.textContent).toContain("terminadas1");
+    expect(resumen.textContent).toContain("Entrega · Tienda");
+    expect(screen.queryByRole("region", { name: "Tareas en background" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Ver el tablero" }));
+    expect(screen.getByRole("region", { name: "Tareas en background" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Ver en cifras" }));
+    expect(screen.getByRole("region", { name: "Tareas" })).toBeTruthy();
+  });
+
+  it("«Trabajando ahora» dice la que trabaja, lo que lleva y cuántas esperan en su proyecto; sin ninguna, no sale", () => {
+    const alIrAlChat = vi.fn();
+    const { rerender } = render(
+      <Escritorio
+        alNuevaSesion={() => {}}
+        alAbrirAjustes={() => {}}
+        proyectos={[{ id: "p1", nombre: "Tienda", local: true }]}
+        alIrAlChatDeTarea={alIrAlChat}
+        tareas={cola([tarea({ id: "a", titulo: "Listados", estado: "en-proceso", empezada: new Date(Date.now() - 65_000).toISOString(), sesion: "s" }), tarea({ id: "b" }), tarea({ id: "c" })])}
+      />
+    );
+    const banda = screen.getByRole("region", { name: "Trabajando ahora" });
+    expect(banda.textContent).toContain("Listados");
+    expect(banda.textContent).toMatch(/Lleva 1 min/);
+    expect(banda.textContent).toContain("2 más en cola");
+    fireEvent.click(screen.getByRole("button", { name: "Ver lo que hace" }));
+    expect(alIrAlChat).toHaveBeenCalled();
+    rerender(<Escritorio alNuevaSesion={() => {}} alAbrirAjustes={() => {}} proyectos={[]} tareas={cola([tarea({ id: "b" })])} />);
+    expect(screen.queryByRole("region", { name: "Trabajando ahora" })).toBeNull();
   });
 });

@@ -5,6 +5,8 @@ import estilos from "./Escritorio.module.css";
 import { Equipo } from "./Equipo.js";
 import { Kanban } from "./Kanban.js";
 import type { Acto, InformeDeDispositivos, TareaDelCable } from "../tipos.js";
+import { useState } from "react";
+import { EnMarcha } from "./TareasDelProyecto.js";
 
 /**
  * El centro cuando no hay sesión abierta: el escritorio.
@@ -59,6 +61,7 @@ export function Escritorio({
   alIrAlChatDeTarea,
   mirandoTarea,
   mirada,
+  tableroAbierto,
 }: {
   /** El saludo (`agent/persona.ts`). Ausente = se saluda igual, sin inventarse un nombre. */
   nombre?: string;
@@ -161,8 +164,12 @@ export function Escritorio({
    * pintado nada en vez de afirmar un turno vacío.
    */
   mirada?: { tarea: string; actos: readonly Acto[] };
+  /** Cómo NACE el tablero de tareas: plegado en cifras por omisión (su lienzo); `true` lo abre de entrada. */
+  tableroAbierto?: boolean;
 }) {
   const apagado = conectado === false;
+  /** El tablero de tareas, plegado en cifras por omisión (su lienzo): se despliega para actuar sobre una. */
+  const [verTablero, setVerTablero] = useState(tableroAbierto === true);
   // Los FIJADOS van primero, y cuentan como enseñados: la misma cuenta que la barra, que los
   // pinta en su grupo aunque no estén entre los visibles. Sin esto la barra decía «14 más» y
   // el escritorio «otros 15» para la misma elección.
@@ -175,10 +182,12 @@ export function Escritorio({
     <div className={estilos.escritorio}>
       <div className={estilos.contenido}>
         <header className={estilos.portada}>
-          <h1 className={estilos.saludo}>{nombre === undefined ? "Hola" : `Hola, ${nombre}`}</h1>
-          <p className={estilos.subtitulo}>
-            Elige un proyecto para empezar a trabajar, o sigue una conversación de antes.
-          </p>
+          <div>
+            <h1 className={estilos.saludo}>{nombre === undefined ? "Hola" : `Hola, ${nombre}`}</h1>
+            <p className={estilos.subtitulo}>
+              Elige un proyecto para empezar a trabajar, o sigue una conversación de antes.
+            </p>
+          </div>
           {entorno === undefined ? null : (
             <p className={estilos.entorno}>
               {/* La marca del entorno, delante de su punto de conexión: la primera dice de
@@ -190,6 +199,14 @@ export function Escritorio({
             </p>
           )}
         </header>
+
+        {tareas === undefined ? null : (
+          <TrabajandoAhora
+            tareas={tareas.lista}
+            proyectos={proyectos}
+            {...(alIrAlChatDeTarea === undefined ? {} : { alIrAlChat: alIrAlChatDeTarea })}
+          />
+        )}
 
         {proyectos.length === 0 ? (
           // Los dos vacíos NO son el mismo, y se distinguen: sin entorno no hay a quién
@@ -296,8 +313,11 @@ export function Escritorio({
           llegado la cola»—, la misma regla que la foto de la máquina de más abajo, así que
           se dice en vez de afirmar un kanban vacío que nadie ha medido.
         */}
+        <div className={estilos.dosColumnas}>
         {tareas === undefined ? (
           <p className={estilos.vacio}>Todavía no ha llegado la cola de tareas en background.</p>
+        ) : !verTablero ? (
+          <ResumenDeTareas tareas={tareas.lista} proyectos={proyectos} alVerTablero={() => setVerTablero(true)} />
         ) : (
           <Kanban
             cola={tareas}
@@ -315,6 +335,7 @@ export function Escritorio({
             {...(mirandoTarea === undefined ? {} : { mirando: mirandoTarea })}
             {...(mirada === undefined ? {} : { mirada })}
             conectado={conectado}
+            alPlegar={() => setVerTablero(false)}
           />
         )}
 
@@ -324,6 +345,7 @@ export function Escritorio({
           {...(alActualizarDispositivos === undefined ? {} : { alActualizar: alActualizarDispositivos })}
           {...(alVerificarDispositivo === undefined ? {} : { alVerificar: alVerificarDispositivo })}
         />
+        </div>
 
         {/* El modelo, dicho una vez y donde se va a usar. Ausente = no hay sesión abierta y
             no se afirma ninguno, la misma regla que la pastilla del compositor. */}
@@ -335,5 +357,103 @@ export function Escritorio({
         )}
       </div>
     </div>
+  );
+}
+
+const nombreDelProyecto = (proyectos: readonly { id: string; nombre: string }[], id: string, porDefecto: string): string =>
+  proyectos.find((p) => p.id === id)?.nombre ?? porDefecto;
+
+/**
+ * **Lo que está trabajando AHORA** (su lienzo, 21-10-2026): la primera tarea en marcha, con cuánto lleva y gasta (la MISMA
+ * línea que la pestaña Tareas, `EnMarcha`) y cuántas esperan detrás en su proyecto. Sin ninguna en marcha, no se pinta.
+ */
+function TrabajandoAhora({
+  tareas,
+  proyectos,
+  alIrAlChat,
+}: {
+  tareas: readonly TareaDelCable[];
+  proyectos: readonly { id: string; nombre: string }[];
+  alIrAlChat?: (tarea: TareaDelCable) => void;
+}) {
+  const enMarcha = tareas.filter((t) => t.estado === "en-proceso");
+  const primera = enMarcha[0];
+  if (primera === undefined) return null;
+  const enCola = tareas.filter((t) => t.estado === "nuevo" && t.proyecto === primera.proyecto).length;
+  return (
+    <section className={estilos.trabajando} aria-label="Trabajando ahora">
+      <div className={estilos.cuerpoDeTrabajando}>
+        <span className={estilos.rotuloDeTrabajando}>
+          {`Trabajando ahora · ${nombreDelProyecto(proyectos, primera.proyecto, primera.proyectoNombre)}`}
+          {enMarcha.length > 1 ? ` · y ${enMarcha.length - 1} más` : ""}
+        </span>
+        <span className={estilos.tituloDeTrabajando}>{primera.titulo}</span>
+        {primera.empezada === undefined ? null : <EnMarcha empezada={primera.empezada} gasto={primera.gastoEnCurso} />}
+        {enCola === 0 ? null : <span className={estilos.colaDeTrabajando}>{enCola === 1 ? "1 más en cola" : `${enCola} más en cola`}</span>}
+      </div>
+      {alIrAlChat === undefined || primera.sesion === undefined ? null : (
+        <button type="button" className={estilos.empezarTarea} onClick={() => alIrAlChat(primera)}>
+          Ver lo que hace
+        </button>
+      )}
+    </section>
+  );
+}
+
+/**
+ * Las tareas en CIFRAS (su lienzo): cuántas en cola, en marcha, en pausa y terminadas, y la lista corta de las que no han
+ * terminado. Para actuar sobre una, «Ver el tablero» despliega el kanban de siempre.
+ */
+function ResumenDeTareas({
+  tareas,
+  proyectos,
+  alVerTablero,
+}: {
+  tareas: readonly TareaDelCable[];
+  proyectos: readonly { id: string; nombre: string }[];
+  alVerTablero: () => void;
+}) {
+  const de = (e: TareaDelCable["estado"]) => tareas.filter((t) => t.estado === e).length;
+  const cifras: [string, number, string][] = [
+    ["en cola", de("nuevo"), "cola"],
+    ["en marcha", de("en-proceso"), "marcha"],
+    ["en pausa", de("requiere-atencion"), "pausa"],
+    ["terminadas", de("terminada"), "hechas"],
+  ];
+  const vivas = tareas.filter((t) => t.estado !== "terminada").slice(0, 5);
+  return (
+    <section className={estilos.resumenDeTareas} aria-label="Tareas">
+      <div className={estilos.cabeceraDeResumen}>
+        <h2 className={estilos.tituloDeResumen}>Tareas</h2>
+        <button type="button" className={estilos.enlace} onClick={alVerTablero}>
+          Ver el tablero
+        </button>
+      </div>
+      <dl className={estilos.cifrasDeTareas}>
+        {cifras.map(([rotulo, n, tono]) => (
+          <div key={rotulo} data-tono={tono}>
+            <dt>{rotulo}</dt>
+            <dd>{n}</dd>
+          </div>
+        ))}
+      </dl>
+      {vivas.length === 0 ? (
+        <p className={estilos.vacio}>Ninguna pendiente.</p>
+      ) : (
+        <ul className={estilos.listaDeTareas}>
+          {vivas.map((t) => (
+            <li key={t.id} data-estado={t.estado}>
+              <span className={estilos.tituloDeTareaCorta}>
+                {t.titulo}
+                <span className={estilos.proyectoDeTarea}>{` · ${nombreDelProyecto(proyectos, t.proyecto, t.proyectoNombre)}`}</span>
+              </span>
+              <span className={estilos.estadoDeTareaCorta}>
+                {t.estado === "en-proceso" ? "en marcha" : t.estado === "requiere-atencion" ? "en pausa" : "en cola"}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }

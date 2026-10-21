@@ -193,3 +193,22 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* La cabecera: el título y, en el Escritorio, «Ver en cifras» para volver al resumen. */
+.cabecera {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.plegar {
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--dsw-alias-label-link, var(--dsw-alias-label-secondary));
+  font: inherit;
+  font-size: 12px;
+  text-decoration: underline;
+  cursor: pointer;
+}

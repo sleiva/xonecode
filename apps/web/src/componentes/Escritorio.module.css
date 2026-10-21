@@ -279,3 +279,179 @@
 .iconoDeEntorno {
   flex-shrink: 0;
 }
+
+/* ── El Escritorio de su lienzo (21-10-2026). La barra lateral no se toca (petición suya). ───── */
+/* El saludo a la izquierda y el entorno a su lado; en estrecho, debajo. */
+.portada.portada {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px 24px;
+}
+
+.portada .entorno {
+  margin: 0;
+}
+
+/* «Trabajando ahora»: la tarea en marcha, con el filo del acento. */
+.trabajando {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 24px;
+  padding: 14px 16px;
+  border: 1px solid var(--xonecode-cian);
+  border-radius: 12px;
+  background: var(--dsw-alias-bg-layer-2);
+}
+
+.cuerpoDeTrabajando {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.rotuloDeTrabajando {
+  color: var(--dsw-alias-label-tertiary);
+  font-family: var(--ds-font-family-code);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.tituloDeTrabajando {
+  color: var(--dsw-alias-label-primary);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.colaDeTrabajando {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+}
+
+/* Tareas y Tu equipo, en DOS columnas cuando cabe; el tablero desplegado ocupa la fila entera. */
+.dosColumnas {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 16px;
+  align-items: start;
+  margin-top: 24px;
+}
+
+.dosColumnas > * {
+  min-width: 0;
+  margin-top: 0;
+}
+
+.dosColumnas > section[aria-label="Tareas en background"] {
+  grid-column: 1 / -1;
+}
+
+.resumenDeTareas {
+  composes: equipo from "./Equipo.module.css";
+}
+
+.resumenDeTareas.resumenDeTareas {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+}
+
+.cabeceraDeResumen {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.tituloDeResumen {
+  margin: 0;
+  color: var(--dsw-alias-label-primary);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.cifrasDeTareas {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.cifrasDeTareas > div {
+  display: flex;
+  flex-direction: column-reverse;
+  padding: 8px 10px;
+  border-top: 3px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.cifrasDeTareas > div[data-tono="marcha"] {
+  border-top-color: var(--xonecode-cian);
+}
+
+.cifrasDeTareas > div[data-tono="pausa"] {
+  border-top-color: var(--dsw-alias-state-warn-primary);
+}
+
+.cifrasDeTareas > div[data-tono="hechas"] {
+  border-top-color: var(--dsw-alias-state-success-primary);
+}
+
+.cifrasDeTareas dt {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+}
+
+.cifrasDeTareas dd {
+  margin: 0;
+  color: var(--dsw-alias-label-primary);
+  font-size: 22px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.listaDeTareas {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.listaDeTareas > li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+  font-size: 13px;
+}
+
+.tituloDeTareaCorta {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--dsw-alias-label-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.proyectoDeTarea,
+.estadoDeTareaCorta {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.estadoDeTareaCorta {
+  flex-shrink: 0;
+  font-size: 12px;
+}

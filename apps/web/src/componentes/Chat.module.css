@@ -985,3 +985,69 @@
   line-height: 14px;
   text-align: center;
 }
+
+/* ── El chat de su lienzo (21-10-2026) ─────────────────────────────────────────────────────
+   La persona, en una BURBUJA a la derecha con su icono al lado (petición suya: «deja el icono del
+   usuario y el de XOneCode»); el agente sigue a la izquierda con el suyo. Va al final y con la clase
+   doblada: gana a la tarjeta a todo el ancho de arriba sin depender del orden del bundle. */
+.usuario.usuario {
+  grid-template-columns: minmax(0, 1fr) 28px;
+  justify-items: end;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+}
+
+.usuario > .columnaDelAvatar {
+  grid-column: 2;
+  grid-row: 1;
+  align-items: flex-start;
+}
+
+.usuario > .cuerpoDeLaPersona {
+  grid-column: 1;
+  grid-row: 1;
+  box-sizing: border-box;
+  max-width: min(640px, 100%);
+  padding: 6px 14px 10px;
+  border: 1px solid var(--dsw-alias-border-l3);
+  border-radius: 14px 4px 14px 14px;
+  background: var(--xonecode-fila-elegida);
+}
+
+.usuario .autor.autor {
+  gap: 4px;
+  min-height: 24px;
+}
+
+/* «Trabajo del agente · N pasos», una PASTILLA que se despliega: se lee como un plegado, no como
+   una línea más de texto. */
+.tramo > .resumen {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 999px;
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-secondary);
+  list-style: none;
+}
+
+.tramo > .resumen::-webkit-details-marker {
+  display: none;
+}
+
+.tramo > .resumen::before {
+  content: "▸";
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.tramo[open] > .resumen::before {
+  content: "▾";
+}
+
+.tramo.tramo {
+  padding-left: 0;
+}
