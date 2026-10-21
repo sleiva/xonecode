@@ -62,7 +62,9 @@ corre solo y escribe sin aprobación. Cuatro estados; `requiere-atencion` = **es
 - **Cortada a mitad se REANUDA sola, una vez** (`#reanudadaTrasCorte`, `TEXTO_DE_REANUDACION` en
   SU hilo, `TOPE_DE_REANUDACIONES`, `Tarea.reanudaciones` no viaja); sin hilo, aparca. **También tras un Ctrl-C**
   (`parar`): un turno que DEVUELVE con el proceso parándose lo devolvió el corte (TrueForge devuelve al cerrarse, no
-  lanza), y se deja reanudable ya. Una PAUSA no se reanuda.
+  lanza), y se deja reanudable ya. Una PAUSA no se reanuda. **Un corte PEDIDO no gasta el «una vez»**
+  (`Tarea.paradaPedida`, escrita por `parar` ANTES de cortar; la lee también la reconciliación); una caída, sí.
+  **`empezada` es la PRIMERA vez**: rearrancar no la mueve.
 - **Abre por su PROPIA puerta** (`vestibulo.ts#abrirParaTarea`), **un solo cuerpo** con la humana,
   REENVIANDO `tarea.sesion` y el id.
 - **Su consola APARCA en vez de contestar por nadie**: `preguntar`/`leerSecreto` no dan `""`, aparcan y CORTAN.

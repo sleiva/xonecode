@@ -545,11 +545,10 @@ describe("lo que una tarea AUTORIZÓ se guarda con su estado", () => {
     p.autorizar(["/app.xne"]);
     await corredor.parar();
     // Cortada por el cierre: vuelve a la cola para reanudarse (21-10-2026), y lo autorizado se queda.
-    expect(estado()[0]).toMatchObject({
-      estado: "nuevo",
-      reanudaciones: 1,
-      autorizadas: ["app.xne"],
-    });
+    expect(estado()[0]).toMatchObject({ estado: "nuevo", autorizadas: ["app.xne"] });
+    // Un corte PEDIDO no gasta la reanudación (`Tarea.paradaPedida`), y la marca no se queda.
+    expect(estado()[0]!.reanudaciones).toBeUndefined();
+    expect(estado()[0]!.paradaPedida).toBeUndefined();
     expect(estado()[0]!.feedback?.at(-1)?.texto).toBe(TEXTO_DE_REANUDACION);
   });
 });
@@ -1991,7 +1990,8 @@ describe("crearCorredorDeTareas", () => {
     expect(t.motivo ?? "").not.toContain("antes de evaluar la entrega");
     // Vuelve a la cola con el aviso de reanudar, una vez: el arranque siguiente la coge.
     expect(t.estado).toBe("nuevo");
-    expect(t.reanudaciones).toBe(1);
+    // Pedido (Ctrl-C): no gasta la reanudación.
+    expect(t.reanudaciones).toBeUndefined();
     expect(t.feedback?.at(-1)).toMatchObject({ texto: TEXTO_DE_REANUDACION, consumido: false });
     expect(juez.casos).toHaveLength(0);
   });
@@ -2043,8 +2043,38 @@ describe("crearCorredorDeTareas", () => {
     expect(p.cierres).toEqual(["/w/A"]);
     // Cortada a mitad, y REANUDABLE (21-10-2026): la misma regla que la reconciliación del arranque, que ya reanudaba
     // una tarea que el proceso dejó «en proceso». Antes un Ctrl-C la dejaba esperando a una persona, y con ella la cadena.
-    expect(d.estado()[0]).toMatchObject({ estado: "nuevo", reanudaciones: 1 });
+    expect(d.estado()[0]).toMatchObject({ estado: "nuevo" });
+    expect(d.estado()[0]!.reanudaciones).toBeUndefined();
     expect(d.soltados()).toBe(1);
+  });
+
+  /**
+   * Petición suya (21-10-2026): reiniciar para actualizar no gasta el «una vez» de reanudarse sola. Medido en Maset: dos
+   * reinicios seguidos dejaron «Listados» aparcada esperando a una persona.
+   */
+  it("parar DOS veces seguidas no la aparca: un corte pedido no cuenta para el tope de reanudaciones", async () => {
+    const d = discoDeMentira([TAREA({ reanudaciones: 1, sesion: "s1" })]);
+    const p = proyectoDeMentira();
+    const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE, disco: d.disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 1 });
+    await corredor.arrancar();
+    await corredor.asentar();
+    await corredor.parar();
+    expect(d.estado()[0]).toMatchObject({ estado: "nuevo", reanudaciones: 1 });
+    expect(d.estado()[0]!.paradaPedida).toBeUndefined();
+  });
+
+  it("si el cierre no llega a escribir, el arranque lee la marca: tampoco cuenta; sin ella (una caída), sí", async () => {
+    const pedida = discoDeMentira([TAREA({ estado: "en-proceso", pid: 999, sesion: "s9", reanudaciones: 1, paradaPedida: true })]);
+    const c1 = crearCorredorDeTareas({ ...ENTREGA_VERDE, disco: pedida.disco, abrirParaTarea: proyectoDeMentira().abrir, pid: 1, concurrencia: () => 0 });
+    await c1.arrancar();
+    expect(pedida.estado()[0]).toMatchObject({ estado: "nuevo", reanudaciones: 1 });
+    expect(pedida.estado()[0]!.paradaPedida).toBeUndefined();
+    await c1.parar();
+    const caida = discoDeMentira([TAREA({ estado: "en-proceso", pid: 999, sesion: "s9", reanudaciones: 1 })]);
+    const c2 = crearCorredorDeTareas({ ...ENTREGA_VERDE, disco: caida.disco, abrirParaTarea: proyectoDeMentira().abrir, pid: 1, concurrencia: () => 0 });
+    await c2.arrancar();
+    expect(caida.estado()[0]!.estado).toBe("requiere-atencion");
+    await c2.parar();
   });
 });
 

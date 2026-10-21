@@ -149,6 +149,12 @@ export function revisionConGit(
  * contradicción solo se veía leyéndolos juntos. Por eso el motivo se compone DESPUÉS de
  * saber si el hilo se olvidó, y no antes: quien lo escribe es el único que lo sabe.
  */
+/** La marca de «se pidió parar» solo vale para decidir la reanudación: una aparcada no la lleva. */
+const sinParadaPedida = (t: Tarea): Tarea => {
+  const { paradaPedida: _p, ...resto } = t;
+  return resto;
+};
+
 export const MOTIVO_CORTADA_POR_CIERRE =
   "la consola se cerró a mitad del turno: no quedó respuesta guardada, aunque el agente " +
   "recuerda el hilo. Reintenta cuando quieras.";
@@ -1299,7 +1305,7 @@ export function crearCorredorDeTareas(opciones: {
           const base = conLoQueQuede(actual);
           return (
             reanudadaTrasCorte(base, corte) ??
-            conEstado(base, "requiere-atencion", base.sesion !== undefined && (actual.reanudaciones ?? 0) >= TOPE_DE_REANUDACIONES ? motivoTrasReanudar(corte) : corte)
+            conEstado(sinParadaPedida(base), "requiere-atencion", base.sesion !== undefined && (actual.reanudaciones ?? 0) >= TOPE_DE_REANUDACIONES ? motivoTrasReanudar(corte) : corte)
           );
         });
       } else {
@@ -1454,7 +1460,7 @@ export function crearCorredorDeTareas(opciones: {
       const reanudada = reanudadaTrasCorte(base, motivo);
       reconciliada.push(
         reanudada ??
-          conEstado(base, "requiere-atencion", base.sesion !== undefined && (t.reanudaciones ?? 0) >= TOPE_DE_REANUDACIONES ? motivoTrasReanudar(motivo) : motivo)
+          conEstado(sinParadaPedida(base), "requiere-atencion", base.sesion !== undefined && (t.reanudaciones ?? 0) >= TOPE_DE_REANUDACIONES ? motivoTrasReanudar(motivo) : motivo)
       );
     }
     if (reconciliada.some((t, i) => t !== lista[i])) {
@@ -1525,6 +1531,17 @@ export function crearCorredorDeTareas(opciones: {
 
     async parar() {
       parando = true;
+      // Que se PIDIÓ parar, en el disco y ANTES de cortar (`Tarea.paradaPedida`): si el cierre no llega a escribir el
+      // final, la reconciliación del arranque lo lee igual y no gasta la reanudación de la tarea.
+      for (const id of enVuelo.keys()) {
+        try {
+          escribirSiSigueSiendoNuestra(id, (actual) =>
+            actual.estado === "en-proceso" && actual.pid === pid && actual.paradaPedida !== true ? { ...actual, paradaPedida: true } : undefined
+          );
+        } catch {
+          // Un disco que no se deja escribir no frena el cierre: el corte contará como no pedido, que es lo de antes.
+        }
+      }
       /**
        * Se CORTA lo que esté en vuelo, no se espera: un turno tarda minutos y quien pulsa
        * Ctrl-C espera que el proceso se vaya. Cerrar la consola es lo que hace que el turno

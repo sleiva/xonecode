@@ -156,6 +156,13 @@ describe("conEstado", () => {
     // El pid se va al dejar de correr: un pid pegado a una tarea parada haría creer que vive.
     expect(acabada.pid).toBeUndefined();
   });
+
+  it("volver a arrancar NO mueve `empezada`: «Lleva» cuenta desde la primera vez (petición suya, 21-10-2026)", () => {
+    const primera = conEstado(tarea(), "en-proceso", undefined, { pid: 1, ahora: "2026-10-21T12:58:00.000Z" });
+    const aparcada = conEstado(primera, "requiere-atencion", "se cortó", { ahora: "2026-10-21T14:00:00.000Z" });
+    const otraVez = conEstado(conEstado(aparcada, "nuevo"), "en-proceso", undefined, { pid: 2, ahora: "2026-10-21T14:03:00.000Z" });
+    expect(otraVez.empezada).toBe("2026-10-21T12:58:00.000Z");
+  });
 });
 
 describe("tituloDeTarea", () => {

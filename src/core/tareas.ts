@@ -111,6 +111,12 @@ export interface Tarea {
    */
   reanudaciones?: number;
   /**
+   * Se PIDIÓ parar el proceso con ella en marcha (Ctrl-C, reiniciar para actualizar): `Corredor.parar` lo apunta en el
+   * disco ANTES de cortar, así que lo ve también la reconciliación del arranque si el cierre no llegó a escribir. Un corte
+   * así no gasta `TOPE_DE_REANUDACIONES`: no es la tarea la que tumba el proceso (petición suya, 21-10-2026). No viaja.
+   */
+  paradaPedida?: true;
+  /**
    * Las escrituras que la tarea AUTORIZÓ sin que ninguna persona las aprobara, con la ruta
    * RELATIVA a la raíz del proyecto.
    *
@@ -376,7 +382,9 @@ export function conEstado(
   if (estado === "requiere-atencion") siguiente.motivo = motivo;
   else delete siguiente.motivo;
   if (estado === "en-proceso") {
-    siguiente.empezada = ahora;
+    // Desde la PRIMERA vez que arrancó (petición suya, 21-10-2026): una reanudada o reintentada sigue siendo la misma
+    // tarea, y «Lleva 33 s» de una que lleva una hora mentía. `puedeEditarEncargo` ya lee `empezada` como «arrancó alguna vez».
+    siguiente.empezada = tarea.empezada ?? ahora;
     if (sello.pid !== undefined) siguiente.pid = sello.pid;
   } else {
     // Un pid pegado a una tarea que no corre haría creer que hay un proceso detrás.
@@ -558,9 +566,12 @@ export const TEXTO_DE_REANUDACION =
 export function reanudadaTrasCorte(tarea: Tarea, motivo: string, ahora?: string): Tarea | undefined {
   if (tarea.estado !== "en-proceso" || tarea.sesion === undefined) return undefined;
   const hechas = tarea.reanudaciones ?? 0;
-  if (hechas >= TOPE_DE_REANUDACIONES) return undefined;
-  const aparcada = conEstado(tarea, "requiere-atencion", motivo, ahora === undefined ? {} : { ahora });
-  return conFeedback({ ...aparcada, reanudaciones: hechas + 1 }, TEXTO_DE_REANUDACION, ahora);
+  // Un corte PEDIDO (`paradaPedida`) no cuenta: ni lo frena el tope ni lo gasta.
+  const pedida = tarea.paradaPedida === true;
+  if (!pedida && hechas >= TOPE_DE_REANUDACIONES) return undefined;
+  const { paradaPedida: _p, ...sinMarca } = tarea;
+  const aparcada = conEstado(sinMarca, "requiere-atencion", motivo, ahora === undefined ? {} : { ahora });
+  return conFeedback(pedida ? aparcada : { ...aparcada, reanudaciones: hechas + 1 }, TEXTO_DE_REANUDACION, ahora);
 }
 
 /** El motivo de aparcar una cortada que YA se reanudó sola: lo de siempre, más por qué esta vez no sigue. */

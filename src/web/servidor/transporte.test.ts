@@ -86,6 +86,8 @@ const DECISIONES: Readonly<Record<string, readonly string[]>> = {
   pid: [],
   // Del corredor: frena el bucle de reanudar. En la pantalla no sirve de nada.
   reanudaciones: [],
+  // Tampoco: es del corredor (si se pidió parar con ella en marcha), y en la pantalla no dice nada.
+  paradaPedida: [],
   autorizadas: ["autorizadas"],
   feedback: ["feedback"],
   veredicto: ["veredicto"],
@@ -118,6 +120,7 @@ const TAREA_COMPLETA: Required<Tarea> = {
   acabada: "2026-09-08T10:09:00.000Z",
   pid: 4242,
   reanudaciones: 1,
+  paradaPedida: true,
   autorizadas: ["app.xne"],
   feedback: [{ texto: "sí, con histórico", creado: "2026-09-08T10:05:00.000Z", consumido: true }],
   veredicto: {
