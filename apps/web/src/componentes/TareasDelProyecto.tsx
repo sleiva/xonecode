@@ -78,6 +78,7 @@ export function TareasDelProyecto({
   alEditarEncargo,
   alRegenerarEncargo,
   alParar,
+  alOrdenar,
   sesionAbierta,
   trabajandoEnElChat,
   alMirar,
@@ -127,6 +128,8 @@ export function TareasDelProyecto({
   alRegenerarEncargo?: (id: string, peticion: string) => Promise<{ encargo: string } | { motivo: string }>;
   /** Parar una en marcha sin borrarla (IXCODE-50): devuelve el motivo si el servidor se negó. */
   alParar?: (id: string) => Promise<string | undefined>;
+  /** La cola en otro orden: TODAS las que esperan, en el nuevo. Devuelve el motivo si el servidor se negó. Ausente = no se ordena. */
+  alOrdenar?: (ids: string[]) => Promise<string | undefined>;
   /**
    * La conversación abierta en el chat y si tiene un turno en marcha. Una aparcada cuya conversación es ESA la estás
    * atendiendo tú: la fila lo dice, porque su estado en la cola («Esperando feedback») no cambia mientras trabajas en el
@@ -198,6 +201,65 @@ export function TareasDelProyecto({
    */
   const [pestana, setPestana] = useState<"curso" | "finalizadas">(pestanaInicial ?? "curso");
   const enCurso = tareas?.filter((t) => t.estado !== "terminada");
+  /**
+   * En TRES grupos (petición suya, 21-10-2026, su lienzo): la que TRABAJA arriba, fija; las que esperan a una persona; y
+   * la COLA, en el orden en que arrancarán (el servidor manda la lista ya en ese orden), que se reordena arrastrando o con
+   * las flechas. La que trabaja no entra en el orden: no se mueve.
+   */
+  const trabajando = enCurso?.filter((t) => t.estado === "en-proceso") ?? [];
+  const cola = enCurso?.filter((t) => t.estado === "nuevo") ?? [];
+  const resto = enCurso?.filter((t) => t.estado !== "en-proceso" && t.estado !== "nuevo") ?? [];
+  const [arrastrada, setArrastrada] = useState<string | undefined>(undefined);
+  const [encima, setEncima] = useState<string | undefined>(undefined);
+  const [negativaDeOrden, setNegativaDeOrden] = useState<string | undefined>(undefined);
+  const ordenar = (ids: string[]): void => {
+    if (alOrdenar === undefined) return;
+    setNegativaDeOrden(undefined);
+    void alOrdenar(ids).then(setNegativaDeOrden, () => setNegativaDeOrden("el envío falló"));
+  };
+  const mover = (desde: number, hasta: number): void => {
+    if (desde === hasta || hasta < 0 || hasta >= cola.length) return;
+    const ids = cola.map((t) => t.id);
+    const [id] = ids.splice(desde, 1);
+    ids.splice(hasta, 0, id!);
+    ordenar(ids);
+  };
+  const ordenable = alOrdenar !== undefined && !apagado && cola.length > 1;
+  const enLaCola = (t: TareaDelCable, i: number): EnLaCola => ({
+    posicion: i + 1,
+    ...(ordenable
+      ? {
+          arrastre: {
+            draggable: true as const,
+            onDragStart: (e: React.DragEvent) => {
+              e.dataTransfer.effectAllowed = "move";
+              e.dataTransfer.setData("text/plain", t.id);
+              setArrastrada(t.id);
+            },
+            onDragOver: (e: React.DragEvent) => {
+              if (arrastrada === undefined) return;
+              e.preventDefault();
+              if (encima !== t.id) setEncima(t.id);
+            },
+            onDrop: (e: React.DragEvent) => {
+              e.preventDefault();
+              const desde = cola.findIndex((x) => x.id === arrastrada);
+              setArrastrada(undefined);
+              setEncima(undefined);
+              if (desde >= 0) mover(desde, i);
+            },
+            onDragEnd: () => {
+              setArrastrada(undefined);
+              setEncima(undefined);
+            },
+          },
+          arrastrando: arrastrada === t.id,
+          encima: encima === t.id && arrastrada !== t.id,
+          ...(i > 0 ? { subir: () => mover(i, i - 1) } : {}),
+          ...(i < cola.length - 1 ? { bajar: () => mover(i, i + 1) } : {}),
+        }
+      : {}),
+  });
   const finalizadas = tareas
     ?.filter((t) => t.estado === "terminada")
     // La más reciente arriba: por `acabada`, y sin ella (de antes del sello) al final.
@@ -310,33 +372,55 @@ export function TareasDelProyecto({
         ) : enCurso.length === 0 ? (
           <p className={estilos.aviso}>No hay ninguna tarea en curso. Las terminadas están en «Finalizadas».</p>
         ) : (
-        <ul className={estilos.filas}>
-          {enCurso.map((t) => (
-            <Fila
-              key={t.id}
-              tarea={t}
-              {...(t.tras === undefined ? {} : { anterior: tareas.find((x) => x.id === t.tras) })}
-              conectado={conectado}
-              corriendoAqui={corriendoAqui}
-              {...(alReintentar === undefined ? {} : { alReintentar })}
-              {...(alDescartar === undefined ? {} : { alDescartar })}
-              {...(alTerminar === undefined ? {} : { alTerminar })}
-              {...(alEnviarFeedback === undefined ? {} : { alEnviarFeedback })}
-              {...(alContinuar === undefined ? {} : { alContinuar })}
-              {...(alArrancarAhora === undefined ? {} : { alArrancarAhora })}
-              {...(alEditarEncargo === undefined ? {} : { alEditarEncargo })}
-              {...(alRegenerarEncargo === undefined ? {} : { alRegenerarEncargo })}
-              {...(alParar === undefined ? {} : { alParar })}
-              puedeArrancar={puedeArrancarYa(t, tareas)}
-              {...(t.sesion !== undefined && t.sesion === sesionAbierta ? { enTuChat: trabajandoEnElChat === true ? "trabajando" : "abierta" } : {})}
-              {...(alMirar === undefined ? {} : { alMirar })}
-              {...(alIrAlChat === undefined ? {} : { alIrAlChat })}
-              {...(alDejarDeMirar === undefined ? {} : { alDejarDeMirar })}
-              {...(mirando === undefined ? {} : { mirando })}
-              {...(mirada === undefined ? {} : { mirada })}
-            />
-          ))}
-        </ul>
+        <>
+          {([
+            ["trabajando", "Trabajando ahora", trabajando],
+            ["atencion", "Esperan a que las mires", resto],
+            ["cola", "En cola", cola],
+          ] as const).map(([clave, rotulo, grupo]) =>
+            grupo.length === 0 ? null : (
+              <div key={clave} className={estilos.grupo}>
+                <div className={estilos.cabeceraDeGrupo}>
+                  <span className={estilos.rotuloDeGrupo}>{clave === "cola" ? `${rotulo} · ${grupo.length}` : rotulo}</span>
+                  {clave === "cola" && ordenable ? (
+                    <span className={estilos.pistaDeGrupo}>Arrastra para cambiar el orden; cada una arranca cuando le toca. La que trabaja no se mueve.</span>
+                  ) : null}
+                </div>
+                {clave === "cola" && negativaDeOrden !== undefined ? (
+                  <p className={estilos.motivo} role="alert">{`No se ha cambiado el orden: ${negativaDeOrden}`}</p>
+                ) : null}
+                <ul className={estilos.filas} aria-label={rotulo}>
+                  {grupo.map((t, i) => (
+                    <Fila
+                      key={t.id}
+                      tarea={t}
+                      {...(t.tras === undefined ? {} : { anterior: tareas.find((x) => x.id === t.tras) })}
+                      conectado={conectado}
+                      corriendoAqui={corriendoAqui}
+                      {...(alReintentar === undefined ? {} : { alReintentar })}
+                      {...(alDescartar === undefined ? {} : { alDescartar })}
+                      {...(alTerminar === undefined ? {} : { alTerminar })}
+                      {...(alEnviarFeedback === undefined ? {} : { alEnviarFeedback })}
+                      {...(alContinuar === undefined ? {} : { alContinuar })}
+                      {...(alArrancarAhora === undefined ? {} : { alArrancarAhora })}
+                      {...(alEditarEncargo === undefined ? {} : { alEditarEncargo })}
+                      {...(alRegenerarEncargo === undefined ? {} : { alRegenerarEncargo })}
+                      {...(alParar === undefined ? {} : { alParar })}
+                      puedeArrancar={puedeArrancarYa(t, tareas)}
+                      {...(clave === "cola" ? { enCola: enLaCola(t, i) } : {})}
+                      {...(t.sesion !== undefined && t.sesion === sesionAbierta ? { enTuChat: trabajandoEnElChat === true ? "trabajando" : "abierta" } : {})}
+                      {...(alMirar === undefined ? {} : { alMirar })}
+                      {...(alIrAlChat === undefined ? {} : { alIrAlChat })}
+                      {...(alDejarDeMirar === undefined ? {} : { alDejarDeMirar })}
+                      {...(mirando === undefined ? {} : { mirando })}
+                      {...(mirada === undefined ? {} : { mirada })}
+                    />
+                  ))}
+                </ul>
+              </div>
+            )
+          )}
+        </>
         )}
         </>
       )}
@@ -817,6 +901,7 @@ function Fila({
   alDejarDeMirar,
   mirando,
   mirada,
+  enCola,
 }: {
   tarea: TareaDelCable;
   /** La tarea a la que ESPERA (`tras`), si sigue en la cola. Una que ya no está —descartada— no
@@ -847,11 +932,39 @@ function Fila({
   alDejarDeMirar?: (id: string) => void;
   mirando?: string;
   mirada?: { tarea: string; actos: readonly Acto[] };
+  /** Su sitio en la cola y cómo moverla (petición suya, 21-10-2026). Ausente = no se ordena (la que trabaja, una aparcada). */
+  enCola?: EnLaCola;
 }) {
   const [verEncargo, setVerEncargo] = useState(false);
   return (
-    <li className={estilos.fila} data-estado={t.estado}>
-      <span className={estilos.punto} aria-hidden="true" />
+    <li
+      className={estilos.fila}
+      data-estado={t.estado}
+      data-arrastrando={enCola?.arrastrando === true ? "" : undefined}
+      data-encima={enCola?.encima === true ? "" : undefined}
+      {...(enCola?.arrastre === undefined ? {} : enCola.arrastre)}
+    >
+      {enCola === undefined ? (
+        <span className={estilos.punto} aria-hidden="true" />
+      ) : (
+        <>
+          {enCola.arrastre === undefined ? null : (
+            <span className={estilos.asa} aria-hidden="true" title="Arrastra para cambiar el orden">
+              <svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor">
+                <circle cx="2.5" cy="2.5" r="1.4" />
+                <circle cx="7.5" cy="2.5" r="1.4" />
+                <circle cx="2.5" cy="8" r="1.4" />
+                <circle cx="7.5" cy="8" r="1.4" />
+                <circle cx="2.5" cy="13.5" r="1.4" />
+                <circle cx="7.5" cy="13.5" r="1.4" />
+              </svg>
+            </span>
+          )}
+          <span className={estilos.posicion} aria-label={`En la cola, la ${enCola.posicion}.ª`}>
+            {enCola.posicion}
+          </span>
+        </>
+      )}
       <div className={estilos.cuerpo}>
         <div className={estilos.cabecera}>
           <span className={estilos.titulo}>{t.titulo}</span>
@@ -877,7 +990,7 @@ function Fila({
             {t.estado === "nuevo" && anterior !== undefined && anterior.estado !== "terminada" ? (
               <p className={estilos.espera}>{`espera a: ${anterior.titulo}`}</p>
             ) : null}
-            {t.estado === "en-proceso" && t.empezada !== undefined ? <EnMarcha empezada={t.empezada} gasto={t.gastoEnCurso} /> : null}
+            {t.estado === "en-proceso" && t.empezada !== undefined ? <CifrasEnMarcha empezada={t.empezada} gasto={t.gastoEnCurso} /> : null}
             {/* Lo que se le encargó, para poder leerlo antes de que arranque: plegado, porque un
                 encargo son párrafos y la lista tiene que seguir siendo una lista. */}
             <details className={estilos.contenido} onToggle={(e) => setVerEncargo((e.currentTarget as HTMLDetailsElement).open)}>
@@ -905,6 +1018,16 @@ function Fila({
         />
       </div>
       <div className={estilos.acciones}>
+        {enCola === undefined || (enCola.subir === undefined && enCola.bajar === undefined) ? null : (
+          <span className={estilos.flechas}>
+            <button type="button" className={estilos.flecha} aria-label="Subir en la cola" disabled={enCola.subir === undefined} onClick={enCola.subir}>
+              ↑
+            </button>
+            <button type="button" className={estilos.flecha} aria-label="Bajar en la cola" disabled={enCola.bajar === undefined} onClick={enCola.bajar}>
+              ↓
+            </button>
+          </span>
+        )}
         <AccionesDeTarea
           tarea={t}
           conectado={conectado}
@@ -1021,5 +1144,53 @@ export function EnMarcha({ empezada, gasto }: { empezada: string; gasto: TareaDe
     <p className={estilos.gasto}>
       {`Lleva ${tiempoQueLleva(ahora - desde)}${gasto === undefined ? "" : ` · ${textoDelGastoDeTarea(gasto)}`}`}
     </p>
+  );
+}
+
+/** Lo que una fila de la COLA sabe de su sitio: el número, cómo arrastrarla y las flechas (ausente = en el borde). */
+interface EnLaCola {
+  posicion: number;
+  arrastre?: {
+    draggable: true;
+    onDragStart: (e: React.DragEvent) => void;
+    onDragOver: (e: React.DragEvent) => void;
+    onDrop: (e: React.DragEvent) => void;
+    onDragEnd: () => void;
+  };
+  arrastrando?: boolean;
+  encima?: boolean;
+  subir?: () => void;
+  bajar?: () => void;
+}
+
+/**
+ * La que TRABAJA, en tres cifras grandes: cuánto lleva, tokens y caché (petición suya, 21-10-2026: la tarjeta de su
+ * lienzo). Las mismas fuentes que `EnMarcha`; sin gasto que conste, solo el tiempo.
+ */
+function CifrasEnMarcha({ empezada, gasto }: { empezada: string; gasto: TareaDelCable["gastoEnCurso"] }) {
+  const [ahora, setAhora] = useState(() => Date.now());
+  useEffect(() => {
+    const reloj = setInterval(() => setAhora(Date.now()), 1000);
+    return () => clearInterval(reloj);
+  }, []);
+  const desde = Date.parse(empezada);
+  if (Number.isNaN(desde)) return null;
+  const tokens = gasto === undefined ? undefined : textoDelGastoDeTarea(gasto).split(" · ");
+  return (
+    <dl className={estilos.cifrasEnMarcha} aria-label={`Lleva ${tiempoQueLleva(ahora - desde)}${gasto === undefined ? "" : ` · ${textoDelGastoDeTarea(gasto)}`}`}>
+      <div>
+        <dt>lleva</dt>
+        <dd>{tiempoQueLleva(ahora - desde)}</dd>
+      </div>
+      {tokens?.map((parte) => {
+        const [cifra, ...resto] = parte.split(" ");
+        return (
+          <div key={parte}>
+            <dt>{resto.join(" ")}</dt>
+            <dd>{cifra}</dd>
+          </div>
+        );
+      })}
+    </dl>
   );
 }

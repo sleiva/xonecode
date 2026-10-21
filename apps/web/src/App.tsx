@@ -2726,6 +2726,10 @@ export function App({
       }}
       // Parar una en marcha sin borrarla (IXCODE-50): queda esperando con su conversación, y se sigue con «Continuar».
       alParar={async (id: string) => negativaOFalloDe(await enviar({ clase: "tarea", accion: "parar", id }))}
+      // La cola en otro orden (petición suya, 21-10-2026): del proyecto activo, y el servidor dice si casa con la de ahora.
+      {...(proyectoActivoId === undefined
+        ? {}
+        : { alOrdenar: async (ids: string[]) => negativaOFalloDe(await enviar({ clase: "tarea", accion: "ordenar", proyecto: proyectoActivoId, ids })) })}
       // El HISTÓRICO: la conversación de una finalizada se LEE, con sus artefactos —nunca `alIrAlChatDeTarea`, que la
       // abriría para escribir—. Y lo que contestó al final, del mismo `leerSesion`, pedido al desplegar su fila.
       alLeerFinalizada={(t: TareaDelCable) => {

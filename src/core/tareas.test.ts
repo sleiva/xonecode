@@ -15,6 +15,7 @@ import {
   puedeEditarEncargo,
   puedeReencolar,
   reanudadaTrasCorte,
+  reordenarCola,
   tareaReencolada,
   continuacionEnCurso,
   textoParaReencolar,
@@ -582,5 +583,44 @@ describe("reencolar una finalizada", () => {
     expect(() => tareaReencolada(hecha({ ticket: { conector: "jira", sitio: "x", proyecto: "MAS", clave: "MAS-1" } }), { id: "t2", texto: "x", adjuntos: [] })).toThrow(/MAS-1/);
     expect(() => tareaReencolada(tarea(), { id: "t2", texto: "x", adjuntos: [] })).toThrow(/terminada/);
     expect(() => tareaReencolada(hecha(), { id: "t2", texto: "   ", adjuntos: [] })).toThrow(/vacío/);
+  });
+});
+
+/** La cola en otro orden (petición suya, 21-10-2026): drag and drop en la pestaña Tareas. */
+describe("reordenarCola", () => {
+  const otro = { id: "p2", raiz: "/w/Otro", nombre: "Otro" };
+  const cadena = (): Tarea[] => [
+    tarea({ id: "run", estado: "en-proceso", creada: "2026-10-21T10:00:00.000Z" }),
+    tarea({ id: "a", tras: "run", creada: "2026-10-21T10:00:01.000Z" }),
+    tarea({ id: "b", tras: "a", creada: "2026-10-21T10:00:02.000Z" }),
+    tarea({ id: "c", tras: "b", creada: "2026-10-21T10:00:03.000Z" }),
+    tarea({ id: "x", proyecto: otro, creada: "2026-10-21T10:00:02.500Z" }),
+  ];
+
+  it("encadenadas: la cadena se reescribe en el orden nuevo y la primera espera a la que trabaja", () => {
+    const r = reordenarCola(cadena(), "p1", ["c", "a", "b"]);
+    if ("motivo" in r) throw new Error(r.motivo);
+    const de = (id: string) => r.tareas.find((t) => t.id === id)!;
+    expect([de("c").tras, de("a").tras, de("b").tras]).toEqual(["run", "c", "a"]);
+    // Y es la que arranca primero cuando haya hueco: las mismas claves, repartidas.
+    expect(de("c").orden).toBeLessThan(de("a").orden!);
+    expect(de("a").orden).toBeLessThan(de("b").orden!);
+    // La que trabaja y la de otro proyecto no se tocan.
+    expect(de("run")).toEqual(cadena()[0]);
+    expect(de("x")).toEqual(cadena()[4]);
+  });
+
+  it("sueltas: solo cambia qué arranca antes", () => {
+    const sueltas = [tarea({ id: "a", creada: "2026-10-21T10:00:01.000Z" }), tarea({ id: "b", creada: "2026-10-21T10:00:02.000Z" })];
+    const r = reordenarCola(sueltas, "p1", ["b", "a"]);
+    if ("motivo" in r) throw new Error(r.motivo);
+    expect(r.tareas.every((t) => t.tras === undefined)).toBe(true);
+    expect(siguientesAEjecutar(r.tareas, { concurrencia: 1 }).map((t) => t.id)).toEqual(["b"]);
+  });
+
+  it("una lista que no es TODA la cola de ahora se niega con motivo, sin tocar nada", () => {
+    expect(reordenarCola(cadena(), "p1", ["a", "b"])).toHaveProperty("motivo");
+    expect(reordenarCola(cadena(), "p1", ["a", "b", "c", "run"])).toHaveProperty("motivo");
+    expect(reordenarCola(cadena(), "p1", ["a", "a", "b"])).toHaveProperty("motivo");
   });
 });

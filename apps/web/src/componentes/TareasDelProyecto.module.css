@@ -657,3 +657,113 @@ a.ticket:hover {
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
+
+/* ── En curso, en TRES grupos (21-10-2026, su lienzo) ──────────────────────────────────────
+   Trabajando ahora, esperan a que las mires y la cola ordenable, cada uno con su rótulo de máquina. */
+.grupo {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.cabeceraDeGrupo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+}
+
+.rotuloDeGrupo {
+  color: var(--dsw-alias-label-tertiary);
+  font-family: var(--ds-font-family-code);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.pistaDeGrupo {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+}
+
+/* La que trabaja, destacada con el filo del acento: es la única que se mueve sola. */
+.fila[data-estado="en-proceso"] {
+  border-color: var(--xonecode-cian);
+  background: var(--dsw-alias-bg-layer-2);
+}
+
+/* La cola: asa para arrastrar, su número de orden y las flechas. */
+.asa {
+  flex-shrink: 0;
+  align-self: center;
+  display: flex;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: grab;
+}
+
+.posicion {
+  flex-shrink: 0;
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.fila[data-arrastrando] {
+  opacity: 0.45;
+}
+
+.fila[data-encima] {
+  border-style: dashed;
+  border-color: var(--xonecode-cian);
+}
+
+.flechas {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.flecha {
+  composes: secundario from "./Boton.module.css";
+}
+
+.flecha.flecha {
+  min-width: 28px;
+  padding: 2px 6px;
+}
+
+/* Las cifras de la que trabaja: lleva, tokens y caché, grandes y en columnas fijas. */
+.cifrasEnMarcha {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 28px;
+  margin: 4px 0 2px;
+}
+
+.cifrasEnMarcha > div {
+  display: flex;
+  flex-direction: column-reverse;
+}
+
+.cifrasEnMarcha dt {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+}
+
+.cifrasEnMarcha dd {
+  margin: 0;
+  color: var(--dsw-alias-label-primary);
+  font-size: 18px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}

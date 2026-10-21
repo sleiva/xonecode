@@ -1970,6 +1970,8 @@ export type MensajeDelCliente =
   /** PARAR una tarea en marcha sin borrarla (IXCODE-50): queda aparcada con su conversación. 204, o 409 con `{motivo}`. */
   | { clase: "tarea"; accion: "parar"; id: string }
   | { clase: "tarea"; accion: "reintentar" | "descartar" | "terminar"; id: string }
+  /** La cola de un proyecto en otro orden: `ids`, TODAS las que esperan, en el nuevo (`core/tareas.ts#reordenarCola`). */
+  | { clase: "tarea"; accion: "ordenar"; proyecto: string; ids: string[] }
   /** Cambia el tope de concurrencia de la cola de tareas. */
   | { clase: "tareas"; concurrencia: number }
   /**

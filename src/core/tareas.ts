@@ -117,6 +117,12 @@ export interface Tarea {
    */
   paradaPedida?: true;
   /**
+   * Su sitio en la COLA, puesto al reordenar a mano (`reordenarCola`, petición suya, 21-10-2026). Ausente = el de su
+   * `creada`. Es la clave con que se elige la siguiente (`claveDeCola`), en milisegundos como `creada`, así que una
+   * reordenada se intercala bien con las de otros proyectos. No viaja: el servidor manda la lista YA en ese orden.
+   */
+  orden?: number;
+  /**
    * Las escrituras que la tarea AUTORIZÓ sin que ninguna persona las aprobara, con la ruta
    * RELATIVA a la raíz del proyecto.
    *
@@ -341,7 +347,7 @@ export function siguientesAEjecutar(
   const candidatas = tareas
     .filter((t) => t.estado === "nuevo")
     .slice()
-    .sort((a, b) => (a.creada < b.creada ? -1 : a.creada > b.creada ? 1 : 0));
+    .sort(porSitioEnLaCola);
   for (const t of candidatas) {
     if (elegidas.length >= huecos) break;
     if (t.tras !== undefined) {
@@ -353,6 +359,46 @@ export function siguientesAEjecutar(
     elegidas.push(t);
   }
   return elegidas;
+}
+
+/** El sitio de una tarea en la cola: el que se le dio al reordenar, o el de su `creada`. */
+export function claveDeCola(t: Pick<Tarea, "orden" | "creada">): number {
+  return t.orden ?? Date.parse(t.creada);
+}
+
+/** Para `sort`: por sitio en la cola, y a igualdad por `creada` (estable entre procesos). */
+export function porSitioEnLaCola(a: Pick<Tarea, "orden" | "creada">, b: Pick<Tarea, "orden" | "creada">): number {
+  return claveDeCola(a) - claveDeCola(b) || (a.creada < b.creada ? -1 : a.creada > b.creada ? 1 : 0);
+}
+
+/**
+ * **La cola de un proyecto en OTRO orden** (petición suya, 21-10-2026: «poder cambiar el orden de las tareas»). `ids`
+ * son TODAS las que esperan (`nuevo`) de ese proyecto, en el orden nuevo: ni una de más ni una de menos, o es que la
+ * pantalla miraba otra cola y no se adivina. La que trabaja no se mueve: no está entre ellas.
+ *
+ * - **Qué arranca antes**: se reparten las MISMAS claves que ya tenían (`claveDeCola`), ordenadas, en el orden nuevo;
+ *   así siguen intercaladas igual con las de otros proyectos.
+ * - **Contra quién espera**: si alguna era ENCADENADA (`tras`), la cadena se reescribe en el orden nuevo —la primera
+ *   espera a lo que esperaba la cabeza de antes (la que trabaja, o nada), cada una a la de encima—; si ninguna lo era,
+ *   siguen sueltas.
+ */
+export function reordenarCola(tareas: readonly Tarea[], proyecto: string, ids: readonly string[]): { tareas: Tarea[] } | { motivo: string } {
+  const enCola = tareas.filter((t) => t.proyecto.id === proyecto && t.estado === "nuevo").sort(porSitioEnLaCola);
+  const iguales = ids.length === enCola.length && new Set(ids).size === ids.length && ids.every((id) => enCola.some((t) => t.id === id));
+  if (!iguales) return { motivo: "la cola ha cambiado mientras la ordenabas: vuelve a intentarlo con la de ahora" };
+  const claves = enCola.map(claveDeCola).sort((a, b) => a - b);
+  const delGrupo = new Set(ids);
+  const encadenada = enCola.some((t) => t.tras !== undefined);
+  // La cabeza de antes: la que no espera a ninguna del grupo. Lo que ella esperaba lo espera ahora la primera.
+  const cabeza = enCola.find((t) => t.tras === undefined || !delGrupo.has(t.tras));
+  const nuevas = new Map<string, Tarea>();
+  ids.forEach((id, i) => {
+    const t = enCola.find((x) => x.id === id)!;
+    const tras = !encadenada ? t.tras : i === 0 ? cabeza?.tras : ids[i - 1];
+    const { tras: _t, ...sinTras } = t;
+    nuevas.set(id, { ...sinTras, orden: claves[i]!, ...(tras === undefined ? {} : { tras }) });
+  });
+  return { tareas: tareas.map((t) => nuevas.get(t.id) ?? t) };
 }
 
 /**

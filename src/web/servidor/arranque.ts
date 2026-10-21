@@ -251,6 +251,8 @@ import {
   CONCURRENCIA_POR_OMISION,
   conEstado,
   darPorBuenaAMano,
+  porSitioEnLaCola,
+  reordenarCola,
   puedeArrancarYa,
   esperasPorPersonas,
   puedeEditarEncargo,
@@ -2397,7 +2399,8 @@ export function montarRutas(
     if (opciones.colaDeTareas === undefined) return undefined;
     const otro = opciones.corredorDeTareas?.ejecutaOtroProceso?.();
     const corriendoAqui = opciones.corredorDeTareas?.corriendoAqui() ?? false;
-    const lista = opciones.colaDeTareas.listar();
+    // En el orden de la COLA (`porSitioEnLaCola`): la pantalla la pinta tal cual, y reordenar a mano se ve sin más campos.
+    const lista = opciones.colaDeTareas.listar().slice().sort(porSitioEnLaCola);
     // Por qué espera a una persona, con la MISMA regla que `bloqueados` del corredor. Solo si
     // ESTE proceso las ejecuta: las consolas de aquí no frenan al corredor de otro.
     const esperas = corriendoAqui ? esperasPorPersonas(vestibulo.proyectosAbiertos(), lista, vestibulo.obrasEnCurso()) : new Map();
@@ -7820,6 +7823,26 @@ export function montarRutas(
         respuesta.end();
         return;
       }
+      if (mensaje.accion === "ordenar" && opciones.colaDeTareas !== undefined) {
+        /**
+         * La cola de un proyecto en otro orden (petición suya, 21-10-2026): lo decide `reordenarCola` sobre la lista
+         * RELEÍDA, y una que no casa con la cola de ahora se NIEGA con su motivo, nunca se adivina.
+         */
+        const negar = (motivo: string): void => {
+          respuesta.writeHead(409, { "content-type": "application/json" });
+          respuesta.end(JSON.stringify({ motivo }));
+        };
+        const ids = Array.isArray(mensaje.ids) ? mensaje.ids.filter((x: unknown): x is string => typeof x === "string") : [];
+        if (typeof mensaje.proyecto !== "string") return negar("falta el proyecto");
+        const r = reordenarCola(opciones.colaDeTareas.listar(), mensaje.proyecto, ids);
+        if ("motivo" in r) return negar(r.motivo);
+        opciones.colaDeTareas.guardar(r.tareas);
+        opciones.revisarTareas?.();
+        emitirTareas();
+        respuesta.writeHead(204);
+        respuesta.end();
+        return;
+      }
       if (mensaje.accion === "parar" && opciones.colaDeTareas !== undefined) {
         /**
          * PARAR una tarea en marcha sin borrarla (IXCODE-50): el mismo corte que «Descartar»
@@ -8044,6 +8067,7 @@ export function montarRutas(
         mensaje.accion !== "encargo" &&
         mensaje.accion !== "regenerarEncargo" &&
         mensaje.accion !== "parar" &&
+        mensaje.accion !== "ordenar" &&
         opciones.colaDeTareas !== undefined
       ) {
         /**

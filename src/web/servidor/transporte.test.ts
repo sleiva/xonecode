@@ -88,6 +88,8 @@ const DECISIONES: Readonly<Record<string, readonly string[]>> = {
   reanudaciones: [],
   // Tampoco: es del corredor (si se pidió parar con ella en marcha), y en la pantalla no dice nada.
   paradaPedida: [],
+  // Tampoco: la lista ya viaja en el orden de la cola (`mensajeDeTareas`), y la clave no le dice nada a la pantalla.
+  orden: [],
   autorizadas: ["autorizadas"],
   feedback: ["feedback"],
   veredicto: ["veredicto"],
@@ -121,6 +123,7 @@ const TAREA_COMPLETA: Required<Tarea> = {
   pid: 4242,
   reanudaciones: 1,
   paradaPedida: true,
+  orden: 1,
   autorizadas: ["app.xne"],
   feedback: [{ texto: "sí, con histórico", creado: "2026-09-08T10:05:00.000Z", consumido: true }],
   veredicto: {

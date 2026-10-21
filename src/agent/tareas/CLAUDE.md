@@ -147,6 +147,11 @@ corre solo y escribe sin aprobación. Cuatro estados; `requiere-atencion` = **es
 
 ## Encadenadas
 
+- **La cola se REORDENA a mano** (`core/tareas.ts#reordenarCola`, `{clase:"tarea", accion:"ordenar"}`): `ids` son TODAS
+  las `nuevo` del proyecto o se niega con 409; se reparten sus mismas claves (`Tarea.orden`, `claveDeCola`) y, si era
+  encadenada, se reescriben los `tras` en el orden nuevo (la primera espera a lo que esperaba la cabeza). La que trabaja
+  no se mueve. `mensajeDeTareas` manda la lista YA en orden de cola (`porSitioEnLaCola`).
+
 - **Con diseño en Stitch, cada tarea propuesta NOMBRA sus pantallas** (título y `name`) y pide traerlas antes de nada
   (`REPARTIR_EN_TAREAS`); el plan se escribe desde las pantallas que el orquestador trae ANTES del analista
   (`PLAN_PRIMERO`), y si el plan y la maqueta no coinciden, manda la maqueta. Es redacción, no guarda.

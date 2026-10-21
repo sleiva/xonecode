@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { tiempoQueLleva, TareasDelProyecto } from "./TareasDelProyecto.js";
 import type { TareaDelCable } from "../tipos.js";
 
@@ -454,8 +454,53 @@ describe("TareasDelProyecto: ver lo que hace una tarea en proceso", () => {
       const empezada = new Date(Date.now() - 125_000).toISOString();
       const gastoEnCurso = { modelo: { entrada: 1_500_000, salida: 60_000, cache: 1_300_000 }, externo: { entrada: 0, salida: 0, cache: 0 } };
       render(<TareasDelProyecto tareas={[tarea({ id: "x", titulo: "Menú", estado: "en-proceso", empezada, gastoEnCurso }), tarea({ id: "y", titulo: "Login", estado: "en-proceso", empezada })]} />);
-      expect(screen.getByText(/^Lleva 2 min 0[5-9] s · 260k tokens · 1,3M de caché$/)).toBeTruthy();
-      expect(screen.getByText(/^Lleva 2 min 0[5-9] s$/)).toBeTruthy();
+      // En cifras grandes (su lienzo): lleva, tokens y caché; sin gasto que conste, solo el tiempo.
+      expect(screen.getByLabelText(/^Lleva 2 min 0[5-9] s · 260k tokens · 1,3M de caché$/).textContent).toMatch(/^lleva2 min 0[5-9] stokens260kde caché1,3M$/);
+      expect(screen.getByLabelText(/^Lleva 2 min 0[5-9] s$/)).toBeTruthy();
+    });
+
+    /** Petición suya (21-10-2026): la cola se reordena; la que trabaja va aparte y no se mueve. */
+    it("en tres grupos, y la cola se reordena con las flechas mandando TODA la cola en el orden nuevo", async () => {
+      const alOrdenar = vi.fn(() => Promise.resolve(undefined as string | undefined));
+      render(
+        <TareasDelProyecto
+          tareas={[
+            tarea({ id: "r", titulo: "Trabajando", estado: "en-proceso" }),
+            tarea({ id: "a", titulo: "Primera" }),
+            tarea({ id: "b", titulo: "Segunda" }),
+            tarea({ id: "c", titulo: "Tercera" }),
+          ]}
+          alOrdenar={alOrdenar}
+        />
+      );
+      const cola = screen.getByRole("list", { name: "En cola" });
+      expect(within(cola).queryByText("Trabajando")).toBeNull();
+      expect(within(screen.getByRole("list", { name: "Trabajando ahora" })).getByText("Trabajando")).toBeTruthy();
+      expect(screen.getByText("En cola · 3")).toBeTruthy();
+      // La primera no sube y la última no baja.
+      const subir = within(cola).getAllByRole("button", { name: "Subir en la cola" });
+      expect((subir[0] as HTMLButtonElement).disabled).toBe(true);
+      fireEvent.click(subir[2]!);
+      await act(async () => {});
+      expect(alOrdenar).toHaveBeenCalledWith(["a", "c", "b"]);
+    });
+
+    it("arrastrar y soltar sobre otra la pone en su sitio; y una negativa del servidor se dice", async () => {
+      const alOrdenar = vi.fn(() => Promise.resolve("la cola ha cambiado" as string | undefined));
+      render(<TareasDelProyecto tareas={[tarea({ id: "a", titulo: "Primera" }), tarea({ id: "b", titulo: "Segunda" })]} alOrdenar={alOrdenar} />);
+      const [primera, segunda] = within(screen.getByRole("list", { name: "En cola" })).getAllByRole("listitem");
+      const datos = { effectAllowed: "", setData: () => {} };
+      fireEvent.dragStart(segunda!, { dataTransfer: datos });
+      fireEvent.dragOver(primera!, { dataTransfer: datos });
+      fireEvent.drop(primera!, { dataTransfer: datos });
+      await act(async () => {});
+      expect(alOrdenar).toHaveBeenCalledWith(["b", "a"]);
+      expect(screen.getByRole("alert").textContent).toBe("No se ha cambiado el orden: la cola ha cambiado");
+    });
+
+    it("con una sola en cola, o sin quien ordene, no hay asa ni flechas", () => {
+      render(<TareasDelProyecto tareas={[tarea({ id: "a" }), tarea({ id: "b" })]} />);
+      expect(screen.queryByRole("button", { name: "Subir en la cola" })).toBeNull();
     });
 
     /** Petición suya (21-10-2026): el resumen final de la tarea dice cuánto gastó. Sin gasto que conste, no se pinta nada. */
