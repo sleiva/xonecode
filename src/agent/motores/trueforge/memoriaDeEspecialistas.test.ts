@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { MAX_CARACTERES_DE_ARGUMENTO, MAX_CARACTERES_DE_RESULTADO, TOPE_COMPLETA_TOKENS, TOPE_REDUCIDA_TOKENS, crearMemoriaDeEspecialistas, reducirHistorial, ventanaDeHistorial } from "./memoriaDeEspecialistas.js";
+import { MAX_CARACTERES_DE_ARGUMENTO, MAX_CARACTERES_DE_RESULTADO, TOPE_COMPLETA_TOKENS, TOPE_REDUCIDA_TOKENS, crearMemoriaDeEspecialistas, reducirHistorial, ventanaDeHistorial, NOTA_DE_ENCARGO_CORTADO, sinOrdenDePresupuesto } from "./memoriaDeEspecialistas.js";
+import { textoDePresupuestoAgotado } from "./presupuesto.js";
 
 const MSGS = [{ role: "user", content: "haz" }, { role: "assistant", content: "hecho" }];
 
@@ -172,5 +173,24 @@ describe("los argumentos largos de sus llamadas, en la memoria reducida (Maset: 
     expect(ms[0]!.tool_calls!.map((t) => t.id)).toEqual(["a"]);
     expect(ms[0]!.content).toContain("edit_file sobre /x.xne");
     expect(ms.filter((m) => m.role === "tool").map((m) => m.tool_call_id)).toEqual(["a"]);
+  });
+});
+
+describe("la memoria de un hijo cortado por presupuesto", () => {
+  it("cambia la orden de parar por una nota y deja lo demás", () => {
+    const orden = textoDePresupuestoAgotado(300);
+    const mensajes = [
+      { role: "user", content: "rediseña la lista" },
+      { role: "assistant", content: "leo el plan" },
+      { role: "user", content: `una nota\n\n${orden}` },
+      { role: "user", content: [{ type: "text", text: orden }] },
+      { role: "assistant", content: "Hice A y B; me falta C." },
+    ];
+    const limpios = sinOrdenDePresupuesto(mensajes) as { role: string; content: unknown }[];
+    expect(JSON.stringify(limpios)).not.toContain("Se acabó tu presupuesto");
+    expect(limpios[2]!.content).toBe(`una nota\n\n${NOTA_DE_ENCARGO_CORTADO}`);
+    expect((limpios[3]!.content as { text: string }[])[0]!.text).toBe(NOTA_DE_ENCARGO_CORTADO);
+    expect(limpios[0]).toEqual(mensajes[0]);
+    expect(limpios[4]).toEqual(mensajes[4]);
   });
 });

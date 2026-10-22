@@ -1806,6 +1806,7 @@ describe("el tope de llamadas es POR TURNO, no de toda la conversación", () => 
   it("un especialista que AGOTA su tope queda anotado en la traza como corte, con su nombre", async () => {
     // Medido: la traza decía «cortes: 0» con un documentador parado en exactamente 30 llamadas.
     const cortes: { origen: string; limite: number }[] = [];
+    const memorias: string[] = [];
     const pasos = TOPE_DE_LLAMADAS_DEL_ESPECIALISTA + 2;
     const { m } = modelosConGuion([
       [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "consultant-xone", input: "mira sin fin" }) }] })],
@@ -1816,10 +1817,18 @@ describe("el tope de llamadas es POR TURNO, no de toda la conversación", () => 
     ]);
     const s = await abrirSesionTrueforge({
       raiz: proyecto(), modelos: m, entorno: ENTORNO, skills: CATALOGO,
-      diagnostico: { modelo: () => {}, herramienta: () => {}, corte: (origen, limite) => void cortes.push({ origen, limite }) },
+      diagnostico: {
+        modelo: () => {},
+        herramienta: () => {},
+        corte: (origen, limite) => void cortes.push({ origen, limite }),
+        memoria: (nombre, que, destino) => void (que === "cierra" && memorias.push(`${nombre}:${String(destino)}`)),
+      },
     });
     await s.turno("mira sin fin", piel().p);
     expect(cortes).toEqual([{ origen: "consultant-xone", limite: TOPE_DE_LLAMADAS_DEL_ESPECIALISTA }]);
+    // Y deja memoria (petición suya): el encargo siguiente sigue desde donde se quedó, sin la orden de parar.
+    expect(memorias).toHaveLength(1);
+    expect(memorias[0]).toMatch(/^consultant-xone:guardada/);
   }, 120_000);
 
   it("`traducirEvento`: el raíz es el orquestador, y un hijo que la sesión no conoce sale sin nombre, nunca con el id del hilo", () => {

@@ -39,7 +39,8 @@ Ante una discrepancia con el código, **el código manda**.
 - **Cada especialista recuerda sus encargos de la sesión** (`memoriaDeEspecialistas.ts`, `definition.messages`; nunca lo
   que leyeron otros). Entero (`TOPE_COMPLETA_TOKENS`), REDUCIDO (`TOPE_REDUCIDA_TOKENS`) o la VENTANA reciente
   (`ventanaDeHistorial`). En la reducida, sus encargos a otro van enteros y un `write_file`/`edit_file` largo se CUENTA en
-  texto, sin respuesta: el modelo copia la FORMA de sus llamadas. Una encarnación viva por especialista; un hijo que falló o se detuvo no deja memoria. Solo en
+  texto, sin respuesta: el modelo copia la FORMA de sus llamadas. Una encarnación viva por especialista; un hijo que falló o se detuvo no deja memoria; uno cortado por su presupuesto
+  sí, sin la orden de parar (`sinOrdenDePresupuesto`). Solo en
   memoria; `XONECODE_SIN_MEMORIA_DE_ESPECIALISTAS=1` la apaga.
 
 ## Lo que lee la persona

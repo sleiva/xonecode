@@ -9830,3 +9830,12 @@ app. Ahora, en una tarea, el orquestador tiene UN encargo (`TOPE_DE_ENCARGOS_AL_
 (`scripts: true`) nace con 300 (`presupuestoDeLlamadas`); el conductor sigue en 60 y el resto de especialistas en 100. Con
 persona delante no hay tope de encargos. Sin medir todavía en una tarea real.
 - Corrección del mismo día (decisión suya): los encargos vuelven a ser tres, cada uno con las 300 llamadas; ya se verá.
+
+## Un encargo cortado por presupuesto deja memoria (22-10-2026)
+
+Petición suya. Desde que el tope devuelve lo hecho (`presupuesto.ts`), un hijo cortado no dejaba memoria de especialista,
+como uno detenido: su historial llevaba la orden de parar y la habría heredado el siguiente. Pero el encargo cortado es el
+que más contexto tiene, y el siguiente empezaba de cero con lo que el orquestador quisiera copiarle. Ahora se guarda como el
+de uno que acabó bien (entero, reducido o ventana), con la orden de parar cambiada por `NOTA_DE_ENCARGO_CORTADO`. Uno
+detenido o que falló sigue sin dejarla. Se descartó, por ahora, un relevo escrito a disco: la memoria no sobrevive a
+reabrir la sesión.

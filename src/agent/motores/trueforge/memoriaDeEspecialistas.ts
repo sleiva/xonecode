@@ -29,7 +29,8 @@
  * - **Saneada**: un hijo cortado o que acaba con una tool call sin respuesta daría un 400 del
  *   proveedor; se salda con el mismo texto que el raíz (`saldarColgadas`).
  * - **Solo si acabó BIEN**: un hijo que falló, o al que se cortó con «Detener» (su historial lleva la
- *   orden de parar y la heredaría la siguiente encarnación), no deja memoria y borra la que hubiera.
+ *   orden de parar y la heredaría la siguiente encarnación), no deja memoria y borra la que hubiera. Uno cortado
+ *   por su PRESUPUESTO sí la deja, sin la orden de parar (`sinOrdenDePresupuesto`).
  * - **En memoria y por sesión**: no va a la foto en disco (habría que subir `VERSION_DE_MEMORIA`) y
  *   se olvida al abrir otra conversación. **Límite declarado**: reabrir una sesión no la recupera.
  */
@@ -176,6 +177,30 @@ export interface EncarnacionPrevia {
 }
 
 /** Por qué una encarnación arranca sin memoria, para la traza. */
+/** Lo que ocupa el sitio de la orden de parar en la memoria de un hijo cortado por presupuesto. */
+export const NOTA_DE_ENCARGO_CORTADO =
+  "[Tu encargo anterior se cortó al acabarse su presupuesto de llamadas: lo que hiciste, lo que mediste y lo que te quedaba está en tu última respuesta. Sigue desde ahí.]";
+
+/**
+ * La memoria de un hijo CORTADO POR PRESUPUESTO, sin la orden de parar (`presupuesto.ts#textoDePresupuestoAgotado`): heredada,
+ * pararía al siguiente sin que nadie se lo pidiera, así que se cambia por `NOTA_DE_ENCARGO_CORTADO`. Lo demás se queda: lo que
+ * leyó, escribió y probó, y su resumen forzado. Petición suya (22-10-2026): el encargo cortado era el que más contexto tenía y
+ * el que lo perdía entero, y el siguiente empezaba de cero.
+ */
+export function sinOrdenDePresupuesto(mensajes: readonly unknown[]): unknown[] {
+  const orden = /\[Se acabó tu presupuesto de \d+ llamadas\.[^\]]*\]/g;
+  const limpiar = (texto: string): string => texto.replace(orden, NOTA_DE_ENCARGO_CORTADO);
+  return mensajes.map((m) => {
+    if (typeof m !== "object" || m === null || (m as { role?: unknown }).role !== "user") return m;
+    const c = (m as { content?: unknown }).content;
+    if (typeof c === "string") return { ...m, content: limpiar(c) };
+    if (Array.isArray(c)) {
+      return { ...m, content: c.map((p) => (typeof p === "object" && p !== null && typeof (p as { text?: unknown }).text === "string" ? { ...p, text: limpiar((p as { text: string }).text) } : p)) };
+    }
+    return m;
+  });
+}
+
 export type SinMemoria = "primera" | "hilo-vivo" | "olvidada-por-tope" | "olvidada-por-fallo";
 
 export interface MemoriaDeEspecialistas {

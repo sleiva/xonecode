@@ -120,7 +120,7 @@ import { lineaDeComprobacion, omisionExplicada, soloDocumentacion, TOPE_DE_COMPR
 import { bloqueantesDelInforme, filasDeListaDeGeometria } from "../../../core/geometriaDePantalla.js";
 import { apartarMemoria, cargarMemoria, fotoSaneada, guardarMemoria, saldarColgadas, textoDeInterrupcion, textoDeMemoriaDescartada, type FotoDeHilo } from "./memoriaTrueforge.js";
 import { crearNota, sobrantes, type Nota } from "./notas.js";
-import { crearMemoriaDeEspecialistas } from "./memoriaDeEspecialistas.js";
+import { crearMemoriaDeEspecialistas, sinOrdenDePresupuesto } from "./memoriaDeEspecialistas.js";
 import { crearEsperas } from "./esperas.js";
 import { conResumenSeguro } from "./resumenSeguro.js";
 import { crearControlDeDetencion, RESUMEN_DE_RELLENO } from "./detencion.js";
@@ -2078,7 +2078,10 @@ export async function abrirSesionTrueforge(
           const tokens = (foto.current_context_usage?.prompt_tokens ?? 0) + (foto.current_context_usage?.completion_tokens ?? 0);
           const destino = memoriaDeEspecialistas.cerrar(deHilo, { // Un hijo CORTADO por «Detener» lleva en su historial la orden de parar: heredarla lo pararía
           // sin que nadie se lo haya pedido, así que no deja memoria (como uno que falló).
-          bien: (evento as { status?: string }).status !== "error" && !detencion.soloTexto(deHilo) && !presupuesto.soloTexto(deHilo), mensajes: [...h.iniciales, ...foto.context], tokens });
+          // Uno cortado por PRESUPUESTO sí la deja, sin la orden de parar: el siguiente encargo sigue desde donde se quedó.
+          bien: (evento as { status?: string }).status !== "error" && !detencion.soloTexto(deHilo),
+          mensajes: presupuesto.soloTexto(deHilo) ? sinOrdenDePresupuesto([...h.iniciales, ...foto.context]) : [...h.iniciales, ...foto.context],
+          tokens });
           diagnostico?.memoria?.(h.nombre, "cierra", destino, tokens);
         }
       }
