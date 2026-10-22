@@ -3793,24 +3793,27 @@ describe("el tope de encargos al desarrollador en una tarea", () => {
     expect(presupuestoDeLlamadas(undefined)).toBe(100);
   });
 
-  it("el segundo encargo no arranca: el orquestador recibe la orden de cerrar con lo que hay", async () => {
-    // Un encargo por tarea (decisión suya, 22-10-2026), con un tope de llamadas alto.
-    expect(TOPE_DE_ENCARGOS_AL_DESARROLLADOR).toBe(1);
+  it("el cuarto encargo no arranca: el orquestador recibe la orden de cerrar con lo que hay", async () => {
+    expect(TOPE_DE_ENCARGOS_AL_DESARROLLADOR).toBe(3);
     const raiz = proyecto();
     const { m, vistos } = modelosConGuion([
       [delega("d1")],
       [new AIMessageChunk({ content: "vuelta 1" })],
       [delega("d2")],
+      [new AIMessageChunk({ content: "vuelta 2" })],
+      [delega("d3")],
+      [new AIMessageChunk({ content: "vuelta 3" })],
+      [delega("d4")],
       [new AIMessageChunk({ content: "Cierro con lo que hay." })],
     ]);
     const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, bucleDelDesarrollador: true, trabajoSinPersona: true });
     const r = piel();
     await s.turno("rediseña la ventana", r.p);
     const ultima = vistos.at(-1)!.join("\n");
-    expect(ultima).toContain("ya tuvo su encargo en esta tarea");
+    expect(ultima).toContain("ya van 3 encargos suyos en esta tarea");
     expect(r.tokens.join("")).toContain("Cierro con lo que hay.");
-    // Cuatro llamadas al modelo: tres del raíz y UNA del desarrollador; el segundo no llegó a arrancar.
-    expect(vistos).toHaveLength(4);
+    // Ocho llamadas al modelo: cuatro del raíz y TRES del desarrollador; la cuarta no llegó a arrancar.
+    expect(vistos).toHaveLength(8);
   }, 30_000);
 
   it("con persona delante no hay tope: el cuarto arranca", async () => {

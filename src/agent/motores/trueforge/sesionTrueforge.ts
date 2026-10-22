@@ -277,10 +277,10 @@ export const SIN_HABLAR_DEL_HARNESS =
  * («Albaranes pendientes»): siete encargos en 70 min —«Última vuelta», «Cierre», «Última prueba», «la ÚLTIMA vía»…—
  * persiguiendo un crítico en rojo por iconos que XOne no pintaba en una fila. Al siguiente no se lanza: se le devuelve al
  * orquestador la orden de cerrar (`textoDeTopeDeEncargos`). Con persona delante no aplica: ella decide si sigue.
- * Desde el 22-10-2026, UNO (decisión suya), con un tope de llamadas alto (`TOPE_DE_LLAMADAS_DEL_DESARROLLADOR`): cada
- * encargo nuevo volvía a leer y a entrar en la app desde cero.
+ * Cada uno con un tope de llamadas alto (`TOPE_DE_LLAMADAS_DEL_DESARROLLADOR`, 22-10-2026): cada encargo nuevo volvía a
+ * leer y a entrar en la app desde cero. Se probó con UNO solo; se quedan tres (decisión suya), y ya se verá.
  */
-export const TOPE_DE_ENCARGOS_AL_DESARROLLADOR = 1;
+export const TOPE_DE_ENCARGOS_AL_DESARROLLADOR = 3;
 
 /** Lo que recibe el agente en modo autónomo cuando pregunta sin marcar ninguna opción como recomendada. */
 /**
@@ -301,9 +301,9 @@ export const TRABAJO_SIN_PERSONA = [
   "  que se ve distinto del diseño o falla), «No es un defecto» (un dato de ejemplo de la maqueta —una versión, una",
   "  cifra, un nombre—, el estado en que la pinta —un campo relleno— o una medida que se equivoca, cada uno con su",
   "  porqué), «Sin comprobar» (lo que nadie probó, primero lo que podría romper la app) y «No se puede en XOne».",
-  "- UN SOLO encargo a developer-xone en la tarea, con la ventana ENTERA (todas sus pantallas) y todo lo que necesite saber:",
-  "  no habrá otro. Si al volver la pantalla no respeta el diseño, cierra con lo que hay y pon lo que falta en «Por arreglar»",
-  "  o «No se puede en XOne», con lo que se midió. Otra «última vuelta» no la arregla.",
+  `- Como MUCHO ${String(TOPE_DE_ENCARGOS_AL_DESARROLLADOR)} encargos a developer-xone en la tarea, y cada uno largo: dale en el primero la ventana ENTERA`,
+  "  y todo lo que necesite saber. Si con eso la pantalla no respeta el diseño, cierra con lo que hay y pon lo que falta en",
+  "  «Por arreglar» o «No se puede en XOne», con lo que se midió. Otra «última vuelta» no la arregla.",
 ].join("\n");
 
 

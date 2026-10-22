@@ -9829,3 +9829,4 @@ llamadas, y cada encargo nuevo gastaba 20–30 en volver a leer el plan, el CSS 
 app. Ahora, en una tarea, el orquestador tiene UN encargo (`TOPE_DE_ENCARGOS_AL_DESARROLLADOR`) y quien prueba él mismo
 (`scripts: true`) nace con 300 (`presupuestoDeLlamadas`); el conductor sigue en 60 y el resto de especialistas en 100. Con
 persona delante no hay tope de encargos. Sin medir todavía en una tarea real.
+- Corrección del mismo día (decisión suya): los encargos vuelven a ser tres, cada uno con las 300 llamadas; ya se verá.

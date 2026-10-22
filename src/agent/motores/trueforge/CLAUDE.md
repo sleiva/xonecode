@@ -74,7 +74,7 @@ Ante una discrepancia con el código, **el código manda**.
   `TOPE_DE_ENCARGOS_AL_DESARROLLADOR` encargos del orquestador a developer-xone por turno**: el siguiente no arranca
   (`hiloQueNoArranca` con `textoDeTopeDeEncargos`) y manda cerrar con lo que falta en «Por arreglar» / «No se puede en
   XOne». Medido: siete «últimas vueltas» persiguiendo un crítico en rojo. Con persona delante no aplica.
-  Es UNO, con un presupuesto alto (`presupuestoDeLlamadas`: quien lleva `scripts`, `TOPE_DE_LLAMADAS_DEL_DESARROLLADOR`):
+  Cada uno con un presupuesto alto (`presupuestoDeLlamadas`: quien lleva `scripts`, `TOPE_DE_LLAMADAS_DEL_DESARROLLADOR`):
   cada encargo nuevo volvía a leer y a entrar en la app desde cero.
   **Tampoco arrancan en una tarea** el analista con plan asignado (`PLAN DE ESTA TAREA` en el encargo) ni el
   device-controller si el desarrollador lleva `scripts`: probar y capturar son suyos y el juez mira SU última captura.
