@@ -9821,3 +9821,11 @@ hijo de Claude Code convertía con `xone-a-utf8`. Ahora, en TrueForge, el harnes
   prólogo; en la Revisión, que decodifica cada lado con su tabla, solo el prólogo.
 - Un `.css`/`.js` de 8 bits sigue en su tabla. Claude Code, Codex y OpenCode, como estaban. El desarrollador de
   TrueForge ya no ve `xone-a-utf8` (`scriptsDeTrueforge`).
+
+## Un encargo al desarrollador por tarea, con 300 llamadas (22-10-2026)
+
+Decisión suya. Medido en Maset, cinco tareas simuladas: casi todos los encargos al desarrollador se cortaban en sus 100
+llamadas, y cada encargo nuevo gastaba 20–30 en volver a leer el plan, el CSS y las colecciones y en volver a entrar en la
+app. Ahora, en una tarea, el orquestador tiene UN encargo (`TOPE_DE_ENCARGOS_AL_DESARROLLADOR`) y quien prueba él mismo
+(`scripts: true`) nace con 300 (`presupuestoDeLlamadas`); el conductor sigue en 60 y el resto de especialistas en 100. Con
+persona delante no hay tope de encargos. Sin medir todavía en una tarea real.

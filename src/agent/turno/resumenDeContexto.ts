@@ -298,6 +298,14 @@ export const TOPE_DE_LLAMADAS_DEL_ESPECIALISTA = 100;
 export const TOPE_DE_LLAMADAS_DEL_CONDUCTOR = 60;
 
 /**
+ * **El de quien PRUEBA ÉL MISMO** (`scripts: true`, hoy developer-xone), más alto que el de un especialista (decisión suya,
+ * 22-10-2026), con UN encargo por tarea (`TOPE_DE_ENCARGOS_AL_DESARROLLADOR`). Medido en Maset, cinco tareas: casi todos los
+ * encargos se cortaban en 100, y cada encargo nuevo gastaba 20–30 llamadas en volver a leer el plan, el CSS y las
+ * colecciones y en volver a entrar en la app. Con uno solo y alto, eso se paga una vez.
+ */
+export const TOPE_DE_LLAMADAS_DEL_DESARROLLADOR = 300;
+
+/**
  * El tope, con `exitBehavior: "end"` y no `"error"`.
  *
  * Con `"error"` la delegación entera se cae y el orquestador se queda sin nada, que es como

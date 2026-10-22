@@ -30,7 +30,7 @@ import { join } from "node:path";
 import { CARPETA_DE_PLANES } from "../../../core/planes.js";
 import winston from "winston";
 import { AgentThread, AgentThreadOrchestrator, EventType, NOOP_AGENT_TRACING, askUserQuestion, contextCompaction, dynamicSubAgents } from "./trueforge.js";
-import { TOPE_DE_LLAMADAS_DEL_CONDUCTOR, TOPE_DE_LLAMADAS_DEL_ESPECIALISTA } from "../../turno/resumenDeContexto.js";
+import { TOPE_DE_LLAMADAS_DEL_CONDUCTOR, TOPE_DE_LLAMADAS_DEL_DESARROLLADOR, TOPE_DE_LLAMADAS_DEL_ESPECIALISTA } from "../../turno/resumenDeContexto.js";
 import type { DomainEvent, HallazgoDelTurno, PendienteDeAprobacion } from "../../../core/events.js";
 import type {
   ConsumoDeSesion,
@@ -277,8 +277,10 @@ export const SIN_HABLAR_DEL_HARNESS =
  * («Albaranes pendientes»): siete encargos en 70 min —«Última vuelta», «Cierre», «Última prueba», «la ÚLTIMA vía»…—
  * persiguiendo un crítico en rojo por iconos que XOne no pintaba en una fila. Al siguiente no se lanza: se le devuelve al
  * orquestador la orden de cerrar (`textoDeTopeDeEncargos`). Con persona delante no aplica: ella decide si sigue.
+ * Desde el 22-10-2026, UNO (decisión suya), con un tope de llamadas alto (`TOPE_DE_LLAMADAS_DEL_DESARROLLADOR`): cada
+ * encargo nuevo volvía a leer y a entrar en la app desde cero.
  */
-export const TOPE_DE_ENCARGOS_AL_DESARROLLADOR = 3;
+export const TOPE_DE_ENCARGOS_AL_DESARROLLADOR = 1;
 
 /** Lo que recibe el agente en modo autónomo cuando pregunta sin marcar ninguna opción como recomendada. */
 /**
@@ -299,15 +301,27 @@ export const TRABAJO_SIN_PERSONA = [
   "  que se ve distinto del diseño o falla), «No es un defecto» (un dato de ejemplo de la maqueta —una versión, una",
   "  cifra, un nombre—, el estado en que la pinta —un campo relleno— o una medida que se equivoca, cada uno con su",
   "  porqué), «Sin comprobar» (lo que nadie probó, primero lo que podría romper la app) y «No se puede en XOne».",
-  `- Como MUCHO ${String(TOPE_DE_ENCARGOS_AL_DESARROLLADOR)} encargos a developer-xone en la tarea: si con eso la pantalla no respeta el diseño, cierra con`,
-  "  lo que hay y pon lo que falta en «Por arreglar» o «No se puede en XOne», con lo que se midió. Otra «última vuelta» no la arregla.",
+  "- UN SOLO encargo a developer-xone en la tarea, con la ventana ENTERA (todas sus pantallas) y todo lo que necesite saber:",
+  "  no habrá otro. Si al volver la pantalla no respeta el diseño, cierra con lo que hay y pon lo que falta en «Por arreglar»",
+  "  o «No se puede en XOne», con lo que se midió. Otra «última vuelta» no la arregla.",
 ].join("\n");
 
+
+/**
+ * Cuántas llamadas al modelo tiene un hijo: el conductor, pocas (medido: sin tope se fue a 150 investigando); quien prueba
+ * él mismo (`scripts`), muchas, porque es UN encargo por tarea (`TOPE_DE_LLAMADAS_DEL_DESARROLLADOR`); el resto, las de un
+ * especialista.
+ */
+export function presupuestoDeLlamadas(agente: Pick<Agente, "ejecucion" | "scripts"> | undefined): number {
+  if (agente?.ejecucion === true) return TOPE_DE_LLAMADAS_DEL_CONDUCTOR;
+  if (agente?.scripts === true) return TOPE_DE_LLAMADAS_DEL_DESARROLLADOR;
+  return TOPE_DE_LLAMADAS_DEL_ESPECIALISTA;
+}
 
 /** Lo que recibe el orquestador en lugar de un encargo más al desarrollador, pasado el tope. */
 export function textoDeTopeDeEncargos(tope: number): string {
   return (
-    `developer-xone NO HA ARRANCADO: ya van ${String(tope)} encargos suyos en esta tarea, que es el tope. CIERRA AHORA con lo que hay: ` +
+    `developer-xone NO HA ARRANCADO: ${tope === 1 ? "ya tuvo su encargo en esta tarea" : `ya van ${String(tope)} encargos suyos en esta tarea`}, que es el tope. CIERRA AHORA con lo que hay: ` +
     "lo hecho y medido, y lo que falta en «Por arreglar» o «No se puede en XOne», cada cosa con lo que se midió, para que la " +
     "persona decida. No vuelvas a llamar a developer-xone en este turno."
   );
@@ -1616,7 +1630,7 @@ export async function abrirSesionTrueforge(
     }
     detencion.nacio(params.threadId);
     // El conductor tiene el suyo, más corto: medido, sin él se fue a 150 llamadas investigando (`presupuesto.ts`).
-    const presupuestoDelHijo = agente?.ejecucion === true ? TOPE_DE_LLAMADAS_DEL_CONDUCTOR : TOPE_DE_LLAMADAS_DEL_ESPECIALISTA;
+    const presupuestoDelHijo = presupuestoDeLlamadas(agente);
     presupuesto.nacio(params.threadId, presupuestoDelHijo);
     esperas.nacio(agente?.nombre ?? params.request.name, params.threadId);
     const hiloDelPadre = (params.parent as { thread_id?: string } | undefined)?.thread_id;
