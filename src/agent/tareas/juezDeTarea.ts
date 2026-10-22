@@ -400,6 +400,11 @@ function promptDelJuez(caso: CasoDeJuez, planes: readonly PlanEnDisco[]): string
     "no se exigen. Tampoco el ESTADO en que está dibujada (firmada, rellena, con filas): si la captura es de otro estado y",
     "el trabajo lo dice, la diferencia que salga por eso no es motivo de «rojo». Lo que sí cuenta es que el SITIO de cada pieza",
     "exista y se vea como en la maqueta.",
+    // Medido en Maset (menú principal): la imagen de Stitch traía una franja de su lienzo y el contenido cortado, y el rojo
+    // salió de «estructura distinta» y «bordes fuera de tolerancia» contra ella. La maqueta no se corrige: se dice.
+    "Si una comprobación trae un «AVISO DE LA MAQUETA», la maqueta viene DEFECTUOSA de Stitch: lo medido contra ella",
+    "(estructura distinta, bordes que no encajan) no es motivo de «rojo». Juzga por el resto, y dilo en el resumen como",
+    "observación para quien hizo la maqueta, no como fallo del trabajo.",
   ].join("\n");
 }
 

@@ -42,6 +42,8 @@ corre solo y escribe sin aprobación. Cuatro estados; `requiere-atencion` = **es
 - **Al juez solo los ERRORES del verificador** (`#parrafoDelVerificador`), y las comprobaciones
   VISUALES del turno (`comprobacionesVisuales`, `CasoDeJuez`, `lineaDeComprobacion`,
   `TOPE_DE_COMPROBACIONES_AL_JUEZ`); sin ninguna, el prompt dice que no hubo.
+  Una maqueta de Stitch DEFECTUOSA (`franjaDeLaMaqueta`, aviso en la primera línea de `comparar_capturas`) no se
+  corrige: lo medido contra ella no pone rojo y el juez lo dice como observación.
 
 ## Corredor, consola y persona
 

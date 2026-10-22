@@ -9795,3 +9795,15 @@ crítica ponía rojo por «3 Liquidaciones» de la maqueta frente a «5 Liquidac
   de una píldora de cabecera, y el modelo con el método nuevo ya lo veía. Descartado.
 - El segundo, en `descripcionDePantalla.ts`: la regla del dato de ejemplo (`pareceDatoDeEjemplo`) solo estaba en la
   comparación geométrica; ahora el mismo texto con otras cifras es una nota, y sin él, una diferencia sin rojo.
+
+## Una maqueta de Stitch defectuosa se dice, no se corrige (22-10-2026)
+
+Medido en Maset (menú principal): `get_screen` declaraba 780 × 1768 y la imagen a tamaño completo (`=s0`, idéntica byte a
+byte a la guardada) era 427 × 1008, con 40 px (9 %) del fondo del lienzo a la derecha y el contenido cortado contra él.
+El juez dio rojo por «estructura distinta» y «bordes fuera de tolerancia» medidos contra esa imagen.
+
+- Decisión suya: la maqueta es la que es; no se recorta ni se rehace desde su `code.html`. `franjaDeLaMaqueta` reconoce la
+  franja (más ancha que el marco de 3–4 px que sí se recorta, hasta un 25 %) y `comparar_capturas` lo AVISA en su primera
+  línea, que es la que llega al juez.
+- El juez no cuenta lo medido contra una maqueta con aviso, y lo dice como observación para quien hizo la maqueta.
+- Comprobado sobre las maquetas y capturas de Maset de las simulaciones: solo la del menú da franja.

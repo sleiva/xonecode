@@ -517,6 +517,8 @@ describe("el juez y el plan de la tarea", () => {
     // Y la regla de los datos y del estado de la maqueta (medido: «el dato real que la maqueta exige: A16-0842189»).
     expect(prompt).toContain("Los DATOS que pinta la maqueta");
     expect(prompt).toContain("Tampoco el ESTADO en que está dibujada");
+    // Y una maqueta defectuosa de Stitch no es un rojo del trabajo: se dice como observación.
+    expect(prompt).toContain("«AVISO DE LA MAQUETA»");
     expect(prompt).toContain("- T2 — Lista (estado: pendiente) · 0/3 criterios");
     expect(v.tareasDelPlan).toEqual([
       { numero: "T1", estado: "hecha" },

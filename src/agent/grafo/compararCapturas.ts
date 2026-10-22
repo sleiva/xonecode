@@ -6,7 +6,7 @@ import {
   nombreDeArtefacto,
   rutaRelativaDeArtefacto,
 } from "../../core/artefactos.js";
-import { compararPantallas, informeDeComparacion } from "../../core/compararCapturas.js";
+import { avisoDeMaquetaDefectuosa, compararPantallas, informeDeComparacion } from "../../core/compararCapturas.js";
 import { filasDeListaDeGeometria } from "../../core/geometriaDePantalla.js";
 import { imagenReferida, type ImagenReferida } from "../../core/referenciasDeImagen.js";
 import { decodificarImagen } from "../dispositivos/decodificarImagen.js";
@@ -111,7 +111,9 @@ export function crearCompararCapturas(deps: DependenciasDeComparacion) {
       // La geometría es un dato de MÁS: que no esté o no se lea deja la medida de siempre.
       const filasDeLista = deps.leerGeometria === undefined ? 0 : filasDeListaDeGeometria(await deps.leerGeometria(nombreDeArtefacto(entrada.captura)).catch(() => undefined));
       try {
-        return informeDeComparacion(compararPantallas(ref, cap, { filasDeLista })).join("\n");
+        // El aviso de una maqueta defectuosa va PRIMERO: la línea que llega al juez es el principio de esta respuesta.
+        const aviso = avisoDeMaquetaDefectuosa(ref);
+        return [...(aviso === undefined ? [] : [aviso]), ...informeDeComparacion(compararPantallas(ref, cap, { filasDeLista }))].join("\n");
       } catch (error) {
         return `No se pudo medir: ${error instanceof Error ? error.message : "fallo desconocido"}.`;
       }

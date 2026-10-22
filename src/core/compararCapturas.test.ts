@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  compararPantallas, desajusteQueCuenta, informeDeCambio, sinMarcoLateral, informeDeComparacion, medirCambio, medirPantalla, FRANJAS_DE_COLUMNAS, FRANJAS_DE_FILAS,
+  avisoDeMaquetaDefectuosa, compararPantallas, desajusteQueCuenta, franjaDeLaMaqueta, informeDeCambio, sinMarcoLateral, informeDeComparacion, medirCambio, medirPantalla, FRANJAS_DE_COLUMNAS, FRANJAS_DE_FILAS,
   type ImagenRgba,
 } from "./compararCapturas.js";
 
@@ -191,6 +191,17 @@ describe("el marco lateral de una maqueta", () => {
     const c = compararPantallas(maqueta, pantalla(400, 400, tarjetas, CLARO));
     expect(c.veredicto).toBe("parecida");
     expect(informeDeComparacion(c).join("\n")).toContain("ENCAJA");
+  });
+
+  it("una FRANJA del lienzo (más ancha que el marco) no se recorta: se avisa de que la maqueta viene defectuosa", () => {
+    // Medido en Maset (menú principal): 40 px (9 %) del lienzo de Stitch a la derecha, con el contenido cortado contra él.
+    const conFranja: Caja[] = [{ x0: 0.9, x1: 1, y0: 0, y1: 1, color: OSCURO }, ...tarjetas];
+    const maqueta = pantalla(400, 400, conFranja, CLARO);
+    expect(sinMarcoLateral(maqueta).ancho).toBe(400);
+    expect(franjaDeLaMaqueta(maqueta)).toMatchObject({ lado: "derecha" });
+    expect(avisoDeMaquetaDefectuosa(maqueta)).toContain("AVISO DE LA MAQUETA");
+    expect(avisoDeMaquetaDefectuosa(pantalla(400, 400, conMarco, CLARO))).toBeUndefined();
+    expect(avisoDeMaquetaDefectuosa(pantalla(400, 400, tarjetas, CLARO))).toBeUndefined();
   });
 
   it("una captura no tiene marco: su primera columna cruza la cabecera y el fondo", () => {

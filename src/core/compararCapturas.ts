@@ -176,9 +176,9 @@ const UNIFORMIDAD_DEL_MARCO = 0.95;
  * lo estaba —dos pasadas del desarrollador perdidas—. Una captura no tiene marco: su primera columna cruza la barra de
  * estado, la cabecera y el fondo. Y un fondo liso a sangre tampoco se recorta: la tira llegaría al tope sin cambiar.
  */
-function columnasDeMarco(img: ImagenRgba, desde: number, hasta: number, lado: "izquierda" | "derecha"): number {
+function columnasDeMarco(img: ImagenRgba, desde: number, hasta: number, lado: "izquierda" | "derecha", maximo: number = ANCHO_MAXIMO_DEL_MARCO): number {
   const { ancho, datos } = img;
-  const tope = Math.floor(ancho * ANCHO_MAXIMO_DEL_MARCO);
+  const tope = Math.floor(ancho * maximo);
   const columna = (k: number) => (lado === "izquierda" ? k : ancho - 1 - k);
   const colorUniforme = (x: number): [number, number, number] | undefined => {
     const m = modaDeColor(img, desde, hasta, (c) => c === x).color;
@@ -216,6 +216,37 @@ export function sinMarcoLateral(img: ImagenRgba, recorte: number = RECORTE_DE_BA
     datos.set(img.datos.subarray(origen, origen + ancho * 4), y * ancho * 4);
   }
   return { ancho, alto: img.alto, datos };
+}
+
+/** Lo más ancha que puede ser una FRANJA del lienzo de Stitch para reconocerla como tal, en fracción del ancho. */
+export const ANCHO_MAXIMO_DE_FRANJA = 0.25;
+
+/**
+ * Una FRANJA del lienzo de Stitch pegada a un lado de la maqueta, más ancha que el marco que se recorta solo
+ * (`ANCHO_MAXIMO_DEL_MARCO`): una tira de un solo color de arriba abajo, distinta de lo de dentro. Medido en Maset (menú
+ * principal): Stitch guardó la captura de la pantalla con 40 px (9 %) del fondo de su lienzo a la derecha y el contenido
+ * cortado contra él, y toda comparación salía «estructura distinta». NO se recorta (decisión suya: la maqueta es la que
+ * es): se DICE, para que el juez no lo cuente contra el trabajo. Sin franja, `undefined`.
+ */
+export function franjaDeLaMaqueta(img: ImagenRgba, recorte: number = RECORTE_DE_BARRAS): { lado: "izquierda" | "derecha"; fraccion: number } | undefined {
+  const desde = Math.floor(img.alto * recorte);
+  const hasta = img.alto - Math.floor(img.alto * recorte);
+  for (const lado of ["derecha", "izquierda"] as const) {
+    const columnas = columnasDeMarco(img, desde, hasta, lado, ANCHO_MAXIMO_DE_FRANJA);
+    if (columnas > Math.floor(img.ancho * ANCHO_MAXIMO_DEL_MARCO)) return { lado, fraccion: columnas / img.ancho };
+  }
+  return undefined;
+}
+
+/** El aviso de una maqueta con franja, para quien compara y para el juez; o nada. */
+export function avisoDeMaquetaDefectuosa(img: ImagenRgba): string | undefined {
+  const f = franjaDeLaMaqueta(img);
+  if (f === undefined) return undefined;
+  return (
+    `AVISO DE LA MAQUETA (no del trabajo): la imagen de Stitch trae a la ${f.lado} una franja de ${Math.round(f.fraccion * 100)} % ` +
+    "de su lienzo y el contenido llega cortado contra ella. Lo medido contra esta maqueta —estructura, bordes— no es fiable; " +
+    "compara la pantalla con lo que la maqueta enseña dentro de esa franja."
+  );
 }
 
 /**
