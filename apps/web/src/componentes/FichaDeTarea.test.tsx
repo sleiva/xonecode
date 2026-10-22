@@ -1,0 +1,69 @@
+import { afterEach, describe, expect, it } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { FichaDeTarea } from "./FichaDeTarea.js";
+import type { TareaDelCable } from "../tipos.js";
+
+afterEach(cleanup);
+
+const tarea = (extra: Partial<TareaDelCable> = {}): TareaDelCable => ({
+  id: "t1", proyecto: "p1", proyectoNombre: "Maset", titulo: "Rediseño del listado de albaranes",
+  peticion: "Rediseña el listado de albaranes", encargo: "## Qué hay que conseguir\nEl listado como la maqueta", adjuntos: [],
+  estado: "en-proceso", creada: "2026-10-22T10:00:00.000Z", ...extra,
+});
+
+/** IXCODE-68: la ficha de la tarea junto a su conversación, opción A de su lienzo. */
+describe("FichaDeTarea", () => {
+  it("en marcha: título, ticket, cuánto lleva y lo que gasta, lo que se pidió y el encargo ABIERTO", () => {
+    render(
+      <FichaDeTarea
+        tarea={tarea({
+          empezada: new Date(Date.now() - 65_000).toISOString(),
+          ticket: { clave: "MAS-12", conector: "jira" },
+          gastoEnCurso: { modelo: { entrada: 1000, salida: 100, cache: 500 }, externo: { entrada: 0, salida: 0, cache: 0 } },
+        })}
+      />
+    );
+    const ficha = screen.getByRole("complementary", { name: "Ficha de la tarea" });
+    expect(ficha.textContent).toContain("Rediseño del listado de albaranes");
+    expect(ficha.textContent).toContain("MAS-12");
+    expect(ficha.textContent).toMatch(/Empezó /);
+    expect(screen.getByText("lleva")).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Lo que se pidió" }).textContent).toContain("Rediseña el listado de albaranes");
+    // Markdown: el `##` es un encabezado, no texto con almohadillas.
+    expect(screen.getByRole("heading", { name: "Qué hay que conseguir" })).toBeTruthy();
+  });
+
+  it("el encargo se pliega y, plegado, se DESMONTA", () => {
+    render(<FichaDeTarea tarea={tarea()} />);
+    const boton = screen.getByRole("button", { name: /Encargo ampliado/ });
+    expect(boton.getAttribute("aria-expanded")).toBe("true");
+    fireEvent.click(boton);
+    expect(screen.queryByRole("heading", { name: "Qué hay que conseguir" })).toBeNull();
+  });
+
+  it("lo que no consta no se pinta: sin ticket, sin empezar, sin diseño ni adjuntos, y la petición igual al encargo una vez", () => {
+    render(<FichaDeTarea tarea={tarea({ peticion: "Lo mismo", encargo: "Lo mismo" })} />);
+    const ficha = screen.getByRole("complementary", { name: "Ficha de la tarea" });
+    expect(ficha.textContent).not.toMatch(/Empezó|lleva/);
+    expect(screen.queryByRole("region", { name: "Lo que se pidió" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Diseño" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Adjuntos" })).toBeNull();
+    expect(screen.getAllByText("Lo mismo")).toHaveLength(1);
+  });
+
+  it("con diseño y adjuntos, los nombra; acabada, dice lo que tardó trabajando", () => {
+    render(
+      <FichaDeTarea
+        tarea={tarea({
+          estado: "terminada",
+          trabajo: 125_000,
+          pantallasDeStitch: [{ name: "projects/1/screens/a", titulo: "Listado de Albaranes", proyecto: "Maset" }],
+          adjuntos: [{ nombre: "captura-actual.png", bytes: 10 }],
+        })}
+      />
+    );
+    expect(screen.getByRole("region", { name: "Diseño" }).textContent).toContain("«Listado de Albaranes»");
+    expect(screen.getByRole("region", { name: "Adjuntos" }).textContent).toContain("captura-actual.png");
+    expect(screen.getByText("Tardó 2 min 05 s trabajando")).toBeTruthy();
+  });
+});

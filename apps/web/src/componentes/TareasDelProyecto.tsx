@@ -1165,7 +1165,7 @@ interface EnLaCola {
  * La que TRABAJA, en tres cifras grandes: cuánto lleva, tokens y caché (petición suya, 21-10-2026: la tarjeta de su
  * lienzo). Las mismas fuentes que `EnMarcha`; sin gasto que conste, solo el tiempo.
  */
-function CifrasEnMarcha({ empezada, gasto }: { empezada: string; gasto: TareaDelCable["gastoEnCurso"] }) {
+export function CifrasEnMarcha({ empezada, gasto }: { empezada: string; gasto: TareaDelCable["gastoEnCurso"] }) {
   const [ahora, setAhora] = useState(() => Date.now());
   useEffect(() => {
     const reloj = setInterval(() => setAhora(Date.now()), 1000);

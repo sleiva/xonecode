@@ -41,7 +41,9 @@ Ante una discrepancia con el código, **el código manda**.
   Sus conversaciones SÍ se abren. **Límite**: que no nazca una conversación lo sostiene el CLIENTE;
   un mensaje que llegue igual no corre turno pero su acto se vuelca.
 - Lo que no se puede ABRIR se LEE sin consola (`{clase:"leerSesion"}`, índice del DISCO; `mirar` en
-  vivo), en `LecturaDeSesion.tsx`; «Ver lo que hace» lleva ahí (`MirarTarea#alIrAlChat`). La barra
+  vivo), en `LecturaDeSesion.tsx`; «Ver lo que hace» lleva ahí (`MirarTarea#alIrAlChat`). **La de una TAREA lleva su
+  ficha a la derecha** (`FichaDeTarea.tsx`, IXCODE-68: cifras, encargo, diseño, adjuntos), y venida de la lista de Tareas
+  se cierra con «Volver a Tareas» a la pestaña de donde vino (`App.tsx#volverATareas`, IXCODE-67). La barra
   mira las DOS marcas de «trabajando»: la del proyecto solo viaja si ninguna fila lleva la suya.
 
 ## Entornos, proyectos y su panel

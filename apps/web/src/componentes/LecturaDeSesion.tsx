@@ -48,6 +48,7 @@ export function LecturaDeSesion({
   conectado,
   alAbrirParaEscribir,
   alIrALaQueTrabaja,
+  textoDeCerrar = "Cerrar",
   alCerrar,
 }: {
   actos?: readonly Acto[];
@@ -69,6 +70,8 @@ export function LecturaDeSesion({
   alAbrirParaEscribir: () => void;
   /** Con `trabajando`: ir a la conversación que trabaja. Ausente = no se sabe cuál. */
   alIrALaQueTrabaja?: () => void;
+  /** Lo que dice el botón de cerrar: «Volver a Tareas» si se vino de la lista de tareas (IXCODE-67). */
+  textoDeCerrar?: string;
   alCerrar: () => void;
 }) {
   const artefactos = useMemo(() => (actos === undefined ? [] : artefactosDeLosActos(actos)), [actos]);
@@ -141,7 +144,7 @@ export function LecturaDeSesion({
             </button>
           ) : null}
           <button type="button" className={estilos.boton} onClick={alCerrar}>
-            Cerrar
+            {textoDeCerrar}
           </button>
         </div>
       </div>

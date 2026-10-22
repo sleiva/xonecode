@@ -1,6 +1,6 @@
 import type { PeticionDeDiseno } from "./componentes/DisenoDelProyecto.js";
 import { DisenoDeTareasContexto } from "./disenoContexto.js";
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Planes } from "./componentes/Planes.js";
 import { Colecciones } from "./componentes/Colecciones.js";
 import type { crearStoreDelCliente } from "./store.js";
@@ -10,6 +10,8 @@ import { ANCHO_BARRA_POR_OMISION, Maqueta } from "./componentes/Maqueta.js";
 import { Barra } from "./componentes/Barra.js";
 import { AvisoDeProyectoConTarea, ElegirDestinoDelMensaje, TareaEnEsperaEnElChat } from "./componentes/MensajeATarea.js";
 import { LecturaDeSesion, type MotivoDeLectura } from "./componentes/LecturaDeSesion.js";
+import { FichaDeTarea } from "./componentes/FichaDeTarea.js";
+import estilosDeFicha from "./componentes/FichaDeTarea.module.css";
 import { Cabecera } from "./componentes/Cabecera.js";
 import { Panel } from "./componentes/Panel.js";
 import type { Pestana } from "./componentes/Pestanas.js";
@@ -584,10 +586,11 @@ export function App({
     return deSesion;
   }, [estado.tareas]);
   /**
-   * Se abrió la lectura de una tarea desde «Finalizadas»: al cerrarla, el panel vuelve a Tareas → Finalizadas, no al
-   * Resumen (los dos se DESMONTAN mientras se lee y nacerían en su pestaña por omisión). Se gasta al volver.
+   * Se abrió la lectura de una tarea desde la lista de Tareas: al cerrarla, el panel vuelve a Tareas —a «Finalizadas» o a
+   * «En curso», de donde se vino (IXCODE-67)—, no al Resumen (los dos se DESMONTAN mientras se lee y nacerían en su
+   * pestaña por omisión). Se gasta al volver.
    */
-  const [volverAFinalizadas, setVolverAFinalizadas] = useState(false);
+  const [volverATareas, setVolverATareas] = useState<"en-curso" | "finalizadas" | undefined>(undefined);
   /** Las conversaciones de las tareas TERMINADAS: son histórico (Tareas → Finalizadas), y la barra no las lista. Salvo
    *  si una tarea VIVA sigue en ella (una reencolada continúa el hilo de su finalizada): entonces es de esa. */
   const sesionesDeFinalizadas = useMemo(() => {
@@ -615,8 +618,8 @@ export function App({
    * render): abrir luego el proyecto desde la barra tiene que seguir llevando al Resumen.
    */
   useEffect(() => {
-    if (lectura === undefined && volverAFinalizadas) setVolverAFinalizadas(false);
-  }, [lectura, volverAFinalizadas]);
+    if (lectura === undefined && volverATareas !== undefined) setVolverATareas(undefined);
+  }, [lectura, volverATareas]);
   const lecturaActual = useRef(lectura);
   lecturaActual.current = lectura;
   const cerrarLectura = useCallback(() => {
@@ -1909,6 +1912,21 @@ export function App({
   const laQueTrabajaEnLaLectura = proyectoDeLaLectura?.sesiones?.find((s) => s.trabajando === true && s.id !== lectura?.sesion);
   /** La tarea de la conversación que se lee, tal como está AHORA en la cola. */
   const tareaDeLaLectura = lectura?.tarea === undefined ? undefined : estado.tareas?.lista.find((t) => t.id === lectura.tarea);
+  /**
+   * La conversación de una TAREA se lee con su ficha a la derecha (IXCODE-68): encargo, tiempo y gasto a la vista. Sin
+   * tarea —una conversación suelta, o una finalizada—, la lectura sola, como siempre.
+   */
+  const conFichaDeTarea = (lecturaSola: ReactNode): ReactNode =>
+    tareaDeLaLectura === undefined ? (
+      lecturaSola
+    ) : (
+      <div className={estilosDeFicha.conFicha}>
+        <div className={estilosDeFicha.reparto}>
+          <div className={estilosDeFicha.conversacion}>{lecturaSola}</div>
+          <FichaDeTarea tarea={tareaDeLaLectura} />
+        </div>
+      </div>
+    );
   /** La conversación que se lee es la de una tarea ya TERMINADA: un registro, abierto desde «Finalizadas». */
   const leeUnaFinalizada =
     lectura !== undefined && estado.tareas?.lista.some((t) => t.sesion === lectura.sesion && t.estado === "terminada") === true;
@@ -2766,10 +2784,10 @@ export function App({
       alLeerFinalizada={(t: TareaDelCable) => {
         if (t.sesion === undefined) return;
         // Al cerrar se vuelve a donde se estaba: el panel y esta lista se desmontan mientras se lee.
-        setVolverAFinalizadas(true);
+        setVolverATareas("finalizadas");
         leerSesion(t.proyecto, t.sesion, t.titulo);
       }}
-      {...(volverAFinalizadas ? { pestanaInicial: "finalizadas" as const } : {})}
+      {...(volverATareas === "finalizadas" ? { pestanaInicial: "finalizadas" as const } : {})}
       // «Mirar ahora» (la puerta 2): solo con el disparo ENCENDIDO en el vínculo de este proyecto.
       {...(estado.gestor?.estado?.vinculo?.automatico === true
         ? {
@@ -2849,7 +2867,11 @@ export function App({
       // vía `Kanban.tsx`/`TareasDelProyecto.tsx`) que monta el escritorio — antes
       // esta pestaña no la ofrecía en absoluto.
       {...(mirar === undefined ? {} : { alMirar: alMirarTarea, alDejarDeMirar: alDejarDeMirarTarea })}
-      alIrAlChat={alIrAlChatDeTarea}
+      // «Ver lo que hace» desde «En curso»: al cerrar la lectura se vuelve a «En curso», no al Resumen (IXCODE-67).
+      alIrAlChat={(t: TareaDelCable) => {
+        if (t.estado === "en-proceso") setVolverATareas("en-curso");
+        alIrAlChatDeTarea(t);
+      }}
       {...(mirandoTarea === undefined ? {} : { mirando: mirandoTarea })}
       {...(estado.mirada === undefined ? {} : { mirada: estado.mirada })}
     />
@@ -3118,6 +3140,7 @@ export function App({
         enLectura ? (
           <>
             <AvisoDeConexion conectado={estado.conectado} />
+            {conFichaDeTarea(
             <LecturaDeSesion
               key={`${lectura.proyecto}/${lectura.sesion}`}
               {...(actosDeLaLectura === undefined ? {} : { actos: actosDeLaLectura })}
@@ -3136,8 +3159,10 @@ export function App({
               {...(laQueTrabajaEnLaLectura === undefined
                 ? {}
                 : { alIrALaQueTrabaja: () => abrirSesion(lectura.proyecto, laQueTrabajaEnLaLectura.id) })}
+              {...(volverATareas === undefined ? {} : { textoDeCerrar: "Volver a Tareas" })}
               alCerrar={cerrarLectura}
             />
+            )}
           </>
         ) : enProyectoSinCopia ? (
           // El panel de un proyecto que NO está en el equipo: solo su Resumen, con «Descargar».
@@ -3563,7 +3588,7 @@ export function App({
                     },
                   })}
               tareasEnFondo={tareasEnFondo}
-              {...(volverAFinalizadas ? { pestanaInicial: "tareas" as const } : {})}
+              {...(volverATareas === undefined ? {} : { pestanaInicial: "tareas" as const })}
               // La puerta 2: el mapeo de estados y el disparo del vínculo, junto a él en Conectores. Contestado en la
               // propia respuesta (los estados vienen de la red, y solo al abrir el editor).
               tareasDesdeElGestor={{

@@ -4092,6 +4092,73 @@ describe("la tarea que espera respuesta, en su chat", () => {
  * El HISTÓRICO de tareas, cosido de punta a punta en `App`: los componentes se prueban con las props puestas a mano,
  * y lo que ata «Finalizadas» a la lectura (con su motivo, su título y los artefactos de SU conversación) vive aquí.
  */
+/**
+ * IXCODE-67/68, cosido en `App`: «Ver lo que hace» desde «En curso» abre su conversación CON su ficha a la derecha, y al
+ * cerrarla se vuelve a «En curso», no al Resumen.
+ */
+describe("App: ver lo que hace una tarea en curso, con su ficha", () => {
+  it("la ficha sale junto a la conversación, y «Volver a Tareas» devuelve a En curso", async () => {
+    const store = crearStoreDelCliente();
+    const enviar: Mock<(mensaje: unknown) => Promise<unknown>> = vi.fn((mensaje: unknown) =>
+      (mensaje as { clase?: string }).clase === "leerSesion"
+        ? Promise.resolve({ status: 200, ok: true, json: async () => ({ actos: [{ tipo: "usuario", texto: "rediseña los albaranes" }] }) } as unknown)
+        : Promise.resolve(undefined as unknown)
+    );
+    render(<App store={store} enviar={enviar} subirAdjunto={subirAdjuntoDeMentira} instalarSkill={instalarSkillDeMentira} />);
+    act(() => store.marcarConectado());
+    act(() =>
+      store.aplicar({
+        clase: "alta",
+        pasos: [],
+        proveedores: [],
+        entornos: [],
+        registrados: [{ id: "webstudio", nombre: "WebStudio", url: "https://x/mcp" }],
+        entornoActivo: "webstudio",
+        proyectos: [{ id: "p1", nombre: "AppDemo", local: true, sesiones: [{ id: "s1", titulo: "Mi chat" }, { id: "s-tarea", titulo: "", deTarea: true }] }],
+        ramas: [],
+        proyectoAbierto: true,
+        proyectoActivo: "p1",
+        sesionActiva: "s1",
+      } as never)
+    );
+    act(() =>
+      store.aplicar({
+        clase: "tareas",
+        lista: [
+          {
+            id: "t1",
+            proyecto: "p1",
+            proyectoNombre: "AppDemo",
+            titulo: "Rediseño de albaranes",
+            peticion: "Rediseña los albaranes",
+            encargo: "## Qué hay que conseguir\nEl listado como la maqueta",
+            adjuntos: [],
+            estado: "en-proceso",
+            sesion: "s-tarea",
+            creada: "2026-10-22T10:00:00.000Z",
+            empezada: "2026-10-22T10:01:00.000Z",
+          },
+        ],
+        concurrencia: 1,
+        corriendoAqui: true,
+      })
+    );
+    const barra = screen.getAllByRole("navigation").find((n) => !n.hasAttribute("aria-label"))!;
+    // Con una tarea trabajando, el botón del proyecto lo dice también en su nombre.
+    fireEvent.click(within(barra).getByRole("button", { name: /^AppDemo/ }));
+    fireEvent.click(screen.getByRole("tab", { name: /^Tareas/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Ver lo que hace" }));
+    expect(await screen.findByText("rediseña los albaranes")).toBeTruthy();
+    const ficha = screen.getByRole("complementary", { name: "Ficha de la tarea" });
+    expect(ficha.textContent).toContain("Rediseño de albaranes");
+    expect(within(ficha).getByRole("heading", { name: "Qué hay que conseguir" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Volver a Tareas" }));
+    expect(screen.getByRole("tab", { name: /^Tareas/ }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByRole("tab", { name: /En curso/ }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.queryByRole("complementary", { name: "Ficha de la tarea" })).toBeNull();
+  });
+});
+
 describe("App: una tarea finalizada se lee con su conversación y sus artefactos", () => {
   function conUnaFinalizada() {
     const store = crearStoreDelCliente();
@@ -4237,12 +4304,12 @@ describe("App: una tarea finalizada se lee con su conversación y sus artefactos
     expect(within(barra).getAllByRole("button", { name: /Tarea de fondo/ }).length).toBeGreaterThan(0);
   });
 
-  it("«Cerrar» vuelve a Tareas → Finalizadas, no al Resumen; y eso se gasta al volver", async () => {
+  it("«Volver a Tareas» vuelve a Tareas → Finalizadas, no al Resumen; y eso se gasta al volver", async () => {
     const { store } = conUnaFinalizada();
     desplegarLaFinalizada();
     fireEvent.click(screen.getByRole("button", { name: "Conversación y artefactos" }));
     expect(await screen.findByText("añade la versión al login")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Cerrar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Volver a Tareas" }));
     expect(screen.getByRole("tab", { name: "Tareas" }).getAttribute("aria-selected")).toBe("true");
     expect(screen.getByRole("tab", { name: /Finalizadas/ }).getAttribute("aria-selected")).toBe("true");
     // Se sale al chat (el servidor contesta con su alta) y se vuelve al proyecto desde la barra: el Resumen de siempre.
