@@ -1429,8 +1429,9 @@ export const COMANDOS: Record<string, { descripcion: string; manejador: Manejado
         const politicaDeAprobacion: PoliticaDeAprobacion | undefined =
           base === undefined
             ? undefined
-            : async (plan) => {
-                const autorizada = await base(plan);
+            : async (plan, contexto) => {
+                // Con su `contexto`: sin la rama del proyecto el diálogo no ofrece crear una nueva (IXCODE-71).
+                const autorizada = await base(plan, contexto);
                 // Por `planAutorizado` y no por su veracidad: `{rutas: []}` es «verdadero».
                 if (planAutorizado(plan, autorizada).length === 0) rechazada = true;
                 return autorizada;

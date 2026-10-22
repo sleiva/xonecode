@@ -700,6 +700,27 @@ describe("/sync", () => {
       expect(operaciones[0]?.resultado).toEqual({ subidos: 1, fallidos: 2 });
     });
 
+    it("la rama del proyecto llega al DIÁLOGO a través de `/sync` (IXCODE-71): sin ella no se ofrece crear ninguna", async () => {
+      // Medido en el navegador: el envoltorio de `/sync` sobre la política reenviaba el plan y perdía la rama.
+      const { consola } = consolaDeConSecreto({ lineas: ["/sync subir", "/salir"], respuestas: [] });
+      const decisiones: { rama?: string }[] = [];
+      let autorizacion: unknown;
+      const conSync: Consola = {
+        ...consola,
+        decidirConSeleccion: async (_pregunta, decision) => {
+          decisiones.push(decision);
+          return { respuesta: "s", seleccion: ["app.xml"], ramaNueva: "pruebas" };
+        },
+        sincronizar: async (_accion, _raiz, politica) => {
+          autorizacion = await politica!([{ tipo: "texto", ruta: "app.xml", clase: "nuevo" }], { rama: "master" });
+          return { tipo: "texto", texto: "" };
+        },
+      };
+      await correrConsola(conSync, estadoDe());
+      expect(decisiones[0]?.rama).toBe("master");
+      expect(autorizacion).toEqual({ rutas: ["app.xml"], ramaNueva: "pruebas" });
+    });
+
     it("el progreso de `sincronizar` llega a la piel que lo pinta (IXCODE-69), y sin ella no se pide", async () => {
       const progresos: unknown[] = [];
       const { consola } = consolaDeConSecreto({ lineas: ["/sync subir", "/salir"], respuestas: ["s"] });
