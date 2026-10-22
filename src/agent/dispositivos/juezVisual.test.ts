@@ -327,6 +327,28 @@ describe("el crítico con una maqueta delante", () => {
     expect(ESFUERZO_DEL_JUEZ_VISUAL).toBe("high");
   });
 
+  it("la MAQUETA pequeña llega al modelo ampliada; la captura, tal cual", async () => {
+    const { PNG } = await import("pngjs");
+    const { decodificarImagen } = await import("./decodificarImagen.js");
+    const p = new PNG({ width: 390, height: 884 });
+    p.data.fill(230);
+    const maqueta = { base64: PNG.sync.write(p).toString("base64"), mime: "image/png" };
+    let contenido: { type: string; image_url?: { url: string } }[] = [];
+    const modelos = {
+      paraPapel: () => ({
+        invoke: async (mensajes: { content: typeof contenido }[]) => {
+          contenido = mensajes[0]!.content;
+          return '{"veredicto":"verde","hallazgos":[]}';
+        },
+      }),
+    };
+    await invocarVisualConModelos(modelos)("afilado", "el prompt", PANTALLA, maqueta);
+    const imagenes = contenido.filter((b) => b.type === "image_url").map((b) => b.image_url!.url);
+    const ancho = decodificarImagen(Buffer.from(imagenes[0]!.split(",")[1]!, "base64")).ancho;
+    expect(ancho).toBeGreaterThanOrEqual(780);
+    expect(imagenes[1]).toBe(`data:${PANTALLA.mime};base64,${PANTALLA.base64}`);
+  });
+
   it("manda DOS imágenes, en orden y cada una rotulada", async () => {
     let contenido: { type: string; text?: string; image_url?: { url: string } }[] = [];
     const modelos = {

@@ -9879,3 +9879,13 @@ las comprobaciones, dio rojo. Cinco arreglos:
   Incidencias lo omitió y el TASKS.md se quedó con las seis tareas en «pendiente».
 - Que el desarrollador llame al consultor: no, por ahora (lo recomendé al hablarlo: tiene las skills en su contexto y un
   consultor es un subagente más); sus dudas repetidas se resuelven ampliando la skill.
+
+## La maqueta pequeña, ampliada para el modelo (22-10-2026)
+
+Petición suya. Medido en Maset (Incidencias, desarrollador en Claude Code): la maqueta de Stitch medía 390 × 884 y la
+crítica dijo que «Ausente 1er pase» iba «sin fondo», cuando lleva una píldora rosa muy pálida; el orquestador mandó
+quitarla y la pantalla se alejó de la maqueta. Ahora, antes de enseñársela al modelo, una maqueta por debajo de 780 px
+de ancho (el que Stitch DECLARA para sus pantallas de móvil) se amplía por un factor entero con interpolación bilineal
+(`core/ampliarImagen.ts`, `agent/dispositivos/maquetaParaElModelo.ts`) y va como PNG. Solo la maqueta: la captura ya
+viene a tamaño real. Cuesta más tokens de imagen en cada crítica con maqueta pequeña. Sin medir todavía si con ella el
+modelo ve la píldora.

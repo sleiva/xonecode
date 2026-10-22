@@ -132,7 +132,8 @@ Todas **reaplican `puedeLeerRuta` a mano** (una tool de xonecode no pasa por el 
   (`contieneTexto`, en los dos emparejamientos): una NOTA por control. **Los VALORES de la maqueta son de ejemplo**
   (versiones, cifras, un campo relleno): el método no los señala; su SITIO vacío, sí. Un TEXTO de la maqueta que
   FALTA es nota, no bloqueante (la maqueta de un rediseño trae datos inventados; importa que use el diseño); un BOTÓN que
-  falta, sí. **El informe abre con un
+  falta, sí. **La maqueta que ve el modelo, ampliada si es pequeña** (`maquetaParaElModelo`, hasta
+  `ANCHO_MINIMO_DE_MAQUETA`): a 390 px no veía lo tenue. **El informe abre con un
   RESUMEN contado de su propio cuerpo** (`resumenDelInforme`): es lo que lee el juez. **Con maqueta, el veredicto
   responde a «¿respeta el diseño?»**: rojo solo por un bloqueante medido, un texto que falta o recortado, o una
   diferencia de DISEÑO que vieron las DOS miradas (`confirmadas`); el resto son DETALLES y no ponen rojo. La frontera,

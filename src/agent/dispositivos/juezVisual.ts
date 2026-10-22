@@ -32,6 +32,7 @@
 import { createHash } from "node:crypto";
 import type { Papel } from "../../core/ports.js";
 import type { Esfuerzo } from "../../core/esfuerzo.js";
+import { maquetaParaElModelo } from "./maquetaParaElModelo.js";
 import { interpretarDescripcion, promptDescribirPantalla, type PantallaDescrita } from "../../core/descripcionDePantalla.js";
 import { objetoDe } from "../tareas/juezDeTarea.js";
 import { confirmadas, METODO_DE_COMPARACION_VISUAL, PASADAS_DE_COMPARACION, unirObservaciones } from "../../core/metodoDeComparacionVisual.js";
@@ -427,10 +428,8 @@ export function invocarVisualConModelos(modelos: {
               ? []
               : [
                   { type: "text", text: "MAQUETA (cómo tendría que verse):" },
-                  {
-                    type: "image_url",
-                    image_url: { url: `data:${referencia.mime};base64,${referencia.base64}` },
-                  },
+                  // Ampliada si es pequeña (`maquetaParaElModelo`): a 390 px el modelo no veía lo tenue.
+                  ((m) => ({ type: "image_url", image_url: { url: `data:${m.mime};base64,${m.base64}` } }))(maquetaParaElModelo(referencia)),
                   { type: "text", text: "CAPTURA del aparato (cómo se ve de verdad):" },
                 ]),
             { type: "image_url", image_url: { url: `data:${imagen.mime};base64,${imagen.base64}` } },
