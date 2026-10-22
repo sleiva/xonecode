@@ -1082,7 +1082,7 @@ export async function abrirSesionTrueforge(
     const sinLeer = [sobrantes(notas), detencion.sobrante()].filter((t): t is string => t !== undefined);
     return sinLeer.length === 0 ? undefined : sinLeer.join("\n\n");
   };
-  const montarBackend = (ejecucion?: { entorno: Record<string, string>; senal?: () => AbortSignal | undefined }) =>
+  const montarBackend = (ejecucion?: Parameters<typeof backendDeAgente>[0]["ejecucion"]) =>
     backendDeAgente({
       raiz,
       ficheros: ficherosDelProyecto(raiz),
@@ -1665,6 +1665,8 @@ export async function abrirSesionTrueforge(
       conShell: () =>
         montarBackend({
           entorno: conTrazaDelEntorno(entornoDeLaShellDelProyecto(raiz, opciones.artefactos)),
+          // Cada orden, con la traza encendida (IXCODE-72): qué shell la corrió y qué ficheros dejó en la raíz.
+          ...(diagnostico?.orden === undefined ? {} : { traza: (orden) => diagnostico.orden?.("shell propia", orden) }),
           // El MISMO patrón que ya usa `modeloParaTrueforge` un poco más arriba en este
           // fichero: un getter que se reevalúa en cada llamada, así siempre lee el
           // `AbortController` de la RONDA en curso y no uno capturado al construir.

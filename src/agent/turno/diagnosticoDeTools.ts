@@ -103,6 +103,13 @@ export interface DiagnosticoDeTools {
    * Recortado a `TOPE_DE_TEXTO_EXTERNO`: un comando puede llevar rutas de la máquina, y la traza es un fichero local.
    */
   externo?(agente: string, datos: Readonly<Record<string, string | number | boolean | undefined>>): void;
+  /**
+   * **Cada orden de NUESTRA shell** (`execute`/`ejecutar_script`, IXCODE-72): la orden recortada, la shell que la corrió
+   * (`sh`, `git-bash`, `cmd.exe`), su código de salida, lo que tardó y los ficheros NUEVOS de la raíz del proyecto (solo
+   * los nombres, hasta `TOPE_DE_NUEVOS_EN_TRAZA`). Existe porque en Windows aparecían ficheros sueltos y no había forma de
+   * saber qué orden los dejaba. Opcional, como `externo`.
+   */
+  orden?(agente: string, datos: { comando: string; shell: string; salida: number | null; ms: number; nuevos: readonly string[] }): void;
   contraste?(contraste: {
     nuestras: { entrada: number; salida: number; cache: number; llamadas: number };
     motor: Record<string, number>;
@@ -113,6 +120,9 @@ export interface DiagnosticoDeTools {
 
 /** Cuánto texto de un comando o de su salida guarda la traza de un hijo externo. */
 export const TOPE_DE_TEXTO_EXTERNO = 600;
+
+/** Cuántos nombres de ficheros nuevos guarda la línea de una orden; el resto se CUENTA. */
+export const TOPE_DE_NUEVOS_EN_TRAZA = 20;
 
 /** Ruta pública solo para comunicar al usuario dónde quedó su diagnóstico. */
 export function rutaTrazaDeTools(raiz: string): string {
@@ -175,6 +185,19 @@ export function crearDiagnosticoDeTools(
     },
     entorno(agente, resumen) {
       escribir({ tipo: "entorno", agente, ...resumen });
+    },
+    orden(agente, datos) {
+      const comando = datos.comando.length > TOPE_DE_TEXTO_EXTERNO ? `${datos.comando.slice(0, TOPE_DE_TEXTO_EXTERNO)}…` : datos.comando;
+      escribir({
+        tipo: "orden",
+        agente,
+        comando,
+        shell: datos.shell,
+        salida: datos.salida,
+        ms: datos.ms,
+        nuevos: datos.nuevos.slice(0, TOPE_DE_NUEVOS_EN_TRAZA),
+        ...(datos.nuevos.length > TOPE_DE_NUEVOS_EN_TRAZA ? { nuevosDeMas: datos.nuevos.length - TOPE_DE_NUEVOS_EN_TRAZA } : {}),
+      });
     },
     externo(agente, datos) {
       const recortado: Record<string, string | number | boolean> = {};

@@ -6,7 +6,7 @@ import { RUTA_MEMORIA_INTERNA, RUTA_MEMORIA_VIRTUAL } from "./memoriaDeProyecto.
 import { sinContenidoInvalido, validarConXoneLinter, type ValidarContenido } from "./validacionXone.js";
 import { escriturasEnSerie } from "./escriturasEnSerie.js";
 import { conCodificacionDelFichero } from "./codificacionDelProyecto.js";
-import { crearExecuteCancelable } from "./ejecucionCancelable.js";
+import { crearExecuteCancelable, type TrazaDeOrden } from "./ejecucionCancelable.js";
 import { RAIZ_SKILLS, skillsConRuta, skillsMontables, type Montaje } from "./skills.js";
 import {
   artefactoFueraDeSitio,
@@ -22,7 +22,7 @@ import { RUTA_ADJUNTOS } from "../../core/adjuntos.js";
 import { esRutaDeMaquina, porQueNoSuelta } from "../../core/traerDeLaMaquina.js";
 import { carpetaDeHotswap, RUTA_HOTSWAP } from "../../core/hotswap.js";
 import { CARPETA_DE_PLANES, RUTA_PLANES } from "../../core/planes.js";
-import { entornoDeShell, variablesDeAndroid } from "../../core/shellDeAgente.js";
+import { bashDeGit, entornoDeShell, lanzamientoDeShell, variablesDeAndroid } from "../../core/shellDeAgente.js";
 import { localizadorDeAndroid } from "../dispositivos/dispositivosEnMaquina.js";
 import {
   RUTAS_DE_DESCARGA,
@@ -82,6 +82,11 @@ export function backendDelProyectoConShell(
    * antes: sin cancelación interactiva, pero YA con el kill de árbol al vencer el timeout.
    */
   senalDelTurno?: () => AbortSignal | undefined,
+  /**
+   * La traza de cada orden («Depurar», IXCODE-72), con la shell que la corre (`sh`, `git-bash` o `cmd.exe`). Ausente = sin
+   * traza, y `execute` no lista nada.
+   */
+  traza?: (orden: TrazaDeOrden & { shell: string }) => void,
 ): FilesystemBackend {
   const backend = new LocalShellBackend({
     rootDir: raiz,
@@ -102,11 +107,22 @@ export function backendDelProyectoConShell(
    * `id` de `LocalShellBackend`. Se lee con el mismo cast que ya hace falta para asignar
    * `execute`, y es exactamente el valor que el `execute` de la librería habría usado.
    */
-  const ejecutar = crearExecuteCancelable({
-    env: entorno,
-    cwd: (backend as unknown as { cwd: string }).cwd,
-    timeoutS: TOPE_DE_COMANDO_S,
-  });
+  // La misma decisión que toma `lanzarReal` al lanzar: se calcula una vez para decirla en cada línea de la traza.
+  const shell =
+    traza === undefined
+      ? ""
+      : lanzamientoDeShell("", {
+          plataforma: process.platform,
+          ...((b) => (b === undefined ? {} : { bash: b }))(process.platform === "win32" ? bashDeGit({ entorno, existe: existsSync }) : undefined),
+        }).nombre;
+  const ejecutar = crearExecuteCancelable(
+    {
+      env: entorno,
+      cwd: (backend as unknown as { cwd: string }).cwd,
+      timeoutS: TOPE_DE_COMANDO_S,
+    },
+    traza === undefined ? {} : { alTerminar: (orden) => traza({ ...orden, shell }) }
+  );
   (backend as unknown as { execute: (comando: string) => ReturnType<typeof ejecutar> }).execute = (comando: string) =>
     ejecutar(comando, senalDelTurno?.());
   return backend;
@@ -579,7 +595,12 @@ export function backendDeAgente(opciones: {
    * —que es todo el mundo menos uno— la cadena no es ejecutable y `permisosDe` sigue
    * aplicándose, que es justo lo que la librería prohíbe combinar.
    */
-  ejecucion?: { entorno: Record<string, string>; senal?: () => AbortSignal | undefined };
+  ejecucion?: {
+    entorno: Record<string, string>;
+    senal?: () => AbortSignal | undefined;
+    /** La traza de cada orden (`backendDelProyectoConShell`). */
+    traza?: (orden: TrazaDeOrden & { shell: string }) => void;
+  };
   /**
    * La carpeta de los adjuntos que se montan como `/adjuntos/`, si hay alguna: los de una
    * TAREA o, desde IXCODE-7, los que una persona anexó en el CHAT de esta sesión — a este
@@ -599,7 +620,7 @@ export function backendDeAgente(opciones: {
   const base =
     opciones.ejecucion === undefined
       ? backendDelProyecto(opciones.raiz)
-      : backendDelProyectoConShell(opciones.raiz, opciones.ejecucion.entorno, opciones.ejecucion.senal);
+      : backendDelProyectoConShell(opciones.raiz, opciones.ejecucion.entorno, opciones.ejecucion.senal, opciones.ejecucion.traza);
   /**
    * **La CUARTA guarda va la MÁS INTERNA, y el orden importa en los dos sentidos.**
    *

@@ -196,7 +196,9 @@ La puerta headless es `run --real` (`cli/run.ts`), y **cierra diciendo lo que co
   `DiagnosticoDeTools`): plataforma, clave del PATH (y cuántas: dos en Windows era el fallo), si `node`/`adb` están; cada
   `Bash` del hijo —pedido, ejecutado tras reescribirlo, permitido o denegado con su motivo— y lo que salió o FALLÓ
   (`PostToolUseFailure`, medido: un `Bash` con código ≠ 0 no pasa por `PostToolUse`). Texto recortado a
-  `TOPE_DE_TEXTO_EXTERNO`. Medido en Windows: «node: command not found» solo se supo porque el hijo lo contó.
+  `TOPE_DE_TEXTO_EXTERNO`. Medido en Windows: «node: command not found» solo se supo porque el hijo lo contó. Y
+  cada orden de NUESTRA shell (`orden`): con qué shell corrió (`sh`, `git-bash`, `cmd.exe`), cómo salió y los ficheros
+  NUEVOS de la raíz del proyecto (IXCODE-72: en Windows aparecían ficheros sueltos y no se sabía qué orden los dejaba).
 - **Dos trampas del formato** (`informeDeTraza.test.ts`): en una línea `modelo`, `llamadas` es el
   acumulado GLOBAL del tracker; y el fichero append-only obliga a partir el informe por `sesion`.
   Que no haya traza sale con **70**.

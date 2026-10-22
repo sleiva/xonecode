@@ -196,3 +196,33 @@ describe("crearLanzador", () => {
     ]);
   });
 });
+
+describe("crearExecuteCancelable: la traza de cada orden", () => {
+  it("sin quien la escuche no lista nada; con él, dice lo que apareció en la raíz", async () => {
+    const hijo = () => {
+      const h = Object.assign(new EventEmitter(), { pid: 1, stdout: new EventEmitter(), stderr: new EventEmitter(), kill: () => true });
+      setTimeout(() => h.emit("close", 0), 0);
+      return h as never;
+    };
+    let listados = 0;
+    const sinTraza = crearExecuteCancelable({ env: {}, cwd: "/p", timeoutS: 5 }, { lanzar: hijo, listar: () => (listados++, []) });
+    await sinTraza("ls");
+    expect(listados).toBe(0);
+
+    let raiz = ["app.xml"];
+    const trazas: unknown[] = [];
+    const conTraza = crearExecuteCancelable(
+      { env: {}, cwd: "/p", timeoutS: 5 },
+      {
+        lanzar: (c, o) => {
+          raiz = [...raiz, "6612"];
+          return hijo();
+        },
+        listar: () => raiz,
+        alTerminar: (d) => trazas.push(d),
+      }
+    );
+    await conTraza("x > 6612");
+    expect(trazas).toEqual([expect.objectContaining({ comando: "x > 6612", salida: 0, nuevos: ["6612"] })]);
+  });
+});

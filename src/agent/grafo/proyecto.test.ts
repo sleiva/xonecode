@@ -670,6 +670,21 @@ describe("la shell de un subagente con EJECUCIÓN", () => {
     expect(isSandboxBackend(backendDelProyecto("/tmp"))).toBe(false);
   });
 
+  it("con traza, apunta cada orden: la shell, cómo salió y los ficheros NUEVOS de la raíz (IXCODE-72)", async () => {
+    // Con la shell de verdad: lo que en Windows dejaba `cmd.exe` era esto mismo, una redirección a un fichero suelto.
+    const raiz = raizDePrueba();
+    const ordenes: Record<string, unknown>[] = [];
+    const be = backendDelProyectoConShell(raiz, { PATH: process.env["PATH"] ?? "" }, undefined, (d) => ordenes.push({ ...d })) as unknown as {
+      execute(c: string): Promise<{ output: string }>;
+    };
+    await be.execute("echo ok > 6612");
+    await be.execute("echo nada");
+    expect(ordenes).toHaveLength(2);
+    expect(ordenes[0]).toMatchObject({ comando: "echo ok > 6612", shell: "sh", salida: 0, nuevos: ["6612"] });
+    expect(typeof ordenes[0]!["ms"]).toBe("number");
+    expect(ordenes[1]).toMatchObject({ comando: "echo nada", nuevos: [] });
+  });
+
   it("recibe el entorno que se le pasa y NADA más: no hereda el del proceso", async () => {
     const raiz = raizDePrueba();
     process.env["XONECODE_MARCA_DE_PRUEBA"] = "no-deberia-llegar";

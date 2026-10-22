@@ -13,7 +13,7 @@
  * "interrumpido") — el modelo puede distinguir "me quedé sin tiempo" de "me cancelaron".
  */
 import { spawn, type SpawnOptions } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { bashDeGit, lanzamientoDeShell } from "../../core/shellDeAgente.js";
 import { matarGrupoReal } from "../dispositivos/procesosEnMaquina.js";
 
@@ -77,11 +77,44 @@ export function crearLanzador(deps: {
 
 const TOPE_DE_SALIDA_BYTES = 100_000;
 
+/**
+ * Lo que la traza («Depurar») apunta de UNA orden, al terminar (IXCODE-72): la orden, cómo salió, cuánto tardó y los
+ * ficheros que NO estaban antes en la raíz del proyecto. Lo último es lo que delata a la orden que deja ficheros sueltos
+ * (en Windows, `cmd.exe` tomaba cada `>` de una orden bash por una redirección). La shell la pone quien monta.
+ */
+export interface TrazaDeOrden {
+  comando: string;
+  salida: number | null;
+  ms: number;
+  nuevos: string[];
+}
+
+/** Los nombres de la raíz que no estaban antes, en orden. Pura. */
+export function nuevosEnLaRaiz(antes: readonly string[], despues: readonly string[]): string[] {
+  const habia = new Set(antes);
+  return despues.filter((n) => !habia.has(n)).sort();
+}
+
 export function crearExecuteCancelable(
   opciones: { env: Record<string, string>; cwd: string; timeoutS: number; maxOutputBytes?: number },
-  deps: { lanzar?: LanzarShell; matarGrupo?: (pid: number, senal: string) => void } = {}
+  deps: {
+    lanzar?: LanzarShell;
+    matarGrupo?: (pid: number, senal: string) => void;
+    /** Quien apunta cada orden en la traza. Ausente (sin «Depurar») = no se lista nada: no cuesta nada. */
+    alTerminar?: (traza: TrazaDeOrden) => void;
+    /** Los nombres de la raíz; por parámetro para probarlo sin disco. */
+    listar?: (carpeta: string) => readonly string[];
+  } = {}
 ): (comando: string, senal?: AbortSignal) => Promise<ResultadoDeEjecucion> {
-  const lanzar = deps.lanzar ?? lanzarReal;
+  const lanzarBase = deps.lanzar ?? lanzarReal;
+  const listar = deps.listar ?? ((carpeta: string): readonly string[] => readdirSync(carpeta));
+  const leerRaiz = (): readonly string[] => {
+    try {
+      return listar(opciones.cwd);
+    } catch {
+      return [];
+    }
+  };
   const matarGrupo = deps.matarGrupo ?? ((pid: number, senal: string) => matarGrupoReal(pid, senal));
   const maxOutputBytes = opciones.maxOutputBytes ?? TOPE_DE_SALIDA_BYTES;
 
@@ -94,8 +127,21 @@ export function crearExecuteCancelable(
       return Promise.resolve({ output: "Error: Command cancelled.", exitCode: 130, truncated: false });
     }
 
-    return new Promise<ResultadoDeEjecucion>((resolver) => {
-      const hijo = lanzar(comando, { env: opciones.env, cwd: opciones.cwd });
+    const alTerminar = deps.alTerminar;
+    const antes = alTerminar === undefined ? [] : leerRaiz();
+    const desde = Date.now();
+    return new Promise<ResultadoDeEjecucion>((resolverBase) => {
+      const resolver = (r: ResultadoDeEjecucion): void => {
+        if (alTerminar !== undefined) {
+          try {
+            alTerminar({ comando, salida: r.exitCode, ms: Date.now() - desde, nuevos: nuevosEnLaRaiz(antes, leerRaiz()) });
+          } catch {
+            // La traza no puede tumbar la orden.
+          }
+        }
+        resolverBase(r);
+      };
+      const hijo = lanzarBase(comando, { env: opciones.env, cwd: opciones.cwd });
       let stdout = "";
       let stderr = "";
       let causa: "timeout" | "cancelado" | undefined;

@@ -134,3 +134,20 @@ describe("la traza del ENTORNO de una shell y de lo que hace un hijo externo", (
     expect(lineas[2]).not.toHaveProperty("motivo");
   });
 });
+
+describe("la traza de cada ORDEN de nuestra shell (IXCODE-72)", () => {
+  it("dice la orden, la shell, cómo salió y los ficheros nuevos, y cuenta los que no caben", async () => {
+    const { TOPE_DE_NUEVOS_EN_TRAZA } = await import("./diagnosticoDeTools.js");
+    const raiz = mkdtempSync(join(tmpdir(), "xc-traza-"));
+    const log = crearDiagnosticoDeTools(raiz, { [VARIABLE_TRAZA_TOOLS]: "1" }, "chat-1")!;
+    log.orden!("shell propia", { comando: "xone-hotswap eval 'x => x > 6612'", shell: "cmd.exe", salida: 0, ms: 120, nuevos: ["6612"] });
+    const muchos = Array.from({ length: TOPE_DE_NUEVOS_EN_TRAZA + 3 }, (_, i) => `f${i}`);
+    log.orden!("shell propia", { comando: "x", shell: "git-bash", salida: 1, ms: 5, nuevos: muchos });
+    const lineas = readFileSync(rutaTrazaDeTools(raiz), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+    expect(lineas[1]).toEqual(
+      expect.objectContaining({ tipo: "orden", chat: "chat-1", agente: "shell propia", comando: "xone-hotswap eval 'x => x > 6612'", shell: "cmd.exe", salida: 0, ms: 120, nuevos: ["6612"] })
+    );
+    expect(lineas[2].nuevos).toHaveLength(TOPE_DE_NUEVOS_EN_TRAZA);
+    expect(lineas[2].nuevosDeMas).toBe(3);
+  });
+});
