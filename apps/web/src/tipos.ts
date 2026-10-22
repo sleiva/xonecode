@@ -1345,6 +1345,8 @@ export interface TareaDelCable {
   gasto?: ConsumoDeTurno;
   /** Lo que lleva gastado la tarea EN MARCHA (redeclarado de `transporte.ts`): solo en `en-proceso`. Ausente = no consta. */
   gastoEnCurso?: ConsumoDeTurno;
+  /** Lo que TARDÓ, en ms, solo trabajando (redeclarado de `transporte.ts`, IXCODE-73). Ausente = no consta. */
+  trabajo?: number;
   /** El ticket del gestor en el que vive (redeclarado de `transporte.ts`): clave, conector, enlace y el último aviso. */
   ticket?: { clave: string; conector: string; url?: string; aviso?: string };
   /** Las pantallas de Stitch elegidas para la tarea, en su orden (`name` y título de cada una). IXCODE-63: eran una. */

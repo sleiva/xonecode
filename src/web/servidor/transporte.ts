@@ -1314,6 +1314,8 @@ export interface TareaDelCable {
   gasto?: ConsumoDeTurno;
   /** Lo que lleva gastado la tarea EN MARCHA (`Corredor.gastoEnCurso`): solo en `en-proceso`. Ausente = no consta. */
   gastoEnCurso?: ConsumoDeTurno;
+  /** Lo que TARDÓ, en ms, solo trabajando (`Tarea.trabajo`, IXCODE-73). Ausente = no consta. */
+  trabajo?: number;
   /**
    * El ticket del gestor de tareas en el que vive (`core/tareas.ts#TicketDeTarea`). Cruzan la CLAVE, el conector (de él
    * sale el nombre que se enseña: «Jira»), el enlace y el aviso de lo último que no se pudo escribir; el `sitio` y el
@@ -1381,6 +1383,7 @@ export function filaDeTarea(t: Tarea, esperaPorTi?: EsperaPorPersona, gastoEnCur
     ...(t.terminadaAMano === undefined ? {} : { terminadaAMano: t.terminadaAMano }),
     ...(t.cierre === undefined ? {} : { cierre: { criticos: [...t.cierre.criticos], observaciones: [...t.cierre.observaciones] } }),
     ...(t.gasto === undefined ? {} : { gasto: t.gasto }),
+    ...(t.trabajo === undefined ? {} : { trabajo: t.trabajo }),
     ...(t.ticket === undefined
       ? {}
       : {

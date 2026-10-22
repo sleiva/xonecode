@@ -192,6 +192,12 @@ export interface Tarea {
    */
   gasto?: ConsumoDeTurno;
   /**
+   * Lo que TARDÓ, en milisegundos: lo que duró cada pasada, sumado (`corredorDeTareas.ts`, como `gasto`). No
+   * `acabada − empezada`, que cuenta también lo que estuvo parada esperando a una persona (IXCODE-73). Ausente = no consta:
+   * una tarea de antes de que esto existiera.
+   */
+  trabajo?: number;
+  /**
    * La dio por buena una PERSONA, con el botón «Dar por bueno», en vez de la puerta de
    * entrega (`core/entrega.ts#decisionDeEntrega`).
    *

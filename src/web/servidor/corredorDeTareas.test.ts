@@ -3525,6 +3525,27 @@ describe("el gasto de la tarea", () => {
 });
 
 /**
+ * Lo que TARDÓ la tarea (IXCODE-73): el tiempo TRABAJANDO, sumado entre pasadas. No `acabada − empezada`: entre las dos
+ * cuenta también lo que estuvo parada esperando a una persona.
+ */
+describe("lo que tardó la tarea", () => {
+  it("es lo que duró la pasada, sumado a lo de las anteriores", async () => {
+    const { disco, estado } = discoDeMentira([TAREA({ trabajo: 5_000 })]);
+    const p = proyectoDeMentira();
+    let ahora = 1_000_000;
+    const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE, disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 1, ahora: () => ahora });
+    await corredor.arrancar();
+    await corredor.asentar();
+    ahora += 90_000;
+    p.acabar({ verificador: "verde", pendientes: 0 });
+    await corredor.asentar();
+    expect(estado()[0]!.estado).toBe("terminada");
+    expect(estado()[0]!.trabajo).toBe(95_000);
+    await corredor.parar();
+  });
+});
+
+/**
  * Medido en Maset (21-10-2026): el Mac se durmió con la tapa cerrada a mitad de una llamada al modelo; al despertar llegó
  * «terminated», el turno devolvió «limpio» y la tarea quedó TERMINADA en rojo («no hizo el trabajo») y la cadena siguió.
  */

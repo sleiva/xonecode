@@ -474,6 +474,7 @@ const FILA_COMPLETA = {
   cierre: { criticos: ["pantalla: falta «Turno de Día»"], observaciones: ["el juez de QA dijo «rojo»"] },
   gasto: { modelo: { entrada: 1600, salida: 160, cache: 1300 }, externo: { entrada: 0, salida: 0, cache: 0 } },
   gastoEnCurso: { modelo: { entrada: 900, salida: 90, cache: 700 }, externo: { entrada: 0, salida: 0, cache: 0 } },
+  trabajo: 95_000,
   ticket: { clave: "KAN-7", conector: "jira", url: "https://x.atlassian.net/browse/KAN-7", aviso: "no se pudo pasar a PROBAR" },
   pantallasDeStitch: [{ name: "projects/1/screens/ab", titulo: "Listado de Entregas", proyecto: "Maset" }],
   reencolable: { texto: "Termina lo pendiente." },

@@ -707,6 +707,27 @@ describe("TareasDelProyecto: ver lo que hace una tarea en proceso", () => {
       expect(screen.queryByText("Lo que se pidió")).toBeNull();
     });
 
+    it("cada una dice lo que TARDÓ ella sola, la continuación también, y la madre sin total (IXCODE-73)", () => {
+      render(
+        <TareasDelProyecto
+          tareas={[
+            tarea({ id: "m", titulo: "Menú", estado: "terminada", acabada: "2026-10-22T10:00:00.000Z", trabajo: 125_000 }),
+            tarea({ id: "c", titulo: "Menú (continuación)", estado: "terminada", acabada: "2026-10-22T11:00:00.000Z", continuaDe: "m", trabajo: 40_000 }),
+          ]}
+        />
+      );
+      fireEvent.click(screen.getByRole("tab", { name: /Finalizadas/ }));
+      expect(filaDe("Menú").textContent).toContain("tardó 2 min 05 s");
+      expect(filaDe("Menú").textContent).not.toContain("2 min 45 s");
+      expect(filaDe("Menú (continuación)").textContent).toContain("tardó 40 s");
+    });
+
+    it("sin lo que tardó (una de antes), no se pinta: ausente no es cero", () => {
+      render(<TareasDelProyecto tareas={[tarea({ id: "x", titulo: "Vieja", estado: "terminada", acabada: "2026-10-22T10:00:00.000Z" })]} />);
+      fireEvent.click(screen.getByRole("tab", { name: /Finalizadas/ }));
+      expect(filaDe("Vieja").textContent).not.toContain("tardó");
+    });
+
     it("se ELIMINA del histórico, pidiendo confirmación antes", () => {
       const borradas: string[] = [];
       render(<TareasDelProyecto tareas={cola()} alDescartar={(id) => borradas.push(id)} />);

@@ -437,8 +437,8 @@ export function TareasDelProyecto({
 }
 
 /**
- * Una tarea del HISTÓRICO, en UNA línea: punto, título, cuándo empezó y acabó (no «cuánto tardó»: entre las dos cuenta
- * también la pausa esperando respuesta) y cómo se entregó (la MISMA `EntregaDeTarea` de la otra pestaña), y a la
+ * Una tarea del HISTÓRICO, en UNA línea: punto, título, cuándo empezó y acabó (lo que TARDÓ no sale de ahí: entre las dos
+ * cuenta también la pausa esperando respuesta; va aparte, de `trabajo`) y cómo se entregó (la MISMA `EntregaDeTarea` de la otra pestaña), y a la
  * derecha lo que se puede MIRAR —qué hizo, el encargo, su conversación con los artefactos—. Sin acciones: ya se
  * entregó. Lo desplegado va debajo, a todo el ancho, y uno a la vez; lo plegado se DESMONTA.
  */
@@ -564,6 +564,10 @@ function FilaFinalizada({
           {resultado === "limpia" ? <span className={estilos.cuentaLimpia}>limpia</span> : null}
           {resultado === "mano" ? <span className={estilos.cuentaMano}>a mano</span> : null}
           {t.gasto === undefined ? null : <span className={estilos.cuentaGasto}>{textoCortoDelGastoDeTarea(t.gasto)}</span>}
+          {/* Lo que tardó ELLA, trabajando (IXCODE-73): sin las esperas a una persona, y la madre sin sumar sus continuaciones. */}
+          {t.trabajo === undefined ? null : (
+            <span className={estilos.cuentaTiempo} title="Tiempo trabajando, sin las esperas a una persona">{`tardó ${tiempoQueLleva(t.trabajo)}`}</span>
+          )}
         </span>
         <span className={estilos.fechasFinalizada}>{fechas}</span>
         <span className={estilos.flecha} aria-hidden="true">

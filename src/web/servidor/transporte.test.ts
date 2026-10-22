@@ -104,6 +104,8 @@ const DECISIONES: Readonly<Record<string, readonly string[]>> = {
   continuaDe: ["continuaDe"],
   // Viaja: Finalizadas y el cierre dicen cuánto gastó (petición suya, 21-10-2026). Son cifras, no rutas.
   gasto: ["gasto"],
+  // Viaja: Finalizadas dice cuánto tardó cada una (IXCODE-73). Una cifra, no una ruta.
+  trabajo: ["trabajo"],
 };
 
 const TAREA_COMPLETA: Required<Tarea> = {
@@ -138,6 +140,7 @@ const TAREA_COMPLETA: Required<Tarea> = {
   pantallasDeStitch: [{ name: "projects/1/screens/ab", titulo: "Listado de Entregas", proyecto: "Maset" }],
   continuaDe: "t0",
   gasto: { modelo: { entrada: 1600, salida: 160, cache: 1300 }, externo: { entrada: 0, salida: 0, cache: 0 } },
+  trabajo: 95_000,
 };
 
 describe("filaDeTarea", () => {

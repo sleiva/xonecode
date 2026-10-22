@@ -1826,6 +1826,8 @@ export function crearStoreDelCliente(): {
                   // Lo que GASTÓ: la misma lectura que el consumo de una sesión; lo que no se entiende es «no consta».
                   ...((g) => (g === undefined ? {} : { gasto: g }))(consumoDeSesion(t["gasto"])),
                   ...((g) => (g === undefined ? {} : { gastoEnCurso: g }))(consumoDeSesion(t["gastoEnCurso"])),
+                  // Lo que TARDÓ: solo un número finito y no negativo; lo demás es «no consta».
+                  ...(typeof t["trabajo"] === "number" && Number.isFinite(t["trabajo"]) && t["trabajo"] >= 0 ? { trabajo: t["trabajo"] } : {}),
                   // El ticket del gestor: solo con clave Y conector de texto (sin ellos no hay ni qué enseñar ni a quién
                   // nombrar). Un `url` se queda solo si es http(s): va a un `href`.
                   ...ticketDeTarea(t["ticket"]),

@@ -575,8 +575,11 @@ export function crearCorredorDeTareas(opciones: {
   consumoDeSesion?: (raiz: string, sesion: string) => ConsumoDeTurno | undefined;
   /** Qué plan es el de una tarea (`planDeLaTarea`). Por omisión el lector REAL; los tests lo doblan. */
   planDeLaTarea?: (raiz: string, encargo: string, desdeMs: number | undefined) => PlanDeLaTarea | undefined;
+  /** El reloj con que se mide lo que dura cada pasada (`Tarea.trabajo`). Por omisión `Date.now`; los tests lo doblan. */
+  ahora?: () => number;
 }): Corredor {
   const pid = opciones.pid ?? process.pid;
+  const ahora = opciones.ahora ?? Date.now;
   const consumoDeSesion =
     opciones.consumoDeSesion ??
     ((raiz: string, sesion: string): ConsumoDeTurno | undefined => {
@@ -1104,7 +1107,8 @@ export function crearCorredorDeTareas(opciones: {
     /** Lo que ya traía su sesión: el gasto de ESTA pasada es lo que crezca desde aquí (`Tarea.gasto`). */
     const consumoAlEmpezar = consumoDeSesion(tarea.proyecto.raiz, hilo);
     pasadasEnCurso.set(tarea.id, { raiz: tarea.proyecto.raiz, hilo, alEmpezar: consumoAlEmpezar, previo: tarea.gasto });
-    entrada.inicioDeLaPasada = Date.now();
+    const inicioDeLaPasada = ahora();
+    entrada.inicioDeLaPasada = inicioDeLaPasada;
     /**
      * ¿Esto CONTINÚA una conversación, o abre una en blanco? `tarea.sesion` es la única
      * fuente: si estaba puesta, es lo que se le pasó a `abrirParaTarea` para que reabriera
@@ -1326,7 +1330,12 @@ export function crearCorredorDeTareas(opciones: {
     // Lo que GASTÓ esta pasada, sumado a lo de las anteriores (petición suya: que el resumen final diga cuánto gastó). Va
     // en los CUATRO finales, como lo autorizado. El `fin` del turno ya está en el índice: se vuelca antes de devolver.
     const gastoDeLaPasada = gastoEntre(consumoAlEmpezar, consumoDeSesion(tarea.proyecto.raiz, hilo));
-    const conElGasto = (t: Tarea): Tarea => (gastoDeLaPasada === undefined ? t : { ...t, gasto: acumularTotales(t.gasto, gastoDeLaPasada) });
+    // Y lo que DURÓ, por la misma razón y en los mismos cuatro finales (IXCODE-73): solo el tiempo trabajando.
+    const trabajoDeLaPasada = Math.max(0, ahora() - inicioDeLaPasada);
+    const conElGasto = (t: Tarea): Tarea => ({
+      ...(gastoDeLaPasada === undefined ? t : { ...t, gasto: acumularTotales(t.gasto, gastoDeLaPasada) }),
+      trabajo: (t.trabajo ?? 0) + trabajoDeLaPasada,
+    });
     let conLoQueQuede: (t: Tarea) => Tarea = (t) => {
       const base = conElGasto(conVeredicto(conAutorizadas(t, entrada.autorizadas), entrada.veredicto));
       return entrada.cierre === undefined ? base : { ...base, cierre: entrada.cierre };
