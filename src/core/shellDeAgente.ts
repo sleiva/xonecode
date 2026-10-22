@@ -47,6 +47,7 @@
  * prompt dice `$XONECODE_SKILL_XONE_HOTSWAP/scripts/android.mjs` y ni el contexto ni el
  * cable ven una ruta.
  */
+import { win32 } from "node:path";
 import { VARIABLE_DE_DISPOSITIVO, type DispositivoDeLaSesion } from "./dispositivoDeSesion.js";
 import { VARIABLES_POR_PROVEEDOR } from "./modelos.js";
 
@@ -379,7 +380,65 @@ export function resumenDelEntorno(
     carpetas: carpetas.length,
     node: tiene("node"),
     adb: tiene("adb"),
+    // Qué shell corre las órdenes (IXCODE-72): en Windows, el Git Bash si está; si no, `cmd.exe`.
+    shell: lanzamientoDeShell("", { plataforma: opciones.plataforma, ...bashSiWindows(entorno, opciones) }).nombre,
     ...(opciones.scripts === undefined ? {} : { scripts: opciones.scripts }),
     ...(opciones.nodeDelServidor === undefined ? {} : { nodeDelServidor: opciones.existe(opciones.nodeDelServidor) }),
   };
+}
+
+/**
+ * La orden del agente, ¿con qué shell? (IXCODE-72). Fuera de Windows, la de siempre: `spawn(orden, { shell: true })`, que es
+ * `/bin/sh`. **En Windows `shell: true` es `cmd.exe`, y el modelo escribe bash**: medido en la máquina de un usuario, la raíz
+ * del proyecto se llenaba de ficheros sin extensión (`6612`, `@getsdsd`), `.txt` y `.json`, porque `cmd` no entiende las
+ * comillas simples y toma cada `>` de un `x => x > 6612` por una redirección a fichero. Tampoco corre los scripts `xone-*`,
+ * que no tienen extensión. Con el bash de Git para Windows —git es obligatorio, así que está— la orden es bash de verdad.
+ *
+ * `MSYS_NO_PATHCONV` y `MSYS2_ARG_CONV_EXCL`: sin ellos MSYS «traduce» lo que parece una ruta POSIX al pasarlo a un programa
+ * nativo, y un `adb push x /sdcard/…` acabaría en `C:/Program Files/Git/sdcard/…`. `-c` y no `-lc`: un login rehace el PATH.
+ */
+export function lanzamientoDeShell(
+  orden: string,
+  opciones: { plataforma: string; bash?: string }
+): { programa: string; argumentos: string[]; shell: boolean; entorno: Record<string, string>; nombre: "sh" | "cmd.exe" | "git-bash" } {
+  if (opciones.plataforma !== "win32") return { programa: orden, argumentos: [], shell: true, entorno: {}, nombre: "sh" };
+  if (opciones.bash === undefined) return { programa: orden, argumentos: [], shell: true, entorno: {}, nombre: "cmd.exe" };
+  return {
+    programa: opciones.bash,
+    argumentos: ["-c", orden],
+    shell: false,
+    entorno: { MSYS_NO_PATHCONV: "1", MSYS2_ARG_CONV_EXCL: "*" },
+    nombre: "git-bash",
+  };
+}
+
+/**
+ * El `bash.exe` de Git para Windows, buscado desde el `git.exe` del PATH (`…\Git\cmd`, `…\Git\bin` o
+ * `…\Git\mingw64\bin`) y, si no, en la carpeta de siempre. **Nunca el de WSL** (`C:\Windows\System32\bash.exe` y
+ * parecidos): corre en OTRA máquina, con otro disco, y el proyecto no estaría donde la orden lo busca. Puro: `existe` mira
+ * el disco.
+ */
+export function bashDeGit(opciones: { entorno: Readonly<Record<string, string | undefined>>; existe: (ruta: string) => boolean }): string | undefined {
+  const clave = Object.keys(opciones.entorno).find((k) => k.toUpperCase() === "PATH");
+  const carpetas = (clave === undefined ? "" : (opciones.entorno[clave] ?? "")).split(";").filter((c) => c !== "");
+  const deWindows = (ruta: string): boolean => /\\windows\\|\\windowsapps\\/i.test(ruta);
+  const candidatas: string[] = [];
+  for (const carpeta of carpetas) {
+    const c = carpeta.replace(/[\\/]+$/, "");
+    if (!opciones.existe(win32.join(c, "git.exe"))) continue;
+    candidatas.push(win32.join(c, "..", "bin", "bash.exe"), win32.join(c, "bash.exe"), win32.join(c, "..", "..", "bin", "bash.exe"));
+  }
+  const programas = opciones.entorno["ProgramFiles"] ?? opciones.entorno["PROGRAMFILES"] ?? "C:\\Program Files";
+  candidatas.push(win32.join(programas, "Git", "bin", "bash.exe"));
+  return candidatas.find((r) => !deWindows(r) && opciones.existe(r));
+}
+
+/** El `bash` para `lanzamientoDeShell`, buscado solo en Windows. */
+function bashSiWindows(
+  entorno: Readonly<Record<string, string>>,
+  opciones: { plataforma: string; existe: (ruta: string) => boolean }
+): { bash?: string } {
+  if (opciones.plataforma !== "win32") return {};
+  const bash = bashDeGit({ entorno, existe: opciones.existe });
+  return bash === undefined ? {} : { bash };
 }

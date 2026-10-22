@@ -4,7 +4,7 @@
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { EventEmitter } from "node:events";
-import { crearExecuteCancelable, type LanzarShell } from "./ejecucionCancelable.js";
+import { crearExecuteCancelable, crearLanzador, type LanzarShell } from "./ejecucionCancelable.js";
 
 function hijoFalso(pid?: number) {
   const stdout = new EventEmitter();
@@ -163,5 +163,36 @@ describe("crearExecuteCancelable", () => {
     expect(l.hijos[0]!.matado).toBe("SIGKILL");
     l.hijos[0]!.cerrar(null);
     await expect(fin).resolves.toEqual({ output: "Error: Command cancelled.", exitCode: 130, truncated: false });
+  });
+});
+
+/** IXCODE-72: la composición REAL del lanzador, con `spawn` y el disco falsos y la regla de verdad. */
+describe("crearLanzador", () => {
+  const llamadas: { programa: string; argumentos: string[]; opciones: Record<string, unknown> }[] = [];
+  const spawn = (programa: string, argumentos: string[], opciones: object): unknown => {
+    llamadas.push({ programa, argumentos, opciones: opciones as Record<string, unknown> });
+    return {};
+  };
+  afterEach(() => void llamadas.splice(0));
+
+  it("en Windows con Git, la orden va a `bash -c` ENTERA, sin `cmd`, con el entorno y sin conversión de rutas", () => {
+    const bash = "C:\\Program Files\\Git\\bin\\bash.exe";
+    const hay = new Set(["C:\\Program Files\\Git\\cmd\\git.exe", bash]);
+    const lanzar = crearLanzador({ plataforma: "win32", existe: (r) => hay.has(r), spawn });
+    lanzar("node -e 'x => x > 6612'", { env: { Path: "C:\\Program Files\\Git\\cmd", XONECODE_X: "1" }, cwd: "C:\\p" });
+    expect(llamadas[0]).toMatchObject({
+      programa: bash,
+      argumentos: ["-c", "node -e 'x => x > 6612'"],
+      opciones: { shell: false, cwd: "C:\\p", detached: false, windowsHide: true, env: { XONECODE_X: "1", MSYS_NO_PATHCONV: "1" } },
+    });
+  });
+
+  it("en Windows sin Git, `cmd.exe` como antes; en macOS, la `sh` de siempre con su grupo propio", () => {
+    crearLanzador({ plataforma: "win32", existe: () => false, spawn })("dir", { env: {}, cwd: "C:\\p" });
+    crearLanzador({ plataforma: "darwin", existe: () => true, spawn })("ls", { env: {}, cwd: "/p" });
+    expect(llamadas.map((l) => [l.programa, l.argumentos, l.opciones["shell"], l.opciones["detached"]])).toEqual([
+      ["dir", [], true, false],
+      ["ls", [], true, true],
+    ]);
   });
 });

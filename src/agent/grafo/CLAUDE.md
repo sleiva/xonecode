@@ -7,12 +7,16 @@ Ante una discrepancia con el código, **el código manda**.
 # El agente, y lo único que puede escribir
 
 `agent/grafo/xoneAgent.ts`: un orquestador que delega en los especialistas de `core/agentes.ts`.
-Cinco cosas no son negociables:
+Seis cosas no son negociables:
 
 - **Orquestador de SOLO LECTURA por PERMISOS, no por falta de tools** (`PERFIL_DEL_ORQUESTADOR`;
   `xoneAgent.orquestador.test.ts`).
 - **`FilesystemBackend` con `virtualMode: true`.** Shell en exactamente UNO, declarado en su `.md`
   (`ejecucion`): `virtualMode` no confina comandos, y deepagents LANZA con `permissions` + backend ejecutable.
+- **En Windows la shell es el BASH de Git, no `cmd.exe`** (`core/shellDeAgente.ts#lanzamientoDeShell`, `#bashDeGit`,
+  `ejecucionCancelable.ts#crearLanzador`, IXCODE-72): el modelo escribe bash, y `cmd` tomaba cada `>` de una orden por
+  una redirección y llenaba el proyecto de ficheros sueltos. Nunca el bash de WSL; `MSYS_NO_PATHCONV` para `/sdcard`;
+  sin Git, `cmd.exe` y la traza lo dice (`resumenDelEntorno.shell`). **Límite**: sin probar en un Windows real.
 - **Permisos con `permisosDe(perfil)`, NUNCA a mano**: `SubAgent.permissions` reemplaza los del
   padre y se perdería la denegación de `/.env`, `/.git` y `/.xonecode`.
 - **`SubAgent.tools` lleva SOLO tools propias**: las de fichero las monta `createFilesystemMiddleware`

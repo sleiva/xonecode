@@ -382,12 +382,67 @@ describe("resumenDelEntorno: lo que la traza dice de la shell de un agente", () 
       { Path: "C:\\Windows\\System32;C:\\Program Files\\nodejs", PATH: "C:\\x:C:\\y" },
       { plataforma: "win32", existe, scripts: 9, nodeDelServidor: "C:\\Program Files\\nodejs\\node.exe" }
     );
-    expect(r).toEqual({ plataforma: "win32", clavePath: "Path", clavesPath: 2, carpetas: 2, node: true, adb: false, scripts: 9, nodeDelServidor: true });
+    expect(r).toEqual({ plataforma: "win32", clavePath: "Path", clavesPath: 2, carpetas: 2, node: true, adb: false, shell: "cmd.exe", scripts: 9, nodeDelServidor: true });
   });
 
   it("sin PATH lo dice, y en macOS busca el binario a secas", async () => {
     const { resumenDelEntorno } = await import("./shellDeAgente.js");
     expect(resumenDelEntorno({}, { plataforma: "darwin", existe: () => true })).toMatchObject({ clavePath: "(ninguna)", carpetas: 0, node: false });
     expect(resumenDelEntorno({ PATH: "/usr/bin:/opt/bin" }, { plataforma: "darwin", existe: (r) => r === "/opt/bin/adb" })).toMatchObject({ node: false, adb: true, carpetas: 2 });
+  });
+});
+
+/**
+ * IXCODE-72: en Windows `shell: true` es `cmd.exe`, y el modelo escribe bash. Medido en la máquina de un usuario: la raíz
+ * del proyecto se llenaba de ficheros `6612`, `@getsdsd`… — cada `>` de un `x => x > 6612` entre comillas simples, que
+ * `cmd` no entiende, era una redirección a fichero. Con el Git Bash que trae Git para Windows la orden es bash de verdad.
+ */
+describe("la shell del agente en Windows", () => {
+  const GIT = "C:\\Program Files\\Git";
+  const conGit = { Path: `C:\\Windows\\System32;${GIT}\\cmd;C:\\Program Files\\nodejs` };
+
+  it("encuentra el bash de Git a partir del git.exe del PATH", async () => {
+    const { bashDeGit } = await import("./shellDeAgente.js");
+    const hay = new Set([`${GIT}\\cmd\\git.exe`, `${GIT}\\bin\\bash.exe`]);
+    expect(bashDeGit({ entorno: conGit, existe: (r) => hay.has(r) })).toBe(`${GIT}\\bin\\bash.exe`);
+  });
+
+  it("NUNCA el bash de WSL: es otra máquina, con otro disco", async () => {
+    const { bashDeGit } = await import("./shellDeAgente.js");
+    const wsl = { Path: "C:\\Windows\\System32" };
+    const hay = new Set(["C:\\Windows\\System32\\git.exe", "C:\\Windows\\System32\\bash.exe", "C:\\Windows\\bin\\bash.exe"]);
+    expect(bashDeGit({ entorno: wsl, existe: (r) => hay.has(r) })).toBeUndefined();
+  });
+
+  it("sin git en el PATH prueba la carpeta de siempre, y sin nada no inventa", async () => {
+    const { bashDeGit } = await import("./shellDeAgente.js");
+    const defecto = `${GIT}\\bin\\bash.exe`;
+    expect(bashDeGit({ entorno: { Path: "C:\\x" }, existe: (r) => r === defecto })).toBe(defecto);
+    expect(bashDeGit({ entorno: { Path: "C:\\x" }, existe: () => false })).toBeUndefined();
+  });
+
+  it("con bash: `bash -c` con la orden ENTERA, sin `cmd`, y sin que MSYS reescriba rutas como /sdcard", async () => {
+    const { lanzamientoDeShell } = await import("./shellDeAgente.js");
+    const bash = `${GIT}\\bin\\bash.exe`;
+    expect(lanzamientoDeShell("node -e 'x => x > 6612'", { plataforma: "win32", bash })).toEqual({
+      programa: bash,
+      argumentos: ["-c", "node -e 'x => x > 6612'"],
+      shell: false,
+      entorno: { MSYS_NO_PATHCONV: "1", MSYS2_ARG_CONV_EXCL: "*" },
+      nombre: "git-bash",
+    });
+  });
+
+  it("sin bash en Windows, `cmd.exe` como antes; fuera de Windows, nada cambia", async () => {
+    const { lanzamientoDeShell } = await import("./shellDeAgente.js");
+    expect(lanzamientoDeShell("ls", { plataforma: "win32" })).toEqual({ programa: "ls", argumentos: [], shell: true, entorno: {}, nombre: "cmd.exe" });
+    expect(lanzamientoDeShell("ls", { plataforma: "darwin", bash: "/bin/bash" })).toEqual({ programa: "ls", argumentos: [], shell: true, entorno: {}, nombre: "sh" });
+  });
+
+  it("la traza dice qué shell corre", async () => {
+    const { resumenDelEntorno } = await import("./shellDeAgente.js");
+    const hay = new Set([`${GIT}\\cmd\\git.exe`, `${GIT}\\bin\\bash.exe`]);
+    expect(resumenDelEntorno(conGit, { plataforma: "win32", existe: (r) => hay.has(r) }).shell).toBe("git-bash");
+    expect(resumenDelEntorno({ PATH: "/usr/bin" }, { plataforma: "darwin", existe: () => false }).shell).toBe("sh");
   });
 });

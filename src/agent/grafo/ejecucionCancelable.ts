@@ -12,7 +12,9 @@
  * ella), **130** si lo canceló la señal (128+SIGINT, convención de shell para
  * "interrumpido") — el modelo puede distinguir "me quedé sin tiempo" de "me cancelaron".
  */
-import { spawn } from "node:child_process";
+import { spawn, type SpawnOptions } from "node:child_process";
+import { existsSync } from "node:fs";
+import { bashDeGit, lanzamientoDeShell } from "../../core/shellDeAgente.js";
 import { matarGrupoReal } from "../dispositivos/procesosEnMaquina.js";
 
 export interface ResultadoDeEjecucion {
@@ -48,14 +50,30 @@ export type LanzarShell = (
  * dice la documentación de Node). `windowsHide: true` va siempre, en las dos plataformas: en
  * POSIX no hace nada, en Windows evita esa ventana.
  */
-export const lanzarReal: LanzarShell = (comando, opciones) =>
-  spawn(comando, {
-    shell: true,
-    env: opciones.env,
-    cwd: opciones.cwd,
-    detached: process.platform !== "win32",
-    windowsHide: true,
-  }) as unknown as ProcesoDeShell;
+export const lanzarReal: LanzarShell = crearLanzador({ plataforma: process.platform, existe: existsSync, spawn });
+
+/**
+ * El lanzador, con la plataforma, el disco y `spawn` por parámetro: la composición de PRODUCCIÓN con su regla
+ * (`core/shellDeAgente.ts#lanzamientoDeShell`, IXCODE-72) probada sin estar en Windows. En Windows corre la orden con el
+ * bash de Git si lo hay —el modelo escribe bash, y `cmd.exe` dejaba ficheros sueltos en el proyecto—; si no, como antes.
+ */
+export function crearLanzador(deps: {
+  plataforma: NodeJS.Platform;
+  existe: (ruta: string) => boolean;
+  spawn: (programa: string, argumentos: string[], opciones: SpawnOptions) => unknown;
+}): LanzarShell {
+  return (comando, opciones) => {
+    const bash = deps.plataforma === "win32" ? bashDeGit({ entorno: opciones.env, existe: deps.existe }) : undefined;
+    const l = lanzamientoDeShell(comando, { plataforma: deps.plataforma, ...(bash === undefined ? {} : { bash }) });
+    return deps.spawn(l.programa, l.argumentos, {
+      shell: l.shell,
+      env: { ...opciones.env, ...l.entorno },
+      cwd: opciones.cwd,
+      detached: deps.plataforma !== "win32",
+      windowsHide: true,
+    }) as ProcesoDeShell;
+  };
+}
 
 const TOPE_DE_SALIDA_BYTES = 100_000;
 
