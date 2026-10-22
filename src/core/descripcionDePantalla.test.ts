@@ -108,8 +108,10 @@ describe("compararDescripciones: maqueta y captura con el MISMO esquema", () => 
   it("el texto RECORTADO, el BORDE que la maqueta no tiene y lo que FALTA", () => {
     expect(c.recortes).toEqual(["«12 + 3» se ve RECORTADO (le falta un trozo de las letras).", "«RAD» se ve RECORTADO (le falta un trozo de las letras)."]);
     expect(c.diferencias).toContain("lleva un BORDE que la maqueta no tiene en «COPY».");
-    // Su fila existe en la captura (COPY se emparejó): lo que falta de ella SÍ se dice.
-    expect(c.faltan).toEqual(["«DEG»", "«Tape»"]);
+    // Su fila existe en la captura (COPY se emparejó): lo que falta de ella se DICE, pero un texto de la maqueta no pone el
+    // rojo (decisión suya, 22-10-2026); el recorte sí.
+    expect(c.faltan).toEqual([]);
+    expect(c.notas?.join("\n")).toContain("«DEG» de la maqueta no está en la captura");
     expect(hayQueArreglar(c)).toBe(true);
   });
 
@@ -238,7 +240,7 @@ describe("lo MENOR no pone el rojo", () => {
     const sinEl = compararDescripciones(maqueta, { filas: [{ controles: [en("RECAUDACIÓN ACUMULADA", 0.3, 0.2)] }], extras: [] });
     expect(sinEl.faltan).toEqual([]);
     expect(hayQueArreglar(sinEl)).toBe(false);
-    expect(sinEl.diferencias.join("\n")).toContain("dato de ejemplo de la maqueta y no está");
+    expect(sinEl.notas?.join("\n")).toContain("«3 Liquidaciones» de la maqueta no está en la captura");
   });
 
   it("una cifra no es la traducción de una palabra: «19» no empareja con «COPY»", () => {
@@ -246,8 +248,10 @@ describe("lo MENOR no pone el rojo", () => {
       { filas: [{ controles: [medido("COPY", "redondeada", 2.5, 0.3), medido("7", "redondeada", 1.2, 0.3)] }], extras: [] },
       { filas: [{ controles: [medido("19", "redondeada", 2.5, 0.3), medido("7", "redondeada", 1.2, 0.3)] }], extras: [] }
     );
-    expect(c.notas).toBeUndefined();
-    expect(c.faltan).toEqual(["«COPY»"]);
+    // No se emparejan; y que «COPY» no esté se dice sin rojo.
+    expect(c.faltan).toEqual([]);
+    expect(c.notas?.join("\n")).not.toContain("donde la maqueta dice «COPY»");
+    expect(c.notas?.join("\n")).toContain("«COPY» de la maqueta no está en la captura");
   });
 });
 
@@ -264,9 +268,17 @@ describe("compararDescripciones: lo que va dentro de otro texto de la captura no
     expect(c.notas?.some((n) => n.includes("«Framework:»") && n.includes("dentro de"))).toBe(true);
   });
 
-  it("sin esa línea, sí falta", () => {
+  it("sin esa línea se dice, sin rojo: un texto de la maqueta es dato de muestra", () => {
     const sola: PantallaDescrita = { filas: [fila("pie", "PIE")], extras: [] };
-    expect(compararDescripciones(maqueta, sola).faltan).toEqual(["«Framework:»"]);
+    const c = compararDescripciones(maqueta, sola);
+    expect(c.faltan).toEqual([]);
+    expect(c.notas?.join("\n")).toContain("«Framework:» de la maqueta no está en la captura");
+  });
+
+  it("un control SIN texto (una imagen, `[nombre]`) no se da por recortado", () => {
+    const img: ControlVisto = { ...tecla("[MAP_ESTADO]"), recortado: true };
+    const c = compararDescripciones({ filas: [], extras: [] }, { filas: [{ controles: [img, { ...tecla("12 + 3"), recortado: true }] }], extras: [] });
+    expect(c.recortes).toEqual(["«12 + 3» se ve RECORTADO (le falta un trozo de las letras)."]);
   });
 });
 

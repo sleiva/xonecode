@@ -360,6 +360,9 @@ function colorDominante(img: ImagenRgba, caja: Caja): Rgb | undefined {
  * Solo dice DIFERENCIAS de lo emparejado: un bloque sin pareja no es noticia, porque los dos lados no parten igual
  * (el aparato puede tener un bloque por fila de teclas donde la maqueta tiene un solo panel).
  */
+/** Lo que tienen que solaparse en alto dos bloques, en fracción de CADA uno, para ser el mismo (`compararBloques`). */
+export const SOLAPE_DE_BLOQUES = 0.6;
+
 export function compararBloques(maqueta: BloquesAMedir, aparato: BloquesAMedir): string[] {
   const situar = (b: BloquesAMedir) =>
     bloquesDeFuera(b.bloques)
@@ -379,7 +382,9 @@ export function compararBloques(maqueta: BloquesAMedir, aparato: BloquesAMedir):
       const solape = Math.min(a.y1, m.y1) - Math.max(a.y0, m.y0);
       if (!usados.has(i) && solape > 0 && (mejor === undefined || solape > mejor.solape)) mejor = { i, solape };
     });
-    if (mejor === undefined || mejor.solape < (a.y1 - a.y0) * 0.4) continue;
+    // El solape cuenta en los DOS: la franja del aparato, algo más abajo que la de la maqueta, caía sobre la cabecera de
+    // columnas de la maqueta y salía «el bloque de arriba es #6C0E1A; en la maqueta, #E5E7E7» (medido en Maset).
+    if (mejor === undefined || mejor.solape < (a.y1 - a.y0) * SOLAPE_DE_BLOQUES || mejor.solape < (ms[mejor.i]!.y1 - ms[mejor.i]!.y0) * SOLAPE_DE_BLOQUES) continue;
     usados.add(mejor.i);
     const m = ms[mejor.i]!;
     const donde = a.y0 < 0.12 ? "de arriba del todo" : `que va del ${porciento(Math.max(0, a.y0))} al ${porciento(Math.min(1, a.y1))} del alto`;

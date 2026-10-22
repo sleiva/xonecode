@@ -9847,3 +9847,21 @@ pantalla use VISUALMENTE el diseño. Medido en Maset (Incidencias): la crítica 
 ejemplo, y el juez dio rojo aunque él mismo decía que no contaba. Ahora un texto de la maqueta que no está en el aparato
 va a la nota de datos de muestra (`compararConMaqueta`), sin reglas para adivinar qué parece dato; un botón que falta
 sigue siendo bloqueante, y lo que se VE que falta (un título, una flecha) lo dice el modelo. El juez lo tiene en su prompt.
+
+## Las medidas falsas de la crítica (22-10-2026)
+
+Medido en Maset (Incidencias, segunda pasada con la crítica nueva): la pantalla quedó casi como la maqueta y la crítica
+siguió en rojo en todas las vueltas por medidas, no por lo que se veía; el juez de la tarea, que juzga por lo que dicen
+las comprobaciones, dio rojo. Cinco arreglos:
+
+- Un TEXTO de la maqueta que falta tampoco pone el rojo en la comparación control a control (`descripcionDePantalla.ts`);
+  se había hecho solo en la geometría y «ESPARREGUERA» seguía en «faltan».
+- Un control SIN texto (`[nombre]`: una imagen, un icono) no se da por «RECORTADO»: el círculo de estado tiene tinta
+  hasta su borde por diseño.
+- Un DATO de la maqueta (con cifras) emparejado por sitio con una IMAGEN del aparato no cuenta para filas ni tamaños
+  (`datoEmparejadoConUnaImagen`): salían «5,3 veces MENOR» y «van en la MISMA fila», y el modelo, que recibe la geometría
+  como hechos, lo repitió como diseño («el cliente baja a otra línea», falso).
+- Un control que se sale unos pocos píxeles (`EXCESO_QUE_NO_SE_VE`, 3,5 % del ancho) es diferencia, no bloqueante: toda
+  lista al 100 % con margen mide 10–32 px más que la pantalla y no se corta nada.
+- Dos bloques solo se comparan si se solapan en los DOS (`SOLAPE_DE_BLOQUES`): la franja del aparato caía sobre la
+  cabecera de columnas de la maqueta y salía «#6C0E1A; en la maqueta, #E5E7E7».

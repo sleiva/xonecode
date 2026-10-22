@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ImagenRgba } from "./compararCapturas.js";
-import { bloquesDeFuera, formaDe, letraDe, medirControl } from "./estiloMedido.js";
+import { bloquesDeFuera, compararBloques, formaDe, letraDe, medirControl } from "./estiloMedido.js";
 
 /** Un lienzo RGBA de un color, y lo que se pinta encima. */
 function lienzo(ancho: number, alto: number, fondo: [number, number, number]): ImagenRgba & { pintar: (dentro: (x: number, y: number) => boolean, c: [number, number, number]) => void } {
@@ -76,5 +76,28 @@ describe("bloquesDeFuera", () => {
     const titulo = { x: 16, y: 36, ancho: 358, alto: 56 };
     const visor = { x: 16, y: 96, ancho: 358, alto: 178 };
     expect(bloquesDeFuera([cabecera, titulo, visor, { ...visor }])).toEqual([cabecera, visor]);
+  });
+});
+
+describe("compararBloques: solo se comparan bloques que se solapan en los DOS", () => {
+  /** Una imagen de 100×1000 con bandas de color a lo ancho. */
+  const conBandas = (bandas: { y0: number; y1: number; color: [number, number, number] }[]): ImagenRgba => {
+    const ancho = 100;
+    const alto = 1000;
+    const datos = new Uint8ClampedArray(ancho * alto * 4).fill(240);
+    for (const b of bandas) {
+      for (let y = b.y0; y < b.y1; y++) {
+        for (let x = 0; x < ancho; x++) datos.set([...b.color, 255], (y * ancho + x) * 4);
+      }
+    }
+    return { ancho, alto, datos };
+  };
+  it("la franja del aparato, algo más abajo, no se compara con la cabecera de columnas de la maqueta", () => {
+    // Medido en Maset: «el bloque de arriba es #6C0E1A; en la maqueta, #E5E7E7».
+    const maqueta = { img: conBandas([{ y0: 100, y1: 140, color: [229, 231, 231] }]), bloques: [{ x: 0, y: 100, ancho: 100, alto: 40 }], util: { arriba: 0, abajo: 1000 } };
+    const aparato = { img: conBandas([{ y0: 120, y1: 160, color: [108, 14, 26] }]), bloques: [{ x: 0, y: 120, ancho: 100, alto: 40 }], util: { arriba: 0, abajo: 1000 } };
+    expect(compararBloques(maqueta, aparato)).toEqual([]);
+    const mismoSitio = { ...aparato, img: conBandas([{ y0: 100, y1: 140, color: [108, 14, 26] }]), bloques: [{ x: 0, y: 100, ancho: 100, alto: 40 }] };
+    expect(compararBloques(maqueta, mismoSitio).join("\n")).toContain("es de color");
   });
 });

@@ -21,7 +21,7 @@
  * Las filas descritas de una maqueta sin `code.html` se comparan además contra el árbol medido
  * (`compararConMaqueta` en modo `aproximada`, vía `maquetaDeLaDescripcion`).
  */
-import { contieneTexto, pareceDatoDeEjemplo, tieneLetras, textoParaEmparejar, textoVisible, type ControlDelAparato, type GeometriaDelAparato, type MaquetaMedida } from "./geometriaDePantalla.js";
+import { contieneTexto, tieneLetras, textoParaEmparejar, textoVisible, type ControlDelAparato, type GeometriaDelAparato, type MaquetaMedida } from "./geometriaDePantalla.js";
 
 export const FORMAS = ["pildora", "redondeada", "recta", "circulo"] as const;
 export const LETRAS = ["pequena", "normal", "grande", "enorme"] as const;
@@ -371,14 +371,17 @@ export function compararDescripciones(maqueta: PantallaDescrita, captura: Pantal
       if (filasConPareja.has(fila) && clave(m) !== ICONO && tieneLetras(clave(m))) {
         // Dentro de otro texto de la captura no falta (`contieneTexto`): la app lo escribe junto en un control.
         const dentro = as.find(({ c: a }) => clave(a) !== ICONO && contieneTexto(a.texto, m.texto));
-        // Un DATO DE EJEMPLO de la maqueta («3 Liquidaciones», un código) no se exige: lo mismo que en la geometría
-        // (`pareceDatoDeEjemplo`). Si en la captura hay el mismo texto con otras cifras, está; si no, se dice sin rojo.
-        // Medido en Maset: «3 Liquidaciones» de la maqueta frente a «5 Liquidaciones» del aparato era un «falta» y un rojo.
-        if (dentro === undefined && pareceDatoDeEjemplo(textoVisible(m.texto))) {
+        // Medido en Maset: «3 Liquidaciones» frente a «5 Liquidaciones», y «ESPARREGUERA», eran un «falta» y un rojo.
+        // Un TEXTO de la maqueta que no está no pone el rojo (decisión suya, 22-10-2026): la maqueta de un rediseño trae datos
+        // inventados y lo que importa es que use el diseño. Lo que se VE que falta lo dice el modelo.
+        if (dentro === undefined) {
           const otroValor = as.find(({ c: a }) => clave(a) !== ICONO && sinCifras(a.texto) === sinCifras(m.texto));
-          if (otroValor !== undefined) notas.push(`${nombrar(otroValor.c)} donde la maqueta dice ${nombrar(m)}: es un dato de ejemplo con otro valor. No falta.`);
-          else anotar("es un dato de ejemplo de la maqueta y no está en la captura: su valor no se exige, su sitio sí (compruébalo)", m);
-        } else if (dentro === undefined) faltan.push(nombrar(m));
+          notas.push(
+            otroValor !== undefined
+              ? `${nombrar(otroValor.c)} donde la maqueta dice ${nombrar(m)}: es un dato de ejemplo con otro valor. No falta.`
+              : `${nombrar(m)} de la maqueta no está en la captura: un texto de la maqueta es dato de muestra, no falta.`
+          );
+        }
         else notas.push(`${nombrar(m)} va dentro de ${nombrar(dentro.c)} en la captura: en la maqueta separado, aquí en un solo texto. No falta.`);
       }
       return;
@@ -424,7 +427,9 @@ export function compararDescripciones(maqueta: PantallaDescrita, captura: Pantal
     );
   const recortes = as
     .map((x) => x.c)
-    .filter((c) => c.recortado === true)
+    // Solo un TEXTO se recorta: un control sin texto (`[nombre]`, una imagen o un icono) tiene tinta hasta su borde por
+    // diseño. Medido en Maset: el círculo de estado de Incidencias salía «RECORTADO» y ponía el rojo.
+    .filter((c) => c.recortado === true && !/^\[[^\]]*\]$/.test(c.texto.trim()))
     .map((c) => `${nombrar(c)} se ve RECORTADO (le falta un trozo de las letras).`);
   return {
     diferencias,

@@ -34,7 +34,9 @@ describe("la calculadora real, medida en sus píxeles", () => {
     // Otro estado (o una traducción) en su sitio se DICE, pero no pone el rojo.
     expect(c.notas?.join("\n")).toContain("«RAD» donde la maqueta dice «DEG»: otro texto en su sitio");
     expect(c.diferencias.join("\n")).not.toContain("«RAD»");
-    expect(c.faltan).toEqual(["«Tape»"]); // sin el nombre de la ligadura de su icono
+    // Un texto de la maqueta que no está se dice sin rojo (decisión suya, 22-10-2026).
+    expect(c.faltan).toEqual([]);
+    expect(c.notas?.join("\n")).toContain("«Tape» de la maqueta no está en la captura");
   });
 
   it("sin inventar: los dígitos tienen la letra y el color de la maqueta, y la maqueta contra sí misma está bien", () => {

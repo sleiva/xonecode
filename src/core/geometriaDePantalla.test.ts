@@ -11,8 +11,7 @@ import { pareceDatoDeEjemplo,
   informeDeGeometria,
   textoParaEmparejar,
   type GeometriaDelAparato,
-  type MaquetaMedida,
-} from "./geometriaDePantalla.js";
+  type MaquetaMedida, datoEmparejadoConUnaImagen } from "./geometriaDePantalla.js";
 
 /**
  * El caso REAL (sesión de MyAllXOne, la calculadora de Stitch): el árbol de la ronda en que la «=» acababa
@@ -73,6 +72,13 @@ describe("hallazgosDelAparato: lo que se ve sin maqueta", () => {
     expect(h.bloqueantes.join("\n")).toMatch(/«fuera» se SALE de la pantalla/);
     expect(h.diferencias).toEqual(["«A» y «B» se SOLAPAN."]);
     expect(h.bloqueantes.join("\n") + h.diferencias.join("\n")).not.toContain("«bien»");
+  });
+
+  it("unos pocos píxeles fuera no bloquean: es lo que mide toda lista de XOne al 100 % con margen", () => {
+    // Medido en Maset: ContentIncidenciasGrid 10→1090 en 1080, y en la captura no se cortaba nada.
+    const h = hallazgosDelAparato({ pantalla, barras, controles: [tecla("lista", 10, 500, 1010, 300)] });
+    expect(h.bloqueantes).toEqual([]);
+    expect(h.diferencias.join("\n")).toMatch(/«lista» se SALE de la pantalla.*20 px, poco para verse cortado/);
   });
 
   it("los marcos no cuentan: van de borde a borde por diseño", () => {
@@ -620,5 +626,14 @@ describe("pareceDatoDeEjemplo", () => {
     for (const t of ["Firma Registrada", "Datos, Cliente", "Paso 1 de 4", "MENÚ PRINCIPAL", "Albaranes Pendientes", ""]) {
       expect(pareceDatoDeEjemplo(t), t).toBe(false);
     }
+  });
+});
+
+describe("un dato de la maqueta emparejado por sitio con una imagen no es la misma pieza", () => {
+  it("con cifras (un código, una hora) no cuenta para filas ni tamaños; un icono sí", () => {
+    // Medido en Maset (Incidencias): «A16-0842189» con un icono salía «5,3 veces MENOR» y «van en la MISMA fila».
+    expect(datoEmparejadoConUnaImagen({ porPosicion: true, maqueta: { texto: "A16-0842189" } })).toBe(true);
+    expect(datoEmparejadoConUnaImagen({ porPosicion: true, maqueta: { texto: "I" } })).toBe(false);
+    expect(datoEmparejadoConUnaImagen({ maqueta: { texto: "A16-0842189" } })).toBe(false);
   });
 });

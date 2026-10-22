@@ -213,7 +213,12 @@ export function hallazgosDelAparato(g: GeometriaDelAparato): HallazgosDeGeometri
         `${nombrar(c)} queda TAPADO por la barra de estado: empieza en y=${c.caja.y} y la barra acaba en y=${estado.abajo}.`
       );
     } else if (c.caja.x < -2 || c.caja.y < -2 || derecha > g.pantalla.ancho + 2 || abajo > g.pantalla.alto + 2) {
-      bloqueantes.push(`${nombrar(c)} se SALE de la pantalla (${c.caja.x},${c.caja.y} → ${derecha},${abajo} en una de ${g.pantalla.ancho}×${g.pantalla.alto}).`);
+      // Unos pocos píxeles de más NO bloquean: medido en Maset, toda lista de XOne al 100 % con margen mide de 10 a 32 px
+      // más que la pantalla (ContentIncidenciasGrid 10→1090, ContentAlbaranesGrid →1112) y en la captura no se corta nada.
+      const exceso = Math.max(-c.caja.x, -c.caja.y, derecha - g.pantalla.ancho, abajo - g.pantalla.alto);
+      const linea = `${nombrar(c)} se SALE de la pantalla (${c.caja.x},${c.caja.y} → ${derecha},${abajo} en una de ${g.pantalla.ancho}×${g.pantalla.alto}).`;
+      if (exceso > g.pantalla.ancho * EXCESO_QUE_NO_SE_VE) bloqueantes.push(linea);
+      else diferencias.push(`${linea.slice(0, -1)}: ${exceso} px, poco para verse cortado; míralo en la captura.`);
     }
   }
 
@@ -275,6 +280,9 @@ export function textoParaEmparejar(texto: string): string {
     .toLowerCase();
 }
 
+/** Lo que un control puede salirse de la pantalla sin bloquear, en fracción de su ancho (`hallazgosDelAparato`). */
+export const EXCESO_QUE_NO_SE_VE = 0.035;
+
 interface Pareja {
   maqueta: ElementoDeMaqueta;
   aparato: ControlDelAparato;
@@ -282,6 +290,15 @@ interface Pareja {
   porPosicion?: true;
   /** Los dos tienen PALABRAS y dicen otra cosa, en el mismo sitio: un texto traducido o cambiado. */
   otroTexto?: true;
+}
+
+/**
+ * Un DATO de la maqueta (lleva cifras: un código, una hora, un teléfono) emparejado por posición con una IMAGEN del aparato
+ * no es la misma pieza: es el azar del sitio. Medido en Maset (Incidencias): «A16-0842189» con un icono salía «5,3 veces
+ * MENOR» y «van en la MISMA fila; en el aparato en otra», y el modelo, que recibe eso como hecho, lo repitió como diseño.
+ */
+export function datoEmparejadoConUnaImagen(p: { porPosicion?: true; maqueta: { texto: string } }): boolean {
+  return p.porPosicion === true && /\d/.test(p.maqueta.texto);
 }
 
 /**
@@ -656,7 +673,7 @@ export function compararConMaqueta(m: MaquetaMedida, g: GeometriaDelAparato, mod
     for (const p of parejas) {
       // Solo IMÁGENES: las dos cajas son lo que se pinta. Medido en Maset, con los botones no valía: la caja del aparato
       // era la de la tarjeta entera y la de la maqueta la de su título («ENTREGAS sale 2,3 veces mayor», y no).
-      if (p.aparato.clase !== "IMG" || p.maqueta.sinAncho === true || p.maqueta.caja.ancho <= 0 || p.aparato.caja.ancho <= 0) continue;
+      if (p.aparato.clase !== "IMG" || datoEmparejadoConUnaImagen(p) || p.maqueta.sinAncho === true || p.maqueta.caja.ancho <= 0 || p.aparato.caja.ancho <= 0) continue;
       const rm = p.maqueta.caja.ancho / m.ancho;
       const ra = p.aparato.caja.ancho / g.pantalla.ancho;
       const factor = ra / rm;
@@ -682,7 +699,7 @@ export function compararConMaqueta(m: MaquetaMedida, g: GeometriaDelAparato, mod
    * ocupa distinto y puede saltar de línea, y salía «van en la MISMA fila; en el aparato en otra» y «las filas acaban en el
    * 61 % del ancho». La maqueta no sabe nada de los datos: de ese texto cuentan su sitio y su estilo, no filas ni anchos.
    */
-  const medibles = parejas.filter((p) => p.otroTexto !== true);
+  const medibles = parejas.filter((p) => p.otroTexto !== true && !datoEmparejadoConUnaImagen(p));
   if (medibles.length < 2) {
     notas.push("con menos de dos controles emparejados no hay filas ni tamaños que comparar.");
     return { bloqueantes, diferencias, notas };
