@@ -128,7 +128,8 @@ Todas **reaplican `puedeLeerRuta` a mano** (una tool de xonecode no pasa por el 
   **No se describe la captura con el modelo**, ni la maqueta con `code.html`. Texto distinto en el mismo
   sitio = estado o TRADUCCIÓN: NOTA, no rojo. **Texto de la maqueta DENTRO de otro del aparato no falta**
   (`contieneTexto`, en los dos emparejamientos): una NOTA por control. **Los VALORES de la maqueta son de ejemplo**
-  (versiones, cifras, un campo relleno): el método no los señala; su SITIO vacío, sí. **El informe abre con un
+  (versiones, cifras, un campo relleno): el método no los señala; su SITIO vacío, sí. Un texto que FALTA y
+  `pareceDatoDeEjemplo` (código con cifras, contador, nombres en lista) es nota, no bloqueante. **El informe abre con un
   RESUMEN contado de su propio cuerpo** (`resumenDelInforme`): es lo que lee el juez. **Con maqueta, el veredicto
   responde a «¿respeta el diseño?»**: rojo solo por un bloqueante medido, un texto que falta o recortado, o una
   diferencia de DISEÑO que vieron las DOS miradas (`confirmadas`); el resto son DETALLES y no ponen rojo. La frontera,

@@ -1,4 +1,4 @@
-import { lstatSync, readdirSync } from "node:fs";
+import { lstatSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { CARPETA_DE_PLANES, RUTA_PLANES } from "../../core/planes.js";
 
@@ -47,4 +47,47 @@ export function planesDelProyecto(raiz: string, ahora: number = Date.now()): Pla
     }
   }
   return planes.sort((a, b) => a.minutos - b.minutos);
+}
+
+/** El plan de una tarea: su carpeta virtual, la ruta de su `TASKS.md` en disco y lo que dice ahora. */
+export interface PlanDeLaTarea {
+  carpeta: string;
+  tasks: string;
+  texto: string;
+}
+
+/**
+ * **Qué plan es el de una tarea de fondo**, para que al cerrarla el harness lo actualice (petición suya, 21-10-2026).
+ * Primero, el que CITA su encargo (`/planes/<nombre>/`) si es uno solo; si no cita ninguno, el que la propia tarea
+ * escribió mientras trabajaba —un `TASKS.md` tocado desde que empezó, el más reciente—, que es lo que pasó en las seis de
+ * Maset: cada una escribió el suyo con el analista. Solo un `TASKS.md` de verdad (`lstat`); lo que no se lee no es plan.
+ */
+export function planDeLaTarea(raiz: string, encargo: string, desdeMs: number | undefined): PlanDeLaTarea | undefined {
+  const base = join(raiz, CARPETA_DE_PLANES);
+  const leer = (nombre: string): PlanDeLaTarea | undefined => {
+    const tasks = join(base, nombre, "TASKS.md");
+    try {
+      if (!lstatSync(tasks).isFile()) return undefined;
+      return { carpeta: `${RUTA_PLANES}${nombre}/`, tasks, texto: readFileSync(tasks, "utf8") };
+    } catch {
+      return undefined;
+    }
+  };
+  const citados = [...new Set([...encargo.matchAll(/\/planes\/([a-z0-9][a-z0-9_-]*)\//gi)].map((m) => m[1]!))];
+  if (citados.length === 1) return leer(citados[0]!);
+  if (citados.length > 1 || desdeMs === undefined) return undefined;
+  let mejor: { nombre: string; ms: number } | undefined;
+  try {
+    for (const nombre of readdirSync(base)) {
+      try {
+        const ms = lstatSync(join(base, nombre, "TASKS.md")).mtimeMs;
+        if (ms >= desdeMs && (mejor === undefined || ms > mejor.ms)) mejor = { nombre, ms };
+      } catch {
+        // Una carpeta sin TASKS.md no es el plan de nadie.
+      }
+    }
+  } catch {
+    return undefined;
+  }
+  return mejor === undefined ? undefined : leer(mejor.nombre);
 }

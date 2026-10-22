@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dependenciasDe, estadoReconocido, leerTareasDelPlan, marcarCriterios, progresoDeTarea, motivoDeTasksInaceptable } from "./tareasDelPlan.js";
+import { conEstadoDeTarea, dependenciasDe, estadoReconocido, leerTareasDelPlan, marcarCriterios, progresoDeTarea, motivoDeTasksInaceptable } from "./tareasDelPlan.js";
 
 const TASKS = `# Plan de ejecución — Visitas
 
@@ -260,5 +260,25 @@ describe("un TASKS.md se escribe con casillas, o no se escribe", () => {
   it("sin ninguna tarea reconocible también, y sin ninguna casilla lo dice de todas", () => {
     expect(motivoDeTasksInaceptable("# Plan\n\nhaz la calculadora")).toContain("No reconozco ninguna tarea");
     expect(motivoDeTasksInaceptable("## T1 — A\n- a\n## T2 — B\n- b\n")).toContain("ninguna tarea trae");
+  });
+});
+
+/** Petición suya (21-10-2026): al cerrar una tarea de fondo, el harness escribe en su plan lo que dijo el juez. */
+describe("conEstadoDeTarea", () => {
+  const plan = ["# TASKS", "", "## T1 — Sonda", "", "- [ ] uno", "- [ ] dos", "", "## T2 — Lista", "**Estado:** pendiente", "- [ ] tres", "", "## Hitos", "- [ ] no es de nadie"].join("\n");
+
+  it("sin estado, lo pone bajo la cabecera; «hecha» marca TODAS sus casillas y nada más", () => {
+    const t = conEstadoDeTarea(plan, "T1", "hecha")!;
+    const leido = leerTareasDelPlan(t).tareas;
+    expect(leido[0]).toMatchObject({ numero: "T1", estado: "hecha", criterios: { hechos: 2, total: 2 } });
+    expect(leido[1]).toMatchObject({ numero: "T2", estado: "pendiente", criterios: { hechos: 0, total: 1 } });
+    expect(t).toContain("- [ ] no es de nadie");
+  });
+
+  it("con estado, lo cambia en su sitio; «implementada» no marca casillas; una tarea que no está, undefined", () => {
+    const t = conEstadoDeTarea(plan, "T2", "implementada")!;
+    expect(leerTareasDelPlan(t).tareas[1]).toMatchObject({ estado: "implementada", criterios: { hechos: 0, total: 1 } });
+    expect(t.match(/\*\*Estado:\*\*/g)).toHaveLength(1);
+    expect(conEstadoDeTarea(plan, "T9", "hecha")).toBeUndefined();
   });
 });

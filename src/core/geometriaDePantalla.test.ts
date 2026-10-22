@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import {
+import { pareceDatoDeEjemplo,
   cajaParaElEstilo,
   compararConMaqueta,
   controlesDelArbol,
@@ -599,5 +599,17 @@ describe("otro texto en su sitio se empareja por su INICIO", () => {
     const h = compararConMaqueta(maqueta, aparato);
     expect(h.bloqueantes).toEqual([]);
     expect(h.notas.some((n) => n.includes("«Protocolo seguro TLS 1.3 activo»") && n.includes("otro texto en su sitio"))).toBe(true);
+  });
+});
+
+/** Medido en Maset (21-10-2026): tres rojos de una noche eran datos de muestra de la maqueta que llevan letras. */
+describe("pareceDatoDeEjemplo", () => {
+  it("un código, un contador y nombres de persona en lista son datos; una etiqueta no", () => {
+    for (const t of ["A16-0842189", "3 Liquidaciones", "12 albaranes", "ELISABETH PATRICIA, LUCAS LUNA", "Pérez Gómez, Ana", "125,50 €", "21/10/2026"]) {
+      expect(pareceDatoDeEjemplo(t), t).toBe(true);
+    }
+    for (const t of ["Firma Registrada", "Datos, Cliente", "Paso 1 de 4", "MENÚ PRINCIPAL", "Albaranes Pendientes", ""]) {
+      expect(pareceDatoDeEjemplo(t), t).toBe(false);
+    }
   });
 });

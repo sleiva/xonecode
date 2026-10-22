@@ -41,7 +41,11 @@ import {
   type ResultadoDeTurno,
   type VeredictoDeTarea,
 } from "../../core/entrega.js";
-import type { JuezDeTareaPort } from "../../core/ports.js";
+import type { DictamenDelJuez, JuezDeTareaPort } from "../../core/ports.js";
+import { readFileSync, writeFileSync } from "node:fs";
+import { anotarError } from "../../core/trazaDeErrores.js";
+import { conEstadoDeTarea, leerTareasDelPlan } from "../../core/tareasDelPlan.js";
+import { planDeLaTarea, type PlanDeLaTarea } from "../../agent/tareas/planesDelProyecto.js";
 import type { Entrega } from "../../core/entrega.js";
 import { crearConsolaDeTarea } from "./consolaDeTarea.js";
 import { conAdjuntos } from "../../core/adjuntos.js";
@@ -149,6 +153,34 @@ export function revisionConGit(
  * contradicción solo se veía leyéndolos juntos. Por eso el motivo se compone DESPUÉS de
  * saber si el hilo se olvidó, y no antes: quien lo escribe es el único que lo sabe.
  */
+/**
+ * Escribe en el `TASKS.md` del plan de una tarea el estado de sus tareas que dijo el juez (`conEstadoDeTarea`): el plan
+ * refleja el resultado aunque el desarrollador no lo marcara. Medido en Maset: seis tareas de una noche y sus planes con 0
+ * casillas marcadas. Releído justo antes de escribir; un fallo se apunta y no tumba la entrega.
+ */
+export function actualizarElPlan(plan: PlanDeLaTarea, estados: NonNullable<DictamenDelJuez["tareasDelPlan"]>): void {
+  try {
+    let texto = readFileSync(plan.tasks, "utf8");
+    for (const { numero, estado } of estados) texto = conEstadoDeTarea(texto, numero, estado) ?? texto;
+    writeFileSync(plan.tasks, texto, "utf8");
+  } catch (error) {
+    anotarError("corredorDeTareas#actualizarElPlan", error);
+  }
+}
+
+/**
+ * La línea que se añade al encargo de una tarea que CITA un plan (uno solo): ese es su plan, se trabaja sobre él y se
+ * marca; no se escribe otro. Al cerrar, el harness escribe en él lo que diga el juez (`actualizarElPlan`).
+ */
+export function lineaDelPlanCitado(encargo: string): string | undefined {
+  const citados = [...new Set([...encargo.matchAll(/\/planes\/([a-z0-9][a-z0-9_-]*)\//gi)].map((m) => m[1]!))];
+  if (citados.length !== 1) return undefined;
+  return (
+    `PLAN DE ESTA TAREA: /planes/${citados[0]!}/. Trabaja sobre ESE plan —léelo, sigue sus tareas y márcalas— y no escribas ` +
+    "otro plan: si le falta algo, amplíalo ahí. Al cerrar, el estado de sus tareas se actualiza con lo que se compruebe."
+  );
+}
+
 /** El motivo de una tarea cuyo turno se cortó porque el MOTOR falló (sin red, el Mac dormido, el proveedor). */
 export const motivoDeMotorCaido = (detalle: string): string =>
   `el modelo dejó de contestar a mitad del turno (${detalle}): lo hecho hasta ahí está en el disco y en su conversación`;
@@ -541,6 +573,8 @@ export function crearCorredorDeTareas(opciones: {
    * de este repo. Lo que no se puede leer es «no consta».
    */
   consumoDeSesion?: (raiz: string, sesion: string) => ConsumoDeTurno | undefined;
+  /** Qué plan es el de una tarea (`planDeLaTarea`). Por omisión el lector REAL; los tests lo doblan. */
+  planDeLaTarea?: (raiz: string, encargo: string, desdeMs: number | undefined) => PlanDeLaTarea | undefined;
 }): Corredor {
   const pid = opciones.pid ?? process.pid;
   const consumoDeSesion =
@@ -603,6 +637,8 @@ export function crearCorredorDeTareas(opciones: {
     /** La tarea tal como se despachó. Hace falta entera y no solo su raíz: si la descartan
      *  del índice mientras corre, sigue ocupando su hueco y su proyecto (ver `revisar`). */
     tarea: Tarea;
+    /** Cuándo empezó ESTA pasada: un plan escrito desde entonces es el de esta tarea (`planDeLaTarea`). */
+    inicioDeLaPasada?: number;
     trabajo: Promise<void>;
     /** Corta el turno. Memoizado: cerrar dos veces la misma consola no puede volver a
      *  abortar nada ni volver a volcar. */
@@ -876,9 +912,10 @@ export function crearCorredorDeTareas(opciones: {
           "está guardada; reintenta para que el juez la mire",
       };
     }
-    let veredicto: VeredictoDeTarea | undefined;
+    let veredicto: DictamenDelJuez | undefined;
     let fallo: unknown;
     let reventó = false;
+    const plan = (opciones.planDeLaTarea ?? planDeLaTarea)(tarea.proyecto.raiz, tarea.encargo, entrada.inicioDeLaPasada);
     /**
      * La consulta, con PLAZO. Ver `TOPE_DEL_JUEZ_MS`: una llamada de modelo colgada dejaría
      * la tarea diciendo «en proceso» durante el plazo del SDK, con su hueco y su proyecto
@@ -906,6 +943,8 @@ export function crearCorredorDeTareas(opciones: {
         // Y lo que midieron las comprobaciones visuales: sin ellas, un criterio que pide validar contra la maqueta era
         // un rojo seguro aunque se hubiera validado (medido en Maset).
         ...(medida.comprobacionesVisuales === undefined ? {} : { comprobacionesVisuales: medida.comprobacionesVisuales }),
+        // Y su PLAN, si tiene: el juez dice qué tareas del plan cumplió y el harness lo escribe (`actualizarElPlan`).
+        ...(plan === undefined ? {} : { plan: { carpeta: plan.carpeta, tareas: leerTareasDelPlan(plan.texto).tareas } }),
       })
       .then((v) => void (veredicto = v))
       .catch((error: unknown) => {
@@ -919,8 +958,11 @@ export function crearCorredorDeTareas(opciones: {
       };
     }
     if (reventó) return { entregable: false, motivo: motivoDelJuez(fallo) };
-    entrada.veredicto = veredicto;
-    return decisionDeEntrega(medida, veredicto);
+    // Lo del PLAN se escribe en su TASKS.md y no se guarda en la tarea: el veredicto que viaja es el de siempre.
+    const { tareasDelPlan, ...elVeredicto } = veredicto!;
+    if (plan !== undefined && tareasDelPlan !== undefined) actualizarElPlan(plan, tareasDelPlan);
+    entrada.veredicto = elVeredicto;
+    return decisionDeEntrega(medida, elVeredicto);
   };
 
   /**
@@ -1062,6 +1104,7 @@ export function crearCorredorDeTareas(opciones: {
     /** Lo que ya traía su sesión: el gasto de ESTA pasada es lo que crezca desde aquí (`Tarea.gasto`). */
     const consumoAlEmpezar = consumoDeSesion(tarea.proyecto.raiz, hilo);
     pasadasEnCurso.set(tarea.id, { raiz: tarea.proyecto.raiz, hilo, alEmpezar: consumoAlEmpezar, previo: tarea.gasto });
+    entrada.inicioDeLaPasada = Date.now();
     /**
      * ¿Esto CONTINÚA una conversación, o abre una en blanco? `tarea.sesion` es la única
      * fuente: si estaba puesta, es lo que se le pasó a `abrirParaTarea` para que reabriera
@@ -1136,6 +1179,9 @@ export function crearCorredorDeTareas(opciones: {
         // que ninguna instrucción del agente nombra. Ver `core/adjuntos.ts#conAdjuntos`.
         peticion = conAdjuntos(peticion, actual.adjuntos);
         if (lineaDeDiseno !== undefined && pendiente === undefined) peticion = `${peticion}\n\n${lineaDeDiseno}`;
+        // Su PLAN, si lo cita: que trabaje sobre él y no escriba otro (medido en Maset: cada tarea escribió el suyo).
+        const lineaDePlan = pendiente === undefined ? lineaDelPlanCitado(actual.encargo) : undefined;
+        if (lineaDePlan !== undefined) peticion = `${peticion}\n\n${lineaDePlan}`;
         /**
          * El veredicto de un ciclo ANTERIOR se retira al empezar otro: es de un trabajo que ya no es el que hay. Medido
          * en Maset: el rojo «la sesión no escribió ningún fichero» del primer ciclo —el agente solo preguntó— siguió en

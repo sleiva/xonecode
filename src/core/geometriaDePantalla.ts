@@ -613,7 +613,7 @@ export function compararConMaqueta(m: MaquetaMedida, g: GeometriaDelAparato, mod
       diferencias.push(
         `${etiqueta(e)} de ${laMaqueta}, junto a ${etiqueta(vecina)}, no se pinta en ${elAparato}: su etiqueta está y el número no (su valor puede ser de ejemplo; que su sitio quede vacío, no).`
       );
-    } else if (!aproximada && e.boton !== true && textoParaEmparejar(e.texto) !== "" && !tieneLetras(textoParaEmparejar(e.texto))) {
+    } else if (!aproximada && e.boton !== true && textoParaEmparejar(e.texto) !== "" && (!tieneLetras(textoParaEmparejar(e.texto)) || pareceDatoDeEjemplo(textoVisible(e.texto)))) {
       datos.push(etiqueta(e));
     } else if (!aproximada && textoParaEmparejar(e.texto) !== "" && dentroDeUnaImagen(e)) {
       enImagen.push(etiqueta(e));
@@ -639,7 +639,7 @@ export function compararConMaqueta(m: MaquetaMedida, g: GeometriaDelAparato, mod
     notas.push(`dibujado dentro de una imagen (no falta): ${enImagen.slice(0, 5).join(", ")}${enImagen.length > 5 ? "…" : ""}.`);
   }
   if (datos.length > 0) {
-    notas.push(`datos de ejemplo de ${laMaqueta} que no están en ${elAparato}: ${datos.slice(0, 5).join(", ")}${datos.length > 5 ? "…" : ""} (cifras de muestra, no controles: no faltan).`);
+    notas.push(`datos de ejemplo de ${laMaqueta} que no están en ${elAparato}: ${datos.slice(0, 5).join(", ")}${datos.length > 5 ? "…" : ""} (datos de muestra, no controles: no faltan).`);
   }
   if (sinFila.length > 0) {
     notas.push(`sin el mismo texto en ${elAparato}, ni en su fila: ${sinFila.slice(0, 5).join(", ")}${sinFila.length > 5 ? "…" : ""} (si son datos de ejemplo de un visor, es normal).`);
@@ -861,4 +861,24 @@ export function filasDelAparato(g: GeometriaDelAparato): ControlDelAparato[][] {
   const porFila = new Map<number, ControlDelAparato[]>();
   visibles.forEach((c, i) => porFila.set(indice[i]!, [...(porFila.get(indice[i]!) ?? []), c]));
   return [...porFila.entries()].sort((a, b) => a[0] - b[0]).map(([, fila]) => fila.sort((a, b) => a.caja.x - b.caja.x));
+}
+
+/**
+ * **Un DATO de ejemplo de la maqueta aunque lleve letras** (petición suya, 21-10-2026): lo que la maqueta pinta como dato de
+ * muestra y no como control. Medido en Maset, tres rojos de una noche fueron esto: un número de albarán («A16-0842189»), un
+ * contador («3 Liquidaciones») y nombres de cliente («ELISABETH PATRICIA, LUCAS LUNA»). Que falten no es un defecto: con
+ * otros datos —o la lista vacía— el aparato no los tiene. Tres formas, medidas; una ETIQUETA («Firma Registrada») no cae.
+ */
+export function pareceDatoDeEjemplo(texto: string): boolean {
+  const t = texto.trim();
+  if (t === "") return false;
+  const cifras = (t.match(/\d/g) ?? []).length;
+  const alfanumericos = (t.match(/[\p{L}\d]/gu) ?? []).length;
+  // Un código, un importe, una fecha: varias cifras y que pesen (no «Paso 1 de 4»).
+  if (cifras >= 3 && cifras / Math.max(1, alfanumericos) >= 0.5) return true;
+  // Un contador: «3 Liquidaciones», «12 albaranes».
+  if (/^\d+\s+\p{L}+$/u.test(t)) return true;
+  // Nombres de persona en lista, separados por coma: «ELISABETH PATRICIA, LUCAS LUNA», «Pérez Gómez, Ana».
+  const nombre = "\\p{Lu}[\\p{L}'.-]*";
+  return new RegExp(`^${nombre}(?:\\s+${nombre})*\\s*,\\s*${nombre}(?:\\s+${nombre})*$`, "u").test(t) && t.split(/[\s,]+/).length >= 3;
 }

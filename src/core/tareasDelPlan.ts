@@ -288,3 +288,34 @@ export function marcarCriterios(
   }
   return { texto: lineas.join(saltos), marcados, yaEstaban };
 }
+
+/** Lo que el juez puede decir de una tarea del plan al cerrar una tarea de fondo (`VeredictoDeTarea.tareasDelPlan`). */
+export type EstadoJuzgado = "hecha" | "implementada" | "pendiente";
+
+/**
+ * **El estado de UNA tarea del plan, escrito por el harness** al cerrar una tarea de fondo (petición suya, 21-10-2026: «las
+ * tareas en background asociadas a un plan deben actualizar su estado»). Medido en Maset: seis tareas de una noche y sus
+ * planes con 0 casillas marcadas y ninguna línea de estado, porque marcarlo dependía de que el desarrollador se acordara.
+ *
+ * Pone o cambia su `**Estado:**` (justo bajo la cabecera, o donde ya estuviera) y, si es `hecha`, marca TODAS sus casillas
+ * —«hecha» es comprobada—. Nunca DESMARCA nada ni toca otra tarea. `undefined` si la tarea no está.
+ */
+export function conEstadoDeTarea(texto: string, numero: string, estado: EstadoJuzgado): string | undefined {
+  const saltos = texto.includes("\r\n") ? "\r\n" : "\n";
+  const lineas = texto.split(/\r?\n/);
+  const inicio = lineas.findIndex((l) => cabeceraDeTarea(l)?.numero === numero);
+  if (inicio === -1) return undefined;
+  let fin = inicio + 1;
+  while (fin < lineas.length && !/^##/.test(lineas[fin]!) && cabeceraDeTarea(lineas[fin]!) === undefined) fin++;
+  const linea = `**Estado:** ${estado}`;
+  let puesta = false;
+  for (let i = inicio + 1; i < fin; i++) {
+    if (!puesta && ESTADO.test(lineas[i]!)) {
+      lineas[i] = linea;
+      puesta = true;
+    }
+    if (estado === "hecha" && CASILLA.test(lineas[i]!)) lineas[i] = lineas[i]!.replace(/\[ \]/, "[x]");
+  }
+  if (!puesta) lineas.splice(inicio + 1, 0, "", linea);
+  return lineas.join(saltos);
+}

@@ -16,6 +16,7 @@ import type { ConsumoDeTurno, ConsumoPorModelo } from "./actos.js";
 import { sumarPorModelo } from "./actos.js";
 import type { EstadoDeVerificador, VeredictoDeTarea } from "./entrega.js";
 import type { HallazgoDelTurno } from "./events.js";
+import type { EstadoJuzgado } from "./tareasDelPlan.js";
 import type { LineaDeDiff } from "./diff.js";
 import type { ConectorParaElAgente, ToolConEsquema } from "./conectores.js";
 import { buscarEnCatalogo, claveDeEstilo, type FamiliaDeFuente, type Peso } from "./fuentes.js";
@@ -534,7 +535,22 @@ export interface CasoDeJuez {
   /** Lo que dieron las comprobaciones VISUALES del turno, medido por el harness (`ResultadoDeTurno.comprobacionesVisuales`).
    *  Ausente = no hubo ninguna: y entonces «no consta» sí es la verdad. */
   comprobacionesVisuales?: readonly string[];
+  /**
+   * El PLAN de esta tarea, si tiene (`agent/tareas/planesDelProyecto.ts#planDeLaTarea`): su carpeta y sus tareas, con lo que
+   * ya dicen. Con él el juez dice qué tareas del plan cumplió (`DictamenDelJuez.tareasDelPlan`) y el harness lo escribe.
+   * Ausente = la tarea no va con ningún plan.
+   */
+  plan?: {
+    carpeta: string;
+    tareas: readonly { numero: string; titulo: string; estado?: string; criterios: { hechos: number; total: number } }[];
+  };
 }
+
+/**
+ * Lo que contesta el juez: el veredicto que se guarda, y —si el caso traía plan— el estado de cada tarea del plan que
+ * puede afirmar. Esa parte NO se guarda en la tarea: la escribe el harness en el `TASKS.md` y se tira.
+ */
+export type DictamenDelJuez = VeredictoDeTarea & { tareasDelPlan?: readonly { numero: string; estado: EstadoJuzgado }[] };
 
 /**
  * El juez de QA: una de las DOS piezas que ocupan el sitio que dejó el modal de aprobación
@@ -551,7 +567,7 @@ export interface CasoDeJuez {
  * existe para impedir. Que no se pueda usar es fallo del ENTORNO y se dice como tal.
  */
 export interface JuezDeTareaPort {
-  juzgar(caso: CasoDeJuez): Promise<VeredictoDeTarea>;
+  juzgar(caso: CasoDeJuez): Promise<DictamenDelJuez>;
 }
 
 /**

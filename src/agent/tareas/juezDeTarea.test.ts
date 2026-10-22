@@ -492,3 +492,47 @@ describe("el juez ve qué planes hay, sin su contenido", () => {
     expect(await prompt(mkdtempSync(join(tmpdir(), "juez-sin-planes-")))).toContain("No hay ningún plan en /planes/.");
   });
 });
+
+/** Con PLAN, el juez dice el estado de sus tareas; el harness solo se queda con lo que casa con el plan. */
+describe("el juez y el plan de la tarea", () => {
+  const plan = {
+    carpeta: "/planes/liquidaciones/",
+    tareas: [
+      { numero: "T1", titulo: "Sonda", criterios: { hechos: 0, total: 2 } },
+      { numero: "T2", titulo: "Lista", estado: "pendiente", criterios: { hechos: 0, total: 3 } },
+    ],
+  };
+
+  it("el prompt nombra el plan y sus tareas y pide `plan`; la respuesta se filtra a tareas que existen y a las tres palabras", async () => {
+    let prompt = "";
+    const juez = crearJuezDeTarea({
+      invocar: async (_p, texto) => {
+        prompt = texto;
+        return '{"veredicto":"rojo","resumen":"falta la lista","plan":[{"tarea":"T1","estado":"hecha"},{"tarea":"T2","estado":"Implementada"},{"tarea":"T9","estado":"hecha"},{"tarea":"T1","estado":"pendiente"},{"tarea":"T2","estado":"casi"}]}';
+      },
+      planes: () => [],
+    });
+    const v = await juez.juzgar({ encargo: "x", raiz: RAIZ, autorizadas: [], plan });
+    expect(prompt).toContain("EL PLAN DE ESTA TAREA: /planes/liquidaciones/");
+    expect(prompt).toContain("- T2 — Lista (estado: pendiente) · 0/3 criterios");
+    expect(v.tareasDelPlan).toEqual([
+      { numero: "T1", estado: "hecha" },
+      { numero: "T2", estado: "implementada" },
+    ]);
+    expect(v.veredicto).toBe("rojo");
+  });
+
+  it("sin plan en el caso, ni se pide ni se devuelve", async () => {
+    let prompt = "";
+    const juez = crearJuezDeTarea({
+      invocar: async (_p, texto) => {
+        prompt = texto;
+        return '{"veredicto":"verde","resumen":"bien","plan":[{"tarea":"T1","estado":"hecha"}]}';
+      },
+      planes: () => [],
+    });
+    const v = await juez.juzgar({ encargo: "x", raiz: RAIZ, autorizadas: [] });
+    expect(prompt).not.toContain("EL PLAN DE ESTA TAREA");
+    expect(v.tareasDelPlan).toBeUndefined();
+  });
+});

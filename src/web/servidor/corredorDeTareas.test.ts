@@ -9,7 +9,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
+import { lineaDelPlanCitado,
   AVISO_SIN_HILO_REANUDABLE,
   MOTIVO_CORTADA_POR_CIERRE,
   motivoDeCorteAMitad,
@@ -3551,5 +3551,53 @@ describe("el MOTOR cae a mitad del turno", () => {
     expect(estado()[0]!.motivo).toContain("ya se reanudó sola una vez");
     expect(juez.casos).toEqual([]);
     await corredor.parar();
+  });
+});
+
+/**
+ * Petición suya (21-10-2026): las tareas de fondo con plan actualizan su estado. Medido en Maset: seis tareas de una noche
+ * y sus planes con 0 casillas marcadas. Al cerrar, el juez dice el estado de las tareas del plan y el HARNESS lo escribe.
+ */
+describe("al cerrar, el plan de la tarea se actualiza con lo que dice el juez", () => {
+  it("el juez recibe el plan; su TASKS.md queda con el estado; la tarea guarda el veredicto de siempre", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "xc-plan-"));
+    const tasks = join(dir, "TASKS.md");
+    writeFileSync(tasks, ["# TASKS", "## T1 — Sonda", "- [ ] uno", "## T2 — Lista", "- [ ] dos"].join("\n"));
+    const casos: CasoDeJuez[] = [];
+    const juez: JuezDeTareaPort = {
+      juzgar: async (caso) => {
+        casos.push(caso);
+        return { veredicto: "verde", resumen: "hecho", tareasDelPlan: [{ numero: "T1", estado: "hecha" }, { numero: "T2", estado: "implementada" }] };
+      },
+    };
+    const { disco, estado } = discoDeMentira([TAREA()]);
+    const p = proyectoDeMentira();
+    const corredor = crearCorredorDeTareas({
+      ...ENTREGA_VERDE,
+      juez,
+      disco,
+      abrirParaTarea: p.abrir,
+      pid: 1,
+      concurrencia: () => 1,
+      planDeLaTarea: () => ({ carpeta: "/planes/liq/", tasks, texto: readFileSync(tasks, "utf8") }),
+    });
+    await corredor.arrancar();
+    await corredor.asentar();
+    p.acabar({ verificador: "verde", pendientes: 0 });
+    await corredor.asentar();
+    expect(casos[0]!.plan).toMatchObject({ carpeta: "/planes/liq/", tareas: [{ numero: "T1" }, { numero: "T2" }] });
+    const texto = readFileSync(tasks, "utf8");
+    expect(texto).toContain("## T1 — Sonda\n\n**Estado:** hecha\n- [x] uno");
+    expect(texto).toContain("**Estado:** implementada\n- [ ] dos");
+    expect(estado()[0]!.estado).toBe("terminada");
+    expect(estado()[0]!.veredicto).toEqual({ veredicto: "verde", resumen: "hecho" });
+    await corredor.parar();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("una tarea que CITA un plan recibe la línea de trabajar sobre él y no escribir otro", () => {
+    expect(lineaDelPlanCitado("sigue /planes/liq/ tareas T4-T5")).toContain("PLAN DE ESTA TAREA: /planes/liq/");
+    expect(lineaDelPlanCitado("sin plan")).toBeUndefined();
+    expect(lineaDelPlanCitado("/planes/a/ y /planes/b/")).toBeUndefined();
   });
 });

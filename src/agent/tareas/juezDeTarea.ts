@@ -22,7 +22,8 @@
  *    convertido en «verde» entregaría sin haber preguntado.
  */
 import { anotarError } from "../../core/trazaDeErrores.js";
-import type { CasoDeJuez, JuezDeTareaPort, ModelosPort, Papel } from "../../core/ports.js";
+import type { CasoDeJuez, DictamenDelJuez, JuezDeTareaPort, ModelosPort, Papel } from "../../core/ports.js";
+import type { EstadoJuzgado } from "../../core/tareasDelPlan.js";
 import { soloDocumentacion } from "../../core/entrega.js";
 import type { HallazgoDelTurno } from "../../core/events.js";
 import type { VeredictoDeTarea } from "../../core/entrega.js";
@@ -323,6 +324,26 @@ const parrafoDeLosPlanes = (planes: readonly PlanEnDisco[]): string[] => {
 };
 
 /**
+ * El PLAN de la tarea y qué se le pide sobre él: el estado de cada tarea del plan que esta tarea TOCÓ, con la misma
+ * vara que el veredicto. «hecha» solo con lo COMPROBADO (verificador, capturas, crítico); escrito sin comprobar es
+ * «implementada»; lo que no se tocó, no se nombra (el harness no cambia lo que el juez no nombre).
+ */
+const parrafoDelPlanDeLaTarea = (caso: CasoDeJuez): string[] =>
+  caso.plan === undefined
+    ? []
+    : [
+        `EL PLAN DE ESTA TAREA: ${caso.plan.carpeta}. Sus tareas, con lo que dicen ahora:`,
+        ...caso.plan.tareas.map(
+          (t) =>
+            `- ${t.numero} — ${t.titulo}${t.estado === undefined ? "" : ` (estado: ${t.estado})`}${t.criterios.total === 0 ? "" : ` · ${String(t.criterios.hechos)}/${String(t.criterios.total)} criterios`}`
+        ),
+        "Además del veredicto, di en `plan` el estado de cada tarea del plan que ESTE trabajo tocó: «hecha» solo si lo",
+        "COMPROBADO arriba (verificador, comprobaciones visuales) lo acredita; «implementada» si se escribió y no se comprobó",
+        "o no pasó; «pendiente» si no se hizo. Las que este trabajo no tocó, no las pongas. Lo que digas se escribe en el plan.",
+        "",
+      ];
+
+/**
  * El prompt del juez.
  *
  * Lleva el encargo, los ficheros que se autorizó escribir y el veredicto del verificador
@@ -345,6 +366,7 @@ function promptDelJuez(caso: CasoDeJuez, planes: readonly PlanEnDisco[]): string
     "",
     ...parrafoDeLosPlanes(planes),
     "",
+    ...parrafoDelPlanDeLaTarea(caso),
     ...parrafoDelVerificador(caso),
     "",
     ...parrafoDeLoVisual(caso),
@@ -365,7 +387,9 @@ function promptDelJuez(caso: CasoDeJuez, planes: readonly PlanEnDisco[]): string
     "existe para atrapar.",
     "",
     "Contesta SOLO con este JSON y nada más:",
-    '{"veredicto":"verde"|"rojo","resumen":"una o dos frases","hallazgos":["lo que falta, uno por entrada"]}',
+    caso.plan === undefined
+      ? '{"veredicto":"verde"|"rojo","resumen":"una o dos frases","hallazgos":["lo que falta, uno por entrada"]}'
+      : '{"veredicto":"verde"|"rojo","resumen":"una o dos frases","hallazgos":["lo que falta, uno por entrada"],"plan":[{"tarea":"T4","estado":"hecha"|"implementada"|"pendiente"}]}',
     "Cada hallazgo, UNA frase corta (menos de 200 caracteres): se lee en una tarjeta.",
     "«verde» = el encargo está cubierto. «rojo» = falta algo, o lo hecho no es lo que se pedía.",
     "Un aviso del verificador, o un defecto que ya estaba en el proyecto, no es motivo de «rojo»:",
@@ -446,6 +470,28 @@ export function veredictoDeTexto(texto: string): VeredictoDeTarea {
   return { veredicto: dicho, resumen, ...(hallazgos.length === 0 ? {} : { hallazgos }) };
 }
 
+const ESTADOS_JUZGADOS: readonly EstadoJuzgado[] = ["hecha", "implementada", "pendiente"];
+
+/**
+ * El estado de las tareas del plan que dice el juez, SOLO de las que existen en el plan y con una de las tres palabras.
+ * Lo demás se tira: el harness no escribe en el plan nada que no se pueda casar. Sin plan, o sin nada válido, `undefined`.
+ */
+export function tareasDelPlanDeTexto(texto: string, plan: CasoDeJuez["plan"]): DictamenDelJuez["tareasDelPlan"] {
+  if (plan === undefined) return undefined;
+  const lista = objetoDe(texto)?.plan;
+  if (!Array.isArray(lista)) return undefined;
+  const existen = new Set(plan.tareas.map((t) => t.numero));
+  const salida: { numero: string; estado: EstadoJuzgado }[] = [];
+  for (const x of lista) {
+    const o = x as { tarea?: unknown; estado?: unknown };
+    if (typeof o.tarea !== "string" || typeof o.estado !== "string") continue;
+    const estado = o.estado.trim().toLowerCase() as EstadoJuzgado;
+    if (!existen.has(o.tarea.trim()) || !ESTADOS_JUZGADOS.includes(estado)) continue;
+    if (!salida.some((s) => s.numero === o.tarea)) salida.push({ numero: o.tarea.trim(), estado });
+  }
+  return salida.length === 0 ? undefined : salida;
+}
+
 export function crearJuezDeTarea(opciones: {
   invocar: InvocarModelo;
   /** Qué planes hay. Por omisión el lector REAL: un opcional que nadie pasa es el patrón de fallo de este repo. */
@@ -465,7 +511,8 @@ export function crearJuezDeTarea(opciones: {
         if (error instanceof ErrorDelJuezDeTarea) throw error;
         throw new ErrorDelJuezDeTarea(error instanceof Error ? error.name : "error al preguntar");
       }
-      const veredicto = veredictoDeTexto(texto);
+      const veredicto: DictamenDelJuez = veredictoDeTexto(texto);
+      const delPlan = tareasDelPlanDeTexto(texto, caso.plan);
       /**
        * Una respuesta sin el JSON pedido se APUNTA, recortada: medido en una tarea real (Maset), la tarjeta decía «el juez
        * no contestó con el JSON que se le pidió» y no había forma de saber qué contestó. Va al registro de errores (la
@@ -480,7 +527,7 @@ export function crearJuezDeTarea(opciones: {
           })
         );
       }
-      return veredicto;
+      return delPlan === undefined ? veredicto : { ...veredicto, tareasDelPlan: delPlan };
     },
   };
 }
