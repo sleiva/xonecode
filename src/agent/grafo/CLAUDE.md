@@ -33,7 +33,9 @@ Y las guardas del proyecto:
   dentro de `sinContenidoInvalido` y de `enSerie`. **El ANTES de la tarjeta se decodifica igual**
   (`decodificarComoTexto`, ambos motores y externos). **Límites**: `grep`/`glob`/`xone_navegacion` en
   UTF-8; los motores externos escriben con sus tools. **Claude Code solo escribe UTF-8**: el HIJO
-  convierte con `xone-a-utf8` (`comandoExterno.ts#TEXTO_DE_A_UTF8`, solo si el script es suyo).
+  convierte con `xone-a-utf8` (`comandoExterno.ts#TEXTO_DE_A_UTF8`, solo si el script es suyo). **TrueForge convierte
+  él**: con `aUtf8` (`backendDeAgente`), un `.xne` de 8 bits que el agente escribe pasa a UTF-8 con su prólogo
+  (`conPrologoUtf8`), en el mismo commit; Claude Code, Codex y OpenCode siguen como estaban.
 - **Un rechazo de guarda se DEVUELVE como `{error}`, nunca se lanza** (`sinVistasAplanadas`,
   `sinArtefactosEnElProyecto`, `sinDescargasEnElProyecto`; `proyecto.test.ts` contra la librería real).
 - **Dos escrituras al MISMO fichero no se solapan** (`core/serieDeEscrituras.ts`,

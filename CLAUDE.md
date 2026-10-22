@@ -143,7 +143,8 @@ Una línea cada uno; el detalle, en el `CLAUDE.md` de su carpeta (tabla de abajo
   a mano. Y un motor EXTERNO escribe al disco directo: las guardas de ruta se reaplican dos veces
   (texto y `realpath`), y lo que no se puede comprobar se deniega.
 - **Los `.xne` se leen y escriben en la codificación que ya tenían o que declaran**
-  (`core/codificacion.ts`): un Latin-1 sigue en su tabla de 8 bits, nunca se convierte por omisión.
+  (`core/codificacion.ts`): un Latin-1 sigue en su tabla de 8 bits, nunca se convierte por omisión. La
+  excepción es TrueForge: un `.xne` de 8 bits que su agente ESCRIBE queda en UTF-8 (`aUtf8`); el que solo lee, no.
 - **deepagents es LEGACY**: lo nuevo va solo a TrueForge, y la elección del motor vive en UN punto
   (`abrirSesionReal`).
 - **Ninguna ruta de la máquina ni ningún secreto viajan por el cable** salvo las excepciones

@@ -39,6 +39,7 @@ import { normalizeReadPagination } from "deepagents";
 import {
   codificacionParaEscribir,
   codificar8Bits,
+  conPrologoUtf8,
   decodificar8Bits,
   esUtf8Valido,
   nombreDeTabla,
@@ -72,7 +73,18 @@ interface FicheroDe8Bits {
   mimeType: unknown;
 }
 
-export function conCodificacionDelFichero<T extends object>(backend: T): T {
+export function conCodificacionDelFichero<T extends object>(
+  backend: T,
+  /**
+   * `aUtf8`: un `.xne` de 8 bits que se ESCRIBE queda en UTF-8, con su prólogo diciéndolo (`conPrologoUtf8`). Solo lo pide
+   * TrueForge (decisión suya): se convierten los ficheros que una tarea cambia, no el proyecto entero, y la conversión va
+   * en el mismo commit que el cambio. Lo que solo se lee no se toca. Sin la opción, la regla de siempre: cada fichero en
+   * la codificación que ya tenía.
+   */
+  opciones: { aUtf8?: boolean } = {}
+): T {
+  /** ¿Este fichero se pasa a UTF-8 al escribirlo? Solo un `.xne`, y solo con la opción. */
+  const pasaAUtf8 = (ruta: string): boolean => opciones.aUtf8 === true && /\.xne$/i.test(ruta);
   const original = (prop: string): Metodo => {
     const m = Reflect.get(backend, prop, backend) as Metodo;
     return m.bind(backend);
@@ -163,9 +175,9 @@ export function conCodificacionDelFichero<T extends object>(backend: T): T {
    * Codifica con `tabla` y escribe como la librería (`O_TRUNC` sin seguir enlaces; uno nuevo con su
    * carpeta y su modo), o devuelve el motivo sin tocar el disco.
    */
-  async function escribir(real: string, ruta: string, texto: string, tabla: Tabla8Bits, nuevo: boolean): Promise<{ error: string } | undefined> {
-    const r = codificar8Bits(texto, tabla);
-    if (!("bytes" in r)) return { error: motivoDeNoRepresentable(ruta, r.caracter, r.linea, tabla) };
+  async function escribir(real: string, ruta: string, texto: string, tabla: Tabla8Bits | "utf-8", nuevo: boolean): Promise<{ error: string } | undefined> {
+    const r = tabla === "utf-8" ? { bytes: Buffer.from(texto, "utf8") } : codificar8Bits(texto, tabla);
+    if (!("bytes" in r)) return { error: motivoDeNoRepresentable(ruta, r.caracter, r.linea, tabla as Tabla8Bits) };
     if (nuevo) await mkdir(dirname(real), { recursive: true });
     const banderas = constants.O_WRONLY | constants.O_TRUNC | SIN_SEGUIR_ENLACES | (nuevo ? constants.O_CREAT : 0);
     const fh = await open(real, banderas, MODO_DE_FICHERO_NUEVO);
@@ -198,6 +210,17 @@ export function conCodificacionDelFichero<T extends object>(backend: T): T {
       if (i.tipo === "existe" && !i.utf8 && (await sondaDeTexto(ruta as string)) === undefined) {
         return original("write")(ruta, contenido);
       }
+      if (pasaAUtf8(ruta as string)) {
+        // A UTF-8 lo que estaba en 8 bits o lo que declara una tabla de 8 bits (una colección nueva con la plantilla).
+        const texto = conPrologoUtf8(contenido);
+        if (texto === contenido && (i.tipo !== "existe" || i.utf8)) return original("write")(ruta, contenido);
+        try {
+          const fallo = await escribir(i.real, ruta as string, texto, "utf-8", i.tipo === "nuevo");
+          return fallo ?? { path: ruta, filesUpdate: null };
+        } catch (e) {
+          return { error: `Error writing file '${String(ruta)}': ${codigoDe(e)}` };
+        }
+      }
       const destino = codificacionParaEscribir(i.tipo === "existe" ? i.bytes : undefined, contenido);
       if (destino === "utf-8") return original("write")(ruta, contenido);
       try {
@@ -224,6 +247,14 @@ export function conCodificacionDelFichero<T extends object>(backend: T): T {
       }
       const r = reemplazar(texto, viejo, nuevo, todas === true);
       if (typeof r === "string") return { error: r };
+      if (pasaAUtf8(ruta as string) && (!i.utf8 || conPrologoUtf8(r[0]) !== r[0])) {
+        try {
+          const fallo = await escribir(i.real, ruta as string, conPrologoUtf8(r[0]), "utf-8", false);
+          return fallo ?? { path: ruta, filesUpdate: null, occurrences: r[1] };
+        } catch (e) {
+          return { error: `Error editing file '${String(ruta)}': ${codigoDe(e)}` };
+        }
+      }
       const destino = codificacionParaEscribir(i.bytes, r[0]);
       if (destino === "utf-8") return delegar();
       try {

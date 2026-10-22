@@ -593,6 +593,8 @@ export function backendDeAgente(opciones: {
    * la guarda desde fuera sin un parser delante; en producción es `validarConXoneLinter()`.
    */
   validar?: ValidarContenido;
+  /** Un `.xne` de 8 bits que se escribe queda en UTF-8 (`conCodificacionDelFichero`). Solo TrueForge lo pide. */
+  aUtf8?: boolean;
 }): FilesystemBackend {
   const base =
     opciones.ejecucion === undefined
@@ -622,7 +624,7 @@ export function backendDeAgente(opciones: {
         // La codificación, la MÁS interna de todas, pegada a quien toca bytes: un `.xne` Latin-1 se
         // lee y se escribe en Latin-1 (`codificacionDelProyecto.ts`), y `sinContenidoInvalido`
         // valida el texto bien decodificado. Sigue DENTRO de `enSerie`, que va por fuera de todo.
-        sinContenidoInvalido(exponerMemoriaDeProyecto(conCodificacionDelFichero(base)), opciones.validar ?? validarConXoneLinter()),
+        sinContenidoInvalido(exponerMemoriaDeProyecto(conCodificacionDelFichero(base, { aUtf8: opciones.aUtf8 === true })), opciones.validar ?? validarConXoneLinter()),
         opciones.ficheros
       )
     )

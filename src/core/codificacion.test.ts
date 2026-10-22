@@ -7,8 +7,7 @@ import {
   decodificar8Bits,
   decodificarComoTexto,
   esUtf8Valido,
-  tablaDeLosBytes,
-} from "./codificacion.js";
+  tablaDeLosBytes, conPrologoUtf8 } from "./codificacion.js";
 
 const ascii = (t: string): number[] => Array.from(new TextEncoder().encode(t));
 
@@ -126,5 +125,15 @@ describe("decodificarParche: un diff de git, línea a línea", () => {
 
   it("con ISO-8859-15 el € está en 0xA4", () => {
     expect(decodificarParche(new Uint8Array([0x2b, 0xa4]), "iso-8859-15")).toBe("+€");
+  });
+});
+
+describe("conPrologoUtf8", () => {
+  it("cambia una declaración de 8 bits a UTF-8 y deja lo demás como estaba", () => {
+    expect(conPrologoUtf8('<?xml version="1.0" encoding="iso-8859-15"?>\n<coll/>')).toBe('<?xml version="1.0" encoding="UTF-8"?>\n<coll/>');
+    expect(conPrologoUtf8("<?xml version='1.0' encoding='windows-1252'?><a/>")).toBe("<?xml version='1.0' encoding='UTF-8'?><a/>");
+    const utf = '<?xml version="1.0" encoding="UTF-8"?><a/>';
+    expect(conPrologoUtf8(utf)).toBe(utf);
+    expect(conPrologoUtf8("<coll/>")).toBe("<coll/>");
   });
 });

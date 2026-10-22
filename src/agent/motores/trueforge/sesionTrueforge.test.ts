@@ -164,7 +164,7 @@ describe("una sesión con el motor TrueForge", () => {
     expect(s.consumo().contexto).toBe(70);
   }, 20_000);
 
-  it("un .xne Latin-1: el hijo lo edita por un ancla CON tilde, la tarjeta enseña el diff real y el disco sigue en windows-1252", async () => {
+  it("un .xne Latin-1: el hijo lo edita por un ancla CON tilde, la tarjeta enseña el diff real y el disco queda en UTF-8", async () => {
     // De punta a punta por la composición de producción: el backend lee el Latin-1 con sus tildes,
     // la tarjeta de aprobación lee el ANTES con la misma codificación, y la escritura vuelve en
     // windows-1252. Con el ANTES en UTF-8, el ancla «Tamaño» no calzaba y la tarjeta enseñaba solo
@@ -193,7 +193,8 @@ describe("una sesión con el motor TrueForge", () => {
       { tipo: "igual", texto: '<prop name="uno"/>' },
       { tipo: "igual", texto: "</coll>" },
     ]);
-    expect(readFileSync(join(raiz, "Datos.xne")).equals(enLatin1('<coll name="Año" title="€">\n<prop name="uno"/>\n</coll>\n'))).toBe(true);
+    // TrueForge escribe el .xne en UTF-8 (`aUtf8`, decisión suya): las tildes y el € siguen, ahora en UTF-8.
+    expect(readFileSync(join(raiz, "Datos.xne"), "utf8")).toBe('<coll name="Año" title="€">\n<prop name="uno"/>\n</coll>\n');
   }, 20_000);
 
   it("al terminar el hijo, el ORQUESTADOR recibe lo que escribió contado por el harness, no solo su informe", async () => {

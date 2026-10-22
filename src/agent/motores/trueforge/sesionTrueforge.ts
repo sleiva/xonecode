@@ -1077,6 +1077,8 @@ export async function abrirSesionTrueforge(
         : { artefactos: { carpeta: opciones.artefactos, alEscribir: anotarArtefacto } }),
       ...(opciones.adjuntos === undefined ? {} : { adjuntos: opciones.adjuntos }),
       ...(ejecucion === undefined ? {} : { ejecucion }),
+      // Decisión suya: un `.xne` de 8 bits que el agente escribe queda en UTF-8, en el mismo commit del cambio.
+      aUtf8: true,
     });
   const backend = montarBackend() as unknown as BackendDeFicheros;
 

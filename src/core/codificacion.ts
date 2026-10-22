@@ -96,6 +96,17 @@ export function codificacionDeclarada(cabeza: string): CodificacionDeEscritura |
   return undefined;
 }
 
+/**
+ * El texto con su prólogo diciendo UTF-8, si declaraba una tabla de 8 bits; si no, el mismo. Para quien convierte un
+ * `.xne` al escribirlo (`codificacionDelProyecto.ts`, `aUtf8`): el contenido va en UTF-8 y el prólogo tiene que decirlo,
+ * o la próxima lectura lo decodificaría con la tabla vieja.
+ */
+export function conPrologoUtf8(texto: string): string {
+  const declarada = codificacionDeclarada(texto);
+  if (declarada === undefined || declarada === "utf-8") return texto;
+  return texto.replace(/^(\uFEFF?\s*<\?xml[^?]*?encoding\s*=\s*["'])([^"']+)(["'])/i, "$1UTF-8$3");
+}
+
 /** La tabla de 8 bits de unos bytes que NO son UTF-8: la que declare su prólogo, o windows-1252. */
 export function tablaDeLosBytes(bytes: Uint8Array): Tabla8Bits {
   // La cabeza se mira byte a byte (como `latin1`): el prólogo es ASCII en cualquier tabla.

@@ -9807,3 +9807,17 @@ El juez dio rojo por «estructura distinta» y «bordes fuera de tolerancia» me
   línea, que es la que llega al juez.
 - El juez no cuenta lo medido contra una maqueta con aviso, y lo dice como observación para quien hizo la maqueta.
 - Comprobado sobre las maquetas y capturas de Maset de las simulaciones: solo la del menú da franja.
+
+## TrueForge escribe los .xne en UTF-8 (22-10-2026)
+
+Decisión suya. Hasta ahora todo `.xne` se escribía en la codificación que ya tenía (Latin-1 de CloudStudio), y solo el
+hijo de Claude Code convertía con `xone-a-utf8`. Ahora, en TrueForge, el harness convierte de forma determinista: un
+`.xne` de 8 bits que el agente ESCRIBE (`write`/`edit`) queda en UTF-8 con el prólogo diciéndolo (`conPrologoUtf8`).
+
+- Solo los que se escriben, no el proyecto entero: convertir todo al bajar obligaba a subir todos los ficheros a
+  CloudStudio aunque nadie los hubiera tocado. Los que cambian se suben igual, y ya en UTF-8 (Studio guarda en la
+  codificación que declara el prólogo).
+- La conversión va en el mismo commit que el cambio. En git cambian solo las líneas con caracteres no ASCII y el
+  prólogo; en la Revisión, que decodifica cada lado con su tabla, solo el prólogo.
+- Un `.css`/`.js` de 8 bits sigue en su tabla. Claude Code, Codex y OpenCode, como estaban. El desarrollador de
+  TrueForge ya no ve `xone-a-utf8` (`scriptsDeTrueforge`).

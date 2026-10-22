@@ -194,3 +194,43 @@ describe("motivoDeNoRepresentable", () => {
     expect(motivoDeNoRepresentable("/estilos.css", "Ω", 1)).toContain("\\3A9");
   });
 });
+
+/**
+ * Con `aUtf8` (TrueForge, decisión suya): el `.xne` de 8 bits que se ESCRIBE queda en UTF-8 con el prólogo diciéndolo, en
+ * el mismo cambio; lo que solo se lee no se toca, y un fichero que no es `.xne` sigue en su tabla.
+ */
+describe("backendDeAgente con aUtf8: un .xne Latin-1 que se escribe queda en UTF-8", () => {
+  function proyecto() {
+    const raiz = mkdtempSync(join(tmpdir(), "xonecode-autf8-"));
+    writeFileSync(join(raiz, "Datos.xne"), enLatin1(TEXTO));
+    writeFileSync(join(raiz, "estilo.css"), enLatin1("/* Tamaño */\n.a { bgcolor: #FFFFFF; }\n"));
+    const backend = backendDeAgente({ raiz, ficheros: new Set(["/Datos.xne", "/estilo.css"]), aUtf8: true }) as unknown as Backend;
+    return { raiz, backend };
+  }
+
+  it("leer no convierte nada", async () => {
+    const { raiz, backend } = proyecto();
+    await backend.read("/Datos.xne");
+    expect(readFileSync(join(raiz, "Datos.xne")).equals(enLatin1(TEXTO))).toBe(true);
+  });
+
+  it("un edit lo deja en UTF-8, con las tildes y el prólogo en UTF-8", async () => {
+    const { raiz, backend } = proyecto();
+    const r = await backend.edit("/Datos.xne", '<prop name="uno"/>', '<prop name="dos"/>');
+    expect(r).not.toHaveProperty("error");
+    const bytes = readFileSync(join(raiz, "Datos.xne"));
+    const texto = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    expect(texto).toContain('encoding="UTF-8"');
+    expect(texto).toContain('<coll name="Tamaño" title="acción €">');
+    expect(texto).toContain('<prop name="dos"/>');
+  });
+
+  it("un write también, y un .css de 8 bits sigue en su tabla", async () => {
+    const { raiz, backend } = proyecto();
+    expect(await backend.write("/Datos.xne", TEXTO.replace("uno", "tres"))).not.toHaveProperty("error");
+    expect(new TextDecoder("utf-8", { fatal: true }).decode(readFileSync(join(raiz, "Datos.xne")))).toContain('encoding="UTF-8"');
+    await backend.edit("/estilo.css", "#FFFFFF", "#000000");
+    const css = readFileSync(join(raiz, "estilo.css"));
+    expect(css.includes(Buffer.from([0xf1]))).toBe(true);
+  });
+});
