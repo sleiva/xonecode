@@ -228,6 +228,19 @@ describe("lo MENOR no pone el rojo", () => {
     expect([...otroColor.diferencias, ...(otroColor.menores ?? [])].join("\n")).toContain("color del texto");
   });
 
+  it("un DATO DE EJEMPLO de la maqueta no falta: con otro valor es una nota, y sin él se dice sin rojo", () => {
+    // Medido en Maset (liquidaciones): «3 Liquidaciones» de la maqueta frente a «5 Liquidaciones» del aparato era un «falta».
+    const en = (texto: string, x: number, y: number): ControlVisto => ({ ...medido(texto, "redondeada", 2.5, 0.3), centro: { x, y } });
+    const maqueta: PantallaDescrita = { filas: [{ controles: [en("RECAUDACIÓN ACUMULADA", 0.3, 0.2), en("3 Liquidaciones", 0.8, 0.2)] }], extras: [] };
+    const otroValor = compararDescripciones(maqueta, { filas: [{ controles: [en("RECAUDACIÓN ACUMULADA", 0.3, 0.2)] }, { controles: [en("5 Liquidaciones", 0.2, 0.9)] }], extras: [] });
+    expect(otroValor.faltan).toEqual([]);
+    expect(otroValor.notas?.join("\n")).toContain("dato de ejemplo con otro valor");
+    const sinEl = compararDescripciones(maqueta, { filas: [{ controles: [en("RECAUDACIÓN ACUMULADA", 0.3, 0.2)] }], extras: [] });
+    expect(sinEl.faltan).toEqual([]);
+    expect(hayQueArreglar(sinEl)).toBe(false);
+    expect(sinEl.diferencias.join("\n")).toContain("dato de ejemplo de la maqueta y no está");
+  });
+
   it("una cifra no es la traducción de una palabra: «19» no empareja con «COPY»", () => {
     const c = compararDescripciones(
       { filas: [{ controles: [medido("COPY", "redondeada", 2.5, 0.3), medido("7", "redondeada", 1.2, 0.3)] }], extras: [] },

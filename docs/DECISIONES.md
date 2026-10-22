@@ -9776,3 +9776,22 @@ juez venían de datos de ejemplo de la maqueta y de su ESTADO (maqueta llena, ca
   el developer lleva `scripts`.
 - El juez no exige los datos ni el estado en que está dibujada la maqueta; cuenta que el sitio exista.
 - Sin medir todavía en una tarea real.
+
+## La crítica no veía lo que SOBRA (22-10-2026)
+
+Medido en una simulación de la tarea de Liquidaciones de Maset: la app pintaba un recuadro oscuro alrededor de cada fila
+de la lista —el borde de celda por omisión de XOne, que se quita con `cell-border-color="#00000000"` y NO con
+`cell-border-width="0"`, medido en el emulador— y no lo vio la crítica, ni el desarrollador, ni el juez. A la vez, la
+crítica ponía rojo por «3 Liquidaciones» de la maqueta frente a «5 Liquidaciones» del aparato.
+
+- La causa del primero estaba en el método: clasificaba «una sombra cambiada por un borde fino» como detalle, y no pedía
+  buscar los sobrantes a propósito. Con el método nuevo (zonas, una fila con lupa, sobrantes buscados, un borde que la
+  maqueta no tiene es diseño) el MISMO modelo (DeepSeek flash) lo vio 3 de 3 y 0 de 3 en la captura sin borde, y vio
+  además el título y el chevron que faltaban.
+- Primera versión demasiado estricta: el Login que anoche era verde salió rojo por el contorno tenue de «Salir» (que la
+  maqueta también tiene) y un rojo más apagado. Con «mira el mismo elemento en la maqueta con lupa» y «otro tono del
+  mismo color es detalle», verde 2 de 2, y las tres pantallas rojas siguieron rojas por lo que tocaba.
+- Se probó también un detector de líneas finas en los píxeles (determinista): veía el recuadro, pero también el contorno
+  de una píldora de cabecera, y el modelo con el método nuevo ya lo veía. Descartado.
+- El segundo, en `descripcionDePantalla.ts`: la regla del dato de ejemplo (`pareceDatoDeEjemplo`) solo estaba en la
+  comparación geométrica; ahora el mismo texto con otras cifras es una nota, y sin él, una diferencia sin rojo.

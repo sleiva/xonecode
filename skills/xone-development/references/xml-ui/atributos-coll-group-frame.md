@@ -50,8 +50,8 @@ Define una tabla de datos (mapeada a SQL) o una pantalla de UI. Es el nodo raiz 
 | `cell-bgcolor_out` | color | heredado | Color de fondo fuera del viewport. |
 | `cell-forecolor` | color | heredado | Color de texto de celda. |
 | `cell-forecolor_out` | color | heredado | Color texto fuera del viewport. |
-| `cell-border-color` | color | — | Color del borde de celda. |
-| `cell-border-width` | medida | `0` | Grosor del borde de celda. |
+| `cell-border-color` | color | — | Color del borde de celda. **Medido en Android: una lista pinta un recuadro oscuro alrededor de cada celda si no se pone; se quita con `cell-border-color="#00000000"`.** |
+| `cell-border-width` | medida | — | Grosor del borde de celda. **Medido: `cell-border-width="0"` NO quita el borde por omisión de una lista**; quita el color. |
 | `cell-even-color` | color | — | Color para filas pares (zebra). |
 | `cell-odd-color` | color | — | Color para filas impares (zebra). |
 | `cell-selected-bgcolor` | color | — | Fondo de celda seleccionada. |

@@ -133,7 +133,9 @@ Todas **reaplican `puedeLeerRuta` a mano** (una tool de xonecode no pasa por el 
   RESUMEN contado de su propio cuerpo** (`resumenDelInforme`): es lo que lee el juez. **Con maqueta, el veredicto
   responde a «¿respeta el diseño?»**: rojo solo por un bloqueante medido, un texto que falta o recortado, o una
   diferencia de DISEÑO que vieron las DOS miradas (`confirmadas`); el resto son DETALLES y no ponen rojo. La frontera,
-  en el método (forma de CATEGORÍA, color de lo IMPORTANTE, disposición; el GRADO es detalle). **Lo medido del ESTILO no
+  en el método (forma de CATEGORÍA, color de lo IMPORTANTE, disposición, un BORDE que la maqueta no tiene; el GRADO y el
+  tono son detalle), que busca los SOBRANTES a propósito. Un dato de ejemplo con otras cifras no FALTA (`pareceDatoDeEjemplo`,
+  también en la comparación descrita). **Lo medido del ESTILO no
   pone rojo** (`hayQueArreglar`: falsos positivos medidos), y un texto que EMPIEZA donde otro de la maqueta es «otro
   texto en su sitio», no un bloqueante. **Sin `referencia` y con maqueta en la sesión, compara contra la más parecida**
   (`maquetaDeLaSesion`, la misma elección que la medida automática) y lo dice: un verde sin comparar no es «respeta». Recorte solo sin fondo propio. Informe en `.critica.txt`; un

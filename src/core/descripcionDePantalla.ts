@@ -21,7 +21,7 @@
  * Las filas descritas de una maqueta sin `code.html` se comparan además contra el árbol medido
  * (`compararConMaqueta` en modo `aproximada`, vía `maquetaDeLaDescripcion`).
  */
-import { contieneTexto, tieneLetras, textoParaEmparejar, textoVisible, type ControlDelAparato, type GeometriaDelAparato, type MaquetaMedida } from "./geometriaDePantalla.js";
+import { contieneTexto, pareceDatoDeEjemplo, tieneLetras, textoParaEmparejar, textoVisible, type ControlDelAparato, type GeometriaDelAparato, type MaquetaMedida } from "./geometriaDePantalla.js";
 
 export const FORMAS = ["pildora", "redondeada", "recta", "circulo"] as const;
 export const LETRAS = ["pequena", "normal", "grande", "enorme"] as const;
@@ -282,6 +282,8 @@ function formaVecina(m: ControlVisto, a: ControlVisto): boolean {
 
 /** El texto de un control en un hallazgo, como se VE: sin el nombre de la ligadura de su icono. */
 const nombrar = (c: ControlVisto): string => `«${textoVisible(c.texto)}»`;
+/** El texto sin sus cifras: «3 Liquidaciones» y «5 Liquidaciones» son el mismo dato con otro valor. */
+const sinCifras = (texto: string | undefined): string => textoVisible(texto ?? "").replace(/\d+(?:[.,]\d+)*/g, "#").replace(/\s+/g, " ").trim().toLowerCase();
 
 /**
  * La comparación, control a control y con la misma frase siempre. Se empareja por TEXTO en orden de lectura
@@ -369,7 +371,14 @@ export function compararDescripciones(maqueta: PantallaDescrita, captura: Pantal
       if (filasConPareja.has(fila) && clave(m) !== ICONO && tieneLetras(clave(m))) {
         // Dentro de otro texto de la captura no falta (`contieneTexto`): la app lo escribe junto en un control.
         const dentro = as.find(({ c: a }) => clave(a) !== ICONO && contieneTexto(a.texto, m.texto));
-        if (dentro === undefined) faltan.push(nombrar(m));
+        // Un DATO DE EJEMPLO de la maqueta («3 Liquidaciones», un código) no se exige: lo mismo que en la geometría
+        // (`pareceDatoDeEjemplo`). Si en la captura hay el mismo texto con otras cifras, está; si no, se dice sin rojo.
+        // Medido en Maset: «3 Liquidaciones» de la maqueta frente a «5 Liquidaciones» del aparato era un «falta» y un rojo.
+        if (dentro === undefined && pareceDatoDeEjemplo(textoVisible(m.texto))) {
+          const otroValor = as.find(({ c: a }) => clave(a) !== ICONO && sinCifras(a.texto) === sinCifras(m.texto));
+          if (otroValor !== undefined) notas.push(`${nombrar(otroValor.c)} donde la maqueta dice ${nombrar(m)}: es un dato de ejemplo con otro valor. No falta.`);
+          else anotar("es un dato de ejemplo de la maqueta y no está en la captura: su valor no se exige, su sitio sí (compruébalo)", m);
+        } else if (dentro === undefined) faltan.push(nombrar(m));
         else notas.push(`${nombrar(m)} va dentro de ${nombrar(dentro.c)} en la captura: en la maqueta separado, aquí en un solo texto. No falta.`);
       }
       return;

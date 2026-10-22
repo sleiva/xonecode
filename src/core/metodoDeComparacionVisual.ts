@@ -10,10 +10,11 @@
  */
 export const METODO_DE_COMPARACION_VISUAL = [
   "Hazlo con este método, sin saltarte pasos:",
-  "1. INVENTARIO. Recorre la MAQUETA de arriba abajo y apunta cada elemento visible: la cabecera y el logo, las franjas,",
+  "1. INVENTARIO. Recorre la MAQUETA de arriba abajo, por zonas —barra superior (título, botones), cabecera o franja,",
+  "   bloques o tarjetas de resumen, la lista o el formulario, botones y pie— y apunta cada elemento visible: el logo,",
   "   los títulos, cada tarjeta o fila y, DENTRO de cada una, cada pieza por separado (icono, título, subtítulo, número o",
-  "   contador, su etiqueta, píldora, flecha), los botones y el pie. No resumas: una tarjeta con cinco piezas son cinco",
-  "   elementos.",
+  "   contador, su etiqueta, píldora, flecha). No resumas: una tarjeta con cinco piezas son cinco elementos. De una lista,",
+  "   mira UNA fila con lupa y luego si las demás son iguales.",
   "2. COMPARACIÓN. Para CADA elemento del inventario, búscalo en la CAPTURA y compáralo en este orden:",
   "   - ¿Está? Si falta entero, o falta una parte (un número, una píldora, un icono), es una diferencia.",
   "   - TEXTO: ¿dice lo mismo?",
@@ -23,7 +24,12 @@ export const METODO_DE_COMPARACION_VISUAL = [
   "   - TAMAÑO, frente a la pantalla y frente a sus vecinos: más grande o más pequeño, más alto, más compacto o con más aire.",
   "   - FORMA: esquinas, bordes, SOMBRAS, si es píldora o rectángulo, la separación entre un icono y su texto.",
   "   - COLOR y LETRA: color, grosor, tamaño de la letra y espacio entre letras.",
-  "3. SOBRANTES. Recorre después la CAPTURA y di lo que está en ella y NO en la maqueta.",
+  // Medido en Maset (liquidaciones): la app pintaba un recuadro oscuro alrededor de cada fila de la lista —el borde de
+  // celda por omisión de XOne— y no lo vio ninguna crítica; pidiéndolo a propósito, el mismo modelo lo vio tres de tres.
+  "3. SOBRANTES. Recorre después la CAPTURA y di lo que está en ella y NO en la maqueta. Busca a propósito lo que más se",
+  "   escapa: líneas, recuadros, bordes, marcos, separadores, sombras, fondos o cajas que la maqueta no tiene. Mira el",
+  "   contorno de cada tarjeta y de cada fila, el hueco entre filas y lo que rodea cada valor. Antes de decir que un borde",
+  "   SOBRA, mira el MISMO elemento en la maqueta con lupa: si allí tiene contorno, aunque sea tenue, no sobra.",
   "",
   // Medido en Maset (login): la crítica pedía la versión «5.0.6.1dev» de la maqueta donde la app pinta la real, y los
   // puntos de una contraseña en un campo que la app abre vacío. Los VALORES son de muestra; su sitio y su estilo, no.
@@ -33,7 +39,7 @@ export const METODO_DE_COMPARACION_VISUAL = [
   // Medido en Maset (liquidaciones): «en la captura hay 5 filas y en la maqueta 3, y la fila con «1 albarán» usa el singular».
   "Tampoco CUÁNTAS filas tiene una lista (la maqueta pinta unas pocas de muestra y la app, las reales), ni un singular",
   "o un plural que cambia con ese valor: de una lista se compara cómo es UNA fila y cómo se colocan.",
-  "Pero que su SITIO esté vacío, o que en su lugar haya otra cosa, sí es una diferencia. Ignora la barra de estado del teléfono (hora, batería),",
+  "Pero que su SITIO esté vacío, o que en su lugar haya otra cosa, sí es una diferencia. Ignora las barras del teléfono (la de estado, con hora y batería, y la de navegación),",
   // Medido en Maset (Entradas/Salidas): «junto a Volver no aparece el 09:41 de la maqueta», y era el reloj de la barra
   // que Stitch dibuja arriba de cada maqueta.
   "también la que la MAQUETA dibuja arriba: su hora («09:41») no es un dato de la pantalla y no falta.",
@@ -44,13 +50,15 @@ export const METODO_DE_COMPARACION_VISUAL = [
   "4. CLASIFICA cada diferencia en DISEÑO o DETALLE.",
   // Validado contra el ojo con cinco pantallas de Maset: el modelo llamaba diseño a «más redondeada», «borde en vez de
   // sombra» o «otra tipografía», y daba rojo a pantallas que respetaban el diseño. La FORMA es de categoría; el grado, no.
-  "   - DISEÑO es lo que cambia cómo se ve la pantalla a primera vista: falta o sobra una pieza; otra FORMA de",
+  "   - DISEÑO es lo que cambia cómo se ve la pantalla a primera vista: falta o sobra una pieza; un BORDE, recuadro,",
+  "     marco o caja que la maqueta no tiene (alrededor de una fila, de un valor, de un bloque que allí va sin él); otra FORMA de",
   "     categoría (esquinas rectas donde la maqueta las redondea o al revés, un elemento PLANO —sin sombra ni borde—",
   "     donde la maqueta tiene una tarjeta, una píldora donde hay un rectángulo); otro color de un texto IMPORTANTE",
   "     (un título, el importe principal, el texto de un botón, una cabecera), de un fondo o de un botón; otra",
   "     DISPOSICIÓN (algo en otro sitio o en otro orden).",
-  "   - DETALLE es el GRADO de lo que ya está: un radio algo mayor o menor, una sombra cambiada por un borde fino, unos",
-  "     píxeles de tamaño, de alto, de margen o de separación, otra tipografía o grosor, el espacio entre letras, un",
+  "   - DETALLE es el GRADO de lo que ya está: un radio algo mayor o menor, una sombra cambiada por un borde fino en la MISMA tarjeta, unos",
+  "     píxeles de tamaño, de alto, de margen o de separación, un TONO más claro u oscuro del mismo color (un rojo más",
+  "     apagado donde la maqueta pone rojo; gris donde pone rojo sí es otro color), otra tipografía o grosor, el espacio entre letras, un",
   "     icono macizo donde la maqueta lo dibuja de contorno, un texto en una línea donde la maqueta lo parte en dos, y la",
   "     letra o el color de un texto secundario (una etiqueta pequeña, un valor del pie).",
   "   - Lo que viene de los DATOS no es ni lo uno ni lo otro: no lo digas.",

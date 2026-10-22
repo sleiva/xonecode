@@ -44,6 +44,9 @@ describe("la frontera entre diseño y detalle", () => {
     expect(METODO_DE_COMPARACION_VISUAL).toMatch(/un radio algo mayor o menor, una sombra cambiada por un borde fino/);
     // Petición suya: una etiqueta importante con otro color es diseño; un texto secundario, detalle.
     expect(METODO_DE_COMPARACION_VISUAL).toMatch(/color de un texto IMPORTANTE/);
+    // Un borde que SOBRA es diseño, y se busca a propósito (medido en Maset: el borde de celda de una lista no lo vio nadie).
+    expect(METODO_DE_COMPARACION_VISUAL).toMatch(/un BORDE, recuadro,/);
+    expect(METODO_DE_COMPARACION_VISUAL).toMatch(/Busca a propósito lo que más se/);
     expect(METODO_DE_COMPARACION_VISUAL).toMatch(/secundario/);
   });
 });

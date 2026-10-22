@@ -31,6 +31,7 @@ Las cinco familias del detalle están en `references/`: `fundamentos/`, `xml-ui/
 5. **`ID` y `ROWID` los gestiona la plataforma.** No hace falta declararlos como `<prop>` (es válido pero redundante). En el `sql=` de la coll, `ID` sí se rescata en el SELECT; `ROWID` no es necesario.
 6. **Inicializa con el evento correcto:** `<before-edit>` al abrir para editar, `<create>` la primera vez. `<load>` se dispara **por cada DataObject** al cargar desde la BD (startBrowse, loadAll, `<contents>`) y no se recomienda por rendimiento.
 7. **Los nombres son únicos y case-sensitive.** Ver la sección de unicidad más abajo.
+8. **Una lista pinta un recuadro alrededor de cada celda por omisión.** Si la fila es una tarjeta (o el diseño no lleva borde), pon `cell-border-color="#00000000"` en su `<coll>`; `cell-border-width="0"` no lo quita (medido en Android).
 
 ## Nunca
 

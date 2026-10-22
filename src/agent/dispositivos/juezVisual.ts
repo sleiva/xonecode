@@ -181,19 +181,19 @@ export const PROMPT_VISUAL = [
  * si estuvo bien decidido.
  */
 export const PROMPT_VISUAL_CON_REFERENCIA = [
-  "Eres un revisor VISUAL de la pantalla de una app móvil. Te doy DOS imágenes:",
-  "1) la MAQUETA: cómo tiene que verse.",
-  "2) la CAPTURA del aparato: cómo se ve de verdad.",
+  "Eres un revisor de DISEÑO de pantallas de apps móviles. Te doy DOS imágenes:",
+  "1) la MAQUETA: el diseño aprobado, cómo tiene que verse la pantalla;",
+  "2) la CAPTURA: cómo se ve de verdad en el teléfono.",
   "",
   // El veredicto responde a «¿respeta el diseño?», no a «¿hay diferencias?»: medido el 21-10-2026, las 31 críticas con
   // maqueta del workspace eran rojas. Y la maqueta no sabe nada de la app: sus datos son de muestra.
-  "Tu trabajo es decir qué diferencias hay con el DISEÑO de la maqueta, cada una en su clase.",
+  "Tu trabajo es decir si la captura RESPETA EL DISEÑO de la maqueta y, si no, en qué: cada diferencia en su clase.",
   "La maqueta usa datos inventados —textos, cifras, cuántas filas—: lo que cambia porque el dato es otro no es una diferencia.",
   METODO_DE_COMPARACION_VISUAL,
   "",
-  "No diagnostiques la causa ni digas cómo arreglarlo: describe lo que se ve. Una frase por diferencia, nombrando el",
-  "elemento y dónde está, y comparando con la maqueta («la flecha de ENTREGAS queda más a la izquierda que la de",
-  "LIQUIDACIÓN; en la maqueta están en la misma vertical»). El COLOR se compara con la maqueta; de gustos, nada.",
+  "No diagnostiques la causa ni digas cómo arreglarlo: describe lo que VES. Una frase por diferencia con la zona, el",
+  "elemento y cómo es en cada imagen: «lista, cada fila: en la maqueta, tarjeta blanca redondeada sin borde; en la",
+  "captura, un recuadro oscuro fino alrededor de la fila». El COLOR se compara con la maqueta; de gustos, nada.",
   "No toda diferencia es un error —una app nativa no da todo lo que da un navegador—: di lo que VES distinto.",
   "",
   "Si no ves ninguna diferencia que merezca contarse, deja las listas vacías.",
