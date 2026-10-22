@@ -628,7 +628,11 @@ export function compararConMaqueta(m: MaquetaMedida, g: GeometriaDelAparato, mod
       );
     } else {
       const enSuSitio = textoQueEmpiezaAhi(e);
-      if (enSuSitio === undefined) bloqueantes.push(`${etiqueta(e)} de ${laMaqueta} NO está en ${elAparato} (ningún control con ese texto).`);
+      // Un TEXTO de la maqueta que no está no pone el rojo: la maqueta (de Stitch) trae datos de muestra y lo que importa es
+      // que la pantalla use visualmente el diseño (decisión suya, 22-10-2026; medido en Maset: «ESPARREGUERA», la población de
+      // ejemplo, bloqueaba la crítica). Un BOTÓN que falta sí: eso es diseño. Lo que se VE que falta lo dice el modelo.
+      if (enSuSitio === undefined && e.boton === true) bloqueantes.push(`${etiqueta(e)} de ${laMaqueta} NO está en ${elAparato} (ningún control con ese texto).`);
+      else if (enSuSitio === undefined) datos.push(etiqueta(e));
       else {
         libres.delete(enSuSitio);
         notas.push(`${etiqueta(e)} de ${laMaqueta} dice «${textoVisible(enSuSitio.texto ?? "")}» en ${elAparato}: otro texto en su sitio (empieza donde él), no falta.`);

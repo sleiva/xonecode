@@ -9839,3 +9839,11 @@ que más contexto tiene, y el siguiente empezaba de cero con lo que el orquestad
 de uno que acabó bien (entero, reducido o ventana), con la orden de parar cambiada por `NOTA_DE_ENCARGO_CORTADO`. Uno
 detenido o que falló sigue sin dejarla. Se descartó, por ahora, un relevo escrito a disco: la memoria no sobrevive a
 reabrir la sesión.
+
+## Lo que importa es que use el diseño, no los textos de la maqueta (22-10-2026)
+
+Decisión suya: una maqueta de rediseño (de Stitch o de donde sea) lleva datos inventados, y lo que importa es que la
+pantalla use VISUALMENTE el diseño. Medido en Maset (Incidencias): la crítica bloqueó por «ESPARREGUERA», la población de
+ejemplo, y el juez dio rojo aunque él mismo decía que no contaba. Ahora un texto de la maqueta que no está en el aparato
+va a la nota de datos de muestra (`compararConMaqueta`), sin reglas para adivinar qué parece dato; un botón que falta
+sigue siendo bloqueante, y lo que se VE que falta (un título, una flecha) lo dice el modelo. El juez lo tiene en su prompt.

@@ -519,6 +519,7 @@ describe("el juez y el plan de la tarea", () => {
     expect(prompt).toContain("Tampoco el ESTADO en que está dibujada");
     // Y una maqueta defectuosa de Stitch no es un rojo del trabajo: se dice como observación.
     expect(prompt).toContain("«AVISO DE LA MAQUETA»");
+    expect(prompt).toContain("use VISUALMENTE el diseño");
     expect(prompt).toContain("- T2 — Lista (estado: pendiente) · 0/3 criterios");
     expect(v.tareasDelPlan).toEqual([
       { numero: "T1", estado: "hecha" },

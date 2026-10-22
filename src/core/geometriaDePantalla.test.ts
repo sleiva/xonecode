@@ -187,8 +187,10 @@ describe("un texto TRADUCIDO en su sitio no falta (la maqueta de Stitch viene en
     expect(emparejar(maqueta, aparato).parejas.find((p) => p.maqueta.texto.endsWith("Tape"))?.aparato.nombre).toBe("MAP_HISTORIAL");
   });
 
-  it("una cifra en el sitio de una palabra no es su traducción: sigue faltando", () => {
-    expect(h.bloqueantes).toContain("«History» de la maqueta NO está en el aparato (ningún control con ese texto).");
+  it("una cifra en el sitio de una palabra no es su traducción: sigue faltando, pero un TEXTO que falta no bloquea", () => {
+    // Decisión suya (22-10-2026): la maqueta de un rediseño trae datos inventados; lo que importa es que use el diseño.
+    expect(h.bloqueantes.join("\n")).not.toContain("«History»");
+    expect(h.notas.join("\n")).toContain("«History»");
   });
 });
 
@@ -450,10 +452,17 @@ describe("una lista de la maqueta: sus filas son datos de ejemplo", () => {
     ]);
   });
 
-  it("y dos textos sueltos alineados NO son una lista: siguen siendo bloqueantes", () => {
+  it("y dos textos sueltos alineados NO son una lista, ni bloquean: un texto de la maqueta que falta es dato de muestra", () => {
     const dos: MaquetaMedida = { ...maqueta, elementos: [maqueta.elementos[0]!, ...[0, 1].flatMap(fila)] };
     const h = compararConMaqueta(dos, { ...conClientes, controles: conClientes.controles.slice(0, 1) });
-    expect(h.bloqueantes).toContain("«COTS REGUA» de la maqueta NO está en el aparato (ningún control con ese texto).");
+    expect(h.bloqueantes.join("\n")).not.toContain("«COTS REGUA»");
+    expect(h.notas.join("\n")).toContain("«COTS REGUA»");
+  });
+
+  it("un BOTÓN de la maqueta que falta sí bloquea: eso es diseño", () => {
+    const conBoton: MaquetaMedida = { ...maqueta, elementos: [...maqueta.elementos, { texto: "SINCRONIZAR", caja: { x: 100, y: 700, ancho: 200, alto: 40 }, boton: true }] };
+    const h = compararConMaqueta(conBoton, conClientes);
+    expect(h.bloqueantes).toContain("«SINCRONIZAR» de la maqueta NO está en el aparato (ningún control con ese texto).");
   });
 });
 

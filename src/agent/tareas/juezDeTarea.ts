@@ -396,6 +396,9 @@ function promptDelJuez(caso: CasoDeJuez, planes: readonly PlanEnDisco[]): string
     "lo que se juzga es ESTE encargo y ESTE trabajo, no el estado general del proyecto.",
     // Medido en Maset (21→22-10-2026): «la forma de pago no muestra el dato real que la maqueta exige: A16-0842189», y «la
     // pantalla vacía no supera» frente a una maqueta dibujada firmada y con datos. Ninguno de los dos era un defecto.
+    "Lo que importa es que la pantalla use VISUALMENTE el diseño de la maqueta. Una maqueta de rediseño (de Stitch o de donde sea)",
+    "lleva datos inventados:",
+    "un texto de la maqueta que no está en la app (una población, un nombre, una cifra) no es un fallo, aunque una medida lo diga.",
     "Los DATOS que pinta la maqueta —números, códigos, nombres, importes, cuántas filas tiene una lista— son de EJEMPLO:",
     "no se exigen. Tampoco el ESTADO en que está dibujada (firmada, rellena, con filas): si la captura es de otro estado y",
     "el trabajo lo dice, la diferencia que salga por eso no es motivo de «rojo». Lo que sí cuenta es que el SITIO de cada pieza",
