@@ -7,6 +7,13 @@ import { crearAtributosXone } from "./atributosXone.js";
 /** Contra la referencia REAL de la skill del paquete: si una tabla cambia de forma, esto lo dice. */
 describe("xone_atributos, sobre la skill real", () => {
   const t = crearAtributosXone();
+  it("con `atributos`, varios en UNA llamada", async () => {
+    const r = await t.invoke({ atributos: ["imgbk", "align", "valign"] });
+    expect(r).toContain("### imgbk");
+    expect(r).toContain("### align");
+    expect(r).toContain("### valign");
+  });
+
   it("dice en qué nodos existe un atributo, con su sección", async () => {
     const r = await t.invoke({ atributo: "imgbk" });
     expect(r).toContain("`imgbk` en <frame>");

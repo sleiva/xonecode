@@ -145,7 +145,7 @@ Todas **reaplican `puedeLeerRuta` a mano** (una tool de xonecode no pasa por el 
 - **`validar_fichero_xone`** (`validarFicheroXone.ts`), solo TrueForge, a TODOS: `.xne`/`.xml`
   (`core/xmlBienFormado.ts`), `.css` (`core/cssBienFormado.ts`), `.js` para Rhino (`core/jsParaRhino.ts`,
   `acorn`, nunca `new Function`). Sin simulador, linter ni red. **Prudente**: solo lo que rompe el parser;
-  atributos son de `xone_atributos`.
+  atributos son de `xone_atributos` (varios en UNA llamada con `atributos`).
 - **`convertir_a_p`** (`agent/motores/trueforge/convertirAP.ts`, `core/convertirAP.ts`), solo TrueForge: px
   CSS → `p`. **Los datos no los pone el modelo**: `resolution-width` del `app.xml` RAÍZ y ancho de la
   imagen (`buscarMaqueta`; `ancho_maqueta` si no queda claro). **Lo que no se sabe no se adivina** (sin

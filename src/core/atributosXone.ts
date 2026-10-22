@@ -214,3 +214,27 @@ export function consultarAtributos(
     PIE_DEL_INDICE,
   ].join("\n");
 }
+
+/** Cuántos atributos se contestan en una sola consulta. */
+export const TOPE_DE_ATRIBUTOS_POR_CONSULTA = 12;
+
+/**
+ * VARIOS atributos en una consulta: la respuesta de cada uno, con el pie una sola vez. Medido en Maset (menú principal): el
+ * desarrollador preguntó quince atributos, uno por llamada (`align`, `valign`, `keep-aspect-ratio`…), en tandas de cuatro.
+ * Los repetidos y los vacíos se quitan; pasado el tope se dice cuántos quedaron fuera.
+ */
+export function consultarVariosAtributos(
+  indice: IndiceDeAtributos,
+  pregunta: { atributos: readonly string[]; nodo?: string },
+  busqueda?: (atributo: string) => string
+): string {
+  const unicos = [...new Set(pregunta.atributos.map((a) => a.trim()).filter((a) => a !== ""))];
+  const elegidos = unicos.slice(0, TOPE_DE_ATRIBUTOS_POR_CONSULTA);
+  const sinPie = (texto: string) => texto.split("\n").filter((l) => l !== PIE_DEL_INDICE).join("\n");
+  const bloques = elegidos.map(
+    (atributo) => `### ${atributo}\n${sinPie(consultarAtributos(indice, { atributo, ...(pregunta.nodo === undefined ? {} : { nodo: pregunta.nodo }) }, busqueda))}`
+  );
+  const fuera = unicos.length - elegidos.length;
+  return [...bloques, ...(fuera > 0 ? [`(${fuera} más sin contestar: pregúntalos en otra llamada.)`] : []), PIE_DEL_INDICE].join("\n\n");
+}
+

@@ -32,6 +32,7 @@ Las cinco familias del detalle están en `references/`: `fundamentos/`, `xml-ui/
 6. **Inicializa con el evento correcto:** `<before-edit>` al abrir para editar, `<create>` la primera vez. `<load>` se dispara **por cada DataObject** al cargar desde la BD (startBrowse, loadAll, `<contents>`) y no se recomienda por rendimiento.
 7. **Los nombres son únicos y case-sensitive.** Ver la sección de unicidad más abajo.
 8. **Una lista pinta un recuadro alrededor de cada celda por omisión.** Si la fila es una tarjeta (o el diseño no lleva borde), pon `cell-border-color="#00000000"` en su `<coll>`; `cell-border-width="0"` no lo quita (medido en Android).
+9. **Etiqueta o valor: quién lleva el estilo.** Un `L`/`TL` pinta su `title`, y su texto se viste con `forecolor`, `fontsize`, `fontname`, `fontbold` y se alinea con `label-align`; **nunca** `labelwidth="0"` (el texto desaparece). Un texto que cambia desde JavaScript es un `T` con `locked="true"` y `labelwidth="0"`: su contenido es el VALOR y se viste con `text-forecolor`, `textfont-size`, `textfont-name`, `textfont-bold`. Detalle: `references/xml-ui/prop-tipos-basicos.md` §5.9.2 y `references/xml-ui/atributos-prop.md` §4.4.
 
 ## Nunca
 

@@ -2,7 +2,14 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
-import { consultarAtributos, indiceDeAtributos, interpretarReferenciaDeAtributos, type IndiceDeAtributos } from "../../core/atributosXone.js";
+import {
+  consultarAtributos,
+  consultarVariosAtributos,
+  indiceDeAtributos,
+  interpretarReferenciaDeAtributos,
+  TOPE_DE_ATRIBUTOS_POR_CONSULTA,
+  type IndiceDeAtributos,
+} from "../../core/atributosXone.js";
 import { RAIZ_SKILLS } from "./skills.js";
 
 export const NOMBRE_ATRIBUTOS_XONE = "xone_atributos";
@@ -45,14 +52,20 @@ export function crearAtributosXone(raizDeSkills: string = RAIZ_SKILLS) {
     fallo = `no se pudo leer la referencia (${(e as { code?: string }).code ?? "error de lectura"})`;
   }
   return tool(
-    async (entrada: { atributo?: string; nodo?: string }): Promise<string> =>
-      indice === undefined || fallo !== undefined
-        ? `Sin índice de atributos: ${fallo ?? "no cargado"}. Ve a la skill: ${busquedaEnLaSkill(entrada.atributo ?? "<atributo>")}.`
-        : consultarAtributos(indice, entrada, busquedaEnLaSkill),
+    async (entrada: { atributo?: string; atributos?: string[]; nodo?: string }): Promise<string> => {
+      // `atributo` y `atributos` juntos: todos en la misma consulta.
+      const varios = [...(entrada.atributos ?? []), ...(entrada.atributo === undefined ? [] : [entrada.atributo])];
+      if (indice === undefined || fallo !== undefined) {
+        return `Sin índice de atributos: ${fallo ?? "no cargado"}. Ve a la skill: ${busquedaEnLaSkill(varios[0] ?? "<atributo>")}.`;
+      }
+      if (varios.length > 1) return consultarVariosAtributos(indice, { atributos: varios, ...(entrada.nodo === undefined ? {} : { nodo: entrada.nodo }) }, busquedaEnLaSkill);
+      return consultarAtributos(indice, { ...(varios[0] === undefined ? {} : { atributo: varios[0] }), ...(entrada.nodo === undefined ? {} : { nodo: entrada.nodo }) }, busquedaEnLaSkill);
+    },
     {
       name: NOMBRE_ATRIBUTOS_XONE,
       description:
         "ÍNDICE DE CONSULTA RÁPIDA de los atributos XML de XOne, sacado de las tablas de la skill xone-development: no la " +
+        "sustituye. Pregunta TODOS los que necesites de una vez con `atributos` (lista): una llamada, no una por atributo. " +
         "sustituye, te dice si un atributo está en sus tablas y DÓNDE leer el detalle. Con `atributo` (bgcolor, imgbk…): en " +
         "qué nodos está (coll, group, frame, prop), tipo, omisión, una línea de descripción y el fichero y sección; si dos " +
         "ficheros de la skill dicen cosas distintas, te da los dos. Con solo `nodo`: sus atributos por sección. Las tablas " +
@@ -60,6 +73,11 @@ export function crearAtributosXone(raizDeSkills: string = RAIZ_SKILLS) {
         "que buscas, o necesitas ejemplos o matices, VE A LA SKILL: la respuesta te da la búsqueda hecha, y manda la skill.",
       schema: z.object({
         atributo: z.string().max(64).optional().describe("El atributo, tal cual se escribe en el XML (bgcolor, border-corner-radius…)."),
+        atributos: z
+          .array(z.string().max(64))
+          .max(TOPE_DE_ATRIBUTOS_POR_CONSULTA)
+          .optional()
+          .describe("Varios atributos en UNA consulta (align, valign, imgbk…): la respuesta de cada uno."),
         nodo: z.string().max(16).optional().describe("coll, group, frame o prop. Con atributo, lo acota; solo, lista sus atributos."),
       }),
     }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { consultarAtributos, indiceDeAtributos, interpretarReferenciaDeAtributos } from "./atributosXone.js";
+import { consultarAtributos, consultarVariosAtributos, indiceDeAtributos, interpretarReferenciaDeAtributos, PIE_DEL_INDICE, TOPE_DE_ATRIBUTOS_POR_CONSULTA } from "./atributosXone.js";
 
 const REF = [
   "## 3. Nodo `<frame>` — Frame",
@@ -21,6 +21,19 @@ describe("el índice de atributos, desde las tablas de la referencia", () => {
     expect(e.map((x) => `${x.nodo}.${x.atributo}`)).toEqual(["frame.bgcolor", "frame.tmargin", "frame.bmargin"]);
     expect(e[0]).toMatchObject({ tipo: "color", defecto: "heredado", descripcion: "Color de fondo del frame.", seccion: "§3.4 Apariencia" });
     expect(e[1]!.defecto).toBe("0");
+  });
+
+  it("VARIOS atributos en una consulta: cada uno con su respuesta, el pie una vez, sin repetidos y con tope", () => {
+    // Medido en Maset: quince consultas de un atributo cada una, en tandas.
+    const indice = indiceDeAtributos(e);
+    const r = consultarVariosAtributos(indice, { atributos: ["bgcolor", "tmargin", "bgcolor", " ", "inventado"] });
+    expect(r).toContain("### bgcolor");
+    expect(r).toContain("### tmargin");
+    expect(r).toContain("`inventado` no aparece en las tablas");
+    expect(r.match(/### bgcolor/g)).toHaveLength(1);
+    expect(r.split(PIE_DEL_INDICE)).toHaveLength(2);
+    const muchos = consultarVariosAtributos(indice, { atributos: Array.from({ length: TOPE_DE_ATRIBUTOS_POR_CONSULTA + 2 }, (_, i) => `a${i}`) });
+    expect(muchos).toContain("(2 más sin contestar");
   });
 
   it("la consulta sin atributo ni nodo explica qué preguntar", () => {
