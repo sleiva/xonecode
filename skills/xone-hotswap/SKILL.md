@@ -25,6 +25,7 @@ No cuestan lo mismo, ni de lejos. Por orden de lo que vas a necesitar:
 | quieres saber… | úsalo | por qué |
 |---|---|---|
 | **dónde estoy** | `screen` | una línea: colección activa, diálogos abiertos, ventana con el foco |
+| **subir lo que cambiaste** | `xone-recargar-android A.xne default.css icons/x.svg icons/y.svg` | TODO en UNA llamada: sube cada uno y aplica una vez. Sin argumentos compara con el aparato y sube solo lo que difiere. Uno a uno son N viajes, y con iconos N relanzamientos |
 | **ir a una ventana** | `abrir NombreColeccion` | DIRECTO (`ui.openMenu`), sin repetir login y menús en cada prueba; se pinta un instante después |
 | **ejecutar JavaScript de la app** | `js 'return …;'` | `runScript` sin componer el Base64 a mano |
 | **qué está fallando** | `xone-log-android` | un error de JavaScript o una excepción salen ahí con su mensaje y su línea |
@@ -111,9 +112,11 @@ xone-desplegar-android --app MiApp --serie emulator-5554
 #   colección (.xne)  → recarga en caliente        JavaScript (.js) → recarga del include
 #   CSS (.css)        → recarga en caliente (loadCssFile; en frameworks viejos, por runScript)
 #   app.xml, app.ini, mappings → relanza la app (unos 6 s)
-# Necesita la app YA desplegada. Lo que no sabe aplicar (iconos, bd) lo dice y manda a desplegar.
+# Necesita la app YA desplegada. Comparando (sin argumentos) no mira iconos ni bd: lo dice.
+# NOMBRADOS, los iconos sí se suben (y la app se relanza UNA vez por todos).
 xone-recargar-android
 xone-recargar-android MenuPrincipal.xne functions.js      # solo esos, sin comparar
+xone-recargar-android icons/a.svg icons/b.svg icons/c.svg # varios iconos: UNA llamada, UN relanzamiento
 
 # Cualquier comando del catálogo de más abajo (varios en orden, si le pasas varios):
 xone-hotswap elements                    # atajo de getAllElements format=xone
