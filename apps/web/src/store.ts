@@ -44,6 +44,7 @@ import type {
   ProveedorDeModelos,
   SelectorDeConsola,
   DecisionDeConsola,
+  ProgresoDeSubida,
   Dispositivo,
   Herramienta,
   InformeDeDispositivos,
@@ -87,6 +88,11 @@ export interface EstadoDelCliente {
    * adivine del enunciado. Ausente = pregunta de texto libre, que es lo de siempre.
    */
   pregunta?: { texto: string; decision?: DecisionDeConsola };
+  /**
+   * Por dónde va la subida EN CURSO (IXCODE-69), para la barra del diálogo. Se borra al llegar otra pregunta: el de
+   * una subida anterior no es el de esta. Ausente = no ha dicho nada (se pinta solo el giro).
+   */
+  progresoDeSubida?: ProgresoDeSubida;
   /**
    * Los modelos, tal y como los cuenta el servidor: cuál está en vigor y qué hay.
    * Ausente = todavía no ha llegado el mensaje. NUNCA se deriva de un acto del transcript
@@ -801,7 +807,22 @@ type DecisionCruda = {
   readonly lineas: readonly { texto: string; cambio?: unknown; ruta?: unknown }[];
   readonly seleccionable?: unknown;
   readonly operacion?: unknown;
+  readonly rama?: unknown;
 };
+
+/** El progreso de una subida, con su forma o nada (lista blanca): cifras enteras y no negativas, y `hechas ≤ total`. */
+function progresoDeSubida(valor: unknown): ProgresoDeSubida | undefined {
+  if (typeof valor !== "object" || valor === null) return undefined;
+  const p = valor as Record<string, unknown>;
+  if (p["fase"] === "creando-rama" && typeof p["rama"] === "string") return { fase: "creando-rama", rama: p["rama"] };
+  const hechas = p["hechas"];
+  const total = p["total"];
+  if (p["fase"] === "subiendo" && Number.isInteger(hechas) && Number.isInteger(total)) {
+    const [h, t] = [hechas as number, total as number];
+    if (h >= 0 && t >= 0 && h <= t) return { fase: "subiendo", hechas: h, total: t };
+  }
+  return undefined;
+}
 
 function esDecision(valor: unknown): valor is DecisionCruda {
   if (typeof valor !== "object" || valor === null) return false;
@@ -1255,6 +1276,7 @@ export function crearStoreDelCliente(): {
           // sería el peor de todos: una tarjeta con campo de texto donde hacía falta
           // decidir, con todo en verde.
           mutar({
+            progresoDeSubida: undefined,
             pregunta: {
               texto: m.texto,
               // Y cada línea se copia NOMBRANDO sus campos —la misma lista blanca, un nivel
@@ -1279,11 +1301,18 @@ export function crearStoreDelCliente(): {
                       ...(m.decision.operacion === "subir" || m.decision.operacion === "bajar"
                         ? { operacion: m.decision.operacion }
                         : {}),
+                      // La rama del proyecto (IXCODE-71): solo texto no vacío; sin ella no se ofrece crear una rama.
+                      ...(typeof m.decision.rama === "string" && m.decision.rama !== "" ? { rama: m.decision.rama } : {}),
                     },
                   }
                 : {}),
             },
           });
+          return;
+        }
+        case "progresoDeSubida": {
+          const progreso = progresoDeSubida((mensaje as { progreso?: unknown }).progreso);
+          if (progreso !== undefined) mutar({ progresoDeSubida: progreso });
           return;
         }
         case "selector": {

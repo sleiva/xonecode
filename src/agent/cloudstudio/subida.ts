@@ -6,7 +6,8 @@
  * tuviera abierta en Studio, y el precio era que lo subido vivía en un sitio que nadie mira
  * mientras la rama del proyecto se quedaba quieta. Se sigue creando la rama si no existe
  * —un proyecto cuyo `config.rama` nombra una rama que aún no está en el servidor—, pero con
- * su propio nombre.
+ * su propio nombre. La excepción la pide quien autoriza: una rama NUEVA, creada desde la del proyecto, que pasa a
+ * ser la del proyecto (IXCODE-71).
  *
  * Tres propiedades que no son negociables:
  * - La ref se mueve SOLO por lo que se autorizó Y se subió COMPROBADO: con todo bien, a HEAD;
@@ -28,16 +29,16 @@
  *   se restaura y se dice: es una cortesía, no una condición de corrección, y tumbar la
  *   subida entera por ella sería pagar el precio más caro por el detalle más barato.
  */
-import { appendFileSync, mkdirSync, readFileSync, statSync, existsSync, readdirSync } from "node:fs";
+import { appendFileSync, mkdirSync, readFileSync, statSync, existsSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { CloudStudioPort } from "../../core/ports.js";
-import type { EstadoDeSync, OperacionOmitida, PoliticaDeAprobacion } from "../../core/cloudstudio.js";
-import { planAutorizado } from "../../core/cloudstudio.js";
+import type { EstadoDeSync, OperacionOmitida, PoliticaDeAprobacion, ProgresoDeSubida } from "../../core/cloudstudio.js";
+import { motivoDeRamaNueva, planAutorizado, ramaNuevaDe } from "../../core/cloudstudio.js";
 import { planDeSubida } from "../../core/planDeSubida.js";
 import { decodificarComoTexto } from "../../core/codificacion.js";
 import { diferenciaDeTexto, motivoSinComprobar } from "../../core/verificacionDeSubida.js";
 import { NOMBRE_CARPETA } from "../config/configEnDisco.js";
-import { cambiosPendientes, marcarSubido, marcarSubidoParcial } from "../sesiones/gitSync.js";
+import { cambiosPendientes, marcarSubido, marcarSubidoParcial, sembrarRefDeRama } from "../sesiones/gitSync.js";
 import { rutaSyncJson } from "./descarga.js";
 import { ramaActiva } from "./ramaActiva.js";
 import { validarTrasDescarga, type FicheroIlegible } from "./validarTrasDescarga.js";
@@ -66,6 +67,18 @@ export interface OpcionesDeSubida {
    */
   politicaDeAprobacion: PoliticaDeAprobacion;
   informar?: (texto: string) => void;
+  /**
+   * Crear en Studio la rama `nueva` a partir de `desde` (`crearRama.ts`); `false` = ya existía. Solo se llama si quien
+   * autorizó pidió una rama nueva (IXCODE-71). Ausente con una rama pedida = no se sube nada: fail-closed.
+   */
+  crearRama?: (nueva: string, desde: string) => Promise<boolean>;
+  /**
+   * Hacer de la rama nueva la del PROYECTO (`config.rama`), en cuanto existe en Studio: desde ahí se baja y se sube.
+   * `sync.json` lo cambia `subir` mismo, que es de esta capa.
+   */
+  adoptarRama?: (nueva: string) => void;
+  /** Por dónde va, como dato (IXCODE-69): la barra de progreso de la web. */
+  alProgreso?: (progreso: ProgresoDeSubida) => void;
 }
 
 /** El aviso cuando la rama activa de Studio no se pudo leer justo antes de subir. */
@@ -82,6 +95,8 @@ export interface FalloDeSubida {
 export interface InformeDeSubida {
   /** Lo subido Y comprobado. */
   ok: string[];
+  /** La rama NUEVA que se creó para esta subida, y que ahora es la del proyecto (IXCODE-71). Ausente = la de siempre. */
+  ramaNueva?: string;
   fallos: FalloDeSubida[];
   /**
    * Presente = la rama activa de Studio NO se pudo leer tras posicionarla (la tool se cae para
@@ -111,6 +126,24 @@ function motivoDeFallo(error: unknown): string {
   const code = (error as { code?: unknown } | null)?.code;
   if (typeof code === "string") return `no se pudo leer el fichero en local (${code})`;
   return error instanceof Error ? error.message : String(error);
+}
+
+/**
+ * El `sync.json` pasa a la rama NUEVA (IXCODE-71): lo que se bajó de la del proyecto es lo que tiene la nueva, que
+ * nació copia de ella. Sin esto, la siguiente subida lo tomaría por el de OTRA rama y no dejaría borrar nada en Studio.
+ * Solo si era de ESTE proyecto y de la rama de la que sale; si no, se deja como estaba (y sigue sin valer, como antes).
+ */
+function adoptarRamaEnSyncJson(raiz: string, proyecto: { id: string }, desde: string, nueva: string): void {
+  const ruta = rutaSyncJson(raiz);
+  if (!existsSync(ruta)) return;
+  let estado: Partial<EstadoDeSync>;
+  try {
+    estado = JSON.parse(readFileSync(ruta, "utf8")) as Partial<EstadoDeSync>;
+  } catch {
+    return;
+  }
+  if (estado.proyecto?.id !== proyecto.id || estado.rama !== desde) return;
+  writeFileSync(ruta, JSON.stringify({ ...estado, rama: nueva }, null, 2) + "\n");
 }
 
 export function rutaSyncLog(raiz: string): string {
@@ -179,7 +212,9 @@ function bajadaDe(
 }
 
 export async function subir(opciones: OpcionesDeSubida): Promise<InformeDeSubida> {
-  const { puerto, raiz, ramaOrigen, proyecto, politicaDeAprobacion, informar = () => {} } = opciones;
+  const { puerto, raiz, ramaOrigen, proyecto, politicaDeAprobacion, informar = () => {}, alProgreso = () => {} } = opciones;
+  /** A qué rama se escribe: la del proyecto, o la nueva que se pidió al autorizar (IXCODE-71). */
+  let destino = ramaOrigen;
 
   const cambios = await cambiosPendientes(raiz, ramaOrigen);
   const tamanos = new Map<string, number>();
@@ -209,7 +244,7 @@ export async function subir(opciones: OpcionesDeSubida): Promise<InformeDeSubida
       fecha: new Date().toISOString(),
       dir: "subida",
       proyecto: proyecto.nombre,
-      rama: ramaOrigen,
+      rama: destino,
       ok: informe.ok,
       fallos: informe.fallos,
       ...(informe.avisoDeRama === undefined ? {} : { avisoDeRama: informe.avisoDeRama }),
@@ -265,11 +300,22 @@ export async function subir(opciones: OpcionesDeSubida): Promise<InformeDeSubida
   //
   // Lo que se ejecuta lo dice `planAutorizado`, nunca la veracidad de la respuesta: una
   // selección vacía es un objeto —«verdadero»— y aun así no autoriza nada.
-  const autorizado = planAutorizado(plan, await politicaDeAprobacion(plan));
+  const autorizacion = await politicaDeAprobacion(plan, { rama: ramaOrigen });
+  const autorizado = planAutorizado(plan, autorizacion);
   if (autorizado.length === 0) {
     informar("subida cancelada: no se ha aplicado nada\n");
     registrar();
     return informe;
+  }
+  // La rama nueva se valida ANTES de abrir nada: un nombre que no vale no toca Studio.
+  const ramaNueva = ramaNuevaDe(autorizacion);
+  if (ramaNueva !== undefined) {
+    const motivo = motivoDeRamaNueva(ramaNueva, ramaOrigen) ?? (opciones.crearRama === undefined ? "aquí no se pueden crear ramas" : undefined);
+    if (motivo !== undefined) {
+      const error = `no se ha subido nada: ${motivo}`;
+      registrar(error);
+      throw new Error(error);
+    }
   }
   const parcial = autorizado.length < plan.length;
 
@@ -286,7 +332,25 @@ export async function subir(opciones: OpcionesDeSubida): Promise<InformeDeSubida
       // así que existir existe. Si alguien la borró en Studio desde entonces, el `switch`
       // falla, queda en `sync.log` y se relanza: inventarse una rama desde sí misma no
       // arreglaría nada y firmaría un linaje falso.
-      await puerto.cambiarRama(ramaOrigen);
+      if (ramaNueva !== undefined) {
+        alProgreso({ fase: "creando-rama", rama: ramaNueva });
+        // `false` = ya existía, y eso NO es un «adelante»: sus ficheros no son los de la rama del proyecto, contra la
+        // que se midió lo pendiente, y subir ahí ese diff dejaría una mezcla. Subir a una rama que ya existe es otra
+        // cosa (IXCODE-70).
+        if (!(await opciones.crearRama!(ramaNueva, ramaOrigen))) {
+          throw new Error(`la rama «${ramaNueva}» ya existe en Studio: no se ha subido nada (elige otro nombre)`);
+        }
+        // En el servidor es una copia de la del proyecto, así que aquí nace donde estaba aquella; y desde ahora es la
+        // del proyecto —también si la subida falla después: la rama ya existe y su ref dice la verdad sobre ella—.
+        await sembrarRefDeRama(raiz, ramaOrigen, ramaNueva);
+        // Primero `config.rama`: si esa escritura revienta (un `config.json` roto), `sync.json` no queda en otra rama.
+        opciones.adoptarRama?.(ramaNueva);
+        adoptarRamaEnSyncJson(raiz, proyecto, ramaOrigen, ramaNueva);
+        destino = ramaNueva;
+        informe.ramaNueva = ramaNueva;
+        informar(`rama «${ramaNueva}» creada desde «${ramaOrigen}»: el proyecto pasa a ser de ella\n`);
+      }
+      await puerto.cambiarRama(destino);
 
       // Y COMPROBAR que el `switch` surtió efecto antes de tocar un solo fichero: un `switch`
       // que contesta bien no prueba en qué rama acaba escribiendo `studio_edit_file`. Si Studio
@@ -303,10 +367,12 @@ export async function subir(opciones: OpcionesDeSubida): Promise<InformeDeSubida
       if (activa === undefined || activa === "") {
         informe.avisoDeRama = AVISO_RAMA_SIN_CONFIRMAR;
         informar(`aviso: ${AVISO_RAMA_SIN_CONFIRMAR}\n`);
-      } else if (activa !== ramaOrigen) {
-        throw new Error(`Studio está en la rama «${activa}» y el proyecto es de la rama «${ramaOrigen}»: no se ha subido nada`);
+      } else if (activa !== destino) {
+        throw new Error(`Studio está en la rama «${activa}» y el proyecto es de la rama «${destino}»: no se ha subido nada`);
       }
 
+      let hechas = 0;
+      alProgreso({ fase: "subiendo", hechas, total: autorizado.length });
       for (const operacion of autorizado) {
         try {
           if (operacion.tipo === "borrado") await puerto.borrarTexto(operacion.ruta);
@@ -355,6 +421,9 @@ export async function subir(opciones: OpcionesDeSubida): Promise<InformeDeSubida
           // Dicho, no solo contado: el diálogo de la subida enseña las últimas líneas del
           // recorrido, y «fallaron 1» sin el porqué no deja ver un corte.
           informar(`${operacion.ruta}: ${motivo}\n`);
+        } finally {
+          // Hecha, haya subido o no: la barra cuenta lo que ya se intentó.
+          alProgreso({ fase: "subiendo", hechas: ++hechas, total: autorizado.length });
         }
       }
     } finally {
@@ -380,15 +449,15 @@ export async function subir(opciones: OpcionesDeSubida): Promise<InformeDeSubida
   // Studio, y perder su rastro sería peor que el error.
   try {
     if (informe.fallos.length === 0 && !parcial) {
-      await marcarSubido(raiz, ramaOrigen, `sync: ${informe.ok.length} ficheros a ${ramaOrigen}`);
+      await marcarSubido(raiz, destino, `sync: ${informe.ok.length} ficheros a ${destino}`);
     } else if (informe.fallos.length === 0 || informe.ok.length > 0) {
       // Solo lo ELEGIDO y COMPROBADO avanza: la ref no puede ir a HEAD, o afirmaría que está arriba lo que
       // la persona dejó sin marcar. Lo omitido tampoco avanza: se sigue declarando.
       await marcarSubidoParcial(
         raiz,
-        ramaOrigen,
+        destino,
         informe.ok,
-        `sync: ${informe.ok.length} de ${plan.length} ficheros a ${ramaOrigen}`
+        `sync: ${informe.ok.length} de ${plan.length} ficheros a ${destino}`
       );
       // Lo que FALLÓ no avanza: el próximo `/sync` lo vuelve a calcular y a intentar.
       const resto = plan.length - informe.ok.length;

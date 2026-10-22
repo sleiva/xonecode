@@ -48,6 +48,7 @@ import { motivoDeFallo } from "../core/diagnosticoDeNode.js";
 import { arbolLimpio, cambiosPendientes, esRepoPropio, MOTIVO_SIN_GIT, prepararRepo, sinCommitear, vaciarCopia, versionDeGit } from "../agent/sesiones/gitSync.js";
 import { baseDeWorkspace } from "../agent/config/settingsEnDisco.js";
 import { subir } from "../agent/cloudstudio/subida.js";
+import { crearRama } from "../agent/cloudstudio/crearRama.js";
 import { guardarCredencial } from "../agent/config/authEnDisco.js";
 import { asistenteDeModelo } from "./wizardInicial.js";
 import {
@@ -923,6 +924,10 @@ export interface PiezasDeSincronizacion {
   limpio: typeof arbolLimpio;
   sinCommitear: typeof sinCommitear;
   subirProyecto: typeof subir;
+  /** Crear una rama en Studio a partir de otra (`crearRama.ts`), para subir a una nueva (IXCODE-71). */
+  crearRama: typeof crearRama;
+  /** Hacer de una rama la del proyecto (`config.rama`). */
+  guardarRama: typeof guardarRamaDeProyecto;
   /** Dejar la copia vacía para bajarla entera (`gitSync.ts#vaciarCopia`). */
   vaciar: typeof vaciarCopia;
   /** Si la carpeta es la raíz de su propio repo: decide si hay historia que perder. */
@@ -946,6 +951,8 @@ const PIEZAS_DE_SINCRONIZACION_REALES: PiezasDeSincronizacion = {
   limpio: arbolLimpio,
   sinCommitear,
   subirProyecto: subir,
+  crearRama,
+  guardarRama: guardarRamaDeProyecto,
   vaciar: vaciarCopia,
   repoPropio: esRepoPropio,
   versionDeGit,
@@ -1025,7 +1032,7 @@ function cloudStudioDeProyecto(
 export function crearSincronizador(
   piezas: PiezasDeSincronizacion = PIEZAS_DE_SINCRONIZACION_REALES
 ): NonNullable<Consola["sincronizar"]> {
-  return async (accion, raiz, politicaDeAprobacion, informar = () => {}, confirmarBajada) => {
+  return async (accion, raiz, politicaDeAprobacion, informar = () => {}, confirmarBajada, alProgreso) => {
     const config = cloudStudioDeProyecto(piezas.leerConfig, piezas.leerSettings, raiz);
     if (config === undefined) {
       return { tipo: "texto", texto: "este proyecto no es cloud (o le falta el proyecto/rama del alta)\n" };
@@ -1139,6 +1146,11 @@ export function crearSincronizador(
           // asumir que sí. El hueco lo documenta `core/cloudstudio.ts#PoliticaDeAprobacion`.
           politicaDeAprobacion: politicaDeAprobacion ?? (async () => false),
           informar,
+          // La rama NUEVA (IXCODE-71) se crea desde la del proyecto con la MISMA sesión, y al existir pasa a ser la
+          // del proyecto: desde ahí se baja y se sube.
+          crearRama: (nueva, desde) => piezas.crearRama(sesion.invocar, puerto, config.proyecto.nombre, nueva, desde),
+          adoptarRama: (nueva) => void piezas.guardarRama(raiz, nueva),
+          ...(alProgreso === undefined ? {} : { alProgreso }),
         });
         // Negada por ficheros ilegibles: el recorrido ya dijo cuáles; «subidos 0, fallaron 0»
         // haría creer que no había nada pendiente.
@@ -1157,6 +1169,7 @@ export function crearSincronizador(
             // Lo que no se pudo CONFIRMAR viaja como dato: el diálogo esconde el recorrido
             // cuando todo subió, y el aviso tiene que verse justo entonces.
             ...(informe.avisoDeRama === undefined ? {} : { avisos: [informe.avisoDeRama] }),
+            ...(informe.ramaNueva === undefined ? {} : { rama: informe.ramaNueva }),
           },
         };
       }

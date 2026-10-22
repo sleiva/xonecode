@@ -948,7 +948,14 @@ export function App({
                   ? "Se ha perdido la conexión con xonecode mientras subía. Mira las últimas subidas al reconectar para saber qué llegó a subir."
                   : "Se ha perdido la conexión con xonecode mientras se actualizaba el repo local. Mira el estado de la copia al reconectar.",
             }
-          : { fase: "trabajando", operacion: operacionEnDialogo.operacion };
+          : {
+              fase: "trabajando",
+              operacion: operacionEnDialogo.operacion,
+              // Por dónde va (IXCODE-69): el store lo borra al llegar otra pregunta, así que es el de ESTA subida.
+              ...(operacionEnDialogo.operacion === "subir" && estado.progresoDeSubida !== undefined
+                ? { avance: estado.progresoDeSubida }
+                : {}),
+            };
   /**
    * La pregunta de DECISIÓN en pantalla: la pendiente del servidor si es de sí o no, o, tras
    * aceptar una subida, la retenida. La de texto libre NO es de aquí: vive en el hilo.
@@ -976,7 +983,7 @@ export function App({
         decision={preguntaDeDecision.decision}
         {...(progresoDeOperacion === undefined ? {} : { progreso: progresoDeOperacion })}
         alCerrar={() => setOperacionEnDialogo(undefined)}
-        alResponder={async (respuesta, seleccion) => {
+        alResponder={async (respuesta, seleccion, ramaNueva) => {
           // Aceptar una operación de sincronización no cierra el diálogo: se retiene con la
           // última operación conocida de ESA acción, y la nueva dirá cómo terminó. La operación
           // la dice la decisión (`operacion`); una seleccionable sin ella es la subida.
@@ -987,7 +994,13 @@ export function App({
           if (retener) setOperacionEnDialogo({ pregunta, operacion, desde: ultimaDe(operacion)?.cuando });
           try {
             // Las rutas marcadas, cuando el diálogo dejó elegir (la subida).
-            await enviar({ clase: "respuesta", texto: respuesta, ...(seleccion === undefined ? {} : { seleccion }) });
+            // Y la rama NUEVA a la que subir, si se pidió una (IXCODE-71).
+            await enviar({
+              clase: "respuesta",
+              texto: respuesta,
+              ...(seleccion === undefined ? {} : { seleccion }),
+              ...(ramaNueva === undefined ? {} : { ramaNueva }),
+            });
           } catch (error) {
             // El envío no llegó: el diálogo vuelve a ser la pregunta, para reintentar.
             if (retener) setOperacionEnDialogo(undefined);

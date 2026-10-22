@@ -397,6 +397,11 @@ export function crearConsolaWeb(opciones: OpcionesDeConsolaWeb = {}): ConsolaWeb
       anotar({ tipo: "sincronizacion", ...operacion });
     },
 
+    /** Por dónde va la subida (IXCODE-69): al cable y a nada más; no es un suceso que guardar. */
+    progresoDeSincronizacion: (progreso) => {
+      transporte.emitir({ clase: "progresoDeSubida", progreso });
+    },
+
     preguntar: async (pregunta, decision) => {
       // El enunciado queda en el transcript, como el prompt de stdio; la RESPUESTA no
       // pasa por aquí.
@@ -579,10 +584,12 @@ export function crearConsolaWeb(opciones: OpcionesDeConsolaWeb = {}): ConsolaWeb
       const decision = esperandoDecision.shift();
       if (decision !== undefined) {
         const texto = typeof mensaje.texto === "string" ? mensaje.texto : "";
+        // La rama nueva (IXCODE-71), solo si es una cadena: el nombre lo valida `subir` antes de tocar Studio.
+        const ramaNueva = typeof mensaje.ramaNueva === "string" ? { ramaNueva: mensaje.ramaNueva } : {};
         decision(
           Array.isArray(mensaje.seleccion)
-            ? { respuesta: texto, seleccion: mensaje.seleccion.filter((r): r is string => typeof r === "string") }
-            : { respuesta: texto }
+            ? { respuesta: texto, seleccion: mensaje.seleccion.filter((r): r is string => typeof r === "string"), ...ramaNueva }
+            : { respuesta: texto, ...ramaNueva }
         );
         return;
       }

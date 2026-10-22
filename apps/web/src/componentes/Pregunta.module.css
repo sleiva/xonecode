@@ -284,6 +284,80 @@
   cursor: default;
 }
 
+/* Subir a una rama NUEVA (IXCODE-71): la casilla, y debajo el nombre y de dónde sale. */
+.ramaNueva {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.casillaDeRama {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.nombreDeRama {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 6px 10px;
+  border: 0.5px solid var(--dsw-alias-border-l3);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-family: var(--ds-font-family-code);
+  font-size: 13px;
+}
+
+.nombreDeRama:focus {
+  outline: none;
+  border-color: var(--xonecode-azul);
+}
+
+.notaDeRama {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+
+/* Por dónde va la subida (IXCODE-69): la barra y «N de M» al lado. */
+.avance {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.barra {
+  flex: 1;
+  height: 6px;
+  border: none;
+  border-radius: 3px;
+  overflow: hidden;
+  appearance: none;
+  background: var(--dsw-alias-bg-layer-2);
+}
+
+.barra::-webkit-progress-bar {
+  background: var(--dsw-alias-bg-layer-2);
+}
+
+.barra::-webkit-progress-value {
+  background: var(--xonecode-azul);
+  transition: width 200ms;
+}
+
+.barra::-moz-progress-bar {
+  background: var(--xonecode-azul);
+}
+
 /* La caja del árbol, la misma que la del `<pre>` del plan: acotada y con scroll propio, para
    que los botones no se salgan de la tarjeta con una subida de cientos de ficheros. */
 .arbol {

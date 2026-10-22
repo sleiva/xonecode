@@ -258,6 +258,8 @@ export interface ResultadoDeSubida {
    * Ausente = nada que avisar; nunca un array vacío.
    */
   avisos?: string[];
+  /** La rama NUEVA que se creó y a la que se subió (IXCODE-71); desde ahí es la del proyecto. Ausente = la de siempre. */
+  rama?: string;
 }
 
 /**

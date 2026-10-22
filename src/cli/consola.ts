@@ -31,7 +31,7 @@ import type { PendienteDeAprobacion } from "../core/events.js";
 import type { ResultadoDeTurno } from "../core/entrega.js";
 import type { LineaDeDiff } from "../core/diff.js";
 import { interpretAnswer, type Decision } from "../vendor/hitl.js";
-import type { AccionDeSincronizacion, ConfirmacionDeBajada, PoliticaDeAprobacion } from "../core/cloudstudio.js";
+import type { AccionDeSincronizacion, AutorizacionDeSubida, ConfirmacionDeBajada, PoliticaDeAprobacion, ProgresoDeSubida } from "../core/cloudstudio.js";
 import { planAutorizado } from "../core/cloudstudio.js";
 import type { NarracionDeSincronizacion, ResultadoDeSubida } from "../core/actos.js";
 import { crearPielStdio, type Escribir } from "./stdio.js";
@@ -241,7 +241,9 @@ export interface Consola {
      * Ausente = no se vacía y se aplica la regla de antes. La rellena el comando `/sync`, que
      * es quien tiene `preguntar`.
      */
-    confirmarBajada?: ConfirmacionDeBajada
+    confirmarBajada?: ConfirmacionDeBajada,
+    /** Por dónde va una subida, como dato (IXCODE-69). Lo rellena `/sync` con `progresoDeSincronizacion`. */
+    alProgreso?: (progreso: ProgresoDeSubida) => void
   ) => Promise<
     // `subida`: el recuento de una subida que corrió, como dato (`ResultadoDeSubida`).
     | { tipo: "texto"; texto: string; subida?: ResultadoDeSubida; bajada?: { bajados: number } }
@@ -268,6 +270,11 @@ export interface Consola {
    * Implementado, `/sync` no escribe ni una línea por `escribir`.
    */
   anotarSincronizacion?: (operacion: NarracionDeSincronizacion) => void;
+  /**
+   * Por dónde va una subida EN CURSO (IXCODE-69), para la barra de progreso de la web. OPCIONAL por la misma asimetría
+   * que `anotarSincronizacion?`: el terminal ya va diciendo el recorrido línea a línea.
+   */
+  progresoDeSincronizacion?: (progreso: ProgresoDeSubida) => void;
   /**
    * Una decisión en la que quien contesta puede quedarse con PARTE del plan: la subida a
    * CloudStudio en el navegador, donde el plan es un árbol con casillas.
@@ -1079,7 +1086,7 @@ export function politicaInteractiva(
   consola: Consola,
   decir: (texto: string) => void = (texto) => consola.escribir(texto)
 ): PoliticaDeAprobacion {
-  return async (plan) => {
+  return async (plan, contexto) => {
     // El plan se compone ANTES de escribirlo, y no es por estilo: las MISMAS líneas que van
     // al scrollback viajan en la PREGUNTA, para que una piel con tarjeta las enseñe dentro
     // de ella —el paso donde se decide— en vez de dejarlas en un transcript que puede estar
@@ -1110,14 +1117,25 @@ export function politicaInteractiva(
     const contestada =
       consola.decidirConSeleccion === undefined
         ? { respuesta: await consola.preguntar("¿Subir a CloudStudio?", { lineas, operacion: "subir" }) }
-        : await consola.decidirConSeleccion("¿Subir a CloudStudio?", { lineas, seleccionable: true, operacion: "subir" });
+        : await consola.decidirConSeleccion("¿Subir a CloudStudio?", {
+            lineas,
+            seleccionable: true,
+            operacion: "subir",
+            ...(contexto === undefined ? {} : { rama: contexto.rama }),
+          });
     if (interpretAnswer(contestada.respuesta).type !== "approve") {
       decir("  → rechazado, no se ha aplicado nada\n");
       return false;
     }
+    // La rama NUEVA (IXCODE-71) viaja tal cual llegó: si el nombre no vale, lo dice `subir` antes de tocar Studio.
+    const ramaNueva = "ramaNueva" in contestada ? contestada.ramaNueva : undefined;
+    const conRama = (rutas: string[]): AutorizacionDeSubida => {
+      decir(`  → a una rama NUEVA, «${ramaNueva}», creada desde «${contexto?.rama ?? "la del proyecto"}»\n`);
+      return { rutas, ramaNueva: ramaNueva! };
+    };
     if (contestada.seleccion === undefined) {
       decir("  → APROBADO\n");
-      return true;
+      return ramaNueva === undefined ? true : conRama(plan.map((operacion) => operacion.ruta));
     }
     const elegidas = planAutorizado(plan, { rutas: contestada.seleccion });
     if (elegidas.length === 0) {
@@ -1126,13 +1144,14 @@ export function politicaInteractiva(
     }
     if (elegidas.length === plan.length) {
       decir("  → APROBADO\n");
-      return true;
+      return ramaNueva === undefined ? true : conRama(elegidas.map((operacion) => operacion.ruta));
     }
     decir(`  → APROBADO: ${elegidas.length} de ${plan.length}\n`);
     // Los NOMBRES de lo elegido: el plan de arriba lista los M, y sin esto el registro de una
     // subida parcial no diría cuáles de ellos subieron.
     for (const operacion of elegidas) decir(`    ${operacion.ruta}\n`);
-    return { rutas: elegidas.map((operacion) => operacion.ruta) };
+    const rutas = elegidas.map((operacion) => operacion.ruta);
+    return ramaNueva === undefined ? { rutas } : conRama(rutas);
   };
 }
 
@@ -1416,7 +1435,14 @@ export const COMANDOS: Record<string, { descripcion: string; manejador: Manejado
                 if (planAutorizado(plan, autorizada).length === 0) rechazada = true;
                 return autorizada;
               };
-        const resultado = await consola.sincronizar(accion, estado.raiz, politicaDeAprobacion, decir, confirmarBajada);
+        const resultado = await consola.sincronizar(
+          accion,
+          estado.raiz,
+          politicaDeAprobacion,
+          decir,
+          confirmarBajada,
+          consola.progresoDeSincronizacion === undefined ? undefined : (p) => consola.progresoDeSincronizacion?.(p)
+        );
         if (resultado.tipo === "arbol-sucio") {
           // Al subir se sube el estado de un COMMIT, no un borrador: así «lo que está
           // arriba» es siempre un commit concreto y mover la ref significa algo. Al bajar

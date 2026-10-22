@@ -25,6 +25,7 @@ import type { SelectorDeConsola } from "../../cli/consola.js";
 // La forma de una pregunta de sí o no. Se trae de donde vive `Preguntar` en vez de
 // redeclararla: es el MISMO contrato, y una segunda copia sería la que diverge.
 import type { DecisionDeConsola } from "../../cli/aprobar.js";
+import type { ProgresoDeSubida } from "../../core/cloudstudio.js";
 // Solo TIPO, y por eso no es un ciclo: `vestibulo.ts` importa este módulo para ejecutar,
 // y esta importación se borra al compilar. Se traen de allí en vez de redeclararlos aquí
 // porque son los MISMOS pasos y los MISMOS entornos que el vestíbulo calcula; una segunda
@@ -231,6 +232,12 @@ export type MensajeAlCliente =
    * ningún error que lo delate.
    */
   | { clase: "pregunta"; texto: string; decision?: DecisionDeConsola }
+  /**
+   * Por dónde va la subida EN CURSO (IXCODE-69): la barra del diálogo de la subida, que sigue abierto tras «Aceptar».
+   * Es un DATO de `subir` (`core/cloudstudio.ts#ProgresoDeSubida`), no se lee del recorrido; no se persiste: lo que
+   * queda de una subida es su acto `sincronizacion`.
+   */
+  | { clase: "progresoDeSubida"; progreso: ProgresoDeSubida }
   | { clase: "selector"; selector: SelectorDeConsola }
   /**
    * Los modelos: cuál está en vigor, cuál queda por defecto, y qué se puede elegir.
@@ -1593,7 +1600,7 @@ export type MensajeDelCliente =
    * `seleccionable` (la subida a CloudStudio): las rutas que la persona dejó marcadas.
    * Ausente = el plan entero, o una pregunta que no deja elegir.
    */
-  | { clase: "respuesta"; texto: string; seleccion?: string[] }
+  | { clase: "respuesta"; texto: string; seleccion?: string[]; ramaNueva?: string }
   /**
    * La respuesta a `seleccionar`. **Sin `id` (o con `id: null`) es CANCELAR**, que es
    * exactamente lo que `seleccionar` ya devuelve al desconectarse y al vencer su plazo — en

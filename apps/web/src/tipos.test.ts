@@ -270,6 +270,7 @@ describe("tipos del cliente", () => {
       ],
       seleccionable: true as const,
       operacion: "subir" as const,
+      rama: "master",
     };
 
     s.aplicar({ clase: "pregunta", texto: "¿Subir a CloudStudio?", decision });

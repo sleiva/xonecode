@@ -3577,6 +3577,24 @@ describe("App: «Subir» y la subida con selección", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
+  it("la rama NUEVA viaja en la respuesta, y la barra enseña el progreso que manda el servidor (IXCODE-71/69)", async () => {
+    const { store, enviar } = montar();
+    act(() =>
+      store.aplicar({
+        clase: "pregunta",
+        texto: "¿Subir a CloudStudio?",
+        decision: { lineas: [{ texto: "x", cambio: "nuevo", ruta: "a.xne" }], seleccionable: true, operacion: "subir", rama: "master" },
+      })
+    );
+    fireEvent.click(screen.getByRole("checkbox", { name: "Subir a una rama nueva" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Nombre de la rama nueva" }), { target: { value: "pruebas" } });
+    fireEvent.click(screen.getByRole("button", { name: /aceptar/i }));
+    expect(enviar).toHaveBeenCalledWith({ clase: "respuesta", texto: "s", seleccion: ["a.xne"], ramaNueva: "pruebas" });
+    await screen.findByRole("button", { name: /subiendo/i });
+    act(() => store.aplicar({ clase: "progresoDeSubida", progreso: { fase: "subiendo", hechas: 1, total: 4 } }));
+    expect(screen.getByText("1 de 4 ficheros")).toBeTruthy();
+  });
+
   it("con fallos lo DICE, no «todo subido»; y sin recuento tampoco", async () => {
     const { store } = montar();
     const preguntar = () =>

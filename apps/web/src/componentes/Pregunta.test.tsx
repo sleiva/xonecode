@@ -387,3 +387,89 @@ describe("Pregunta: «Actualizar repo local» se queda hasta que termina", () =>
     expect(screen.queryByText("Repo local actualizado")).toBeNull();
   });
 });
+
+describe("Pregunta: subir a una rama NUEVA (IXCODE-71) y la barra de progreso (IXCODE-69)", () => {
+  const SUBIDA = {
+    lineas: [
+      { texto: "SUBIDA A CLOUDSTUDIO — 1 operación" },
+      { texto: "  ~ app.xml", cambio: "modificado" as const, ruta: "app.xml" },
+    ],
+    seleccionable: true as const,
+    operacion: "subir" as const,
+    rama: "master",
+  };
+  const aceptar = (): HTMLButtonElement => screen.getByRole("button", { name: /aceptar/i });
+
+  it("sin la rama del proyecto no se ofrece crear ninguna", () => {
+    const { rama: _rama, ...sinRama } = SUBIDA;
+    render(<Pregunta texto="¿Subir a CloudStudio?" decision={sinRama} alResponder={() => {}} />);
+    expect(screen.queryByRole("checkbox", { name: "Subir a una rama nueva" })).toBeNull();
+  });
+
+  it("pide el nombre, dice de dónde sale, y sin nombre no deja aceptar", () => {
+    render(<Pregunta texto="¿Subir a CloudStudio?" decision={SUBIDA} alResponder={() => {}} />);
+    expect(screen.queryByRole("textbox", { name: "Nombre de la rama nueva" })).toBeNull();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Subir a una rama nueva" }));
+    expect(screen.getByRole("textbox", { name: "Nombre de la rama nueva" })).toBeTruthy();
+    expect(screen.getByText(/Se crea desde «master»/)).toBeTruthy();
+    expect(aceptar().disabled).toBe(true);
+    fireEvent.change(screen.getByRole("textbox", { name: "Nombre de la rama nueva" }), { target: { value: "   " } });
+    expect(aceptar().disabled).toBe(true);
+  });
+
+  it("Aceptar manda las rutas y el NOMBRE, sin espacios alrededor", () => {
+    const alResponder = vi.fn();
+    render(<Pregunta texto="¿Subir a CloudStudio?" decision={SUBIDA} alResponder={alResponder} />);
+    fireEvent.click(screen.getByRole("checkbox", { name: "Subir a una rama nueva" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Nombre de la rama nueva" }), { target: { value: " pruebas " } });
+    fireEvent.click(aceptar());
+    expect(alResponder).toHaveBeenCalledWith("s", ["app.xml"], "pruebas");
+  });
+
+  it("sin pedir rama nueva no manda ninguna", () => {
+    const alResponder = vi.fn();
+    render(<Pregunta texto="¿Subir a CloudStudio?" decision={SUBIDA} alResponder={alResponder} />);
+    fireEvent.click(aceptar());
+    expect(alResponder).toHaveBeenCalledWith("s", ["app.xml"]);
+  });
+
+  it("subiendo, la barra dice cuántos de cuántos; creando la rama, que la crea", () => {
+    const { rerender } = render(
+      <Pregunta
+        texto="¿Subir a CloudStudio?"
+        decision={SUBIDA}
+        alResponder={() => {}}
+        progreso={{ fase: "trabajando", operacion: "subir", avance: { fase: "creando-rama", rama: "pruebas" } }}
+      />
+    );
+    expect(screen.getByText("Creando la rama «pruebas»…")).toBeTruthy();
+    rerender(
+      <Pregunta
+        texto="¿Subir a CloudStudio?"
+        decision={SUBIDA}
+        alResponder={() => {}}
+        progreso={{ fase: "trabajando", operacion: "subir", avance: { fase: "subiendo", hechas: 3, total: 8 } }}
+      />
+    );
+    const barra = screen.getByRole("progressbar", { name: "Progreso de la subida" }) as HTMLProgressElement;
+    expect([barra.value, barra.max]).toEqual([3, 8]);
+    expect(screen.getByText("3 de 8 ficheros")).toBeTruthy();
+  });
+
+  it("sin avance que conste, solo el giro: ni barra ni cifras inventadas", () => {
+    render(<Pregunta texto="¿Subir a CloudStudio?" decision={SUBIDA} alResponder={() => {}} progreso={{ fase: "trabajando", operacion: "subir" }} />);
+    expect(screen.queryByRole("progressbar")).toBeNull();
+  });
+
+  it("al final dice la rama nueva y que el proyecto es ahora de ella", () => {
+    render(
+      <Pregunta
+        texto="¿Subir a CloudStudio?"
+        decision={SUBIDA}
+        alResponder={() => {}}
+        progreso={{ fase: "terminada", operacion: "subir", lineas: [], resultado: { subidos: 1, fallidos: 0, rama: "pruebas" } }}
+      />
+    );
+    expect(screen.getByText(/en la rama nueva «pruebas»\. El proyecto es ahora de esa rama\./)).toBeTruthy();
+  });
+});

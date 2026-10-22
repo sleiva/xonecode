@@ -700,6 +700,35 @@ describe("/sync", () => {
       expect(operaciones[0]?.resultado).toEqual({ subidos: 1, fallidos: 2 });
     });
 
+    it("el progreso de `sincronizar` llega a la piel que lo pinta (IXCODE-69), y sin ella no se pide", async () => {
+      const progresos: unknown[] = [];
+      const { consola } = consolaDeConSecreto({ lineas: ["/sync subir", "/salir"], respuestas: ["s"] });
+      let recibido: unknown = "sin llamar";
+      const conSync: Consola = {
+        ...consola,
+        progresoDeSincronizacion: (p) => progresos.push(p),
+        sincronizar: async (_accion, _raiz, _politica, _informar, _confirmar, alProgreso) => {
+          alProgreso?.({ fase: "subiendo", hechas: 1, total: 2 });
+          return { tipo: "texto", texto: "subidos 1, fallaron 0\n" };
+        },
+      };
+      await correrConsola(conSync, estadoDe());
+      expect(progresos).toEqual([{ fase: "subiendo", hechas: 1, total: 2 }]);
+
+      const terminal = consolaDeConSecreto({ lineas: ["/sync subir", "/salir"], respuestas: ["s"] });
+      await correrConsola(
+        {
+          ...terminal.consola,
+          sincronizar: async (_accion, _raiz, _politica, _informar, _confirmar, alProgreso) => {
+            recibido = alProgreso;
+            return { tipo: "texto", texto: "" };
+          },
+        },
+        estadoDe()
+      );
+      expect(recibido).toBeUndefined();
+    });
+
     it("una subida CANCELADA no deja entrada en el registro, y en el terminal se sigue diciendo", async () => {
       // Medido en el navegador: cada «Cancelar» en la tarjeta dejaba un «Subir · 10:30» en la
       // banda que no contaba nada que hubiera pasado. El registro es de lo que CORRIÓ.

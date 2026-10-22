@@ -2280,3 +2280,20 @@ describe("store: lo pendiente de subir (la pestaña Sincronización)", () => {
     expect(s.leer().remoto).toEqual({ estado: "reconectando", url: "https://r/r/S#K", moviles: 2 });
   });
 });
+
+/** IXCODE-69: la barra del diálogo de la subida lee esto, y solo lo que tiene su forma. */
+describe("el progreso de la subida", () => {
+  it("guarda lo que tiene su forma, tira lo que no, y otra pregunta lo borra", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "progresoDeSubida", progreso: { fase: "subiendo", hechas: 2, total: 5 } });
+    expect(s.leer().progresoDeSubida).toEqual({ fase: "subiendo", hechas: 2, total: 5 });
+    // Más hechas que total, o cifras que no son enteras: no se pinta una barra imposible.
+    s.aplicar({ clase: "progresoDeSubida", progreso: { fase: "subiendo", hechas: 6, total: 5 } });
+    s.aplicar({ clase: "progresoDeSubida", progreso: { fase: "subiendo", hechas: 1.5, total: 5 } as never });
+    expect(s.leer().progresoDeSubida).toEqual({ fase: "subiendo", hechas: 2, total: 5 });
+    s.aplicar({ clase: "progresoDeSubida", progreso: { fase: "creando-rama", rama: "pruebas" } });
+    expect(s.leer().progresoDeSubida).toEqual({ fase: "creando-rama", rama: "pruebas" });
+    s.aplicar({ clase: "pregunta", texto: "¿Subir a CloudStudio?", decision: { lineas: [], seleccionable: true, operacion: "subir" } });
+    expect(s.leer().progresoDeSubida).toBeUndefined();
+  });
+});

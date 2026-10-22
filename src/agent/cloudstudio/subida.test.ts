@@ -882,3 +882,122 @@ describe("subir lee cada texto con su codificación", () => {
     expect(puerto.textos["a.xne"]).toBe(texto);
   });
 });
+
+/**
+ * IXCODE-71: subir creando una rama NUEVA a partir de la del proyecto. Lo pendiente se sigue midiendo contra la ref de
+ * la del proyecto —la nueva nace copia suya en el servidor—, se escribe en la nueva, y el proyecto pasa a ser de ella.
+ */
+describe("subir a una rama nueva", () => {
+  const conRamaNueva = (ramaNueva: string) => async () => ({ rutas: ["app.xml"], ramaNueva });
+
+  it("la crea desde la del proyecto, escribe ahí, siembra y avanza SU ref, y la adopta", async () => {
+    const raiz = await proyectoConCambios();
+    mkdirSync(dirname(rutaSyncJson(raiz)), { recursive: true });
+    writeFileSync(rutaSyncJson(raiz), JSON.stringify({ proyecto: { id: "1", nombre: "AppForTest" }, rama: "master", descargados: ["app.xml"] }));
+    const refDeMaster = git(raiz, "rev-parse", `refs/remotes/${REMOTO}/master`);
+    const base = new CloudStudioEnMemoria({ rama: "master", textos: { "app.xml": "<app/>" } });
+    await base.abrir("AppForTest");
+    const { puerto, ramasAlEscribir } = conRamaInstrumentada(base);
+    const creadas: [string, string][] = [];
+    const adoptadas: string[] = [];
+
+    const informe = await subir({
+      puerto, raiz, ramaOrigen: "master", proyecto: { id: "1", nombre: "AppForTest" },
+      politicaDeAprobacion: conRamaNueva(" pruebas-rafa "),
+      crearRama: async (nueva, desde) => (creadas.push([nueva, desde]), true),
+      adoptarRama: (nueva) => adoptadas.push(nueva),
+    });
+
+    expect(creadas).toEqual([["pruebas-rafa", "master"]]);
+    expect(ramasAlEscribir).toEqual(["pruebas-rafa"]);
+    expect(informe).toMatchObject({ ok: ["app.xml"], ramaNueva: "pruebas-rafa" });
+    expect(adoptadas).toEqual(["pruebas-rafa"]);
+    // La ref de la nueva llega a HEAD; la de la del proyecto no se toca.
+    expect(git(raiz, "rev-parse", `refs/remotes/${REMOTO}/pruebas-rafa`)).toBe(git(raiz, "rev-parse", "HEAD"));
+    expect(git(raiz, "rev-parse", `refs/remotes/${REMOTO}/master`)).toBe(refDeMaster);
+    expect(await cambiosPendientes(raiz, "pruebas-rafa")).toEqual([]);
+    expect(JSON.parse(readFileSync(rutaSyncJson(raiz), "utf8")).rama).toBe("pruebas-rafa");
+    const ultima = JSON.parse(readFileSync(rutaSyncLog(raiz), "utf8").trim().split("\n").at(-1)!);
+    expect(ultima.rama).toBe("pruebas-rafa");
+  });
+
+  it("si ya EXISTE no sube nada, no adopta y no mueve ninguna ref: eso sería IXCODE-70", async () => {
+    const raiz = await proyectoConCambios();
+    const refDeMaster = git(raiz, "rev-parse", `refs/remotes/${REMOTO}/master`);
+    const puerto = new CloudStudioEnMemoria({ rama: "master", textos: { "app.xml": "<app/>" } });
+    await puerto.abrir("AppForTest");
+    const adoptadas: string[] = [];
+
+    await expect(
+      subir({
+        puerto, raiz, ramaOrigen: "master", proyecto: { id: "1", nombre: "AppForTest" },
+        politicaDeAprobacion: conRamaNueva("dev"),
+        crearRama: async () => false,
+        adoptarRama: (nueva) => adoptadas.push(nueva),
+      })
+    ).rejects.toThrow(/ya existe/);
+
+    expect(puerto.escrituras).toEqual([]);
+    expect(adoptadas).toEqual([]);
+    expect(git(raiz, "rev-parse", `refs/remotes/${REMOTO}/master`)).toBe(refDeMaster);
+    expect(git(raiz, "for-each-ref", "--format=%(refname)", `refs/remotes/${REMOTO}/dev`)).toBe("");
+  });
+
+  it("un nombre que no vale no llega a Studio: ni se abre ni se crea nada", async () => {
+    const raiz = await proyectoConCambios();
+    const puerto = new CloudStudioEnMemoria({ rama: "master", textos: { "app.xml": "<app/>" } });
+    let creada = false;
+    await expect(
+      subir({
+        puerto, raiz, ramaOrigen: "master", proyecto: { id: "1", nombre: "AppForTest" },
+        politicaDeAprobacion: conRamaNueva("con espacios"),
+        crearRama: async () => (creada = true),
+      })
+    ).rejects.toThrow(/no vale como nombre de rama/);
+    expect(creada).toBe(false);
+    expect(puerto.escrituras).toEqual([]);
+  });
+
+  it("sin quien cree ramas, pedir una es un NO: fail-closed", async () => {
+    const raiz = await proyectoConCambios();
+    const puerto = new CloudStudioEnMemoria({ rama: "master", textos: { "app.xml": "<app/>" } });
+    await expect(
+      subir({ puerto, raiz, ramaOrigen: "master", proyecto: { id: "1", nombre: "AppForTest" }, politicaDeAprobacion: conRamaNueva("nueva") })
+    ).rejects.toThrow(/no se pueden crear ramas/);
+    expect(puerto.escrituras).toEqual([]);
+  });
+});
+
+/** IXCODE-69: la barra de progreso lee DATOS, no el recorrido de texto. */
+describe("subir dice por dónde va", () => {
+  it("de 0 al total de lo autorizado, contando también lo que falla", async () => {
+    const raiz = await proyectoConCambios();
+    const base = new CloudStudioEnMemoria({ rama: "master", textos: { "app.xml": "<app/>" } });
+    await base.abrir("AppForTest");
+    const puerto = conEscrituraDeTextoQueFalla(base);
+    const progreso: unknown[] = [];
+    await subir({
+      puerto, raiz, ramaOrigen: "master", proyecto: { id: "1", nombre: "AppForTest" },
+      politicaDeAprobacion: autorizaSiempre, alProgreso: (p) => progreso.push(p),
+    });
+    expect(progreso).toEqual([
+      { fase: "subiendo", hechas: 0, total: 1 },
+      { fase: "subiendo", hechas: 1, total: 1 },
+    ]);
+  });
+
+  it("con rama nueva, primero dice que la crea", async () => {
+    const raiz = await proyectoConCambios();
+    const puerto = new CloudStudioEnMemoria({ rama: "master", textos: { "app.xml": "<app/>" } });
+    await puerto.abrir("AppForTest");
+    const progreso: unknown[] = [];
+    await subir({
+      puerto, raiz, ramaOrigen: "master", proyecto: { id: "1", nombre: "AppForTest" },
+      politicaDeAprobacion: async () => ({ rutas: ["app.xml"], ramaNueva: "nueva" }),
+      crearRama: async () => true,
+      alProgreso: (p) => progreso.push(p),
+    });
+    expect(progreso[0]).toEqual({ fase: "creando-rama", rama: "nueva" });
+    expect(progreso.at(-1)).toEqual({ fase: "subiendo", hechas: 1, total: 1 });
+  });
+});

@@ -514,6 +514,16 @@ export async function marcarSubido(raiz: string, rama: string, mensaje: string):
 }
 
 /**
+ * La ref de una rama RECIÉN creada en Studio a partir de otra (IXCODE-71): nace donde estaba la de su origen, porque en
+ * el servidor es una copia de ella. Sin esto `marcarSubidoParcial` no tendría de qué partir, y «lo que falta por subir»
+ * contra la rama nueva lo contaría todo.
+ */
+export async function sembrarRefDeRama(raiz: string, desde: string, nueva: string): Promise<void> {
+  const { stdout } = await git(raiz, ["rev-parse", "--verify", `refs/remotes/${REMOTO}/${desde}^{commit}`]);
+  await git(raiz, ["update-ref", "-m", `rama ${nueva} creada desde ${desde}`, `refs/remotes/${REMOTO}/${nueva}`, stdout.trim()]);
+}
+
+/**
  * Mover la ref SOLO por lo que subió: la subida parcial, cuando la persona eligió qué ficheros
  * subían.
  *

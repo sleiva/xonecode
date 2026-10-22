@@ -38,7 +38,13 @@ Ante una discrepancia con el código, **el código manda**.
   se dice «quedó SIN git», solo con el `code`. Git sale también en el diagnóstico de Node.
 - **Lo que no se pudo bajar, no se puede borrar** (`core/planDeSubida.ts`): el manifiesto de
   `sync.json`.
-- **Se sube a la MISMA rama de la que se bajó** (`config.rama`).
+- **Se sube a la MISMA rama de la que se bajó** (`config.rama`), **salvo a una rama NUEVA pedida al
+  autorizar** (IXCODE-71, `AutorizacionDeSubida.ramaNueva`): se crea en Studio DESDE la del proyecto
+  (`crearRama.ts`; si ya existe, no se sube nada), su ref nace de la del proyecto (`sembrarRefDeRama`), `sync.json`
+  y `config.rama` pasan a ella, y se sube ahí. Lo pendiente se mide contra la ref de la del proyecto: la nueva nace
+  copia suya. Subir a una rama que YA existe es otra cosa (IXCODE-70) y no se hace.
+- **El progreso de la subida es un DATO** (`ProgresoDeSubida`, `subir#alProgreso`, `Consola.progresoDeSincronizacion?`
+  → `{clase:"progresoDeSubida"}`), nunca leído del recorrido; no se persiste.
 - **La rama activa solo se sabe por `studio_get_context`, y esa tool se CAE en el servidor para
   algunos proyectos**: leerla es una CORTESÍA, no una condición de corrección — el
   `cambiarRama(ramaOrigen)` explícito sostiene de qué rama se baja/sube. `ramaActiva.ts` devuelve

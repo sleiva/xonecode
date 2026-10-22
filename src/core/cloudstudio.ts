@@ -118,7 +118,11 @@ export interface OperacionOmitida {
  *   sustentaría, así que esta política no se implementa todavía: el hueco queda limpio
  *   para enchufarla el día que exista.
  */
-export type PoliticaDeAprobacion = (plan: readonly OperacionDeSubida[]) => Promise<AutorizacionDeSubida>;
+export type PoliticaDeAprobacion = (
+  plan: readonly OperacionDeSubida[],
+  /** La rama del proyecto, para que quien autoriza sepa de cuál saldría una rama nueva. */
+  contexto?: { rama: string }
+) => Promise<AutorizacionDeSubida>;
 
 /**
  * Lo que contesta la política: nada (`false`), el plan ENTERO (`true`), o solo las rutas que
@@ -128,7 +132,40 @@ export type PoliticaDeAprobacion = (plan: readonly OperacionDeSubida[]) => Promi
  * leerlo así convertiría «no marqué nada» en «súbelo». Lo que se ejecuta lo dice SIEMPRE
  * `planAutorizado`, y un plan autorizado vacío es un rechazo.
  */
-export type AutorizacionDeSubida = boolean | { rutas: readonly string[] };
+export type AutorizacionDeSubida = boolean | { rutas: readonly string[]; ramaNueva?: string };
+
+/**
+ * La rama NUEVA a la que pidió subir quien autorizó (IXCODE-71), si pidió una: se crea en Studio a partir de la del
+ * proyecto y se sube ahí. Va DENTRO de la autorización, y no en el comando, para que un «Cancelar» no cree nada.
+ */
+export function ramaNuevaDe(autorizacion: AutorizacionDeSubida): string | undefined {
+  if (typeof autorizacion !== "object" || autorizacion === null) return undefined;
+  return typeof autorizacion.ramaNueva === "string" ? autorizacion.ramaNueva.trim() : undefined;
+}
+
+/**
+ * Por qué NO vale ese nombre para una rama nueva, o `undefined` si vale. Pura, y la decide el servidor: el cliente
+ * solo la repite para apagar el botón. Letras, cifras, `.`, `_` y `-`, empezando por letra o cifra: lo que no sabemos si
+ * Studio acepta no se le manda. Que ya EXISTA lo dice quien la crea (`crearRama`), que es quien lo puede saber.
+ */
+export function motivoDeRamaNueva(nombre: string, ramaDelProyecto: string): string | undefined {
+  const limpio = nombre.trim();
+  if (limpio === "") return "falta el nombre de la rama nueva";
+  if (limpio.length > TOPE_DEL_NOMBRE_DE_RAMA) return `el nombre de la rama es demasiado largo (más de ${TOPE_DEL_NOMBRE_DE_RAMA})`;
+  if (!/^[\p{L}\p{N}][\p{L}\p{N}._-]*$/u.test(limpio)) {
+    return `«${limpio}» no vale como nombre de rama: solo letras, cifras, «.», «_» y «-», sin espacios`;
+  }
+  if (limpio === ramaDelProyecto) return `«${limpio}» es la rama del proyecto: para subir a ella no hace falta crearla`;
+  return undefined;
+}
+
+export const TOPE_DEL_NOMBRE_DE_RAMA = 100;
+
+/**
+ * Por dónde va una subida, como DATO (IXCODE-69): la barra de progreso no puede leer cifras del recorrido, que es
+ * texto. `creando-rama` antes de escribir nada; `subiendo` con lo hecho —subido, fallado o no— de lo autorizado.
+ */
+export type ProgresoDeSubida = { fase: "creando-rama"; rama: string } | { fase: "subiendo"; hechas: number; total: number };
 
 /**
  * Las operaciones que se ejecutan de verdad: el plan cruzado con lo autorizado.

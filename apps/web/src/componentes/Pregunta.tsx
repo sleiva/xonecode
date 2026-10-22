@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Input, Button, Modal } from "@deepseek-ai/dsh-client-ui-primitives";
-import type { DecisionDeConsola } from "../tipos.js";
+import type { DecisionDeConsola, ProgresoDeSubida } from "../tipos.js";
 import { arbolDeRutas } from "../arbolDeRutas.js";
 import { Arbol } from "./Arbol.js";
 import estilos from "./Pregunta.module.css";
@@ -30,11 +30,12 @@ const SIN_CERRAR = (): void => {};
  *   servidor (el cable que se cae).
  */
 export type ProgresoDeOperacion =
-  | { fase: "trabajando"; operacion: "subir" | "bajar" }
+  /** `avance`: por dónde va la subida, si ya lo ha dicho (IXCODE-69); sin él, solo el giro. */
+  | { fase: "trabajando"; operacion: "subir" | "bajar"; avance?: ProgresoDeSubida }
   | {
       fase: "terminada";
       operacion: "subir" | "bajar";
-      resultado?: { subidos: number; fallidos: number; avisos?: string[] };
+      resultado?: { subidos: number; fallidos: number; avisos?: string[]; rama?: string };
       bajados?: number;
       error?: string;
       lineas: readonly string[];
@@ -132,7 +133,7 @@ export function Pregunta({
    * dar la respuesta por entregada: retirar la pregunta con el envío fallido dejaría al
    * usuario creyendo que contestó, mientras el servidor sigue esperando hasta su plazo.
    */
-  alResponder: (respuesta: string, seleccion?: string[]) => void | Promise<unknown>;
+  alResponder: (respuesta: string, seleccion?: string[], ramaNueva?: string) => void | Promise<unknown>;
   /**
    * `true` dentro de `TarjetaDeAlta` (la clave de API del paso de cuenta): sin borde ni
    * fondo propio, para no anidar dos cajas iguales — ver `Selector.tsx`, mismo motivo y
@@ -170,11 +171,13 @@ export function Pregunta({
    * DOS resolutores de la cola FIFO del servidor, y el segundo se comería la respuesta de
    * la pregunta siguiente.
    */
-  const responder = (respuesta: string, seleccion?: string[]): void => {
+  const responder = (respuesta: string, seleccion?: string[], ramaNueva?: string): void => {
     if (enviando) return;
     setEnviando(true);
     setFalloDeEnvio(false);
-    void Promise.resolve(seleccion === undefined ? alResponder(respuesta) : alResponder(respuesta, seleccion)).catch(() => {
+    const envio =
+      seleccion === undefined ? alResponder(respuesta) : ramaNueva === undefined ? alResponder(respuesta, seleccion) : alResponder(respuesta, seleccion, ramaNueva);
+    void Promise.resolve(envio).catch(() => {
       if (!montado.current) return;
       setEnviando(false);
       setFalloDeEnvio(true);
@@ -339,7 +342,7 @@ function DecisionConSeleccion({
   decision: DecisionDeConsola;
   enviando: boolean;
   fallo: ReactNode;
-  alResponder: (respuesta: string, seleccion?: string[]) => void;
+  alResponder: (respuesta: string, seleccion?: string[], ramaNueva?: string) => void;
   progreso?: ProgresoDeOperacion;
   alCerrar?: () => void;
 }) {
@@ -360,6 +363,13 @@ function DecisionConSeleccion({
   const cuantas = ficheros.filter((f) => marcadas.has(f.ruta)).length;
   // Desde que se acepta, nada de lo elegido se puede tocar: ni casillas, ni atajos, ni Cancelar.
   const bloqueado = enviando || subiendo;
+  /**
+   * Subir a una rama NUEVA (IXCODE-71), creada desde la del proyecto: solo si la decisión dice cuál es. El nombre lo
+   * valida el SERVIDOR, que dice por qué no vale en el final del diálogo; aquí solo se exige que haya uno.
+   */
+  const [conRamaNueva, setConRamaNueva] = useState(false);
+  const [ramaNueva, setRamaNueva] = useState("");
+  const faltaNombre = conRamaNueva && ramaNueva.trim() === "";
 
   if (progreso?.fase === "terminada") {
     return <FinDeLaOperacion texto={texto} progreso={progreso} alCerrar={alCerrar ?? SIN_CERRAR} />;
@@ -391,6 +401,36 @@ function DecisionConSeleccion({
               Deseleccionar todo
             </button>
           </div>
+          {decision.rama === undefined ? null : (
+            <div className={estilos.ramaNueva}>
+              <label className={estilos.casillaDeRama}>
+                <input
+                  type="checkbox"
+                  checked={conRamaNueva}
+                  disabled={bloqueado}
+                  onChange={(e) => setConRamaNueva(e.target.checked)}
+                />
+                Subir a una rama nueva
+              </label>
+              {conRamaNueva ? (
+                <>
+                  <input
+                    className={estilos.nombreDeRama}
+                    type="text"
+                    aria-label="Nombre de la rama nueva"
+                    placeholder="nombre de la rama"
+                    value={ramaNueva}
+                    disabled={bloqueado}
+                    autoFocus
+                    onChange={(e) => setRamaNueva(e.target.value)}
+                  />
+                  <p className={estilos.notaDeRama}>
+                    Se crea desde «{decision.rama}» y el proyecto pasa a ser de ella: las próximas subidas irán ahí.
+                  </p>
+                </>
+              ) : null}
+            </div>
+          )}
           <div className={estilos.arbol}>
             <Arbol
               nodos={nodos}
@@ -413,10 +453,14 @@ function DecisionConSeleccion({
               type="button"
               variant="primary"
               className={estilos.accion}
-              disabled={bloqueado || cuantas === 0}
+              disabled={bloqueado || cuantas === 0 || faltaNombre}
               aria-busy={subiendo}
               // Las marcadas en el ORDEN del plan, no en el de los clics.
-              onClick={() => alResponder(SI, ficheros.filter((f) => marcadas.has(f.ruta)).map((f) => f.ruta))}
+              onClick={() => {
+                const elegidas = ficheros.filter((f) => marcadas.has(f.ruta)).map((f) => f.ruta);
+                if (conRamaNueva) alResponder(SI, elegidas, ramaNueva.trim());
+                else alResponder(SI, elegidas);
+              }}
             >
               {subiendo ? <span className={estilos.girando} aria-hidden="true" /> : null}
               {subiendo ? "Subiendo…" : "Aceptar"}
@@ -431,10 +475,35 @@ function DecisionConSeleccion({
               Cancelar
             </Button>
           </div>
+          {subiendo && progreso?.fase === "trabajando" && progreso.avance !== undefined ? (
+            <BarraDeSubida avance={progreso.avance} />
+          ) : null}
           {fallo}
         </div>
       </div>
     </Modal>
+  );
+}
+
+/**
+ * La barra de la subida en curso (IXCODE-69): cuántos de cuántos, del DATO que manda `subir`. Creando la rama no hay
+ * cifras todavía, y se dice qué hace.
+ */
+function BarraDeSubida({ avance }: { avance: ProgresoDeSubida }) {
+  if (avance.fase === "creando-rama") {
+    return (
+      <p className={estilos.avance} role="status">
+        Creando la rama «{avance.rama}»…
+      </p>
+    );
+  }
+  return (
+    <div className={estilos.avance}>
+      <progress className={estilos.barra} max={avance.total} value={avance.hechas} aria-label="Progreso de la subida" />
+      <span role="status">
+        {avance.hechas} de {avance.total} {avance.total === 1 ? "fichero" : "ficheros"}
+      </span>
+    </div>
   );
 }
 
@@ -474,7 +543,9 @@ function FinDeLaOperacion({
         : (progreso.motivo ?? "No consta cómo terminó. Esto es lo que contó la operación:");
   } else if (bien && resultado !== undefined) {
     titulo = "Todo subido correctamente";
-    detalle = `${resultado.subidos} ${resultado.subidos === 1 ? "fichero subido" : "ficheros subidos"} a CloudStudio.`;
+    detalle =
+      `${resultado.subidos} ${resultado.subidos === 1 ? "fichero subido" : "ficheros subidos"} a CloudStudio` +
+      (resultado.rama === undefined ? "." : `, en la rama nueva «${resultado.rama}». El proyecto es ahora de esa rama.`);
   } else if (resultado === undefined) {
     titulo = "La subida no ha terminado bien";
     detalle = progreso.motivo ?? "No consta cómo terminó. Esto es lo que contó la operación:";
@@ -484,6 +555,10 @@ function FinDeLaOperacion({
   } else {
     titulo = "La subida ha terminado con fallos";
     detalle = `Subidos ${resultado.subidos}, fallaron ${resultado.fallidos}. Lo que falló sigue pendiente y se reintenta en la próxima subida.`;
+  }
+  // Con una rama NUEVA que no subió entera, se dice igual que la rama ya existe y es la del proyecto (IXCODE-71).
+  if (subir && !bien && error === undefined && resultado?.rama !== undefined) {
+    detalle += ` La rama «${resultado.rama}» ya está creada y el proyecto es ahora de ella.`;
   }
   // Lo que contó la operación, solo cuando no fue bien: con todo subido sobra.
   const lineas = bien ? [] : progreso.lineas.slice(-12);

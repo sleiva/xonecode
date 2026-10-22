@@ -2,10 +2,11 @@
 /**
  * Crear una rama en Studio a partir de otra.
  *
- * `CloudStudioPort` no lo tiene a propósito: la consola sube a la MISMA rama de la que bajó, y
- * nada de lo que hay hoy crea ramas. Quien trabaja de servidor (xonecode-copilot) sí lo
- * necesita: hace la tarea en una rama de destino que puede no existir todavía. Va aparte y no
- * en el puerto para que el puerto —y sus dobles— no cambien.
+ * `CloudStudioPort` no lo tiene a propósito: la consola sube a la MISMA rama de la que bajó, salvo
+ * cuando quien autoriza la subida pide una rama NUEVA (IXCODE-71, `subida.ts`), que se crea con
+ * esto. Quien trabaja de servidor (xonecode-copilot) también lo necesita: hace la tarea en una
+ * rama de destino que puede no existir todavía. Va aparte y no en el puerto para que el puerto
+ * —y sus dobles— no cambien.
  *
  * Se reabre el proyecto al final por lo mismo que `cambiarRama`: una operación de ramas puede
  * cerrar el proyecto en el servidor, y la siguiente llamada fallaría con «No project is open».

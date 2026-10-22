@@ -752,6 +752,8 @@ function piezasFalsas(overrides: Partial<PiezasDeSincronizacion> = {}): PiezasDe
     limpio: overrides.limpio ?? (async () => true),
     sinCommitear: overrides.sinCommitear ?? (async () => []),
     subirProyecto: overrides.subirProyecto ?? (async () => ({ ok: [], fallos: [], omitidas: [] })),
+    crearRama: overrides.crearRama ?? (async () => true),
+    guardarRama: overrides.guardarRama ?? ((_raiz, rama) => ({ ruta: "config.json", rama })),
     vaciar: overrides.vaciar ?? (() => []),
     repoPropio: overrides.repoPropio ?? (async () => false),
     versionDeGit: overrides.versionDeGit ?? (async () => "git version 2.47.0"),
@@ -763,6 +765,36 @@ function piezasFalsas(overrides: Partial<PiezasDeSincronizacion> = {}): PiezasDe
 }
 
 describe("crearSincronizador", () => {
+  /**
+   * IXCODE-71/69, la COSTURA: `subir` sabe crear, adoptar y contar, pero solo si quien lo compone le pasa con qué. Un
+   * opcional que nadie pasa es el patrón de fallo de este repo.
+   */
+  it("al subir le pasa a `subir` cómo crear la rama con su sesión, cómo adoptarla y el progreso; y devuelve la rama", async () => {
+    const raiz = raizConProyectoCloudYEntorno();
+    const invocar = async (): Promise<unknown> => undefined;
+    const creadas: unknown[][] = [];
+    const guardadas: string[] = [];
+    const progreso: unknown[] = [];
+    const subirProyecto: PiezasDeSincronizacion["subirProyecto"] = async (o) => {
+      await o.crearRama!("nueva", "master");
+      o.adoptarRama!("nueva");
+      o.alProgreso!({ fase: "subiendo", hechas: 1, total: 1 });
+      return { ok: ["a.xne"], fallos: [], omitidas: [], ramaNueva: "nueva" };
+    };
+    const resultado = await crearSincronizador(
+      piezasFalsas({
+        sesion: async () => ({ invocar, cerrar: async () => {} }),
+        subirProyecto,
+        crearRama: async (...args) => (creadas.push(args), true),
+        guardarRama: (_raiz, rama) => (guardadas.push(rama), { ruta: "config.json", rama }),
+      })
+    )("subir", raiz, async () => true, undefined, undefined, (p) => progreso.push(p));
+    expect(creadas).toEqual([[invocar, PUERTO_OPACO, "Proyecto", "nueva", "master"]]);
+    expect(guardadas).toEqual(["nueva"]);
+    expect(progreso).toEqual([{ fase: "subiendo", hechas: 1, total: 1 }]);
+    expect(resultado).toMatchObject({ subida: { subidos: 1, fallidos: 0, rama: "nueva" } });
+  });
+
   /**
    * IXCODE-60: bajar escribe los ficheros y DESPUÉS hace el `git init`. Sin git, la copia se
    * quedaba en el disco sin repo y todo lo que cuelga de git fallaba más tarde sin nombrarlo.

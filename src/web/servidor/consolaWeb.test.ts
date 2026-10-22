@@ -766,6 +766,50 @@ describe("consolaWeb: la subida deja ELEGIR qué ficheros suben", () => {
   });
 });
 
+describe("consolaWeb: la subida a una rama NUEVA (IXCODE-71) y su progreso (IXCODE-69)", () => {
+  const PLAN: OperacionDeSubida[] = [
+    { tipo: "texto", ruta: "a.xne", clase: "nuevo" },
+    { tipo: "texto", ruta: "js/b.js", clase: "modificado" },
+  ];
+  function conCable(): { c: ReturnType<typeof crearConsolaWeb>; vistos: MensajeAlCliente[] } {
+    const c = crearConsolaWeb({ msDeEspera: 60_000 });
+    const vistos: MensajeAlCliente[] = [];
+    c.conectar((m) => vistos.push(m));
+    return { c, vistos };
+  }
+
+  it("la pregunta dice la rama del proyecto, y la respuesta trae la nueva hasta la autorización", async () => {
+    const { c, vistos } = conCable();
+    const lineas: string[] = [];
+    const promesa = politicaInteractiva(c.consola, (t) => lineas.push(t))(PLAN, { rama: "master" });
+    const pregunta = vistos.find((m) => m.clase === "pregunta");
+    expect(pregunta?.clase === "pregunta" && pregunta.decision?.rama).toBe("master");
+    c.recibir({ clase: "respuesta", texto: "s", seleccion: ["a.xne", "js/b.js"], ramaNueva: "pruebas" });
+    // Con TODO marcado sigue siendo una lista: `true` no puede llevar la rama.
+    expect(await promesa).toEqual({ rutas: ["a.xne", "js/b.js"], ramaNueva: "pruebas" });
+    expect(lineas.join("")).toContain("rama NUEVA, «pruebas», creada desde «master»");
+  });
+
+  it("una rama que no es texto no viaja; un Cancelar con rama sigue siendo un NO", async () => {
+    const raro = conCable();
+    const r = politicaInteractiva(raro.c.consola)(PLAN, { rama: "master" });
+    raro.c.recibir({ clase: "respuesta", texto: "s", seleccion: ["a.xne", "js/b.js"], ramaNueva: 7 as unknown as string });
+    expect(await r).toBe(true);
+
+    const cancelada = conCable();
+    const no = politicaInteractiva(cancelada.c.consola)(PLAN, { rama: "master" });
+    cancelada.c.recibir({ clase: "respuesta", texto: "n", seleccion: ["a.xne"], ramaNueva: "pruebas" });
+    expect(await no).toBe(false);
+  });
+
+  it("el progreso de la subida va al cable, y NO al registro de la sesión", () => {
+    const { c, vistos } = conCable();
+    c.consola.progresoDeSincronizacion!({ fase: "subiendo", hechas: 2, total: 5 });
+    expect(vistos).toContainEqual({ clase: "progresoDeSubida", progreso: { fase: "subiendo", hechas: 2, total: 5 } });
+    expect(vistos.some((m) => m.clase === "acto")).toBe(false);
+  });
+});
+
 describe("consolaWeb: el registro de la sincronización", () => {
   /**
    * El recorrido de una operación de `/sync` —el plan, el `→ APROBADO`, las cuentas— es el

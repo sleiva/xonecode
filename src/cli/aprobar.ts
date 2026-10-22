@@ -83,6 +83,11 @@ export interface DecisionDeConsola {
    * no por el enunciado. Ausente = una decisión que no lanza ninguna operación.
    */
   operacion?: "subir" | "bajar";
+  /**
+   * La rama del PROYECTO, en una subida: de ella saldría la rama nueva si quien contesta pide una (IXCODE-71). Solo la
+   * enseña quien deja pedirla (la web). Ausente = no se sabe, y no se ofrece crear ninguna.
+   */
+  rama?: string;
 }
 
 /**
@@ -93,6 +98,8 @@ export interface DecisionDeConsola {
 export interface RespuestaConSeleccion {
   respuesta: string;
   seleccion?: readonly string[];
+  /** Subir a una rama NUEVA con este nombre, creada desde la del proyecto (IXCODE-71). Ausente = a la de siempre. */
+  ramaNueva?: string;
 }
 
 /**

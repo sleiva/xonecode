@@ -548,7 +548,7 @@ export type Acto =
       lineas: string[];
       /** El recuento de una subida que corrió (`core/actos.ts#ResultadoDeSubida`). Ausente =
        *  no terminó con informe: el diálogo de la subida lo dice así, no como «todo bien». */
-      resultado?: { subidos: number; fallidos: number; avisos?: string[] };
+      resultado?: { subidos: number; fallidos: number; avisos?: string[]; rama?: string };
       /** Cuántos trajo una bajada que terminó (`core/actos.ts`). */
       bajados?: number;
       /** La operación lanzó: el mismo texto que se dijo en el hilo. */
@@ -627,7 +627,12 @@ export interface DecisionDeConsola {
   seleccionable?: true;
   /** De qué operación es: el diálogo sigue abierto tras Aceptar hasta su acto. */
   operacion?: "subir" | "bajar";
+  /** La rama del proyecto, en una subida: de ella sale la rama nueva si se pide una (IXCODE-71). */
+  rama?: string;
 }
+
+/** Por dónde va una subida (redeclarado de `core/cloudstudio.ts`, IXCODE-69). */
+export type ProgresoDeSubida = { fase: "creando-rama"; rama: string } | { fase: "subiendo"; hechas: number; total: number };
 
 /**
  * Las seis fases de un lanzamiento, EN ORDEN, y los cinco estados en que puede estar.
@@ -696,6 +701,8 @@ export type MensajeAlCliente =
    */
   | { clase: "bienvenida"; nombre?: string }
   | { clase: "pregunta"; texto: string; decision?: DecisionDeConsola }
+  /** Por dónde va la subida en curso (IXCODE-69), redeclarado de `transporte.ts`. Solo para la barra del diálogo. */
+  | { clase: "progresoDeSubida"; progreso: ProgresoDeSubida }
   | { clase: "selector"; selector: SelectorDeConsola }
   /**
    * Los modelos: cuál está en vigor (`actual`, «proveedor/modelo»), cuál queda por DEFECTO
@@ -1542,7 +1549,7 @@ export type MensajeDelCliente =
    *  en Ajustes. Mudar el activo le cambiaría la barra a quien trabaja en otro servidor. */
   | { clase: "entorno"; accion: "proyectos"; entorno: string }
   /** `seleccion`: las rutas marcadas en el diálogo de una decisión `seleccionable`. */
-  | { clase: "respuesta"; texto: string; seleccion?: string[] }
+  | { clase: "respuesta"; texto: string; seleccion?: string[]; ramaNueva?: string }
   /**
    * La respuesta a `seleccionar`. **Sin `id` (o con `id: null`) es CANCELAR** — la misma
    * salida que en el terminal («número, Enter cancela»). El servidor lo traduce a
