@@ -126,6 +126,9 @@ if (pedidos.length === 0 || pedidos.includes("--help") || pedidos.includes("-h")
   xone-hotswap shot                          la captura va a $XONECODE_ARTEFACTOS
   xone-hotswap shot name=MAP_ACEPTAR scale=0.5 quality=40     recortada a un control
   xone-hotswap sql MiApp "SELECT * FROM CLIENTES LIMIT 20"
+  xone-hotswap abrir MenuAlbaranes           ir DIRECTO a una ventana (ui.openMenu), sin login ni menús;
+                                             se pinta un instante después: mira «screen» tras un segundo
+  xone-hotswap js 'return self.getName();'   JavaScript de la app, sin Base64 a mano (runScript)
 
 Cada comando es "<nombre> clave=valor ..."; con -- se encadenan varios por la MISMA
 conexion, que es lo que hay que hacer (el servidor admite una sola y cierra la anterior).
@@ -183,6 +186,15 @@ const ATAJOS = {
   shot: (resto) => aplicarPares({ command: "getScreenshot" }, resto),
   tables: (resto) => ({ command: "getDatabaseTableNames", appName: resto[0] }),
   sql: (resto) => ({ command: "runSql", appName: resto[0], sql: resto.slice(1).join(" ") }),
+  // JavaScript de la app SIN el Base64 a mano (`runScript` lo exige): medido en Maset, el desarrollador lo componía a
+  // mano o navegaba a base de clics —38 `runScript` y 79 `click` en una noche—.
+  js: (resto) => ({ command: "runScript", scriptLanguage: "javascript", scriptText: Buffer.from(resto.join(" "), "utf8").toString("base64") }),
+  // Ir DIRECTO a una ventana por su colección, sin repetir login y menús en cada prueba (`ui.openMenu`).
+  abrir: (resto) => ({
+    command: "runScript",
+    scriptLanguage: "javascript",
+    scriptText: Buffer.from(`ui.openMenu(${JSON.stringify(resto[0] ?? "")}); return "abierta ${String(resto[0] ?? "").replace(/"/g, "")}";`, "utf8").toString("base64"),
+  }),
 };
 
 function aplicarPares(json, pares) {

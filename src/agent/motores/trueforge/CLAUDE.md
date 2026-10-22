@@ -73,6 +73,11 @@ Ante una discrepancia con el código, **el código manda**.
   `TOPE_DE_ENCARGOS_AL_DESARROLLADOR` encargos del orquestador a developer-xone por turno**: el siguiente no arranca
   (`hiloQueNoArranca` con `textoDeTopeDeEncargos`) y manda cerrar con lo que falta en «Por arreglar» / «No se puede en
   XOne». Medido: siete «últimas vueltas» persiguiendo un crítico en rojo. Con persona delante no aplica.
+  **Tampoco arrancan en una tarea** el analista con plan asignado (`PLAN DE ESTA TAREA` en el encargo) ni el
+  device-controller si el desarrollador lleva `scripts`: probar y capturar son suyos y el juez mira SU última captura.
+- **Sus llamadas no se van en navegar ni releer** (`textoDelBucle#pruebaElMismo`): `xone-hotswap abrir <Coll>` y `js`
+  (atajos del script), CSS por `xone_navegacion estilos`, `describe_image` solo si la cifra no cuadra, captura en el
+  estado de la maqueta. Medido en `docs/DECISIONES.md`: la mayoría del tope se iba en navegar y releer.
 - **UNA VENTANA por encargo y por tarea del plan** (`UNA_VENTANA_POR_ENCARGO`, `PLAN_DE_DESARROLLO`, `REPARTIR_EN_TAREAS`,
   skill `xone-plan-builder`): con varias, el developer agota su presupuesto a mitad. Es redacción, no guarda.
 - **Traspasos acotados** (`toolsDeFichero.ts`, `informesDeHijos.ts`): `write_file` solo CREA un `.xne`/`.js`/`.css`

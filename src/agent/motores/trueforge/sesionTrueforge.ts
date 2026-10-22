@@ -390,11 +390,15 @@ function hiloQueNoArranca(
   esperados: readonly string[],
   params: { threadId: string; parent: unknown; request: { name: string; input: string } },
   modelo: unknown,
-  logger: unknown
+  logger: unknown,
+  /** Lo que se le contesta en vez del de esperar o del tope, si es otra la razón de no arrancar. */
+  otro?: string
 ): AgentThread {
   const padre = params.parent as { tool_call_id?: string };
   const texto =
-    esperados.length === 0
+    otro !== undefined
+      ? otro
+      : esperados.length === 0
       ? textoDeTopeDeEncargos(TOPE_DE_ENCARGOS_AL_DESARROLLADOR)
       : `${nombre} NO HA ARRANCADO: espera a que termine ${esperados.join(", ")}, que sigue trabajando y produce lo que ${nombre} necesita. ` +
         `Cuando ${esperados.join(", ")} te devuelva su informe, vuelve a llamar a ${nombre} con ese informe dentro del encargo.`;
@@ -462,6 +466,16 @@ export function textoDelBucle(
           `Tu bucle es: escribe, prueba TÚ en el aparato con \`${NOMBRE_EJECUTAR_SCRIPT}\` (los scripts de \`xone-hotswap\`), lee lo que sale y corrige.`,
           "Antes de comprobar nada, `xone-recargar-android` (1-2 s: sube solo lo que cambió); si la app no contesta, `xone-desplegar-android`.",
           "Junta los cambios antes de recargar: no recargues por cada línea.",
+          // Medido en Maset (21→22-10-2026): de 100 llamadas por vuelta, ~39 conducían el aparato —volviendo a navegar desde el
+          // arranque en cada prueba— y ~35 releían: default.css 73 veces y la skill de hotswap 54. Solo ~14 escribían.
+          "TUS LLAMADAS SE ACABAN (unas 100 por encargo): no las gastes en navegar ni en releer.",
+          "- Ve DIRECTO a la ventana: `xone-hotswap abrir <Colección>` (y `screen` tras un segundo). No repitas login y menús en cada prueba.",
+          "- Los comandos que necesitas son estos y no hace falta releer la skill: `screen`, `abrir <Coll>`, `js 'return …;'`,",
+          "  `click name=X`, `fill name=X value=…`, `waitForElement name=X timeout=5000`, `shot` (varios en UNA llamada, separados por",
+          "  `--`); `xone-log-android --limpiar` y `--app`; `xone-recargar-android`. `elements` solo para explorar: es enorme.",
+          "- El CSS: busca la clase que vas a tocar con `xone_navegacion` (operación `estilos`) o un `grep` de su nombre. No leas",
+          "  `default.css` entero, y lo que ya leíste en este encargo no lo vuelvas a leer.",
+          "- `describe_image` sobre tu captura solo si `comparar_capturas` no cuadra y necesitas ver por qué: cada una es un modelo aparte.",
         ]
       : [
           "Tu bucle es: escribe, llama al de pruebas para desplegar y comprobar, lee lo que te devuelve y corrige.",
@@ -480,6 +494,10 @@ export function textoDelBucle(
           "- VISUAL, solo cuando lo funcional pasa: UNA captura por ronda (`xone-hotswap shot`, o `xone-captura-android` si hay un",
           "  diálogo encima). Entre retoques mide con `comparar_capturas` (sin modelo, siempre la misma cifra para las mismas dos",
           `  imágenes): arregla TODAS las diferencias en la misma ronda y solo entonces otra captura. ${String(RONDAS_VISUALES)} rondas como mucho.`,
+          // Medido en Maset: la maqueta pinta el paso firmado y con filas; la captura era el paso vacío, y salía 24 % «distinta».
+          "- Captura en el MISMO ESTADO que la maqueta: con datos, con filas, firmado, con el campo relleno… Si la app no tiene ese",
+          "  estado a mano, dilo junto a la cifra («la maqueta tiene 3 filas, el aparato 0»): una distancia por eso no es un defecto.",
+          "- Tu respuesta final nombra la ÚLTIMA captura (`/artefactos/…`) y lo que midió: es la que mira el juez al cerrar.",
         ]
       : [
           "- FUNCIONAL: UN encargo con TODOS los casos, como acciones y lo que esperas («teclea 2 + 3 × 4 = → log `CALC resultado",
@@ -978,6 +996,8 @@ export async function abrirSesionTrueforge(
   let capturasDelTurno: Artefacto[] = [];
   /** Lo que dieron las comprobaciones visuales del turno, una línea cada una, para el juez de QA (`ResultadoDeTurno`). */
   let comprobacionesDelTurno: string[] = [];
+  /** El plan que el encargo de ESTE turno asigna a la tarea (`lineaDelPlanCitado` del corredor), si lo hay. */
+  let planAsignadoDelTurno: string | undefined;
   /** Cuántos encargos ha hecho el orquestador a developer-xone en este turno (`TOPE_DE_ENCARGOS_AL_DESARROLLADOR`). */
   let encargosAlDesarrolladorDelTurno = 0;
   /** El fallo del motor en el RAÍZ durante este turno (`ResultadoDeTurno.falloDelMotor`). */
@@ -1564,8 +1584,27 @@ export async function abrirSesionTrueforge(
       diagnostico?.memoria?.(agente.nombre, "arranca-sin", `espera a ${debeEsperar.join(", ")}`);
       return hiloQueNoArranca(agente.nombre, debeEsperar, params, llm, logger);
     }
+    const delRaiz = (params.parent as { thread_id?: string } | undefined)?.thread_id === HILO_RAIZ;
+    /**
+     * En una TAREA, dos encargos del orquestador que no arrancan (petición suya, 22-10-2026). Medido en Maset: cada tarea
+     * de la noche escribió un plan NUEVO con el analista (4-5 min) y mandó al de pruebas a «verificar y capturar» después
+     * del desarrollador (2-4 pasadas de ~2,5 min), cuando ese desarrollador ya prueba y captura él y el juez mira SU captura.
+     */
+    if (opciones.trabajoSinPersona === true && delRaiz && agente !== undefined) {
+      const conScripts = especialistas().find((a) => a.nombre === "developer-xone")?.scripts === true;
+      const razon =
+        agente.nombre === "analyst-xone" && planAsignadoDelTurno !== undefined
+          ? `analyst-xone NO HA ARRANCADO: esta tarea ya tiene su plan, ${planAsignadoDelTurno}, con sus tareas asignadas. Trabaja sobre ese plan: si le falta algo, que developer-xone lo amplíe ahí. No se escribe otro.`
+          : agente.nombre === "device-controller" && conScripts
+            ? "device-controller NO HA ARRANCADO: en una tarea, probar y capturar es de developer-xone, que lo hace él con sus scripts, y el juez de cierre mira SU última captura. Si te falta una captura o una medida, pídesela a developer-xone en su encargo; si ya la tienes, cierra."
+            : undefined;
+      if (razon !== undefined) {
+        anotarPaso("trueforge.no-arranca", `${agente.nombre}: ${razon.slice(0, 80)}`)();
+        return hiloQueNoArranca(agente.nombre, [], params, llm, logger, razon);
+      }
+    }
     // Pasado el tope de encargos al desarrollador en una TAREA, no arranca: el orquestador recibe la orden de cerrar.
-    if (opciones.trabajoSinPersona === true && agente?.nombre === "developer-xone" && (params.parent as { thread_id?: string } | undefined)?.thread_id === HILO_RAIZ) {
+    if (opciones.trabajoSinPersona === true && agente?.nombre === "developer-xone" && delRaiz) {
       if (encargosAlDesarrolladorDelTurno >= TOPE_DE_ENCARGOS_AL_DESARROLLADOR) {
         anotarPaso("trueforge.tope-de-encargos", `developer-xone: ${String(encargosAlDesarrolladorDelTurno)} encargos, no arranca otro`)();
         diagnostico?.memoria?.(agente.nombre, "arranca-sin", "tope de encargos al desarrollador");
@@ -2090,6 +2129,7 @@ export async function abrirSesionTrueforge(
       return hilo;
     },
     async turno(peticion: string, piel: Piel) {
+      planAsignadoDelTurno = /PLAN DE ESTA TAREA: (\/planes\/[^/\s]+\/)/.exec(peticion)?.[1];
       if (cerrada) throw new Error("la sesión está cerrada");
       const t0 = Date.now();
       cancelado = false;

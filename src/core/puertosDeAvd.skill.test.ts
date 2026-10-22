@@ -184,6 +184,9 @@ describe("el script xone-hotswap real, con --dry-run", () => {
     [["click", "name=X", "--dry-run"], '{"command":"click","name":"X"}'],
     [["--serie", "emulator-5556", "click", "name=X", "--dry-run"], '{"command":"click","name":"X"}'],
     [["--dry-run", "click", "name=X", "--", "click", "name=Y"], '{"command":"click","name":"X"}\n{"command":"click","name":"Y"}'],
+    // Los atajos del 22-10-2026 (medido contra pixel8): `js` sin Base64 a mano y `abrir` directo a una ventana.
+    [["--dry-run", "js", "return", "1+1;"], `{"command":"runScript","scriptLanguage":"javascript","scriptText":"${Buffer.from("return 1+1;").toString("base64")}"}`],
+    [["--dry-run", "abrir", "MenuAlbaranes"], `{"command":"runScript","scriptLanguage":"javascript","scriptText":"${Buffer.from('ui.openMenu("MenuAlbaranes"); return "abierta MenuAlbaranes";').toString("base64")}"}`],
   ])("%j", (args, esperado) => {
     expect(correr(...args)).toBe(esperado);
   });

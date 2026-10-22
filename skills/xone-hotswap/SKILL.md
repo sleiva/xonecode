@@ -25,6 +25,8 @@ No cuestan lo mismo, ni de lejos. Por orden de lo que vas a necesitar:
 | quieres saber… | úsalo | por qué |
 |---|---|---|
 | **dónde estoy** | `screen` | una línea: colección activa, diálogos abiertos, ventana con el foco |
+| **ir a una ventana** | `abrir NombreColeccion` | DIRECTO (`ui.openMenu`), sin repetir login y menús en cada prueba; se pinta un instante después |
+| **ejecutar JavaScript de la app** | `js 'return …;'` | `runScript` sin componer el Base64 a mano |
 | **qué está fallando** | `xone-log-android` | un error de JavaScript o una excepción salen ahí con su mensaje y su línea |
 | **qué ha pasado tras una acción** | `xone-log-android --limpiar`, la acción, `xone-log-android --app` | trae SOLO los `console.log` de la app, sus errores y qué manejador corrió (`Executing script: [MenuPrincipal][btnD8][onclick]`): casi siempre basta sin captura |
 | **el valor de un campo** | `getText name=X` | un viaje, una respuesta corta |

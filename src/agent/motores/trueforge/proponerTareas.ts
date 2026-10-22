@@ -88,5 +88,7 @@ export const REPARTIR_EN_TAREAS = [
   // Medido en Maset (21-10-2026): cinco tareas encadenadas sin nombrar ninguna pantalla de Stitch trabajaron desde un
   // DISENO.md que el analista había deducido sin verlas, y rehicieron el login con una tarjeta blanca que la maqueta no tiene.
   `- Si el diseño está en Stitch, cada petición NOMBRA las pantallas de ESA tarea —su título y su \`name\` (projects/<id>/screens/<id>, de list_screens)— y empieza pidiendo traerlas con ${NOMBRE_TRAER_DE_STITCH} antes de tocar nada: son su maqueta y, si el plan dice otra cosa, manda la maqueta. Sin ellas la tarea trabaja a ciegas.`,
+  // Medido en Maset: sin plan citado, cada tarea escribió el suyo con el analista y ninguno se actualizó.
+  "- Si hay plan (/planes/<nombre>/ con su TASKS.md), cada petición cita su carpeta y SUS tareas del plan (T4, T5): esa tarea trabaja sobre ese plan, no escribe otro, y al cerrarla se actualiza su estado.",
   "- No lo uses para lo que cabe en un turno. Y tras proponer no hagas las tareas: la persona decide si se encolan.",
 ].join("\n");

@@ -514,6 +514,9 @@ describe("el juez y el plan de la tarea", () => {
     });
     const v = await juez.juzgar({ encargo: "x", raiz: RAIZ, autorizadas: [], plan });
     expect(prompt).toContain("EL PLAN DE ESTA TAREA: /planes/liquidaciones/");
+    // Y la regla de los datos y del estado de la maqueta (medido: «el dato real que la maqueta exige: A16-0842189»).
+    expect(prompt).toContain("Los DATOS que pinta la maqueta");
+    expect(prompt).toContain("Tampoco el ESTADO en que está dibujada");
     expect(prompt).toContain("- T2 — Lista (estado: pendiente) · 0/3 criterios");
     expect(v.tareasDelPlan).toEqual([
       { numero: "T1", estado: "hecha" },

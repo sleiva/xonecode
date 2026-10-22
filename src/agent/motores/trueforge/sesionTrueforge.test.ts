@@ -3821,3 +3821,45 @@ describe("el tope de encargos al desarrollador en una tarea", () => {
     expect(vistos.at(-1)!.join("\n")).not.toContain("encargos suyos en esta tarea");
   }, 30_000);
 });
+
+
+/** Petición suya (22-10-2026): en una TAREA, ni un plan nuevo si ya lo tiene, ni el de pruebas tras el desarrollador. */
+describe("en una tarea: el plan asignado y la captura del desarrollador", () => {
+  const delega = (id: string, nombre: string) =>
+    new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id, name: "create_sub_agent", args: JSON.stringify({ name: nombre, input: "haz" }) }] });
+
+  it("con plan asignado, el analista no arranca; el de pruebas tampoco, porque el desarrollador prueba él", async () => {
+    const raiz = proyecto();
+    const { m, vistos } = modelosConGuion([
+      [delega("a1", "analyst-xone")],
+      [delega("d1", "device-controller")],
+      [new AIMessageChunk({ content: "Cierro." })],
+    ]);
+    const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, bucleDelDesarrollador: true, trabajoSinPersona: true });
+    await s.turno("rediseña la lista\n\nPLAN DE ESTA TAREA: /planes/liq/. Trabaja sobre ESE plan", piel().p);
+    // Tres llamadas, todas del raíz: ni el analista ni el de pruebas llegaron a llamar al modelo.
+    expect(vistos).toHaveLength(3);
+    expect(vistos[1]!.join("\n")).toContain("analyst-xone NO HA ARRANCADO: esta tarea ya tiene su plan, /planes/liq/");
+    expect(vistos[2]!.join("\n")).toContain("device-controller NO HA ARRANCADO: en una tarea, probar y capturar es de developer-xone");
+  }, 30_000);
+
+  it("sin plan asignado el analista arranca; y con persona delante, el de pruebas también", async () => {
+    const raiz = proyecto();
+    const { m, vistos } = modelosConGuion([
+      [delega("a1", "analyst-xone")],
+      [new AIMessageChunk({ content: "plan hecho" })],
+      [new AIMessageChunk({ content: "Hecho." })],
+    ]);
+    const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, bucleDelDesarrollador: true, trabajoSinPersona: true });
+    await s.turno("rediseña la lista", piel().p);
+    expect(vistos).toHaveLength(3);
+  }, 30_000);
+
+  it("el bucle del desarrollador le dice cómo no gastar sus llamadas: ir directo, no releer, capturar en el estado de la maqueta", () => {
+    const t = textoDelBucle(["designer-xone"], { conCritica: true, pruebaElMismo: true });
+    expect(t).toContain("xone-hotswap abrir <Colección>");
+    expect(t).toContain("No leas\n  `default.css` entero");
+    expect(t).toContain("Captura en el MISMO ESTADO que la maqueta");
+    expect(t).toContain("Tu respuesta final nombra la ÚLTIMA captura");
+  });
+});

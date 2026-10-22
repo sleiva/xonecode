@@ -9758,3 +9758,21 @@ y cada arranque empezaba de cero (siete delegaciones en MyAllXOne, ver `TOPE_DE_
 - Afecta solo a quien tiene `ejecucion: true` (de serie, el `device-controller`); en deepagents (legacy)
   `topeDeLlamadas` ya devolvía lo parcial y solo cambia el número.
 - Sin medir todavía en una tarea real.
+
+## Las llamadas del desarrollador se iban en navegar y releer (22-10-2026)
+
+Medido sobre las seis tareas nocturnas de Maset (41–57 min cada una, una en verde): el developer agotaba sus 100
+llamadas por encargo; de ellas ~39 conducían el aparato renavegando desde el arranque, ~35 releían (`default.css` 73
+lecturas en la noche, la skill de hotswap 54) y solo ~14 escribían. Cada tarea daba tres vueltas, el orquestador
+mandaba además al device-controller a verificar y el analista rehacía un plan que ya estaba asignado. Los rojos del
+juez venían de datos de ejemplo de la maqueta y de su ESTADO (maqueta llena, captura vacía).
+
+- `xone-hotswap` gana `js <código>` (runScript sin Base64 a mano) y `abrir <Colección>` (`ui.openMenu`): ir directo a
+  la pantalla en vez de renavegar. Probado en `emulator-5554`.
+- `textoDelBucle#pruebaElMismo`: lista de comandos sin releer la skill, CSS por `xone_navegacion estilos`,
+  `describe_image` solo si la cifra no cuadra, captura en el estado de la maqueta, y la respuesta nombra la ÚLTIMA
+  captura (la que mira el juez).
+- En una tarea sin persona: el analista no arranca con `PLAN DE ESTA TAREA` en el encargo, ni el device-controller si
+  el developer lleva `scripts`.
+- El juez no exige los datos ni el estado en que está dibujada la maqueta; cuenta que el sitio exista.
+- Sin medir todavía en una tarea real.
