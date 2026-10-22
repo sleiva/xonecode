@@ -17,6 +17,7 @@ import type { DispositivoDeLaSesion } from "../../../core/dispositivoDeSesion.js
 import { permisosDe } from "../../grafo/perfiles.js";
 import { NOMBRE_INCORPORAR_ADJUNTO } from "../../../core/adjuntos.js";
 import { NOMBRE_TRAER_FUENTE } from "../../../core/fuentes.js";
+import { SCRIPT_A_UTF8 } from "../../../core/comandoExterno.js";
 import {
   fuenteDeEjecucion,
   fuenteDeFicheros,
@@ -118,6 +119,16 @@ export function capacidadDeConectores(conectores: ConectoresDeSesion, clase: Cla
       ],
     },
   };
+}
+
+/**
+ * Los scripts de sus skills que tienen sentido en TrueForge: sin `xone-a-utf8`, que es del hijo de Claude Code (sus
+ * herramientas solo escriben UTF-8). Aquí cada `.xne` se escribe en su propia codificación (`core/codificacion.ts`) y
+ * convertirlo rompería el invariante. Medido en Maset: tres tareas seguidas, el desarrollador pidió su `--help` sin
+ * necesitarlo y buscó tildes por si tenía que convertir.
+ */
+export function scriptsDeTrueforge(scripts: readonly string[]): string[] {
+  return scripts.filter((s) => s !== SCRIPT_A_UTF8);
 }
 
 /**
@@ -431,8 +442,8 @@ export function capacidadesDelEspecialista(
         ]
       : []),
     ...(clase === "ejecuta" ? [capacidadDeEjecucion(deps.conShell(), deps.dispositivo)] : []),
-    ...(clase !== "ejecuta" && agente.scripts === true && deps.scriptsDe(agente).length > 0
-      ? [capacidadDeScripts(deps.conShell(), deps.scriptsDe(agente), deps.dispositivo)]
+    ...(clase !== "ejecuta" && agente.scripts === true && scriptsDeTrueforge(deps.scriptsDe(agente)).length > 0
+      ? [capacidadDeScripts(deps.conShell(), scriptsDeTrueforge(deps.scriptsDe(agente)), deps.dispositivo)]
       : []),
     ...(deps.conectores?.(agente) ?? []),
     ...(deps.puedeLlamar?.(agente) === true ? [capacidadDeSubagentes(), ...(deps.informes === undefined ? [] : [deps.informes])] : []),

@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import winston from "winston";
 import { AIMessageChunk, type BaseMessage } from "@langchain/core/messages";
-import { capacidadDeFecha, capacidadDeNotas, capacidadesDelEspecialista, SKILL_DE_OPENUI, toolsDe, type DependenciasDelEspecialista } from "./capacidades.js";
+import { capacidadDeFecha, capacidadDeNotas, capacidadesDelEspecialista, scriptsDeTrueforge, SKILL_DE_OPENUI, toolsDe, type DependenciasDelEspecialista } from "./capacidades.js";
 import { crearNota, textoDeNotaYaEntregada, type Nota } from "./notas.js";
 import { AgentThread, AgentThreadOrchestrator, EventType, NOOP_AGENT_TRACING } from "./trueforge.js";
 import { modeloParaTrueforge } from "./modeloLangchain.js";
@@ -55,6 +55,12 @@ describe("qué piezas lleva cada especialista, por lo que declara su `.md`", () 
     expect(toolsDe(capacidadesDelEspecialista(agente({ scripts: true, ejecucion: true }), "x", deps()))).not.toContain("ejecutar_script");
     expect(toolsDe(capacidadesDelEspecialista(agente({ scripts: true }), "x", { ...deps(), scriptsDe: () => [] }))).not.toContain("ejecutar_script");
     expect(toolsDe(capacidadesDelEspecialista(agente({}), "x", deps()))).not.toContain("ejecutar_script");
+  });
+
+  it("xone-a-utf8 no es de TrueForge: escribe cada .xne en su codificación; es del hijo de Claude Code", () => {
+    expect(scriptsDeTrueforge(["xone-hotswap", "xone-a-utf8", "xone-log-android"])).toEqual(["xone-hotswap", "xone-log-android"]);
+    // Con solo ése, ni siquiera se monta la tool.
+    expect(toolsDe(capacidadesDelEspecialista(agente({ scripts: true }), "x", { ...deps(), scriptsDe: () => ["xone-a-utf8"] }))).not.toContain("ejecutar_script");
   });
 
   it("quien solo LEE: las seis (su permiso lo confina fuera del proyecto) y sin shell", () => {

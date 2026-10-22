@@ -63,7 +63,8 @@ Ante una discrepancia con el código, **el código manda**.
   orquestador al instante. **Nunca se espera bloqueando**. `developer-xone` espera a `designer-xone`.
 - **Quien corre sus scripts PRUEBA ÉL** (`textoDelBucle#pruebaElMismo`, cuando lleva `ejecutar_script`): recarga,
   toca, lee el log y captura sin un hijo; `comparar_capturas` entre retoques y el crítico UNA vez al cerrar cada
-  pantalla. Cada `xone-recargar/desplegar-android` cuenta una vuelta.
+  pantalla. Cada `xone-recargar/desplegar-android` cuenta una vuelta. Sus scripts, sin `xone-a-utf8` (`scriptsDeTrueforge`): ese es del hijo de
+  Claude Code, y aquí cada `.xne` se escribe en su codificación.
 - **Avisos por umbral, no «para»** (`textoDelBucle`, `capacidadDeAvisoDeVueltas`, `UMBRALES_DE_VUELTAS`): UN mensaje de
   «cambia de procedimiento». Ciclo de vida de `getControl`: `NUCLEO_XONE` y `errores-comunes.md`.
 - **Las capturas se cuentan** (`COMANDO_DE_CAPTURA`, `UMBRALES_DE_CAPTURAS`), con o sin bucle.
