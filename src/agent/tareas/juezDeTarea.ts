@@ -340,6 +340,8 @@ const parrafoDelPlanDeLaTarea = (caso: CasoDeJuez): string[] =>
         "Además del veredicto, di en `plan` el estado de cada tarea del plan que ESTE trabajo tocó: «hecha» solo si lo",
         "COMPROBADO arriba (verificador, comprobaciones visuales) lo acredita; «implementada» si se escribió y no se comprobó",
         "o no pasó; «pendiente» si no se hizo. Las que este trabajo no tocó, no las pongas. Lo que digas se escribe en el plan.",
+        // Medido en Maset (Incidencias): con «verde» el juez omitió `plan` y el TASKS.md se quedó con las seis en «pendiente».
+        "`plan` es OBLIGATORIO también con «verde»: sin él, el plan se queda sin actualizar. Usa los números tal como salen arriba.",
         "",
       ];
 
@@ -389,7 +391,7 @@ function promptDelJuez(caso: CasoDeJuez, planes: readonly PlanEnDisco[]): string
     "Contesta SOLO con este JSON y nada más:",
     caso.plan === undefined
       ? '{"veredicto":"verde"|"rojo","resumen":"una o dos frases","hallazgos":["lo que falta, uno por entrada"]}'
-      : '{"veredicto":"verde"|"rojo","resumen":"una o dos frases","hallazgos":["lo que falta, uno por entrada"],"plan":[{"tarea":"T4","estado":"hecha"|"implementada"|"pendiente"}]}',
+      : `{"veredicto":"verde"|"rojo","resumen":"una o dos frases","hallazgos":["lo que falta, uno por entrada"],"plan":[{"tarea":"${caso.plan.tareas[0]?.numero ?? "T1"}","estado":"hecha"|"implementada"|"pendiente"}]}`,
     "Cada hallazgo, UNA frase corta (menos de 200 caracteres): se lee en una tarjeta.",
     "«verde» = el encargo está cubierto. «rojo» = falta algo, o lo hecho no es lo que se pedía.",
     "Un aviso del verificador, o un defecto que ya estaba en el proyecto, no es motivo de «rojo»:",

@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -189,5 +190,15 @@ describe("el script xone-hotswap real, con --dry-run", () => {
     [["--dry-run", "abrir", "MenuAlbaranes"], `{"command":"runScript","scriptLanguage":"javascript","scriptText":"${Buffer.from('ui.openMenu("MenuAlbaranes"); return "abierta MenuAlbaranes";').toString("base64")}"}`],
   ])("%j", (args, esperado) => {
     expect(correr(...args)).toBe(esperado);
+  });
+});
+
+describe("xone-desplegar-android avisa de que sustituye la base del aparato", () => {
+  it("el aviso está en la rama que acaba bien, antes de salir con 0", () => {
+    // Medido en Maset: desplegar entero para subir un icono borró dos veces los datos de prueba.
+    const texto = readFileSync(resolve(__dirname, "../../skills/xone-hotswap/scripts/xone-desplegar-android"), "utf8");
+    const aviso = texto.indexOf("ha SUSTITUIDO la base de datos del aparato");
+    expect(aviso).toBeGreaterThan(0);
+    expect(texto.indexOf("process.exit(0)", aviso)).toBeGreaterThan(aviso);
   });
 });

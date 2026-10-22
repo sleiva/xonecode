@@ -591,7 +591,9 @@ export function compararConMaqueta(m: MaquetaMedida, g: GeometriaDelAparato, mod
       if (enSuSitio) {
         notas.push(`filas de una lista de ejemplo de ${laMaqueta} (${muestra}): en ${elAparato} esa columna lleva sus datos reales, no faltan.`);
       } else {
-        bloqueantes.push(`la columna de la lista de ${laMaqueta} (${muestra}) NO está en ${elAparato}: ninguna fila lleva texto en ese sitio.`);
+        // No bloquea: una columna de DATOS que la app pinta algo desplazada no cae «en su sitio» (medido en Maset, Incidencias:
+        // los códigos estaban, más a la izquierda). Si de verdad falta, se VE, y eso lo dice el modelo.
+        diferencias.push(`la columna de la lista de ${laMaqueta} (${muestra}) no tiene texto en ese sitio en ${elAparato}: puede ir desplazada; míralo en la captura.`);
       }
     }
   }

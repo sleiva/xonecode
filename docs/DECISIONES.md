@@ -9865,3 +9865,17 @@ las comprobaciones, dio rojo. Cinco arreglos:
   lista al 100 % con margen mide 10–32 px más que la pantalla y no se corta nada.
 - Dos bloques solo se comparan si se solapan en los DOS (`SOLAPE_DE_BLOQUES`): la franja del aparato caía sobre la
   cabecera de columnas de la maqueta y salía «#6C0E1A; en la maqueta, #E5E7E7».
+
+## Pendientes tras el primer verde (22-10-2026)
+
+- `xone-desplegar-android` AVISA al acabar de que ha sustituido la base de datos del aparato por la del proyecto (`bd/`):
+  en Maset el desarrollador borró dos veces sus datos de prueba desplegando para subir un icono. La skill lo dice en la
+  tabla «Qué usar para qué»: desplegar entero solo la primera vez o con fuentes nuevas.
+- La «columna de la lista que NO está» deja de bloquear: una columna de datos que la app pinta algo desplazada no caía
+  en su sitio (Incidencias: los códigos estaban, más a la izquierda). Se dice como diferencia que mirar.
+- La crítica visual pide el modelo con esfuerzo FIJO `high` (`ESFUERZO_DEL_JUEZ_VISUAL`): iba el del proveedor por
+  omisión, sin medir.
+- El juez devuelve `plan` también con verde, y el ejemplo de la respuesta usa un número real del plan: en el verde de
+  Incidencias lo omitió y el TASKS.md se quedó con las seis tareas en «pendiente».
+- Que el desarrollador llame al consultor: no, por ahora (lo recomendé al hablarlo: tiene las skills en su contexto y un
+  consultor es un subagente más); sus dudas repetidas se resuelven ampliando la skill.

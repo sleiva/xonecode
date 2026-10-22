@@ -1211,9 +1211,9 @@ export async function abrirSesionTrueforge(
       : ([
           crearCriticaVisual({
             leerArtefacto: async (nombre) => readFileSync(join(carpeta, nombre)),
-            invocar: invocarVisualConModelos({ paraPapel: (p) => modelos.paraPapel(p) }),
+            invocar: invocarVisualConModelos({ paraPapel: (p, e) => modelos.paraPapel(p, e) }),
             // La maqueta y la captura, cada una descrita SOLA con el mismo esquema: geometría y luego estilo.
-            describirPantalla: (imagen, existen) => describirPantalla(imagen, invocarVisualConModelos({ paraPapel: (p) => modelos.paraPapel(p) }), existen),
+            describirPantalla: (imagen, existen) => describirPantalla(imagen, invocarVisualConModelos({ paraPapel: (p, e) => modelos.paraPapel(p, e) }), existen),
             // El estilo de cada control se MIDE en sus píxeles: hace falta sacarlos de la imagen.
             decodificar: decodificarImagen,
             // El informe se queda junto a la captura, para poder auditar qué se le dijo al agente.
@@ -1257,7 +1257,7 @@ export async function abrirSesionTrueforge(
   // `read_file` no abre una imagen y el aviso de adjuntos manda aquí (`describirImagen.ts`).
   const describirImagen = (): ToolDeLangchain =>
     crearDescribirImagen({
-      invocar: invocarVisualConModelos({ paraPapel: (p) => modelos.paraPapel(p) }),
+      invocar: invocarVisualConModelos({ paraPapel: (p, e) => modelos.paraPapel(p, e) }),
       leer: lectorDeReferencias,
       carpetas: {
         raiz,

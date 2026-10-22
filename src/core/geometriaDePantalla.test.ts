@@ -450,11 +450,13 @@ describe("una lista de la maqueta: sus filas son datos de ejemplo", () => {
     expect(h.diferencias.some((d) => d.startsWith("«Crédito» de la maqueta, dentro de las filas de su lista"))).toBe(true);
   });
 
-  it("pero si la columna entera falta, es UN bloqueante, no uno por fila", () => {
+  it("pero si la columna entera falta, se dice UNA vez, como diferencia que mirar (no bloquea: puede ir desplazada)", () => {
+    // Medido en Maset (Incidencias): los códigos estaban, algo más a la izquierda, y bloqueaba.
     const sinClientes: GeometriaDelAparato = { ...conClientes, controles: conClientes.controles.slice(0, 1) };
     const h = compararConMaqueta(maqueta, sinClientes);
-    expect(h.bloqueantes.filter((b) => b.includes("COTS") || b.includes("COMA"))).toEqual([
-      "la columna de la lista de la maqueta («COTS REGUA», «COMA MUNNE», «REINA GUER»…) NO está en el aparato: ninguna fila lleva texto en ese sitio.",
+    expect(h.bloqueantes.filter((b) => b.includes("COTS") || b.includes("COMA"))).toEqual([]);
+    expect(h.diferencias.filter((d) => d.includes("COTS") || d.includes("COMA"))).toEqual([
+      "la columna de la lista de la maqueta («COTS REGUA», «COMA MUNNE», «REINA GUER»…) no tiene texto en ese sitio en el aparato: puede ir desplazada; míralo en la captura.",
     ]);
   });
 
@@ -527,9 +529,11 @@ describe("lo que en el aparato va dentro de otro texto no falta (pie del login d
     expect(nota).toMatch(/«10\.09\.2026-1»/);
   });
 
-  it("pero sin esa etiqueta, la columna sigue faltando", () => {
+  it("pero sin esa etiqueta, la columna sigue sin estar: se dice como diferencia que mirar", () => {
     const sinPie: GeometriaDelAparato = { ...aparatoLogin, controles: aparatoLogin.controles.filter((c) => c.nombre !== "MAP_VERSIONAPP") };
-    expect(compararConMaqueta(maquetaLogin, sinPie).bloqueantes.join("\n")).toMatch(/Aplicación/);
+    const h = compararConMaqueta(maquetaLogin, sinPie);
+    expect(h.bloqueantes.join("\n")).not.toMatch(/Aplicación/);
+    expect(h.diferencias.join("\n")).toMatch(/Aplicación/);
   });
 });
 

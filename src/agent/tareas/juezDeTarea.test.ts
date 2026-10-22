@@ -521,6 +521,9 @@ describe("el juez y el plan de la tarea", () => {
     expect(prompt).toContain("«AVISO DE LA MAQUETA»");
     expect(prompt).toContain("use VISUALMENTE el diseño");
     expect(prompt).toContain("- T2 — Lista (estado: pendiente) · 0/3 criterios");
+    // `plan` obligatorio también con verde, y el ejemplo con un número REAL del plan (medido: «01»…«06» y el ejemplo decía «T4»).
+    expect(prompt).toContain("`plan` es OBLIGATORIO también con «verde»");
+    expect(prompt).toContain('"plan":[{"tarea":"T1"');
     expect(v.tareasDelPlan).toEqual([
       { numero: "T1", estado: "hecha" },
       { numero: "T2", estado: "implementada" },

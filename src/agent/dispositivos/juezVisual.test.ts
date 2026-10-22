@@ -4,6 +4,7 @@ import {
   ErrorDelJuezVisual,
   juzgarPantalla,
   invocarVisualConModelos,
+  ESFUERZO_DEL_JUEZ_VISUAL,
   PROMPT_VISUAL,
   PROMPT_VISUAL_CON_REFERENCIA,
   TOPE_DE_OBSERVACIONES,
@@ -311,6 +312,19 @@ describe("el crítico con una maqueta delante", () => {
       return JSON.stringify({ veredicto: "verde", hallazgos: [] });
     }, PANTALLA);
     expect(v.veredicto).toBe("verde");
+  });
+
+  it("pide el modelo con su esfuerzo FIJO (high), no el que ponga el proveedor por omisión", async () => {
+    const pedidos: unknown[] = [];
+    const modelos = {
+      paraPapel: (papel: string, esfuerzo?: string) => {
+        pedidos.push([papel, esfuerzo]);
+        return { invoke: async () => '{"veredicto":"verde","hallazgos":[]}' };
+      },
+    };
+    await invocarVisualConModelos(modelos as never)("afilado", "el prompt", PANTALLA);
+    expect(pedidos).toEqual([["afilado", ESFUERZO_DEL_JUEZ_VISUAL]]);
+    expect(ESFUERZO_DEL_JUEZ_VISUAL).toBe("high");
   });
 
   it("manda DOS imágenes, en orden y cada una rotulada", async () => {

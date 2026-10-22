@@ -31,12 +31,20 @@
  */
 import { createHash } from "node:crypto";
 import type { Papel } from "../../core/ports.js";
+import type { Esfuerzo } from "../../core/esfuerzo.js";
 import { interpretarDescripcion, promptDescribirPantalla, type PantallaDescrita } from "../../core/descripcionDePantalla.js";
 import { objetoDe } from "../tareas/juezDeTarea.js";
 import { confirmadas, METODO_DE_COMPARACION_VISUAL, PASADAS_DE_COMPARACION, unirObservaciones } from "../../core/metodoDeComparacionVisual.js";
 
 /** El papel del juez, el mismo que el de tareas. `core/modelos.ts` lo reserva para esto. */
 export const PAPEL_DEL_JUEZ_VISUAL: Papel = "afilado";
+
+/**
+ * El esfuerzo de razonamiento de quien mira las pantallas, FIJO (petición suya, 22-10-2026): sin él iba el que pusiera el
+ * proveedor por omisión, que nadie había medido. Una crítica imprecisa cuesta una vuelta entera del desarrollador.
+ * `esfuerzoAplicable` lo descarta en un modelo que no lo admite.
+ */
+export const ESFUERZO_DEL_JUEZ_VISUAL: Esfuerzo = "high";
 
 /**
  * Cuántas observaciones se conservan y cuánto ocupa cada una.
@@ -369,12 +377,12 @@ export async function describirPantalla(
  * el cuerpo remoto y con él cabeceras y claves redactadas.
  */
 export function invocarVisualConModelos(modelos: {
-  paraPapel(papel: Papel): unknown;
+  paraPapel(papel: Papel, esfuerzo?: Esfuerzo): unknown;
 }): InvocarVisual {
   return async (papel, prompt, imagen, referencia) => {
     let modelo: unknown;
     try {
-      modelo = modelos.paraPapel(papel);
+      modelo = modelos.paraPapel(papel, ESFUERZO_DEL_JUEZ_VISUAL);
     } catch (error) {
       throw new ErrorDelJuezVisual(error instanceof Error ? error.message : String(error));
     }

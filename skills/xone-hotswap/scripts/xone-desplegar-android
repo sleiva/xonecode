@@ -526,6 +526,16 @@ function exigirAparato() {
         console.error("sobrantes, y una `var` no se puede declarar dos veces en la misma función.");
         process.exit(1);
       }
+      // **El despliegue sube también `bd/` y SUSTITUYE la base del aparato.** Medido en Maset: el desarrollador marcó
+      // datos de prueba con `xone-hotswap sql`, desplegó entero para subir un icono y la lista se quedó vacía —dos veces,
+      // unos diez minutos—. Se dice aquí, que es cuando pasa: un aviso en la skill no lo leyó a tiempo.
+      if (existsSync("bd")) {
+        console.log("");
+        console.log("AVISO: el despliegue entero ha SUSTITUIDO la base de datos del aparato por la del proyecto (bd/):");
+        console.log("lo que hubieras cambiado en el aparato (datos de prueba, un UPDATE con xone-hotswap sql) se ha perdido.");
+        console.log("Si los necesitas, vuelve a ponerlos. Para subir un .xne, un .css, un .js o un icono NO despliegues:");
+        console.log("xone-recargar-android <ruta> (varios a la vez) no toca la base.");
+      }
       process.exit(0);
     }
     esperar(2);

@@ -26,6 +26,7 @@ No cuestan lo mismo, ni de lejos. Por orden de lo que vas a necesitar:
 |---|---|---|
 | **dónde estoy** | `screen` | una línea: colección activa, diálogos abiertos, ventana con el foco |
 | **subir lo que cambiaste** | `xone-recargar-android A.xne default.css icons/x.svg icons/y.svg` | TODO en UNA llamada: sube cada uno y aplica una vez. Sin argumentos compara con el aparato y sube solo lo que difiere. Uno a uno son N viajes, y con iconos N relanzamientos |
+| **desplegar entero** | `xone-desplegar-android` | solo la PRIMERA vez o con fuentes nuevas: **sustituye la base de datos del aparato** y borra tus datos de prueba. Para todo lo demás, `xone-recargar-android` |
 | **ir a una ventana** | `abrir NombreColeccion` | DIRECTO (`ui.openMenu`), sin repetir login y menús en cada prueba; se pinta un instante después |
 | **ejecutar JavaScript de la app** | `js 'return …;'` | `runScript` sin componer el Base64 a mano |
 | **qué está fallando** | `xone-log-android` | un error de JavaScript o una excepción salen ahí con su mensaje y su línea |
