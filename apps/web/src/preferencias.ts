@@ -91,3 +91,25 @@ export function guardarAnchoPanel(px: number): void {
     // Se redimensiona igual; dura lo que dure la pestaña.
   }
 }
+
+const CLAVE_ANCHO_FICHA = "xonecode.anchoFichaDeTarea";
+
+/** El ancho que la persona le dio a la ficha de una tarea (IXCODE-68), en este navegador. Ausente = el de por omisión. */
+export function leerAnchoFicha(): number | undefined {
+  try {
+    const guardado = window.localStorage.getItem(CLAVE_ANCHO_FICHA);
+    if (guardado === null) return undefined;
+    const px = Number.parseInt(guardado, 10);
+    return Number.isFinite(px) ? px : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export function guardarAnchoFicha(px: number): void {
+  try {
+    window.localStorage.setItem(CLAVE_ANCHO_FICHA, String(Math.round(px)));
+  } catch {
+    // Se redimensiona igual; dura lo que dure la pestaña.
+  }
+}

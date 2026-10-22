@@ -14,7 +14,21 @@
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 360px;
+  /* El ancho lo pone `ConFicha` (`--ancho-ficha`), con el tirador en medio. */
+  grid-template-columns: minmax(0, 1fr) 6px var(--ancho-ficha, 360px);
+}
+
+/* El tirador: una tira fina que se marca al pasar, al arrastrar y con el foco. */
+.tirador {
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.tirador:hover,
+.tirador[data-arrastrando],
+.tirador:focus-visible {
+  background: var(--dsw-alias-border-l3);
+  outline: none;
 }
 
 /* La conversación: la misma columna que tenía sola. */
@@ -30,6 +44,11 @@
   .reparto {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  /* Apilada no hay ancho que repartir: el tirador no ocupa sitio. */
+  .reparto > .tirador {
+    display: none;
   }
 
   .reparto > .ficha {

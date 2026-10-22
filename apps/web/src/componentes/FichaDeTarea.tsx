@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { MarkdownText } from "@deepseek-ai/dsh-client-ui-primitives";
 import type { TareaDelCable } from "../tipos.js";
 import { selloDeFecha } from "../selloDeFecha.js";
@@ -6,7 +6,93 @@ import { protegerDolares } from "../protegerDolares.js";
 import { ETIQUETAS_DE_CODIGO } from "../etiquetasDeCodigo.js";
 import { ListaDePantallas } from "./DisenoDelProyecto.js";
 import { CifrasAcabadas, CifrasEnMarcha } from "./TareasDelProyecto.js";
+import { guardarAnchoFicha, leerAnchoFicha } from "../preferencias.js";
 import estilos from "./FichaDeTarea.module.css";
+
+export const ANCHO_FICHA_POR_OMISION = 360;
+export const ANCHO_FICHA_MINIMO = 280;
+/** Lo que se le deja como mínimo a la conversación al ensanchar la ficha. */
+export const ANCHO_MINIMO_DE_LA_CONVERSACION = 420;
+
+/** El ancho de la ficha, acotado: ni más estrecha que su mínimo, ni tanto que la conversación baje del suyo. Pura. */
+export function acotarAnchoDeFicha(px: number, anchoDelReparto?: number): number {
+  if (!Number.isFinite(px)) return ANCHO_FICHA_POR_OMISION;
+  const techo =
+    anchoDelReparto === undefined || !Number.isFinite(anchoDelReparto)
+      ? Number.POSITIVE_INFINITY
+      : Math.max(ANCHO_FICHA_MINIMO, anchoDelReparto - ANCHO_MINIMO_DE_LA_CONVERSACION);
+  return Math.round(Math.min(Math.max(px, ANCHO_FICHA_MINIMO), techo));
+}
+
+/**
+ * La conversación a la izquierda y la ficha a la derecha, con un tirador entre las dos para ENSANCHAR la ficha (petición
+ * suya: «que pueda crecer de ancho»). Es un `separator` enfocable, como los de la maqueta: se arrastra con el puntero y se
+ * mueve con las flechas; el ancho se recuerda en este navegador (`preferencias.ts`).
+ */
+export function ConFicha({ ficha, children }: { ficha: ReactNode; children: ReactNode }) {
+  const [ancho, setAncho] = useState(() => acotarAnchoDeFicha(leerAnchoFicha() ?? ANCHO_FICHA_POR_OMISION));
+  const [arrastrando, setArrastrando] = useState(false);
+  const reparto = useRef<HTMLDivElement | null>(null);
+  const pedir = (px: number, terminado: boolean): void => {
+    const acotado = acotarAnchoDeFicha(px, reparto.current?.getBoundingClientRect().width || undefined);
+    setAncho(acotado);
+    if (terminado) guardarAnchoFicha(acotado);
+  };
+  // La ficha va pegada al borde DERECHO: su ancho es lo que va del puntero a ese borde.
+  const desdeElPuntero = (clientX: number, terminado: boolean): void => {
+    const caja = reparto.current?.getBoundingClientRect();
+    if (caja !== undefined) pedir(caja.right - clientX, terminado);
+  };
+  return (
+    <div className={estilos.conFicha}>
+      <div ref={reparto} className={estilos.reparto} style={{ "--ancho-ficha": `${ancho}px` } as React.CSSProperties}>
+        <div className={estilos.conversacion}>{children}</div>
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Ancho de la ficha"
+          aria-valuenow={ancho}
+          aria-valuemin={ANCHO_FICHA_MINIMO}
+          tabIndex={0}
+          className={estilos.tirador}
+          data-arrastrando={arrastrando ? "" : undefined}
+          onPointerDown={(e) => {
+            if (e.button > 0) return;
+            e.preventDefault();
+            setArrastrando(true);
+            try {
+              e.currentTarget.setPointerCapture?.(e.pointerId);
+            } catch {
+              // Sin captura: el arrastre sigue mientras el puntero no salga de la tira.
+            }
+          }}
+          onPointerMove={(e) => {
+            if (arrastrando) desdeElPuntero(e.clientX, false);
+          }}
+          onPointerUp={(e) => {
+            if (!arrastrando) return;
+            setArrastrando(false);
+            desdeElPuntero(e.clientX, true);
+          }}
+          onPointerCancel={() => {
+            setArrastrando(false);
+            guardarAnchoFicha(ancho);
+          }}
+          onKeyDown={(e) => {
+            // La flecha IZQUIERDA ensancha: el tirador se mueve hacia ese lado.
+            const paso = e.shiftKey ? 64 : 16;
+            if (e.key === "ArrowLeft") pedir(ancho + paso, true);
+            else if (e.key === "ArrowRight") pedir(ancho - paso, true);
+            else return;
+            e.preventDefault();
+          }}
+          onDoubleClick={() => pedir(ANCHO_FICHA_POR_OMISION, true)}
+        />
+        {ficha}
+      </div>
+    </div>
+  );
+}
 
 /**
  * La FICHA de una tarea, a la derecha de su conversación mientras se lee (IXCODE-68, opción A de su lienzo «Tarea en

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { FichaDeTarea } from "./FichaDeTarea.js";
+import { acotarAnchoDeFicha, ANCHO_FICHA_MINIMO, ANCHO_FICHA_POR_OMISION, ConFicha, FichaDeTarea } from "./FichaDeTarea.js";
 import type { TareaDelCable } from "../tipos.js";
 
 afterEach(cleanup);
@@ -81,5 +81,33 @@ describe("FichaDeTarea", () => {
     unmount();
     render(<FichaDeTarea tarea={tarea({ estado: "terminada" })} />);
     expect(screen.getByRole("complementary", { name: "Ficha de la tarea" }).textContent).not.toMatch(/Tardó|Gastó/);
+  });
+});
+
+/** Petición suya: «que pueda crecer de ancho». */
+describe("el ancho de la ficha", () => {
+  it("se acota: nunca bajo su mínimo, ni tan ancha que la conversación se quede sin sitio", () => {
+    expect(acotarAnchoDeFicha(100)).toBe(ANCHO_FICHA_MINIMO);
+    expect(acotarAnchoDeFicha(900)).toBe(900);
+    expect(acotarAnchoDeFicha(900, 1200)).toBe(1200 - 420);
+    expect(acotarAnchoDeFicha(Number.NaN)).toBe(ANCHO_FICHA_POR_OMISION);
+  });
+
+  it("el tirador la ensancha con la flecha izquierda, la estrecha con la derecha, y lo recuerda", () => {
+    window.localStorage.removeItem("xonecode.anchoFichaDeTarea");
+    render(
+      <ConFicha ficha={<FichaDeTarea tarea={tarea()} />}>
+        <p>la conversación</p>
+      </ConFicha>
+    );
+    const tirador = screen.getByRole("separator", { name: "Ancho de la ficha" });
+    expect(tirador.getAttribute("aria-valuenow")).toBe(String(ANCHO_FICHA_POR_OMISION));
+    fireEvent.keyDown(tirador, { key: "ArrowLeft", shiftKey: true });
+    expect(tirador.getAttribute("aria-valuenow")).toBe(String(ANCHO_FICHA_POR_OMISION + 64));
+    expect(window.localStorage.getItem("xonecode.anchoFichaDeTarea")).toBe(String(ANCHO_FICHA_POR_OMISION + 64));
+    fireEvent.keyDown(tirador, { key: "ArrowRight" });
+    expect(tirador.getAttribute("aria-valuenow")).toBe(String(ANCHO_FICHA_POR_OMISION + 48));
+    fireEvent.doubleClick(tirador);
+    expect(tirador.getAttribute("aria-valuenow")).toBe(String(ANCHO_FICHA_POR_OMISION));
   });
 });

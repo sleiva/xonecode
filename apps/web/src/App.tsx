@@ -10,8 +10,7 @@ import { ANCHO_BARRA_POR_OMISION, Maqueta } from "./componentes/Maqueta.js";
 import { Barra } from "./componentes/Barra.js";
 import { AvisoDeProyectoConTarea, ElegirDestinoDelMensaje, TareaEnEsperaEnElChat } from "./componentes/MensajeATarea.js";
 import { LecturaDeSesion, type MotivoDeLectura } from "./componentes/LecturaDeSesion.js";
-import { FichaDeTarea } from "./componentes/FichaDeTarea.js";
-import estilosDeFicha from "./componentes/FichaDeTarea.module.css";
+import { ConFicha, FichaDeTarea } from "./componentes/FichaDeTarea.js";
 import { Cabecera } from "./componentes/Cabecera.js";
 import { Panel } from "./componentes/Panel.js";
 import type { Pestana } from "./componentes/Pestanas.js";
@@ -1923,12 +1922,7 @@ export function App({
     tareaDeLaFicha === undefined ? (
       lecturaSola
     ) : (
-      <div className={estilosDeFicha.conFicha}>
-        <div className={estilosDeFicha.reparto}>
-          <div className={estilosDeFicha.conversacion}>{lecturaSola}</div>
-          <FichaDeTarea tarea={tareaDeLaFicha} />
-        </div>
-      </div>
+      <ConFicha ficha={<FichaDeTarea tarea={tareaDeLaFicha} />}>{lecturaSola}</ConFicha>
     );
   /** La conversación que se lee es la de una tarea ya TERMINADA: un registro, abierto desde «Finalizadas». */
   const leeUnaFinalizada =
