@@ -64,6 +64,22 @@ describe("FichaDeTarea", () => {
     );
     expect(screen.getByRole("region", { name: "Diseño" }).textContent).toContain("«Listado de Albaranes»");
     expect(screen.getByRole("region", { name: "Adjuntos" }).textContent).toContain("captura-actual.png");
-    expect(screen.getByText("Tardó 2 min 05 s trabajando")).toBeTruthy();
+    expect(screen.getByText("tardó")).toBeTruthy();
+    expect(screen.getByText("2 min 05 s")).toBeTruthy();
+  });
+
+  it("acabada y con gasto, dice también lo que gastó; sin nada que conste, ninguna cifra", () => {
+    const { unmount } = render(
+      <FichaDeTarea
+        tarea={tarea({ estado: "terminada", trabajo: 40_000, gasto: { modelo: { entrada: 279_900, salida: 0, cache: 0 }, externo: { entrada: 0, salida: 0, cache: 0 } } })}
+      />
+    );
+    // Las mismas cifras grandes que en curso: tardó, tokens y caché.
+    expect(screen.getByText("tardó")).toBeTruthy();
+    expect(screen.getByText("40 s")).toBeTruthy();
+    expect(screen.getByLabelText(/^Tardó 40 s · .*tokens/)).toBeTruthy();
+    unmount();
+    render(<FichaDeTarea tarea={tarea({ estado: "terminada" })} />);
+    expect(screen.getByRole("complementary", { name: "Ficha de la tarea" }).textContent).not.toMatch(/Tardó|Gastó/);
   });
 });

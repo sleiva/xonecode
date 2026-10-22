@@ -4309,6 +4309,8 @@ describe("App: una tarea finalizada se lee con su conversación y sus artefactos
     desplegarLaFinalizada();
     fireEvent.click(screen.getByRole("button", { name: "Conversación y artefactos" }));
     expect(await screen.findByText("añade la versión al login")).toBeTruthy();
+    // Una finalizada se lee también con su ficha (IXCODE-68): ya no escribe la conversación, pero es suya.
+    expect(screen.getByRole("complementary", { name: "Ficha de la tarea" }).textContent).toContain("Versión en el login");
     fireEvent.click(screen.getByRole("button", { name: "Volver a Tareas" }));
     expect(screen.getByRole("tab", { name: "Tareas" }).getAttribute("aria-selected")).toBe("true");
     expect(screen.getByRole("tab", { name: /Finalizadas/ }).getAttribute("aria-selected")).toBe("true");

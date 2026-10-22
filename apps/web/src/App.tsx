@@ -607,7 +607,7 @@ export function App({
    * ventana, como `mirandoTarea`.
    */
   const [lectura, setLectura] = useState<
-    { proyecto: string; sesion: string; titulo: string; tarea?: string; actos?: Acto[]; error?: string } | undefined
+    { proyecto: string; sesion: string; titulo: string; tarea?: string; ficha?: string; actos?: Acto[]; error?: string } | undefined
   >(undefined);
   /**
    * La lectura de AHORA, para cerrar o cambiar sin meter efectos dentro de un `setLectura`: dejar de
@@ -630,10 +630,11 @@ export function App({
     if (tarea !== undefined) alDejarDeMirarTarea(tarea);
   }, [alDejarDeMirarTarea]);
   const leerSesion = useCallback(
-    (proyecto: string, sesion: string, titulo: string) => {
+    (proyecto: string, sesion: string, titulo: string, ficha?: string) => {
       const tarea = tareaQueEscribeLaSesion.get(sesion);
       const anterior = lecturaActual.current?.tarea;
-      const nueva = { proyecto, sesion, titulo, ...(tarea === undefined ? {} : { tarea }) };
+      // `ficha`: de qué tarea es la ficha de al lado cuando no es la que escribe (una FINALIZADA, IXCODE-68).
+      const nueva = { proyecto, sesion, titulo, ...(tarea === undefined ? {} : { tarea }), ...(ficha === undefined ? {} : { ficha }) };
       lecturaActual.current = nueva;
       setLectura(nueva);
       if (anterior !== undefined && anterior !== tarea) alDejarDeMirarTarea(anterior);
@@ -1916,14 +1917,16 @@ export function App({
    * La conversación de una TAREA se lee con su ficha a la derecha (IXCODE-68): encargo, tiempo y gasto a la vista. Sin
    * tarea —una conversación suelta, o una finalizada—, la lectura sola, como siempre.
    */
+  const tareaDeLaFicha =
+    lectura?.ficha === undefined ? tareaDeLaLectura : (estado.tareas?.lista.find((t) => t.id === lectura.ficha) ?? tareaDeLaLectura);
   const conFichaDeTarea = (lecturaSola: ReactNode): ReactNode =>
-    tareaDeLaLectura === undefined ? (
+    tareaDeLaFicha === undefined ? (
       lecturaSola
     ) : (
       <div className={estilosDeFicha.conFicha}>
         <div className={estilosDeFicha.reparto}>
           <div className={estilosDeFicha.conversacion}>{lecturaSola}</div>
-          <FichaDeTarea tarea={tareaDeLaLectura} />
+          <FichaDeTarea tarea={tareaDeLaFicha} />
         </div>
       </div>
     );
@@ -2785,7 +2788,7 @@ export function App({
         if (t.sesion === undefined) return;
         // Al cerrar se vuelve a donde se estaba: el panel y esta lista se desmontan mientras se lee.
         setVolverATareas("finalizadas");
-        leerSesion(t.proyecto, t.sesion, t.titulo);
+        leerSesion(t.proyecto, t.sesion, t.titulo, t.id);
       }}
       {...(volverATareas === "finalizadas" ? { pestanaInicial: "finalizadas" as const } : {})}
       // «Mirar ahora» (la puerta 2): solo con el disparo ENCENDIDO en el vínculo de este proyecto.

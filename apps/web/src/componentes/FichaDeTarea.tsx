@@ -5,7 +5,7 @@ import { selloDeFecha } from "../selloDeFecha.js";
 import { protegerDolares } from "../protegerDolares.js";
 import { ETIQUETAS_DE_CODIGO } from "../etiquetasDeCodigo.js";
 import { ListaDePantallas } from "./DisenoDelProyecto.js";
-import { CifrasEnMarcha, tiempoQueLleva } from "./TareasDelProyecto.js";
+import { CifrasAcabadas, CifrasEnMarcha } from "./TareasDelProyecto.js";
 import estilos from "./FichaDeTarea.module.css";
 
 /**
@@ -35,9 +35,10 @@ export function FichaDeTarea({ tarea: t }: { tarea: TareaDelCable }) {
 
       {t.estado === "en-proceso" && t.empezada !== undefined ? (
         <CifrasEnMarcha empezada={t.empezada} gasto={t.gastoEnCurso} />
-      ) : t.trabajo !== undefined ? (
-        <p className={estilos.texto}>{`Tardó ${tiempoQueLleva(t.trabajo)} trabajando`}</p>
-      ) : null}
+      ) : (
+        // Acabada: las MISMAS cifras grandes, con lo que tardó trabajando y lo que gastó (cada una solo si consta).
+        <CifrasAcabadas trabajo={t.trabajo} gasto={t.gasto} />
+      )}
 
       {igual ? null : (
         <section className={estilos.seccion} aria-label="Lo que se pidió">

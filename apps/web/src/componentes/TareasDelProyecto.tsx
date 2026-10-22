@@ -1145,6 +1145,35 @@ export function EnMarcha({ empezada, gasto }: { empezada: string; gasto: TareaDe
   );
 }
 
+/**
+ * Las cifras de una tarea ACABADA, con la misma cara que `CifrasEnMarcha` (petición suya: la ficha de una finalizada,
+ * igual que la de una en curso): lo que tardó trabajando, tokens y caché. Lo que no consta no se pinta.
+ */
+export function CifrasAcabadas({ trabajo, gasto }: { trabajo: number | undefined; gasto: TareaDelCable["gasto"] }) {
+  if (trabajo === undefined && gasto === undefined) return null;
+  const tokens = gasto === undefined ? [] : textoDelGastoDeTarea(gasto).split(" · ");
+  const resumen = [...(trabajo === undefined ? [] : [`Tardó ${tiempoQueLleva(trabajo)}`]), ...(gasto === undefined ? [] : [textoDelGastoDeTarea(gasto)])].join(" · ");
+  return (
+    <dl className={estilos.cifrasEnMarcha} aria-label={resumen}>
+      {trabajo === undefined ? null : (
+        <div>
+          <dt>tardó</dt>
+          <dd>{tiempoQueLleva(trabajo)}</dd>
+        </div>
+      )}
+      {tokens.map((parte) => {
+        const [cifra, ...resto] = parte.split(" ");
+        return (
+          <div key={parte}>
+            <dt>{resto.join(" ")}</dt>
+            <dd>{cifra}</dd>
+          </div>
+        );
+      })}
+    </dl>
+  );
+}
+
 /** Lo que una fila de la COLA sabe de su sitio: el número, cómo arrastrarla y las flechas (ausente = en el borde). */
 interface EnLaCola {
   posicion: number;
