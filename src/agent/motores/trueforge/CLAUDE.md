@@ -90,6 +90,8 @@ Ante una discrepancia con el código, **el código manda**.
   (sobre uno existente, error → `edit_file`); `read_file` hasta `LINEAS_POR_LECTURA`/`CARACTERES_POR_LECTURA` y dice por
   dónde seguir; al terminar un hijo, quien lo llamó recibe en UN mensaje lo que ESCRIBIÓ (sin contenido; binarios
   incluidos). Límite declarado: el rechazo llega DESPUÉS de la aprobación.
+  Y lo que APUNTÓ en lo aprendido, tema y alcance sin el texto (`textoDeLoApuntado`): medido, el orquestador lo volvía a
+  apuntar con otro tema y salía duplicado.
 - **La pantalla la MIDE el harness tras cada prueba** (`medidaAutomatica.ts`): última captura contra la maqueta
   (`/diseno/`, `/adjuntos/`), sin modelo, con `CRITERIO_DE_DISTANCIA` y recordatorio del crítico; viaja al orquestador.
   **Incluye el ENCAJE** (`TOLERANCIA_DE_ENCAJE`, `compararCapturas.ts#desajusteDeEncaje`, mediana de franjas a los lados)

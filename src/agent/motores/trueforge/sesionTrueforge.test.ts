@@ -3349,6 +3349,23 @@ describe("lo APRENDIDO del proyecto llega delante de cada encargo, y quien traba
     expect(vistos[1]![0]).toContain(LO_LEIDO_SON_DATOS);
   }, 20_000);
 
+  it("lo que APUNTÓ el especialista se le dice al orquestador al volver, para que no lo repita con otro tema", async () => {
+    const raiz = proyecto();
+    const { m, vistos } = modelosConGuion([
+      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "developer-xone", input: "pinta el menú" }) }] })],
+      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "a1", name: "apuntar_aprendizaje", args: JSON.stringify({ tema: "tarjeta por fila en una rejilla", texto: "un frame redondeado en la coll de la fila", como_lo_se: "medido en el aparato", alcance: "proyecto" }) }] })],
+      [new AIMessageChunk({ content: "Hecho." })],
+      [new AIMessageChunk({ content: "Listo." })],
+    ]);
+    const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO });
+    await s.turno("pinta el menú", piel().p);
+    const tras = vistos[3]!.join("\n");
+    expect(tras).toContain("developer-xone ya APUNTÓ en lo aprendido");
+    expect(tras).toContain("- «tarjeta por fila en una rejilla» (proyecto)");
+    // El texto de lo apuntado no viaja en el informe: solo el tema.
+    expect(tras.split("ya APUNTÓ")[1]).not.toContain("un frame redondeado");
+  }, 20_000);
+
   it("lo de XOne, de la carpeta global, llega también al orquestador y al especialista", async () => {
     const raiz = proyecto();
     const global = join(homedir(), ".xonecode");

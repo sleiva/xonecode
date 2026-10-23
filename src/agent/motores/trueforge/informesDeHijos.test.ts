@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { anotarEscritura, capacidadDeInformesDeHijos, escrituraConExito, textoDelInforme, type CambioDeFichero } from "./informesDeHijos.js";
+import { anotarEscritura, capacidadDeInformesDeHijos, escrituraConExito, textoDeLoApuntado, textoDelInforme, type CambioDeFichero } from "./informesDeHijos.js";
 
 describe("lo que escribió un hijo, contado por el harness", () => {
   it("suma ediciones y líneas por fichero; un write que crea es «nuevo»", () => {
@@ -63,5 +63,24 @@ describe("lo que escribió un hijo, contado por el harness", () => {
     expect(await sacar("otro")).toEqual([]);
     expect(await sacar("padre")).toEqual([{ type: "internal.agent.context.append", context: [{ role: "user", content: "uno\n\ndos" }], output: [] }]);
     expect(await sacar("padre")).toEqual([]);
+  });
+});
+
+/**
+ * Medido el 23-10-2026 (rediseño de liquidaciones en Maset): el desarrollador apuntaba lo aprendido y, al volver, el
+ * orquestador lo apuntaba OTRA VEZ con otro tema («tarjeta por fila dentro de una rejilla contents» / «tarjeta con
+ * esquinas redondeadas por fila en una rejilla (contents)»): el mismo tema se sustituye, pero un tema DISTINTO no.
+ */
+describe("lo que APUNTÓ un hijo, dicho a quien lo llamó", () => {
+  it("nombra cada tema con su alcance y pide no volver a apuntarlo; sin nada, nada", () => {
+    const t = textoDeLoApuntado("developer-xone", [
+      { tema: "tarjeta por fila dentro de una rejilla contents", alcance: "xone" },
+      { tema: "cómo llegar a la lista", alcance: "proyecto" },
+    ])!;
+    expect(t).toContain("developer-xone");
+    expect(t).toContain("- «tarjeta por fila dentro de una rejilla contents» (XOne)");
+    expect(t).toContain("- «cómo llegar a la lista» (proyecto)");
+    expect(t).toContain("no lo vuelvas a apuntar");
+    expect(textoDeLoApuntado("developer-xone", [])).toBeUndefined();
   });
 });

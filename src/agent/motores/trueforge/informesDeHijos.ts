@@ -102,6 +102,26 @@ export function textoDelInforme(quien: string, cambios: ReadonlyMap<string, Camb
   ].join("\n");
 }
 
+/** Lo que un hijo apuntó con `apuntar_aprendizaje` y quedó guardado. */
+export interface Apunte {
+  tema: string;
+  alcance: "proyecto" | "xone";
+}
+
+/**
+ * Lo que APUNTÓ un hijo en lo aprendido, para quien lo llamó. Medido en una tarea real: el especialista apuntaba y el
+ * orquestador, al volver, apuntaba lo mismo con OTRO tema (el mismo tema se sustituye, uno distinto no), así que lo
+ * aprendido salía duplicado. Se le dice qué está ya guardado, con su alcance; nunca el texto (puede llevar una clave).
+ */
+export function textoDeLoApuntado(quien: string, apuntes: readonly Apunte[]): string | undefined {
+  if (apuntes.length === 0) return undefined;
+  return [
+    `[harness] ${quien} ya APUNTÓ en lo aprendido, y está guardado:`,
+    ...apuntes.map((a) => `- «${a.tema}» (${a.alcance === "xone" ? "XOne" : "proyecto"})`),
+    "Eso no lo vuelvas a apuntar, ni con otras palabras: saldría duplicado.",
+  ].join("\n");
+}
+
 /**
  * Entrega, antes de la siguiente llamada del hilo, los informes que le esperan (`pendientes` los CONSUME: cada uno
  * sale una vez). Va en el raíz y en quien puede llamar a otros. No añade tools.

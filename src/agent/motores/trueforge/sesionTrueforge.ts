@@ -110,7 +110,7 @@ import { casanConTitulo, esDeLaMaqueta } from "../../../core/stitch.js";
 import { recibeConectores } from "../../../core/conectores.js";
 import { crearConvertirAP, NOMBRE_CONVERTIR_A_P, recibeConvertirAP } from "./convertirAP.js";
 import { buscarMaquetas, medirContraLaMasParecida, RONDAS_VISUALES, resumenDeMedida, textoDeMedidaAutomatica, ultimaCaptura } from "./medidaAutomatica.js";
-import { anotarEscritura, capacidadDeInformesDeHijos, esEscrituraBinaria, escrituraConExito, textoDelInforme, type CambioDeFichero } from "./informesDeHijos.js";
+import { anotarEscritura, capacidadDeInformesDeHijos, esEscrituraBinaria, escrituraConExito, textoDeLoApuntado, textoDelInforme, type Apunte, type CambioDeFichero } from "./informesDeHijos.js";
 import { crearDiagnosticoDeTools, type DiagnosticoDeTools } from "../../turno/diagnosticoDeTools.js";
 import { encenderTrazaDeErrores } from "../../trazaDeErroresEnDisco.js";
 import { anotarPaso } from "../../../core/trazaDeErrores.js";
@@ -349,7 +349,8 @@ export function textoDeAprendidoDelRaiz(lista: Parameters<typeof bloqueDeAprendi
   return [
     bloqueDeAprendido(lista, deXone),
     `${USO_DE_APUNTAR_APRENDIZAJE} Y si un especialista te devuelve un apartado «Aprendido:», apúntalo tú, con el cómo lo ` +
-      "comprobó que él diga y con alcance «xone» si la línea empieza por «XOne:»; lo que no diga cómo se comprobó, no lo apuntes.",
+      "comprobó que él diga y con alcance «xone» si la línea empieza por «XOne:»; lo que no diga cómo se comprobó, no lo apuntes. " +
+      "Lo que un especialista ya apuntó él mismo te lo dice el harness al volver: eso no lo vuelvas a apuntar, ni con otras palabras.",
   ]
     .filter((l): l is string => l !== undefined)
     .join("\n");
@@ -968,6 +969,8 @@ export async function abrirSesionTrueforge(
   const capturasDeCadaHilo = new Map<string, number>();
   /** Lo que escribió cada hijo en su encargo, quién lo llamó, y los informes que esperan a ese padre (`informesDeHijos.ts`). */
   const escritosDeCadaHilo = new Map<string, Map<string, CambioDeFichero>>();
+  /** Lo que cada hijo APUNTÓ en lo aprendido, para que quien lo llamó no lo repita con otro tema (`textoDeLoApuntado`). */
+  const apuntesDeCadaHilo = new Map<string, Apunte[]>();
   const padreDeHilo = new Map<string, string>();
   /** Qué hijo nació de cada `create_sub_agent` del raíz (id de la llamada → hilo): la foto a mitad de turno lo nombra. */
   const hiloDeLlamadaDelRaiz = new Map<string, string>();
@@ -2053,6 +2056,17 @@ export async function abrirSesionTrueforge(
         }
         const chars = typeof evento.content === "string" ? evento.content.length : 0;
         diagnostico?.resultado?.(llamada?.nombre, llamada === undefined ? undefined : detalleDe(llamada.nombre, llamada.args), chars);
+        // Lo que APUNTÓ un hijo y quedó guardado (el texto de éxito empieza por «Apuntado»).
+        if (
+          deHilo !== HILO_RAIZ &&
+          llamada?.nombre === NOMBRE_APUNTAR_APRENDIZAJE &&
+          typeof evento.content === "string" &&
+          evento.content.startsWith("Apuntado") &&
+          typeof llamada.args["tema"] === "string"
+        ) {
+          const alcance = llamada.args["alcance"] === "xone" ? "xone" : "proyecto";
+          apuntesDeCadaHilo.set(deHilo, [...(apuntesDeCadaHilo.get(deHilo) ?? []), { tema: llamada.args["tema"].trim(), alcance }]);
+        }
         // Lo que ESCRIBIÓ este hilo, para decírselo a quien lo llamó al terminar (`informesDeHijos.ts`).
         const escritura = escriturasEnVuelo.get(claveDe(deHilo, evento.tool_call_id));
         if (escritura !== undefined) {
@@ -2086,8 +2100,11 @@ export async function abrirSesionTrueforge(
             medida ??
             textoDelInforme(quienEs.get(deHilo) ?? deHilo, escritos, quien !== undefined && quien.motor === "modelo" && clasesDeTools(quien) === "escribe", ultimaMedidaDeHilo.get(deHilo));
           const reparto = hiloPadre === HILO_RAIZ ? await avisoDeRepartoTras(escritos) : undefined;
-          const texto = reparto === undefined ? informe : [informe, reparto].filter((t) => t !== undefined).join("\n\n");
+          const apuntado = textoDeLoApuntado(quienEs.get(deHilo) ?? deHilo, apuntesDeCadaHilo.get(deHilo) ?? []);
+          const partes = [informe, reparto, apuntado].filter((t): t is string => t !== undefined);
+          const texto = partes.length === 0 ? undefined : partes.join("\n\n");
           escritosDeCadaHilo.delete(deHilo);
+          apuntesDeCadaHilo.delete(deHilo);
           nacimientoDeHilo.delete(deHilo);
           if (texto !== undefined) informesPendientes.set(hiloPadre, [...(informesPendientes.get(hiloPadre) ?? []), texto]);
         }
@@ -2752,6 +2769,7 @@ export async function abrirSesionTrueforge(
       vueltasDeCadaHilo.clear();
       capturasDeCadaHilo.clear();
       escritosDeCadaHilo.clear();
+      apuntesDeCadaHilo.clear();
       escriturasEnVuelo.clear();
       nacimientoDeHilo.clear();
       ultimaEscrituraDeHilo.clear();
