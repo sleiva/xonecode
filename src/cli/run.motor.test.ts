@@ -9,7 +9,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
  * `run` salió con 0, que CI lee como «bien». Es un fallo del ENTORNO (contrato de códigos de salida).
  * Atado por la PUERTA de verdad, como `run.tope.test.ts`: la regla vive dentro de `correrReal`.
  */
-const resultado: { falloDelMotor?: string } = {};
+const resultado: { falloDelMotor?: string; preguntaPendiente?: string } = {};
 vi.mock("../agent/turno/turnoReal.js", async (original) => {
   const real = (await original()) as Record<string, unknown>;
   return {
@@ -60,5 +60,21 @@ describe("run con el motor caído", () => {
   it("sin fallo del motor, el camino de siempre: 0", async () => {
     delete resultado.falloDelMotor;
     expect((await correr()).codigo).toBe(0);
+  });
+});
+
+/**
+ * Un turno que se queda en una PREGUNTA sin contestar no hizo lo pedido: espera a alguien que en `run` no hay. Medido el
+ * 23-10-2026 (el agente preguntó cómo conseguir la maqueta de Stitch, sin conectores en `run`) y salió con 0. Es el mismo
+ * desenlace que quedarse sin humano ante una aprobación: 2.
+ */
+describe("run con una pregunta sin contestar", () => {
+  it("sale con 2 y lo dice", async () => {
+    delete resultado.falloDelMotor;
+    resultado.preguntaPendiente = "¿Cómo me pasas la pantalla?";
+    const { codigo, salida } = await correr();
+    expect(codigo).toBe(2);
+    expect(salida).toMatch(/pregunta sin contestar/);
+    delete resultado.preguntaPendiente;
   });
 });

@@ -219,8 +219,9 @@ async function correrReal(opciones: OpcionesRun, escribir: Escribir): Promise<nu
   let cambios: Cambio[];
   let cortadoPorTope = false;
   let falloDelMotor: string | undefined;
+  let preguntaPendiente: string | undefined;
   try {
-    ({ bitacora, cambios, cortadoPorTope, falloDelMotor } = await sesion.turno(opciones.peticion, piel));
+    ({ bitacora, cambios, cortadoPorTope, falloDelMotor, preguntaPendiente } = await sesion.turno(opciones.peticion, piel));
   } catch (e) {
     if (!(e instanceof CorteSinHumano)) throw e;
     cambios = await instantanea.cambios();
@@ -279,6 +280,12 @@ async function correrReal(opciones: OpcionesRun, escribir: Escribir): Promise<nu
   if (falloDelMotor !== undefined) {
     escribir("\n(el motor falló a mitad del turno: es un fallo del entorno, no del proyecto; salida 70)\n");
     return 70;
+  }
+  // Un turno que acaba PREGUNTANDO espera a alguien que en `run` no hay: lo pedido no se hizo. Salía 0 (medido el
+  // 23-10-2026: el agente preguntó cómo conseguir la maqueta). Es el desenlace de quedarse sin humano: 2.
+  if (preguntaPendiente !== undefined) {
+    escribir("\n(el turno acabó con una pregunta sin contestar, y en `run` no hay nadie que conteste: salida 2)\n");
+    return 2;
   }
   return bitacora!.corrio("bloqueado") ? 1 : 0;
 }

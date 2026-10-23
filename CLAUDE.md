@@ -209,9 +209,9 @@ La puerta headless es `run --real` (`cli/run.ts`), y **cierra diciendo lo que co
 |---|---|
 | 0 | bien |
 | 1 | el proyecto tiene errores, o no es un proyecto XOne |
-| 2 | quedaron escrituras **sin resolver** (nadie las aprobó, o se agotó el tope) |
+| 2 | quedaron escrituras **sin resolver** (nadie las aprobó, o se agotó el tope), o el turno acabó con una **pregunta sin contestar** |
 | 64 | error de uso (bandera o modelo mal escritos) |
-| 70 | fallo del **entorno**, no del proyecto |
+| 70 | fallo del **entorno**, no del proyecto (también el MOTOR caído a mitad: un 429, la red) |
 
 Un fallo del entorno no se reporta como un proyecto roto: `agent/turno/verificador.ts` lanza
 `ErrorDelSimulador` en vez de devolver un informe en rojo.
