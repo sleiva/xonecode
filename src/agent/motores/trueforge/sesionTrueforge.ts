@@ -334,7 +334,8 @@ export function textoDeTopeDeEncargos(tope: number): string {
 export function textoDeAprendidoDelRaiz(lista: Parameters<typeof bloqueDeAprendido>[0]): string {
   return [
     bloqueDeAprendido(lista),
-    `${USO_DE_APUNTAR_APRENDIZAJE} Y si un especialista te devuelve un apartado «Aprendido:», apúntalo tú.`,
+    `${USO_DE_APUNTAR_APRENDIZAJE} Y si un especialista te devuelve un apartado «Aprendido:», apúntalo tú, con el cómo lo ` +
+      "comprobó que él diga; lo que no diga cómo se comprobó, no lo apuntes.",
   ]
     .filter((l): l is string => l !== undefined)
     .join("\n");

@@ -8,13 +8,20 @@ describe("apuntar_aprendizaje, contra el disco", () => {
   it("escribe en .xonecode/aprendido.json con 0600, sustituye el mismo tema y rechaza sin lanzar", async () => {
     const raiz = mkdtempSync(join(tmpdir(), "xc-aprendido-"));
     const t = crearApuntarAprendizaje({ raiz, quien: "device-controller", ahora: () => new Date("2026-10-15T10:00:00Z") });
-    expect(await t.invoke({ tema: "cómo entrar en la app", texto: "usuario 1" })).toContain("Apuntado «cómo entrar en la app»");
-    await t.invoke({ tema: "Cómo entrar en la app", texto: "usuario 08006, sin clave; pulsar Entrar" });
+    expect(await t.invoke({ tema: "cómo entrar en la app", texto: "usuario 1", como_lo_se: "lo probé" })).toContain("Apuntado «cómo entrar en la app»");
+    await t.invoke({ tema: "Cómo entrar en la app", texto: "usuario 08006, sin clave; pulsar Entrar", como_lo_se: " entré en el emulador " });
     expect(leerAprendido(raiz)).toEqual([
-      { tema: "Cómo entrar en la app", texto: "usuario 08006, sin clave; pulsar Entrar", cuando: "2026-10-15T10:00:00.000Z", quien: "device-controller" },
+      {
+        tema: "Cómo entrar en la app",
+        texto: "usuario 08006, sin clave; pulsar Entrar",
+        comoLoSe: "entré en el emulador",
+        cuando: "2026-10-15T10:00:00.000Z",
+        quien: "device-controller",
+      },
     ]);
     if (process.platform !== "win32") expect(statSync(rutaDeAprendido(raiz)).mode & 0o777).toBe(0o600);
-    expect(await t.invoke({ tema: "", texto: "x" })).toBe("No se apunta: falta el tema.");
+    expect(await t.invoke({ tema: "", texto: "x", como_lo_se: "lo probé" })).toBe("No se apunta: falta el tema.");
+    expect(await t.invoke({ tema: "otra cosa", texto: "x", como_lo_se: "" })).toContain("No se apunta: falta cómo lo sabes");
     expect(JSON.parse(readFileSync(rutaDeAprendido(raiz), "utf8"))).toHaveLength(1);
   });
 

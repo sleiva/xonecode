@@ -8,6 +8,7 @@ import {
   interpretarAprendido,
   motivoDeAprendizajeInaceptable,
   NOMBRE_APUNTAR_APRENDIZAJE,
+  TOPE_DE_COMO_LO_SE,
   TOPE_DE_TEMA,
   TOPE_DE_TEXTO,
   type Aprendizaje,
@@ -44,6 +45,9 @@ export function apuntarAprendizaje(raiz: string, nuevo: Aprendizaje): Aprendizaj
 const ESQUEMA = z.object({
   tema: z.string().describe(`De qué va, corto y siempre igual para lo mismo (máximo ${TOPE_DE_TEMA}): «cómo entrar en la app», «llegar al menú de albaranes»`),
   texto: z.string().describe(`Lo aprendido, concreto y corto (máximo ${TOPE_DE_TEXTO}): «usuario 08006, sin contraseña; pulsar Entrar»`),
+  como_lo_se: z
+    .string()
+    .describe(`Cómo lo COMPROBASTE (máximo ${TOPE_DE_COMO_LO_SE}): «entré en el emulador con él», «está en usuarios.xne». Si no lo comprobaste, no lo apuntes`),
 });
 
 /**
@@ -53,11 +57,11 @@ const ESQUEMA = z.object({
  */
 export function crearApuntarAprendizaje(donde: { raiz: string; quien: string; ahora?: () => Date }) {
   return tool(
-    async ({ tema, texto }: z.infer<typeof ESQUEMA>) => {
-      const motivo = motivoDeAprendizajeInaceptable({ tema, texto });
+    async ({ tema, texto, como_lo_se: comoLoSe }: z.infer<typeof ESQUEMA>) => {
+      const motivo = motivoDeAprendizajeInaceptable({ tema, texto, comoLoSe });
       if (motivo !== undefined) return `No se apunta: ${motivo}.`;
       try {
-        const lista = apuntarAprendizaje(donde.raiz, { tema, texto, cuando: (donde.ahora?.() ?? new Date()).toISOString(), quien: donde.quien });
+        const lista = apuntarAprendizaje(donde.raiz, { tema, texto, comoLoSe, cuando: (donde.ahora?.() ?? new Date()).toISOString(), quien: donde.quien });
         return `Apuntado «${tema.trim()}». Los encargos siguientes lo tendrán delante (${lista.length} cosa(s) aprendida(s) en el proyecto).`;
       } catch (error) {
         return `No se pudo apuntar: ${(error as NodeJS.ErrnoException).code ?? "error de disco"}.`;
@@ -68,7 +72,8 @@ export function crearApuntarAprendizaje(donde: { raiz: string; quien: string; ah
       description:
         "Apunta algo aprendido del proyecto o del aparato que otro encargo va a necesitar (cómo entrar en la app con su usuario " +
         "y clave, qué pulsar para llegar a una pantalla, una trampa). El harness se lo pone delante a los encargos siguientes. " +
-        "El mismo tema se sustituye: úsalo también para corregir algo que ya no es cierto.",
+        "Solo lo COMPROBADO, diciendo cómo: lo supuesto no se apunta. El mismo tema se sustituye: úsalo también para " +
+        "corregir algo que ya no es cierto.",
       schema: ESQUEMA,
     }
   );

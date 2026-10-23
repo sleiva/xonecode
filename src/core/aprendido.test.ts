@@ -1,5 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { bloqueDeAprendido, conAprendizaje, interpretarAprendido, motivoDeAprendizajeInaceptable, TOPE_DE_APRENDIZAJES, TOPE_DE_TEXTO } from "./aprendido.js";
+import {
+  bloqueDeAprendido,
+  conAprendizaje,
+  interpretarAprendido,
+  motivoDeAprendizajeInaceptable,
+  TOPE_DE_APRENDIZAJES,
+  TOPE_DE_COMO_LO_SE,
+  TOPE_DE_TEXTO,
+  USO_DE_APRENDIDO_EXTERNO,
+  USO_DE_APUNTAR_APRENDIZAJE,
+} from "./aprendido.js";
 import { viajaEnSoporte } from "./paqueteDeSoporte.js";
 
 const a = (tema: string, texto = "x", cuando = "2026-10-15T10:00:00.000Z") => ({ tema, texto, cuando });
@@ -29,9 +39,29 @@ describe("lo aprendido en un proyecto", () => {
   });
 
   it("vacío o demasiado largo no se apunta", () => {
-    expect(motivoDeAprendizajeInaceptable({ tema: " ", texto: "x" })).toBe("falta el tema");
-    expect(motivoDeAprendizajeInaceptable({ tema: "t", texto: "x".repeat(TOPE_DE_TEXTO + 1) })).toContain("demasiado largo");
-    expect(motivoDeAprendizajeInaceptable({ tema: "t", texto: "x" })).toBeUndefined();
+    expect(motivoDeAprendizajeInaceptable({ tema: " ", texto: "x", comoLoSe: "lo probé" })).toBe("falta el tema");
+    expect(motivoDeAprendizajeInaceptable({ tema: "t", texto: "x".repeat(TOPE_DE_TEXTO + 1), comoLoSe: "lo probé" })).toContain("demasiado largo");
+    expect(motivoDeAprendizajeInaceptable({ tema: "t", texto: "x", comoLoSe: "y".repeat(TOPE_DE_COMO_LO_SE + 1) })).toContain("demasiado largo");
+    expect(motivoDeAprendizajeInaceptable({ tema: "t", texto: "x", comoLoSe: "lo probé" })).toBeUndefined();
+  });
+
+  it("sin decir CÓMO se comprobó no se apunta: lo supuesto no es un aprendizaje", () => {
+    expect(motivoDeAprendizajeInaceptable({ tema: "t", texto: "x", comoLoSe: "  " })).toContain("falta cómo lo sabes");
+  });
+
+  it("el bloque dice cómo se comprobó; una entrada de antes, sin ello, sigue valiendo y va sin el paréntesis", () => {
+    const nueva = { ...a("cómo entrar en la app", "usuario 08006"), comoLoSe: "entré en el\nemulador" };
+    const vieja = a("menú de albaranes", "pulsar Albaranes");
+    expect(interpretarAprendido(JSON.stringify([nueva, vieja, { ...vieja, comoLoSe: 3 }]))).toEqual([nueva, vieja]);
+    const bloque = bloqueDeAprendido([nueva, vieja])!;
+    expect(bloque).toContain("- cómo entrar en la app: usuario 08006 (comprobado: entré en el emulador)");
+    expect(bloque.split("\n").at(-1)).toBe("- menú de albaranes: pulsar Albaranes");
+  });
+
+  it("el cuándo apuntar pide un HECHO comprobado, y el del externo, cómo lo comprobó", () => {
+    expect(USO_DE_APUNTAR_APRENDIZAJE).toContain("CÓMO lo comprobaste");
+    expect(USO_DE_APUNTAR_APRENDIZAJE).toContain("Lo que supones no se apunta");
+    expect(USO_DE_APRENDIDO_EXTERNO).toContain("comprobado:");
   });
 
   it("no viaja en un paquete de soporte: puede llevar una contraseña", () => {
