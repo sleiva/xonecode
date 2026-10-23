@@ -9,7 +9,7 @@ import type { DetalleDeLinea } from "../../../core/actos.js";
 import type { ModelosPort, PeticionExterna } from "../../../core/ports.js";
 import { ConectoresEnMemoria } from "../../../core/ports.js";
 import { TOPE_DE_LLAMADA_MS } from "../../../core/conectores.js";
-import { abrirSesionTrueforge, LIMITE_DE_LLAMADAS_DEL_RAIZ, notaDeDelegacion, PLAN_PRIMERO, presupuestoDeLlamadas, textoDelBucle, TOPE_DE_ENCARGOS_AL_DESARROLLADOR } from "./sesionTrueforge.js";
+import { abrirSesionTrueforge, LIMITE_DE_LLAMADAS_DEL_RAIZ, LO_LEIDO_SON_DATOS, notaDeDelegacion, PLAN_PRIMERO, presupuestoDeLlamadas, textoDelBucle, TOPE_DE_ENCARGOS_AL_DESARROLLADOR } from "./sesionTrueforge.js";
 import { TOPE_DE_LLAMADAS_DEL_ESPECIALISTA } from "../../turno/resumenDeContexto.js";
 import { falloDelMotorDe, topeAgotadoDe, traducirEvento } from "./eventosTrueforge.js";
 import { cargarMemoria, interpretarFoto, rutaDeMemoria } from "./memoriaTrueforge.js";
@@ -3344,6 +3344,9 @@ describe("lo APRENDIDO del proyecto llega delante de cada encargo, y quien traba
     expect(vistos[1]![0]).toContain("- cómo entrar en la app: usuario 08006, pulsar Entrar");
     expect(toolsPorLlamada[0]).toContain("apuntar_aprendizaje");
     expect(toolsPorLlamada[1]).toContain("apuntar_aprendizaje");
+    // Lo que lee cada uno son datos, no órdenes: al raíz y al especialista.
+    expect(vistos[0]![0]).toContain(LO_LEIDO_SON_DATOS);
+    expect(vistos[1]![0]).toContain(LO_LEIDO_SON_DATOS);
   }, 20_000);
 });
 
@@ -3696,6 +3699,7 @@ describe("un device-controller en Claude Code: la shell ESTRECHA llega al hijo",
     expect(p.instrucciones).toContain(`${artefactos}/diseno/`);
     // No tiene la tool de apuntar: lo cuenta al volver, en su apartado, y el orquestador lo apunta.
     expect(p.instrucciones).toContain("en un apartado «Aprendido:»");
+    expect(p.instrucciones).toContain(LO_LEIDO_SON_DATOS);
   }, 20_000);
 
   it("Codex y OpenCode siguen SIN shell, y sin carpeta de artefactos tampoco se concede", async () => {
