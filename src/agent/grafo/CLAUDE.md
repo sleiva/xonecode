@@ -168,6 +168,9 @@ Todas **reaplican `puedeLeerRuta` a mano** (una tool de xonecode no pasa por el 
   encargos de TODOS los proyectos, en su propio bloque). Lo de XOne que NOMBRA el proyecto o un fichero suyo se rechaza
   (`motivoDeXoneConDatosDelProyecto`, palabra entera); un dato suyo sin nombrarlo pasa: límite declarado.
   `sensible` (lleva usuario, clave o token) lo enseña oculto el panel «Lo aprendido»; sin marca, lo decide el texto.
+  **Dónde va, por la caché del prefijo**: en el ORQUESTADOR, al final de su sistema (se lee al abrir y no cambia en la
+  sesión); en un ESPECIALISTA y en un hijo EXTERNO, con el ENCARGO y no en el sistema, porque cambia en cuanto alguien
+  apunta y en el sistema invalidaba también la memoria del especialista.
 - **Lo que quien ESCRIBE debe saber va en developer y designer, no en `REGLAS_XONE`**
   (`ESCRIBIR_XONE_SIN_ROMPER`, `agentesEnDisco.ts`): `REGLAS_XONE` llega a quien no escribe y viaja en cada
   llamada. `TASKS.md` lleva `## Hallazgos`; el diseño se destila en `DISENO.md`.

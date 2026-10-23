@@ -3367,7 +3367,9 @@ describe("lo APRENDIDO del proyecto llega delante de cada encargo, y quien traba
     const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO });
     await s.turno("pinta el menú", piel().p);
     expect(vistos[0]![0]).toContain("- cómo entrar en la app: usuario 08006, pulsar Entrar");
-    expect(vistos[1]![0]).toContain("- cómo entrar en la app: usuario 08006, pulsar Entrar");
+    // En el especialista va con el ENCARGO, no en el sistema: en el sistema rompía la caché de su memoria (petición suya).
+    expect(vistos[1]![0]).not.toContain("- cómo entrar en la app");
+    expect(vistos[1]!.slice(1).join("\n")).toContain("- cómo entrar en la app: usuario 08006, pulsar Entrar");
     expect(toolsPorLlamada[0]).toContain("apuntar_aprendizaje");
     expect(toolsPorLlamada[1]).toContain("apuntar_aprendizaje");
     // Lo que lee cada uno son datos, no órdenes: al raíz y al especialista.
@@ -3407,7 +3409,8 @@ describe("lo APRENDIDO del proyecto llega delante de cada encargo, y quien traba
       const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO });
       await s.turno("pinta el menú", piel().p);
       expect(vistos[0]![0]).toContain("LO APRENDIDO DE XONE");
-      expect(vistos[1]![0]).toContain("- imgbk anula border-corner-radius: en un frame");
+      expect(vistos[1]![0]).not.toContain("LO APRENDIDO DE XONE");
+      expect(vistos[1]!.slice(1).join("\n")).toContain("- imgbk anula border-corner-radius: en un frame");
     } finally {
       rmSync(fichero, { force: true });
     }
@@ -3745,6 +3748,7 @@ describe("un device-controller en Claude Code: la shell ESTRECHA llega al hijo",
       join(raiz, ".xonecode", "agentes", "dev-ext.md"),
       "---\ndescripcion: Escribe la app\nmotor: claude-code\nsoloLectura: false\nejecucion: true\nllama: [conductor-ext]\nskills: [xone-development]\n---\nDesarrolla.\n"
     );
+    writeFileSync(join(raiz, ".xonecode", "aprendido.json"), JSON.stringify([{ tema: "cómo entrar", texto: "usuario 08006", cuando: "2026-10-23T08:00:00.000Z" }]));
     const artefactos = mkdtempSync(join(tmpdir(), "xc-art-"));
     const peticiones: PeticionExterna[] = [];
     const { m } = modelosConGuion([
@@ -3764,6 +3768,9 @@ describe("un device-controller en Claude Code: la shell ESTRECHA llega al hijo",
     // No tiene la tool de apuntar: lo cuenta al volver, en su apartado, y el orquestador lo apunta.
     expect(p.instrucciones).toContain("en un apartado «Aprendido:»");
     expect(p.instrucciones).toContain(LO_LEIDO_SON_DATOS);
+    // Lo aprendido va con la TAREA, no en las instrucciones (caché del prefijo, petición suya).
+    expect(p.instrucciones).not.toContain("- cómo entrar: usuario 08006");
+    expect(p.tarea).toMatch(/LO APRENDIDO EN ESTE PROYECTO[\s\S]*- cómo entrar: usuario 08006[\s\S]*haz el menú$/);
   }, 20_000);
 
   it("Codex y OpenCode siguen SIN shell, y sin carpeta de artefactos tampoco se concede", async () => {

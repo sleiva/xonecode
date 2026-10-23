@@ -1585,12 +1585,13 @@ export async function abrirSesionTrueforge(
               ...(lecturasDeSesion === undefined ? [] : [textoDeCarpetasDeLaSesion(lecturasDeSesion[0]!, lecturasDeSesion[1]!)]),
               // Su puerta a `/planes/` (`escrituraExterna.ts#rutaDePlanDelHijo`): sin decirle dónde cae, el plan acababa en el proyecto.
               ...(motor === "claude-code" ? [textoDeCarpetaDePlanes(join(raiz, CARPETA_DE_PLANES))] : []),
-              ...[bloqueDeAprendido(leerAprendido(raiz), leerAprendidoDeXone())].filter((b): b is string => b !== undefined),
               USO_DE_APRENDIDO_EXTERNO,
               LO_LEIDO_SON_DATOS,
               inventarioDelProyecto(ficherosDelProyecto(raiz)),
             ].join("\n\n"),
-            tarea: params.request.input,
+            // Lo aprendido, con la TAREA y no en las instrucciones: cambia en cuanto alguien apunta, y en el sistema rompía la
+            // caché de todo lo que va detrás (ver `delanteDelEncargo`).
+            tarea: ((b) => (b === undefined ? params.request.input : `${b}\n\n${params.request.input}`))(bloqueDeAprendido(leerAprendido(raiz), leerAprendidoDeXone())),
             ...(agente.modelo === undefined ? {} : { modelo: agente.modelo }),
             permitirEscritura: !agente.soloLectura,
             agente: agente.nombre,
@@ -1764,7 +1765,6 @@ export async function abrirSesionTrueforge(
             "",
             nota,
             anuncioDeSkills(agente, catalogo),
-            ...(aprendido === undefined ? [] : ["", aprendido]),
             ...(conBucleDelDesarrollador && (agente.llama?.length ?? 0) > 0 ? ["", textoDelBucle(agente.llama ?? [], { conCritica: carpeta !== undefined, conFuentes: opciones.fuentes !== undefined, pruebaElMismo: nombres.includes(NOMBRE_EJECUTAR_SCRIPT) })] : []),
           ]
             .filter((l) => l !== undefined)
@@ -1783,9 +1783,16 @@ export async function abrirSesionTrueforge(
     // Si lo que esperaba ya terminó en esta conversación, sabe qué dejó (solo nombres, nunca contenido).
     const esperado = conEsperas && agente !== undefined ? esperas.terminados(agente.espera ?? []) : [];
     const avisoDeLoEsperado = esperado.length > 0 ? `${textoDeLoQueDejaronLosEsperados(raiz, esperado)}\n\n` : "";
+    /**
+     * **Lo aprendido va con el ENCARGO, no en el sistema.** La caché del proveedor reutiliza el prefijo —tools, sistema,
+     * mensajes— hasta el primer cambio, y lo aprendido cambia en cuanto alguien apunta: en el sistema, invalidaba también la
+     * MEMORIA del especialista (su historial de encargos, 40–120 mil tokens) en cada encargo nuevo. Aquí va detrás de
+     * ella, en el mensaje que de todos modos es nuevo. Petición suya (23-10-2026).
+     */
+    const delanteDelEncargo = `${avisoDeLoEsperado}${aprendido === undefined ? "" : `${aprendido}\n\n`}`;
     const mensajesIniciales: unknown[] =
       previa === undefined
-        ? [{ role: "user", content: `${avisoDeLoEsperado}${params.request.input}` }]
+        ? [{ role: "user", content: `${delanteDelEncargo}${params.request.input}` }]
         : [
             ...previa.mensajes,
             {
@@ -1793,7 +1800,7 @@ export async function abrirSesionTrueforge(
               content:
                 "NUEVO ENCARGO. Ya trabajaste antes en esta sesión: lo de arriba es tu conversación anterior, con lo que leíste y decidiste. " +
                 "No repitas lecturas de ficheros que no hayan cambiado.\n\n" +
-                `${avisoDeLoEsperado}${params.request.input}`,
+                `${delanteDelEncargo}${params.request.input}`,
             },
           ];
     const definicionDelHijo = {
