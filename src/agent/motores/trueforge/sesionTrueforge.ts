@@ -66,7 +66,7 @@ import type { Artefacto } from "../../../core/artefactos.js";
 import type { LineaDeDiff } from "../../../core/diff.js";
 import { createTokenTracker, type TokenTracker } from "../../../vendor/tokenTracking.js";
 import { MAX_APPROVAL_ROUNDS, type Decision } from "../../../vendor/hitl.js";
-import { resumenDelEntorno } from "../../../core/shellDeAgente.js";
+import { resumenDelEntorno, scriptQueNoArranca, textoDeScriptsQueNoArrancan } from "../../../core/shellDeAgente.js";
 import { artefactosNuevos, backendDeAgente, entornoDeLaShellDelProyecto, fotoDeArtefactos, lectorDelDispositivoDeSesion, scriptsConRuta, scriptsDeLasSkills } from "../../grafo/proyecto.js";
 import { carpetaDeHotswap } from "../../../core/hotswap.js";
 import { cargarAgentes } from "../../subagentes/agentesEnDisco.js";
@@ -972,6 +972,8 @@ export async function abrirSesionTrueforge(
   const escritosDeCadaHilo = new Map<string, Map<string, CambioDeFichero>>();
   /** Lo que cada hijo APUNTÓ en lo aprendido, para que quien lo llamó no lo repita con otro tema (`textoDeLoApuntado`). */
   const apuntesDeCadaHilo = new Map<string, Apunte[]>();
+  /** ¿Ya se avisó en este turno de que los scripts no arrancan? (`scriptQueNoArranca`) */
+  let avisoDeScriptsDado = false;
   const padreDeHilo = new Map<string, string>();
   /** Qué hijo nació de cada `create_sub_agent` del raíz (id de la llamada → hilo): la foto a mitad de turno lo nombra. */
   const hiloDeLlamadaDelRaiz = new Map<string, string>();
@@ -2059,6 +2061,15 @@ export async function abrirSesionTrueforge(
         }
         const chars = typeof evento.content === "string" ? evento.content.length : 0;
         diagnostico?.resultado?.(llamada?.nombre, llamada === undefined ? undefined : detalleDe(llamada.nombre, llamada.args), chars);
+        // Un script que NO ARRANCA (no se encuentra él o su intérprete) es un fallo de la máquina, y la persona tiene que
+        // saberlo: medido en Windows, los siete fallaron y solo lo decía, de pasada, el cierre del agente. Una vez por turno.
+        if (!avisoDeScriptsDado && (llamada?.nombre === NOMBRE_EJECUTAR_SCRIPT || llamada?.nombre === "execute") && typeof evento.content === "string") {
+          const causa = scriptQueNoArranca(evento.content);
+          if (causa !== undefined) {
+            avisoDeScriptsDado = true;
+            eventosExternos.empujar({ tipo: "aviso", texto: textoDeScriptsQueNoArrancan(causa), severidad: "grave" });
+          }
+        }
         // Lo que APUNTÓ un hijo y quedó guardado (el texto de éxito empieza por «Apuntado»).
         if (
           deHilo !== HILO_RAIZ &&
@@ -2773,6 +2784,7 @@ export async function abrirSesionTrueforge(
       capturasDeCadaHilo.clear();
       escritosDeCadaHilo.clear();
       apuntesDeCadaHilo.clear();
+      avisoDeScriptsDado = false;
       escriturasEnVuelo.clear();
       nacimientoDeHilo.clear();
       ultimaEscrituraDeHilo.clear();

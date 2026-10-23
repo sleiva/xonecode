@@ -442,3 +442,25 @@ function bashSiWindows(
   const bash = bashDeGit({ entorno, existe: opciones.existe });
   return bash === undefined ? {} : { bash };
 }
+
+/**
+ * ¿La salida dice que el script NO ARRANCÓ (no se encontró él o su intérprete)? Devuelve la causa en pocas palabras, sin
+ * ninguna ruta, o `undefined`. Es un fallo de la MÁQUINA, no del trabajo: medido en el soporte de una tarea en Windows, los
+ * siete `xone-*` fallaron así y la persona no se enteró, porque solo lo decía de pasada el cierre del agente.
+ */
+export function scriptQueNoArranca(salida: string): string | undefined {
+  if (/Cannot find module/.test(salida)) return "Cannot find module";
+  if (/command not found/.test(salida)) return "command not found";
+  if (/['"]?node['"]?: No such file or directory/.test(salida)) return "node no encontrado";
+  if (/is not recognized as an internal or external command|no se reconoce como un comando interno o externo/.test(salida)) return "orden no reconocida";
+  return undefined;
+}
+
+/** El aviso a la PERSONA, una vez por turno: sin rutas (viaja al chat). */
+export function textoDeScriptsQueNoArrancan(causa: string): string {
+  return (
+    `⚠ los scripts del aparato NO arrancan en esta máquina («${causa}»): lo que se haga en este turno no se ha podido probar ` +
+    "en el aparato. Es un fallo del entorno (Node, la shell o la instalación de xonecode), no del proyecto: con «Depurar» " +
+    "encendido la traza guarda cada orden; mándala a soporte."
+  );
+}

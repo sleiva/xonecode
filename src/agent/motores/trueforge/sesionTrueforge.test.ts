@@ -540,6 +540,24 @@ describe("una sesión con el motor TrueForge", () => {
     expect(readFileSync(join(raiz, ".xonecode", "artefactos", "panel.openui"), "utf8")).toBe("root = A");
   }, 20_000);
 
+  // Soporte de una tarea en Windows (23-10-2026): los scripts no arrancaban y la persona no se enteró. Con una orden REAL
+  // que la shell no encuentra («command not found»), el aviso sale en el chat, y una sola vez aunque falle dos.
+  it("si los scripts NO ARRANCAN en la máquina, la persona lo ve en el chat, una vez por turno", async () => {
+    const { m } = modelosConGuion([
+      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "device-controller", input: "captura" }) }] })],
+      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "x1", name: "execute", args: JSON.stringify({ command: "xone-orden-que-no-existe shot" }) }] })],
+      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "x2", name: "execute", args: JSON.stringify({ command: "xone-orden-que-no-existe log" }) }] })],
+      [new AIMessageChunk({ content: "No pude." })],
+      [new AIMessageChunk({ content: "Listo." })],
+    ]);
+    const s = await abrirSesionTrueforge({ raiz: proyecto(), modelos: m, entorno: ENTORNO, skills: CATALOGO });
+    const { p, lineas } = piel();
+    await s.turno("captura la pantalla", p);
+    const avisos = lineas.filter((l) => l.includes("NO arrancan"));
+    expect(avisos).toHaveLength(1);
+    expect(avisos[0]).toContain("command not found");
+  }, 30_000);
+
   it("el raíz DELEGA en el device-controller, que EJECUTA de verdad: la shell la tiene solo él", async () => {
     const raiz = proyecto();
     const vistos: string[][] = [];

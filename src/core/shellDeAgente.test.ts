@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { VARIABLES_POR_PROVEEDOR } from "./modelos.js";
 import { entornoDeShell, variableDeSkill, variablesDeAndroid, motivoDeComandoRechazado, motivoDeOtroAparato } from "./shellDeAgente.js";
+import { scriptQueNoArranca, textoDeScriptsQueNoArrancan } from "./shellDeAgente.js";
 
 describe("entornoDeShell", () => {
   it("quita las claves de API de los proveedores de serie", () => {
@@ -444,5 +445,28 @@ describe("la shell del agente en Windows", () => {
     const hay = new Set([`${GIT}\\cmd\\git.exe`, `${GIT}\\bin\\bash.exe`]);
     expect(resumenDelEntorno(conGit, { plataforma: "win32", existe: (r) => hay.has(r) }).shell).toBe("git-bash");
     expect(resumenDelEntorno({ PATH: "/usr/bin" }, { plataforma: "darwin", existe: () => false }).shell).toBe("sh");
+  });
+});
+
+/**
+ * Medido en el soporte de una tarea en Windows (23-10-2026): los siete `xone-*` fallaron con «Cannot find module» y la
+ * persona no se enteró: solo lo decía, de pasada, el cierre del agente. Este detector decide cuándo el HARNESS lo avisa.
+ */
+describe("un script que NO ARRANCA es un fallo de la máquina, no del trabajo", () => {
+  it("reconoce que el script o su intérprete no se encuentran, y nada más", () => {
+    expect(scriptQueNoArranca("node:internal/modules/cjs/loader:1228\n  throw err;\nError: Cannot find module 'C:\\c\\Users\\X\\scripts\\xone-hotswap'\n[exit code 1]")).toBe("Cannot find module");
+    expect(scriptQueNoArranca("/bin/sh: xone-hotswap: command not found\n[exit code 127]")).toBe("command not found");
+    expect(scriptQueNoArranca("/usr/bin/env: 'node': No such file or directory\n[exit code 127]")).toBe("node no encontrado");
+    expect(scriptQueNoArranca("'xone-hotswap' is not recognized as an internal or external command")).toBe("orden no reconocida");
+    // Un script que arranca y falla por su cuenta, o que va bien, no es esto.
+    expect(scriptQueNoArranca("error: no hay ningún aparato conectado\n[exit code 1]")).toBeUndefined();
+    expect(scriptQueNoArranca("ok\n[exit code 0]")).toBeUndefined();
+  });
+
+  it("el aviso no lleva ninguna ruta de la máquina: viaja al chat", () => {
+    const t = textoDeScriptsQueNoArrancan("Cannot find module");
+    expect(t).toContain("NO arrancan");
+    expect(t).toContain("no se ha podido probar en el aparato");
+    expect(t).not.toMatch(/[A-Z]:\\|\/Users\//);
   });
 });
