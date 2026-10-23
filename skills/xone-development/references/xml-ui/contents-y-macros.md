@@ -171,6 +171,30 @@ self.getContents("content4").sort = "NOMBRE ASC";
 self.getContents("content4").loadAll();
 ```
 
+#### Filas con esquinas redondeadas (tarjeta por fila)
+
+**No hay un atributo `cell-*` de radio, y eso NO significa que no se pueda.** Cada fila se pinta con la coll de la
+rejilla, así que la tarjeta se hace DENTRO de esa coll: un `<frame>` con `border-corner-radius` y su `bgcolor` que
+envuelve las props de la fila. Y en la rejilla, `cell-border-color` TRANSPARENTE (`#00000000`, el alfa va primero), o
+el borde rectangular de la celda se pinta por fuera de la tarjeta redondeada.
+
+```xml
+<!-- La coll de la rejilla: la celda sin borde, y la tarjeta redondeada dentro -->
+<coll name="ContentClientesGrid" ... cell-border-color="#00000000">
+  <group name="General" id="1">
+    <frame name="frmTarjeta" width="96%" height="90%" align="center|center"
+           bgcolor="#FFFFFF" border-corner-radius="12">
+      <prop name="NOMBRE" type="T" visible="7" ... />
+      <prop name="DIRECCION" type="T" visible="7" ... />
+    </frame>
+  </group>
+</coll>
+```
+
+Medido el 23-10-2026: un agente buscó un `cell-*-radius`, no lo encontró y concluyó «la rejilla de XOne no admite
+esquinas redondeadas por celda», dejando el diseño sin hacer. Que un atributo no aparezca en estas referencias no es
+prueba de que XOne no pueda: antes de dar algo por imposible, busca el patrón con los nodos que sí existen.
+
 ### 6.6 Nodo asfilter - Filtros de Busqueda en Listas
 
 El nodo `<asfilter>` define campos de busqueda que permiten al usuario filtrar los registros de una coleccion directamente desde la interfaz. Se declara como hijo directo de `<coll>` y genera automáticamente una barra de busqueda con los campos especificados.
