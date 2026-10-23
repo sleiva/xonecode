@@ -139,15 +139,30 @@ export function scriptsDeTrueforge(scripts: readonly string[]): string[] {
 export function capacidadDeScripts(
   conShell: { execute(c: string): unknown; write(ruta: string, contenido: string): unknown },
   scripts: readonly string[],
-  dispositivo?: () => DispositivoDeLaSesion | undefined
+  dispositivo?: () => DispositivoDeLaSesion | undefined,
+  /** En Windows, con qué Node y desde qué ruta se lanza cada script (`lanzadorDeScriptsEn`). */
+  enWindows?: { rutas: Readonly<Record<string, string>>; node: string }
 ): Capacidad {
   return {
     nombre: "scripts",
     tools: [NOMBRE_EJECUTAR_SCRIPT],
     capability: {
-      systemToolSets: [new ToolSet({ source: fuenteDeEjecucion(conShell, dispositivo, scripts) as never, selectors: SIN_APROBACION, preload: true })],
+      systemToolSets: [new ToolSet({ source: fuenteDeEjecucion(conShell, dispositivo, scripts, enWindows) as never, selectors: SIN_APROBACION, preload: true })],
     },
   };
+}
+
+/**
+ * Cómo se lanza cada script en ESTA plataforma: en Windows, con el Node del servidor y la ruta del script (`comandoConNode`,
+ * el de Claude Code); fuera de Windows, `undefined` (por su nombre, como siempre). Pura: la plataforma va por parámetro.
+ */
+export function lanzadorDeScriptsEn(
+  plataforma: string,
+  scripts: readonly { nombre: string; ruta: string }[],
+  node: string
+): { rutas: Record<string, string>; node: string } | undefined {
+  if (plataforma !== "win32") return undefined;
+  return { rutas: Object.fromEntries(scripts.map((s) => [s.nombre, s.ruta])), node };
 }
 
 /** `execute`: la shell del que la declara en su `.md`, y de nadie más. */
@@ -380,6 +395,8 @@ export interface DependenciasDelEspecialista {
   conShell: () => { execute(c: string): unknown; write(ruta: string, contenido: string): unknown };
   /** Los scripts de las skills de ESTE agente, para `ejecutar_script` (`Agente.scripts`). */
   scriptsDe: (agente: Agente) => readonly string[];
+  /** En Windows, cómo se lanza cada uno de esos scripts (`lanzadorDeScriptsEn`). Ausente = por su nombre. */
+  lanzadorDeScripts?: (agente: Agente) => { rutas: Readonly<Record<string, string>>; node: string } | undefined;
   /** El aparato de la sesión para la guarda del `execute` (IXCODE-32). Ausente = ninguno elegido. */
   dispositivo?: () => DispositivoDeLaSesion | undefined;
   /** La cola de notas de la SESIÓN, ya envuelta: la misma instancia para todos los hijos. */
@@ -443,7 +460,7 @@ export function capacidadesDelEspecialista(
       : []),
     ...(clase === "ejecuta" ? [capacidadDeEjecucion(deps.conShell(), deps.dispositivo)] : []),
     ...(clase !== "ejecuta" && agente.scripts === true && scriptsDeTrueforge(deps.scriptsDe(agente)).length > 0
-      ? [capacidadDeScripts(deps.conShell(), scriptsDeTrueforge(deps.scriptsDe(agente)), deps.dispositivo)]
+      ? [capacidadDeScripts(deps.conShell(), scriptsDeTrueforge(deps.scriptsDe(agente)), deps.dispositivo, deps.lanzadorDeScripts?.(agente))]
       : []),
     ...(deps.conectores?.(agente) ?? []),
     ...(deps.puedeLlamar?.(agente) === true ? [capacidadDeSubagentes(), ...(deps.informes === undefined ? [] : [deps.informes])] : []),

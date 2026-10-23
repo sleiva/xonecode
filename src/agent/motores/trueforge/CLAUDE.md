@@ -64,6 +64,9 @@ Ante una discrepancia con el código, **el código manda**.
   nombre fuera cae al ayudante genérico de solo lectura. El juez final revisa igual.
 - **Un hijo NO ARRANCA mientras trabaja aquel del que depende** (`espera:` en el `.md`, `esperas.ts`): se devuelve al
   orquestador al instante. **Nunca se espera bloqueando**. `developer-xone` espera a `designer-xone`.
+- **En Windows, `ejecutar_script` lanza `node '<ruta>' args`** (`lanzadorDeScriptsEn`, `comandoConNode`, el del hijo de
+  Claude Code): por su shebang desde el Git Bash, con `MSYS_NO_PATHCONV`, node recibía `/c/Users/…` y no arrancaba
+  ninguno. Sin probar aún en Windows. **Límite**: el `execute` libre del device-controller sigue lanzándolos por su nombre.
 - **Quien corre sus scripts PRUEBA ÉL** (`textoDelBucle#pruebaElMismo`, cuando lleva `ejecutar_script`): recarga,
   toca, lee el log y captura sin un hijo; `comparar_capturas` entre retoques y el crítico UNA vez al cerrar cada
   pantalla. Cada `xone-recargar/desplegar-android` cuenta una vuelta. Sus scripts, sin `xone-a-utf8` (`scriptsDeTrueforge`): ese es del hijo de

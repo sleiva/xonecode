@@ -29,7 +29,7 @@ import { desalojarSiGrande, MAXIMO_DE_COINCIDENCIAS, truncarSiLargo } from "./re
 import { motivoDeTasksInaceptable, RUTA_DE_TASKS } from "../../../core/tareasDelPlan.js";
 import { motivoDeComandoRechazado, motivoDeOtroAparato } from "../../../core/shellDeAgente.js";
 import type { DispositivoDeLaSesion } from "../../../core/dispositivoDeSesion.js";
-import { motivoDeComandoExternoInaceptable } from "../../../core/comandoExterno.js";
+import { comandoConNode, motivoDeComandoExternoInaceptable } from "../../../core/comandoExterno.js";
 
 /** El backend de deepagents en su versión nueva, en lo que se usa. */
 export interface BackendDeFicheros {
@@ -366,7 +366,15 @@ export function fuenteDeEjecucion(
    * que la shell estrecha de Claude Code (`motivoDeComandoExternoInaceptable`), y DESPUÉS las mismas guardas que la
    * shell entera. Ausente = la shell de quien declara `ejecucion`.
    */
-  estrecha?: readonly string[]
+  estrecha?: readonly string[],
+  /**
+   * Solo en WINDOWS, y solo con `estrecha`: cada script se lanza como `node '<ruta>' args` (`comandoConNode`, el mismo que
+   * el hijo de Claude Code). Medido en el soporte de una tarea: lanzado por su shebang desde el Git Bash, con
+   * `MSYS_NO_PATHCONV=1` (IXCODE-72), node recibía `/c/Users/…` sin traducir, buscaba `C:\\c\\Users\\…` y los siete
+   * `xone-*` fallaban en menos de un segundo: el desarrollador no pudo probar nada. Las variables de MSYS se quedan como
+   * están (protegen `/sdcard`): lo que cambia es cómo se nombra el script. Sin probar todavía en Windows.
+   */
+  enWindows?: { rutas: Readonly<Record<string, string>>; node: string }
 ) {
   const nombre = estrecha === undefined ? "execute" : NOMBRE_EJECUTAR_SCRIPT;
   return {
@@ -400,8 +408,12 @@ export function fuenteDeEjecucion(
       // Y uno que iría a OTRO aparato que el de la sesión (`motivoDeOtroAparato`): el elegido se pasa siempre.
       const rechazo = motivoDeComandoRechazado(comando) ?? motivoDeOtroAparato(comando, dispositivo());
       if (rechazo !== undefined) return toolResultResponse({ text: rechazo, isError: true });
+      const lanzado = estrecha === undefined || enWindows === undefined ? comando : comandoConNode(comando, enWindows.rutas, enWindows.node);
+      if (lanzado === undefined) {
+        return toolResultResponse({ text: "XOneCode no sabe dónde está ese script en esta máquina, así que no se ejecuta.", isError: true });
+      }
       try {
-        const r = (await backend.execute(comando)) as { output?: string; exitCode?: number | null; truncated?: boolean };
+        const r = (await backend.execute(lanzado)) as { output?: string; exitCode?: number | null; truncated?: boolean };
         const salida = `${r.output ?? ""}${r.truncated === true ? "\n[salida truncada]" : ""}`;
         const codigo = r.exitCode ?? 0;
         const texto = await desalojarSiGrande(`${salida}\n[exit code ${codigo}]`, backend);

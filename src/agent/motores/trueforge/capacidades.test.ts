@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import winston from "winston";
 import { AIMessageChunk, type BaseMessage } from "@langchain/core/messages";
-import { capacidadDeFecha, capacidadDeNotas, capacidadesDelEspecialista, scriptsDeTrueforge, SKILL_DE_OPENUI, toolsDe, type DependenciasDelEspecialista } from "./capacidades.js";
+import { capacidadDeFecha, capacidadDeNotas, capacidadesDelEspecialista, lanzadorDeScriptsEn, scriptsDeTrueforge, SKILL_DE_OPENUI, toolsDe, type DependenciasDelEspecialista } from "./capacidades.js";
 import { crearNota, textoDeNotaYaEntregada, type Nota } from "./notas.js";
 import { AgentThread, AgentThreadOrchestrator, EventType, NOOP_AGENT_TRACING } from "./trueforge.js";
 import { modeloParaTrueforge } from "./modeloLangchain.js";
@@ -55,6 +55,26 @@ describe("qué piezas lleva cada especialista, por lo que declara su `.md`", () 
     expect(toolsDe(capacidadesDelEspecialista(agente({ scripts: true, ejecucion: true }), "x", deps()))).not.toContain("ejecutar_script");
     expect(toolsDe(capacidadesDelEspecialista(agente({ scripts: true }), "x", { ...deps(), scriptsDe: () => [] }))).not.toContain("ejecutar_script");
     expect(toolsDe(capacidadesDelEspecialista(agente({}), "x", deps()))).not.toContain("ejecutar_script");
+  });
+
+  // Windows (soporte de una tarea, 23-10-2026): por su shebang desde el Git Bash los `xone-*` no arrancaban. Atado por el
+  // ENSAMBLADO de verdad: la tool montada, llamada como la llama TrueForge, corre `node` con la ruta del script.
+  it("en Windows la tool montada lanza cada script con node y su ruta; fuera de Windows, por su nombre", async () => {
+    const corrida = async (lanzador: DependenciasDelEspecialista["lanzadorDeScripts"]) => {
+      const corridos: string[] = [];
+      const d = { ...deps(), conShell: () => ({ execute: (c: string) => (corridos.push(c), { output: "", exitCode: 0 }), write: () => undefined }), ...(lanzador === undefined ? {} : { lanzadorDeScripts: lanzador }) };
+      const piezas = capacidadesDelEspecialista(agente({ scripts: true }), "x", d);
+      const scripts = piezas.find((p) => p.tools.includes("ejecutar_script"))!;
+      const toolSet = (scripts.capability as { systemToolSets: { callTool(p: { name: string; arguments: Record<string, unknown> }): Promise<unknown> }[] }).systemToolSets[0]!;
+      await toolSet.callTool({ name: "ejecutar_script", arguments: { command: "xone-hotswap shot" } });
+      return corridos;
+    };
+    const ruta = "C:\\Users\\x\\skills\\scripts\\xone-hotswap";
+    expect(await corrida(() => lanzadorDeScriptsEn("win32", [{ nombre: "xone-hotswap", ruta }], "C:\\node\\node.exe"))).toEqual([
+      "'C:/node/node.exe' 'C:/Users/x/skills/scripts/xone-hotswap' shot",
+    ]);
+    expect(await corrida(() => lanzadorDeScriptsEn("darwin", [{ nombre: "xone-hotswap", ruta: "/s/xone-hotswap" }], "/usr/bin/node"))).toEqual(["xone-hotswap shot"]);
+    expect(await corrida(undefined)).toEqual(["xone-hotswap shot"]);
   });
 
   it("xone-a-utf8 no es de TrueForge: escribe cada .xne en su codificación; es del hijo de Claude Code", () => {

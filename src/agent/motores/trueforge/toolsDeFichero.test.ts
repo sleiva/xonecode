@@ -295,6 +295,30 @@ describe("ejecutar_script: los scripts de sus skills, sin shell", () => {
     expect(corridos).toEqual([]);
   });
 
+  /**
+   * Windows (soporte de una tarea en Maset, 23-10-2026): los siete `xone-*` del desarrollador salieron con 1 en menos de
+   * un segundo, «Cannot find module 'C:\\c\\Users\\…\\scripts\\xone-…'», y no probó nada. Lanzado por su shebang desde el
+   * Git Bash (con `MSYS_NO_PATHCONV=1`, IXCODE-72), node recibe la ruta POSIX `/c/Users/…` sin traducir. Como el hijo de
+   * Claude Code (`comandoConNode`, medido allí): se lanza `node '<ruta>' args`.
+   */
+  it("en Windows corre `node` con la RUTA del script, no el script por su nombre; sin ruta conocida, no se corre", async () => {
+    const corridos: string[] = [];
+    const fuente = fuenteDeEjecucion(
+      { execute: (c: string) => { corridos.push(c); return { output: "ok", exitCode: 0 }; }, write: () => ({}) },
+      () => undefined,
+      ["xone-hotswap", "xone-log-android"],
+      { rutas: { "xone-hotswap": "C:\\Users\\Juan Pérez\\skills\\scripts\\xone-hotswap" }, node: "C:\\Program Files\\nodejs\\node.exe" }
+    );
+    const correr = async (command: string) =>
+      (await fuente.callTool({ name: "ejecutar_script", arguments: { command } })) as unknown as { result: { content: { text: string }[]; isError?: boolean } };
+    expect((await correr("xone-hotswap fill name=MAP_LOGIN value='08 006'")).result.isError).not.toBe(true);
+    expect(corridos).toEqual(["'C:/Program Files/nodejs/node.exe' 'C:/Users/Juan Pérez/skills/scripts/xone-hotswap' fill name=MAP_LOGIN value='08 006'"]);
+    const sinRuta = await correr("xone-log-android --app");
+    expect(sinRuta.result.isError).toBe(true);
+    expect(sinRuta.result.content[0]!.text).toContain("no sabe dónde está");
+    expect(corridos).toHaveLength(1);
+  });
+
   it("`execute` no existe aquí: la shell entera sigue siendo solo de quien declara `ejecucion`", async () => {
     const { fuente, corridos } = conScripts();
     const r = (await fuente.callTool({ name: "execute", arguments: { command: "xone-hotswap shot" } })) as unknown as { result: { isError?: boolean } };

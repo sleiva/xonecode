@@ -99,6 +99,7 @@ import {
   capacidadesDelEspecialista,
   type Capacidad,
   clasesDeTools,
+  lanzadorDeScriptsEn,
   toolsDe,
 } from "./capacidades.js";
 import { crearConectoresDeSesion, tarjetaDeRemota } from "./toolsDeConectores.js";
@@ -1681,6 +1682,8 @@ export async function abrirSesionTrueforge(
       dispositivo: lectorDelDispositivoDeSesion(opciones.artefactos),
       // Los de SUS skills, leídos al montar el hijo (`ejecutar_script`, `Agente.scripts`).
       scriptsDe: (a) => scriptsDeLasSkills(raiz, a.skills),
+      // En Windows, cada script con el Node del servidor y su ruta: por su shebang desde el Git Bash no arrancaban.
+      lanzadorDeScripts: (a) => lanzadorDeScriptsEn(process.platform, scriptsConRuta(raiz, a.skills), process.execPath),
       conShell: () =>
         montarBackend({
           entorno: conTrazaDelEntorno(entornoDeLaShellDelProyecto(raiz, opciones.artefactos)),
