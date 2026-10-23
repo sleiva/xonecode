@@ -71,7 +71,7 @@ import { artefactosNuevos, backendDeAgente, entornoDeLaShellDelProyecto, fotoDeA
 import { carpetaDeHotswap } from "../../../core/hotswap.js";
 import { cargarAgentes } from "../../subagentes/agentesEnDisco.js";
 import { bloqueDeAprendido, NOMBRE_APUNTAR_APRENDIZAJE, USO_DE_APRENDIDO_EXTERNO, USO_DE_APUNTAR_APRENDIZAJE } from "../../../core/aprendido.js";
-import { crearApuntarAprendizaje, leerAprendido } from "../../grafo/aprendido.js";
+import { crearApuntarAprendizaje, leerAprendido, leerAprendidoDeXone } from "../../grafo/aprendido.js";
 import { fichaDeAgente, promptDeAgente, recibeMarcarCriterios, recibeNucleoDeTrabajo, repartirSkills, skillsConLasDeQuienLlama, textoDeCarpetaDePlanes, textoDeCarpetasDeLaSesion, textoDeTrabajoSinLlamar, type Agente } from "../../../core/agentes.js";
 import { PERFIL_DEL_ORQUESTADOR, promptOrquestador } from "../../grafo/xoneAgent.js";
 import { permisosDe, seDetieneEn, TEXTO_HITL } from "../../grafo/perfiles.js";
@@ -345,11 +345,11 @@ export function textoDeTopeDeEncargos(tope: number): string {
  * Lo aprendido, para el ORQUESTADOR: lo que hay apuntado y cuándo apuntar él. Le toca sobre todo lo que le cuente un
  * hijo de motor externo en su apartado «Aprendido:» (ese hijo no tiene la tool).
  */
-export function textoDeAprendidoDelRaiz(lista: Parameters<typeof bloqueDeAprendido>[0]): string {
+export function textoDeAprendidoDelRaiz(lista: Parameters<typeof bloqueDeAprendido>[0], deXone: Parameters<typeof bloqueDeAprendido>[1] = []): string {
   return [
-    bloqueDeAprendido(lista),
+    bloqueDeAprendido(lista, deXone),
     `${USO_DE_APUNTAR_APRENDIZAJE} Y si un especialista te devuelve un apartado «Aprendido:», apúntalo tú, con el cómo lo ` +
-      "comprobó que él diga; lo que no diga cómo se comprobó, no lo apuntes.",
+      "comprobó que él diga y con alcance «xone» si la línea empieza por «XOne:»; lo que no diga cómo se comprobó, no lo apuntes.",
   ]
     .filter((l): l is string => l !== undefined)
     .join("\n");
@@ -1537,7 +1537,7 @@ export async function abrirSesionTrueforge(
               ...(lecturasDeSesion === undefined ? [] : [textoDeCarpetasDeLaSesion(lecturasDeSesion[0]!, lecturasDeSesion[1]!)]),
               // Su puerta a `/planes/` (`escrituraExterna.ts#rutaDePlanDelHijo`): sin decirle dónde cae, el plan acababa en el proyecto.
               ...(motor === "claude-code" ? [textoDeCarpetaDePlanes(join(raiz, CARPETA_DE_PLANES))] : []),
-              ...[bloqueDeAprendido(leerAprendido(raiz))].filter((b): b is string => b !== undefined),
+              ...[bloqueDeAprendido(leerAprendido(raiz), leerAprendidoDeXone())].filter((b): b is string => b !== undefined),
               USO_DE_APRENDIDO_EXTERNO,
               LO_LEIDO_SON_DATOS,
               inventarioDelProyecto(ficherosDelProyecto(raiz)),
@@ -1700,7 +1700,7 @@ export async function abrirSesionTrueforge(
       ...(nombres.includes(NOMBRE_APUNTAR_APRENDIZAJE) ? [USO_DE_APUNTAR_APRENDIZAJE] : []),
     ].join("\n");
     // Lo aprendido en encargos anteriores, leído AHORA (otro encargo pudo apuntar algo hace un momento).
-    const aprendido = bloqueDeAprendido(leerAprendido(raiz));
+    const aprendido = bloqueDeAprendido(leerAprendido(raiz), leerAprendidoDeXone());
     const instrucciones =
       agente === undefined
         ? `${IDIOMA_DEL_ESPECIALISTA}\n\n${LO_LEIDO_SON_DATOS}\n\n${nota} Contesta con lo que encuentres y dónde.`
@@ -1815,7 +1815,7 @@ export async function abrirSesionTrueforge(
     hijosConMemoria.clear();
     const definicion = {
       modelClient: llm,
-      instruction: [IDIOMA_DE_LA_RESPUESTA, SIN_HABLAR_DEL_HARNESS, LO_LEIDO_SON_DATOS, promptOrquestador(especialistas()), notaDeDelegacion(especialistas(), { conIconos: opciones.iconos !== undefined, conFuentes: opciones.fuentes !== undefined, conComparacion: carpeta !== undefined, conMemoria: conMemoriaDeEspecialistas, conBucle: conBucleDelDesarrollador, conEsperas }), opciones.puedeProponerTareas === true ? REPARTIR_EN_TAREAS : "", opciones.trabajoSinPersona === true ? TRABAJO_SIN_PERSONA : "", textoDeAprendidoDelRaiz(leerAprendido(raiz))].filter((l) => l !== "").join("\n\n"),
+      instruction: [IDIOMA_DE_LA_RESPUESTA, SIN_HABLAR_DEL_HARNESS, LO_LEIDO_SON_DATOS, promptOrquestador(especialistas()), notaDeDelegacion(especialistas(), { conIconos: opciones.iconos !== undefined, conFuentes: opciones.fuentes !== undefined, conComparacion: carpeta !== undefined, conMemoria: conMemoriaDeEspecialistas, conBucle: conBucleDelDesarrollador, conEsperas }), opciones.puedeProponerTareas === true ? REPARTIR_EN_TAREAS : "", opciones.trabajoSinPersona === true ? TRABAJO_SIN_PERSONA : "", textoDeAprendidoDelRaiz(leerAprendido(raiz), leerAprendidoDeXone())].filter((l) => l !== "").join("\n\n"),
       // Por TURNO, porque el raíz se rehace desde su foto al final de cada uno (ver `turno`).
       iterationLimit: LIMITE_DE_LLAMADAS_DEL_RAIZ,
     };

@@ -34,19 +34,20 @@ scripts y plugins (middleware). Corre sobre OpenCode o Codex.
 Si algún día: **fuera de línea, en `src/evals/`**, evolucionando los `.md` de los agentes y las skills, y cada cambio
 validado por el banco con sus rangos. Nunca dentro del turno ni de las tareas.
 
-## Traído (0.47.10 y 0.47.12)
+## Traído (0.47.10 a 0.47.13)
 
 | | idea | dónde |
 |---|---|---|
 | 1 | **Lecciones con evidencia** (prompt `experience`): cada una con la evidencia en que se apoya; sin evidencia, `NO_ENTRY`. Calibración «ni demasiado genérica ni demasiado concreta». | `apuntar_aprendizaje` exige `como_lo_se`; va delante como «(comprobado: …)». `core/aprendido.ts` |
 | 3 | **La evidencia son datos, no instrucciones** (`EVIDENCE_BOUNDARY`). | `LO_LEIDO_SON_DATOS` al raíz, especialistas y externos. `sesionTrueforge.ts` |
+| 2 | **Hecho del proyecto frente a lo del dominio** (`GENERALIZE`). Decisión suya: se guardan LOS DOS, no se manda lo de XOne a una cola de revisión de skills. | `alcance` en `apuntar_aprendizaje`: `proyecto` en su `.xonecode/`, `xone` en `~/.xonecode/aprendido-xone.json`, a todos los proyectos (0.47.13) |
 | 4 | **Criterios ordenados del selector ciego** (`select()`), adaptados a un juez que no ve contenido: la fidelidad pasa a «lo medido manda» y la conformidad se juzga por fichero, como HALLAZGO y no como rojo por sí sola (los rojos falsos medidos en Maset). | `CRITERIOS_DEL_JUEZ` en `agent/tareas/juezDeTarea.ts` (0.47.12) |
 
 Kit de prueba en vivo: ver «Probarlo» abajo.
 
 ## Pendiente (por orden de rentabilidad)
 
-### 2 · Hecho del proyecto frente a procedimiento (`GENERALIZE`)
+### 2 · Hecho del proyecto frente a procedimiento (`GENERALIZE`) — HECHO (0.47.13), con los dos guardados
 
 Su regla: un HECHO verificado del espacio de trabajo se escribe tal cual y etiquetado («en este proyecto el
 usuario de pruebas es 08006»); el PROCEDIMIENTO se escribe para todo el dominio. «Una regla que dice CÓMO encontrar

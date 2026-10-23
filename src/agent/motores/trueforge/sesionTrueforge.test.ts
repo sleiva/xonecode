@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { AIMessageChunk } from "@langchain/core/messages";
 import { PNG } from "pngjs";
@@ -3347,6 +3347,27 @@ describe("lo APRENDIDO del proyecto llega delante de cada encargo, y quien traba
     // Lo que lee cada uno son datos, no órdenes: al raíz y al especialista.
     expect(vistos[0]![0]).toContain(LO_LEIDO_SON_DATOS);
     expect(vistos[1]![0]).toContain(LO_LEIDO_SON_DATOS);
+  }, 20_000);
+
+  it("lo de XOne, de la carpeta global, llega también al orquestador y al especialista", async () => {
+    const raiz = proyecto();
+    const global = join(homedir(), ".xonecode");
+    mkdirSync(global, { recursive: true });
+    const fichero = join(global, "aprendido-xone.json");
+    writeFileSync(fichero, JSON.stringify([{ tema: "imgbk anula border-corner-radius", texto: "en un frame", cuando: "2026-10-23T08:00:00.000Z" }]));
+    try {
+      const { m, vistos } = modelosConGuion([
+        [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "developer-xone", input: "pinta el menú" }) }] })],
+        [new AIMessageChunk({ content: "Hecho." })],
+        [new AIMessageChunk({ content: "Listo." })],
+      ]);
+      const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO });
+      await s.turno("pinta el menú", piel().p);
+      expect(vistos[0]![0]).toContain("LO APRENDIDO DE XONE");
+      expect(vistos[1]![0]).toContain("- imgbk anula border-corner-radius: en un frame");
+    } finally {
+      rmSync(fichero, { force: true });
+    }
   }, 20_000);
 });
 

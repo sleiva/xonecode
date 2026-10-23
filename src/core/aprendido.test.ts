@@ -67,4 +67,22 @@ describe("lo aprendido en un proyecto", () => {
   it("no viaja en un paquete de soporte: puede llevar una contraseña", () => {
     expect(viajaEnSoporte(".xonecode/aprendido.json")).toBe(false);
   });
+
+  it("lo del proyecto y lo de XOne van en dos bloques, cada uno con su cabecera; sin uno, solo el otro", () => {
+    const delProyecto = [a("cómo entrar en la app", "usuario 08006")];
+    const deXone = [a("imgbk anula border-corner-radius", "en un frame")];
+    const ambos = bloqueDeAprendido(delProyecto, deXone)!;
+    expect(ambos.indexOf("LO APRENDIDO EN ESTE PROYECTO")).toBeLessThan(ambos.indexOf("LO APRENDIDO DE XONE"));
+    expect(ambos).toContain("- imgbk anula border-corner-radius: en un frame");
+    expect(bloqueDeAprendido([], deXone)).not.toContain("EN ESTE PROYECTO");
+    expect(bloqueDeAprendido([], deXone)).toContain("LO APRENDIDO DE XONE");
+    expect(bloqueDeAprendido([], [])).toBeUndefined();
+  });
+
+  it("el cuándo apuntar explica los dos alcances, y que en XOne no van datos del proyecto", () => {
+    expect(USO_DE_APUNTAR_APRENDIZAJE).toContain("`proyecto`");
+    expect(USO_DE_APUNTAR_APRENDIZAJE).toContain("`xone`");
+    expect(USO_DE_APUNTAR_APRENDIZAJE).toContain("nunca usuarios, claves ni nombres de este proyecto");
+    expect(USO_DE_APRENDIDO_EXTERNO).toContain("«XOne:»");
+  });
 });
