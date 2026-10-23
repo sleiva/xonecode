@@ -310,7 +310,7 @@ export function motivoDeBloqueo(causa: CausaDeBloqueo): string {
     case "dispositivo-no-alcanzable":
       return `«${causa.nombre}» no está alcanzable ahora: su estado es «${ETIQUETA_DE_ESTADO[causa.estado]}». Arranca el dispositivo o conéctalo del todo —y acepta la depuración si es un teléfono— y vuelve a mirar en Ajustes → Dispositivos.`;
     case "framework-ausente":
-      return `«${causa.nombre}» no tiene instalado el framework de XOne, que es la app con la que se habla para lanzar (XOneStudio). Instálalo en el dispositivo —XOne Studio lo distribuye— y vuelve a mirar en Ajustes → Dispositivos.`;
+      return `«${causa.nombre}» no tiene instalado el framework de XOne, que es la app con la que se habla para lanzar (XOneStudio). Instálalo con «Instalar framework», aquí al lado, o desde Ajustes → Dispositivos («Framework…»).`;
     case "framework-no-medido":
       return `Todavía no se ha mirado si «${causa.nombre}» tiene el framework de XOne, así que no se puede prometer que la app vaya a arrancar. Vuelve a mirar en Ajustes → Dispositivos y espera a que llegue la medida.`;
     case "sin-app-xml":

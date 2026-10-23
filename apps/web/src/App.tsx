@@ -5,7 +5,7 @@ import { Planes } from "./componentes/Planes.js";
 import { Colecciones } from "./componentes/Colecciones.js";
 import type { crearStoreDelCliente } from "./store.js";
 import type { PeticionDeAprendido, RespuestaDeAprendido } from "./componentes/LoAprendido.js";
-import type { Acto, AprendizajeDelCable, EstadoDelGestor, FicheroDelProyecto, MapeoDeEstados, TareaDelCable, ActoDeSincronizacion, FotoDelResumen, ListadoDeSoporte, MensajeDelCliente, ModoDeEscritura } from "./tipos.js";
+import type { Acto, AprendizajeDelCable, EstadoDelGestor, FicheroDelProyecto, MapeoDeEstados, TareaDelCable, ActoDeSincronizacion, EleccionDeFramework, FotoDelResumen, ListadoDeSoporte, MensajeDelCliente, ModoDeEscritura } from "./tipos.js";
 import type { Conexion } from "./conexion.js";
 import { ANCHO_BARRA_POR_OMISION, Maqueta } from "./componentes/Maqueta.js";
 import { Barra } from "./componentes/Barra.js";
@@ -1047,6 +1047,15 @@ export function App({
     void enviar({ clase: "lanzarApp" });
   }, [enviar]);
 
+  // Los dos «Copiar…» son el MISMO lanzamiento con otro `modo`: copiar y relanzar.
+  const copiarTodo = useCallback(() => {
+    void enviar({ clase: "lanzarApp", modo: "todo" });
+  }, [enviar]);
+
+  const copiarModificados = useCallback(() => {
+    void enviar({ clase: "lanzarApp", modo: "modificados" });
+  }, [enviar]);
+
   const cancelarLanzamiento = useCallback(() => {
     void enviar({ clase: "cancelarLanzamiento" });
   }, [enviar]);
@@ -1056,6 +1065,21 @@ export function App({
       void enviar({ clase: "dispositivo", id });
     },
     [enviar]
+  );
+
+  /**
+   * Instalar el framework: lo mismo desde Ajustes → Dispositivos y desde Ejecutar. Lo ofrecido llega
+   * en `frameworks` y el progreso en `instalacion` (`instalar-framework`); lo que se elige vuelve
+   * como sha o id de fichero, y el servidor lo comprueba contra lo que sirvió.
+   */
+  const framework = useMemo(
+    () => ({
+      ...(estado.frameworks === undefined ? {} : { frameworks: estado.frameworks }),
+      alPedir: (serie: string) => void enviar({ clase: "frameworks", serie }),
+      alInstalar: (serie: string, eleccion: EleccionDeFramework, bajarVersion: boolean) =>
+        void enviar({ clase: "instalarFramework", serie, eleccion, ...(bajarVersion ? { bajarVersion: true } : {}) }),
+    }),
+    [enviar, estado.frameworks]
   );
 
   /** La línea del fichero elegido a la que se llegó desde un hallazgo. Va y viene CON él. */
@@ -2559,6 +2583,7 @@ export function App({
       alPararEmulador={(id) => void enviar({ clase: "pararEmulador", id })}
       alCrearEmulador={(nombre, desde) => void enviar({ clase: "crearEmulador", nombre, ...(desde ?? {}) })}
       alEliminarEmulador={(avd) => void enviar({ clase: "eliminarEmulador", avd })}
+      framework={framework}
       {...(estado.arranqueDeEmulador === undefined
         ? {}
         : { arranqueDeEmulador: estado.arranqueDeEmulador })}
@@ -2918,10 +2943,17 @@ export function App({
       conectado={estado.conectado}
       alRevisar={revisarLanzamiento}
       alLanzar={lanzarApp}
+      alCopiarTodo={copiarTodo}
+      alCopiarModificados={copiarModificados}
       alCancelar={cancelarLanzamiento}
       alElegirDispositivo={elegirDispositivoDeEjecutar}
       // Qué teléfono está usando una tarea (IXCODE-58): lanzar encima le pisaría las capturas.
       {...(estado.enUsoDeDispositivos === undefined ? {} : { enUso: estado.enUsoDeDispositivos })}
+      framework={{
+        ...framework,
+        ...(estado.instalacion?.receta === "instalar-framework" ? { progreso: estado.instalacion } : {}),
+        alCancelar: () => void enviar({ clase: "receta", id: "instalar-framework", paso: 0, accion: "cancelar" }),
+      }}
     />
   );
 

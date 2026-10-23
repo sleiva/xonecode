@@ -31,6 +31,8 @@ import type {
   ProveedorDeModelos,
   SistemaOperativo,
   EstadoDeMotorLocal,
+  EleccionDeFramework,
+  FrameworksDelAparato,
 } from "../tipos.js";
 import { PLATAFORMAS_DE_DISPOSITIVO, seMira, type ModoDeEscritura } from "../tipos.js";
 import { SelectorDeModo } from "./SelectorDeModo.js";
@@ -46,6 +48,7 @@ import { ArrancarEmulador } from "./ArrancarEmulador.js";
 import { AjustesDeAvd } from "./AjustesDeAvd.js";
 import { CrearEmulador } from "./CrearEmulador.js";
 import { EliminarEmulador } from "./EliminarEmulador.js";
+import { InstalarFramework } from "./InstalarFramework.js";
 import { motivoParaNoEliminarAvd } from "../reglasDeAvd.js";
 import { useMedirAlVolver } from "../medirAlVolver.js";
 import { useEsperaDeRefresco } from "../esperaDeRefresco.js";
@@ -444,6 +447,7 @@ export function Ajustes({
   alPararEmulador,
   alCrearEmulador,
   alEliminarEmulador,
+  framework,
   modelosDeMotor,
   alPedirModelosDeMotor,
   motoresLocales,
@@ -657,6 +661,15 @@ export function Ajustes({
   alCrearEmulador?: (nombre: string, desde?: { base: string; conDatos: boolean }) => void;
   /** Eliminar un AVD (viaja el nombre); su progreso llega en `instalacion` (`borrar-avd`). Ausente = no se pinta «Eliminar». */
   alEliminarEmulador?: (avd: string) => void;
+  /**
+   * Instalar el framework de XOne en un Android: lo último ofrecido y cómo pedir e instalar. Su
+   * progreso llega en `instalacion` (`instalar-framework`). Ausente = no se pinta «Framework…».
+   */
+  framework?: {
+    frameworks?: FrameworksDelAparato;
+    alPedir: (serie: string) => void;
+    alInstalar: (serie: string, eleccion: EleccionDeFramework, bajarVersion: boolean) => void;
+  };
   /** Lo que ofrece cada motor externo, por motor, para el desplegable de un subagente. */
   modelosDeMotor?: Record<string, { modelos: { id: string; nombre: string }[]; error?: string }>;
   /** Ajustes → Motores locales: la foto que manda el servidor. Ausente = no ha llegado. */
@@ -804,6 +817,8 @@ export function Ajustes({
    */
   // El AVD cuyo diálogo de «Eliminar» está abierto. Lo plegado se desmonta: sin él no hay ventana.
   const [avdAEliminar, setAvdAEliminar] = useState<string | undefined>(undefined);
+  /** El aparato cuyo framework se está instalando o eligiendo. Ausente = el diálogo cerrado. */
+  const [aparatoParaFramework, setAparatoParaFramework] = useState<{ id: string; nombre: string } | undefined>(undefined);
   const [dispositivosTecleados, setDispositivosTecleados] = useState<AjustesDeDispositivos | undefined>(undefined);
   const dispositivosEnElCampo = dispositivosTecleados ?? ajustesDeDispositivos ?? {};
   const dispositivosCambiados =
@@ -1778,6 +1793,17 @@ export function Ajustes({
                                 medidoDeLaFoto={dispositivos.medido}
                                 {...(alVerificarDispositivo === undefined ? {} : { alVerificar: alVerificarDispositivo })}
                               />
+                              {framework !== undefined && d.plataforma === "android" && d.soloDefinicion !== true && seLlegaAlDispositivo(d) ? (
+                                    <button
+                                      type="button"
+                                      className={estilosDeAccion.boton}
+                                      disabled={conectado !== true}
+                                      title={`Instala o actualiza el framework de XOne en ${d.nombre}`}
+                                      onClick={() => setAparatoParaFramework({ id: d.id, nombre: d.nombre })}
+                                    >
+                                      Framework…
+                                    </button>
+                                  ) : null}
                             </li>
                           ))}
                         </ul>
@@ -1823,6 +1849,17 @@ export function Ajustes({
                                       {ajustesDeDispositivos.avds[avd]!.copiaDe}
                                     </span>
                                   )}
+                                  {framework !== undefined && d.plataforma === "android" && d.soloDefinicion !== true && seLlegaAlDispositivo(d) ? (
+                                    <button
+                                      type="button"
+                                      className={estilosDeAccion.boton}
+                                      disabled={conectado !== true}
+                                      title={`Instala o actualiza el framework de XOne en ${d.nombre}`}
+                                      onClick={() => setAparatoParaFramework({ id: d.id, nombre: d.nombre })}
+                                    >
+                                      Framework…
+                                    </button>
+                                  ) : null}
                                 </span>
                                 {avd === undefined || alAjustarAvd === undefined ? (
                                   <>
@@ -1912,6 +1949,17 @@ export function Ajustes({
                             d.avd !== undefined && d.estado !== "apagado" && d.estado !== "no-disponible" ? [d.avd] : [],
                           )}
                           {...(instalacion?.receta === "crear-avd" ? { progreso: instalacion } : {})}
+                        />
+                      ) : null}
+                      {aparatoParaFramework !== undefined && framework !== undefined ? (
+                        <InstalarFramework
+                          aparato={aparatoParaFramework}
+                          {...(framework.frameworks === undefined ? {} : { frameworks: framework.frameworks })}
+                          {...(instalacion?.receta === "instalar-framework" ? { progreso: instalacion } : {})}
+                          alPedir={() => framework.alPedir(aparatoParaFramework.id)}
+                          alInstalar={(eleccion, bajar) => framework.alInstalar(aparatoParaFramework.id, eleccion, bajar)}
+                          alCancelar={() => alCancelarPaso?.("instalar-framework")}
+                          alCerrar={() => setAparatoParaFramework(undefined)}
                         />
                       ) : null}
                       {avdAEliminar !== undefined && alEliminarEmulador !== undefined ? (

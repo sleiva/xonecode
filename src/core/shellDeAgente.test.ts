@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { VARIABLES_SECRETAS_BYXONE } from "./byxone.js";
 import { VARIABLES_POR_PROVEEDOR } from "./modelos.js";
 import { entornoDeShell, variableDeSkill, variablesDeAndroid, motivoDeComandoRechazado, motivoDeOtroAparato } from "./shellDeAgente.js";
 import { scriptQueNoArranca, textoDeScriptsQueNoArrancan } from "./shellDeAgente.js";
@@ -28,6 +29,12 @@ describe("entornoDeShell", () => {
     const entorno = entornoDeShell({ entorno: { ...todas, PATH: "/usr/bin" } });
 
     expect(Object.keys(entorno)).toEqual(["PATH"]);
+  });
+
+  it("quita la credencial de byXOne, la de uso y la de build", () => {
+    const todas = Object.fromEntries(VARIABLES_SECRETAS_BYXONE.map((v) => [v, "secreta"]));
+    expect(VARIABLES_SECRETAS_BYXONE).toEqual(expect.arrayContaining(["XONECODE_BYXONE_SECRETO", "BYXONE_SECRETO_DE_BUILD"]));
+    expect(Object.keys(entornoDeShell({ entorno: { ...todas, PATH: "/usr/bin" } }))).toEqual(["PATH"]);
   });
 
   it("quita las de un proveedor PERSONALIZADO, que no están en la tabla", () => {

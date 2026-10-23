@@ -61,6 +61,8 @@ import type {
   BaseDelFichero,
   EstadoDeMotorLocal,
   DiagnosticoDeNode,
+  FrameworksDelAparato,
+  OpcionDeFramework,
 } from "./tipos.js";
 import { FORMA_DE_NOMBRE_DE_AVD, FORMA_DE_SERIE } from "./reglasDeAvd.js";
 import { PLATAFORMAS_DE_DISPOSITIVO, FASES_DEL_LANZAMIENTO, ESTADOS_DEL_LANZAMIENTO, ESFUERZOS, esAutenticacionDeConector } from "./tipos.js";
@@ -440,10 +442,19 @@ export interface EstadoDelCliente {
     faltas: string[];
     app?: string;
     dispositivo?: DispositivoElegido;
+    /** El aparato no tiene el framework, como DATO (no deducido de las frases). */
+    sinFramework?: true;
+    /** Ver `tipos.ts`: hay un framework posterior al instalado. Ausente = no hay, o no se sabe. */
+    frameworkMasNuevo?: { instalada: string; titulo: string };
     medido: string;
     /** Ver `tipos.ts`: qué se sube con una tarea trabajando (IXCODE-58). Ausente = la copia tal cual. */
     origen?: string;
   };
+  /**
+   * Lo último que el servidor ofreció instalar del framework, de UN aparato (`serie`). Ausente =
+   * no se ha pedido; se pide al abrir el selector. Lo que se elige vuelve contra esta lista.
+   */
+  frameworks?: FrameworksDelAparato;
   /**
    * El recorrido del lanzamiento, o cómo acabó el último.
    *
@@ -2201,6 +2212,39 @@ export function crearStoreDelCliente(): {
           });
           return;
         }
+        case "frameworks": {
+          // Campo a campo y opción a opción: una opción que no se entiende se queda fuera sola, y
+          // sin `serie` no se sabe de qué aparato habla, así que se descarta el mensaje entero.
+          const m = mensaje as Record<string, unknown>;
+          if (typeof m["serie"] !== "string" || !Array.isArray(m["opciones"])) return;
+          const opciones: OpcionDeFramework[] = [];
+          for (const x of m["opciones"] as unknown[]) {
+            const o = x as Record<string, unknown> | null;
+            if (o === null || typeof o !== "object" || typeof o["titulo"] !== "string") continue;
+            const preferida = o["preferida"] === true;
+            if (o["origen"] === "local" && typeof o["sha256"] === "string" && typeof o["bytes"] === "number") {
+              opciones.push({ origen: "local", titulo: o["titulo"], sha256: o["sha256"], bytes: o["bytes"], preferida });
+            } else if (o["origen"] === "catalogo" && typeof o["ficheroId"] === "number") {
+              opciones.push({
+                origen: "catalogo",
+                titulo: o["titulo"],
+                ficheroId: o["ficheroId"],
+                ...(typeof o["bytes"] === "number" ? { bytes: o["bytes"] } : {}),
+                preferida,
+              });
+            }
+          }
+          mutar({
+            frameworks: {
+              serie: m["serie"],
+              opciones,
+              ...(typeof m["motivoDelCatalogo"] === "string" ? { motivoDelCatalogo: m["motivoDelCatalogo"] } : {}),
+              ...(typeof m["instalada"] === "string" ? { instalada: m["instalada"] } : {}),
+              ...(m["sinFramework"] === true ? { sinFramework: true as const } : {}),
+            },
+          });
+          return;
+        }
         case "lanzable": {
           // La forma del `case "instalacion"`, campo a campo. Las cuatro exigencias son las que
           // sostienen el veredicto: sin `proyecto` no se sabe de qué app habla, `listo` y
@@ -2225,6 +2269,12 @@ export function crearStoreDelCliente(): {
               medido: m["medido"],
               ...(typeof m["app"] === "string" ? { app: m["app"] } : {}),
               ...(typeof m["origen"] === "string" ? { origen: m["origen"] } : {}),
+              ...(m["sinFramework"] === true ? { sinFramework: true as const } : {}),
+              ...((f) =>
+                typeof f === "object" && f !== null && typeof (f as Record<string, unknown>)["instalada"] === "string" &&
+                typeof (f as Record<string, unknown>)["titulo"] === "string"
+                  ? { frameworkMasNuevo: { instalada: (f as { instalada: string }).instalada, titulo: (f as { titulo: string }).titulo } }
+                  : {})(m["frameworkMasNuevo"]),
               // La foto del dispositivo se copia por sus CAMPOS y no entera: lo que llega por
               // el cable no entra en el estado sin nombre. Una a medias —un id sin nombre—
               // se queda fuera sola, como en el `alta`: el veredicto sigue siendo cierto sin

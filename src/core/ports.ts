@@ -1029,6 +1029,53 @@ export class GestorDeTareasEnMemoria implements GestorDeTareasPort {
 }
 
 /**
+ * Instalar el framework de XOne en el aparato de la sesión, desde una tool del agente
+ * (`instalar_framework`). Lo construye el SERVIDOR web sobre su cerrojo de trabajos de la máquina
+ * (`arranque.ts#correrTrabajo`): una tool de `agent/` no lo alcanza, y saltárselo dejaría correr una
+ * instalación a la vez que un `crearAvd`. **Sin puerto no hay tool**: el terminal, `run` y los evals
+ * no la tienen.
+ *
+ * El aparato lo pasa quien llama (el de la sesión, `core/dispositivoDeSesion.ts`) y el servidor lo
+ * comprueba contra su última medida. Ninguno de los dos métodos lanza.
+ */
+export interface InstaladorDeFrameworkPort {
+  /** Qué se instalaría ahora, sin instalar ni descargar nada. Para la tarjeta de aprobación. */
+  plan(aparato: { id: string; nombre: string }): Promise<PlanDeFramework | { motivo: string }>;
+  /** Instala lo que diga `plan` en ese momento. Con `soloLocal`, una versión que haya que bajar es un NO. */
+  instalar(
+    aparato: { id: string; nombre: string },
+    opciones: { soloLocal: boolean; senal?: AbortSignal }
+  ): Promise<{ ok: true; detalle: string } | { ok: false; motivo: string }>;
+}
+
+export interface PlanDeFramework {
+  aparato: string;
+  /** La versión que se instalaría (`v5.0.5.8rel`). */
+  titulo: string;
+  /** ¿Hay que bajarla de byXOne? Falso = ya está en la copia local. */
+  descarga: boolean;
+  bytes?: number;
+  /** La versión que el aparato tiene ahora, si consta. */
+  instalada?: string;
+}
+
+/** El doble: un plan fijo y un registro de lo que se pidió instalar. */
+export class InstaladorDeFrameworkEnMemoria implements InstaladorDeFrameworkPort {
+  readonly [ES_DOBLE] = true;
+  readonly instalados: Array<{ id: string; soloLocal: boolean }> = [];
+  constructor(private readonly respuesta: PlanDeFramework | { motivo: string }) {}
+  async plan(): Promise<PlanDeFramework | { motivo: string }> {
+    return this.respuesta;
+  }
+  async instalar(aparato: { id: string }, opciones: { soloLocal: boolean }): Promise<{ ok: true; detalle: string } | { ok: false; motivo: string }> {
+    if ("motivo" in this.respuesta) return { ok: false, motivo: this.respuesta.motivo };
+    if (opciones.soloLocal && this.respuesta.descarga) return { ok: false, motivo: "no hay ninguna versión descargada" };
+    this.instalados.push({ id: aparato.id, soloLocal: opciones.soloLocal });
+    return { ok: true, detalle: `framework ${this.respuesta.titulo} instalado en «${this.respuesta.aparato}»` };
+  }
+}
+
+/**
  * De dónde salen los iconos (IXCODE-18): Iconify, por la red. Un puerto porque `npm test` no
  * puede necesitar una conexión, y porque la tool que lo usa (`agent/grafo/buscarIcono.ts`) no
  * puede saber si hay red.

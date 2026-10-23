@@ -77,6 +77,9 @@ npm run build
 npm link
 ```
 
+Para construir un paquete que se vaya a repartir (`npm pack`), hace falta la credencial de
+byXOneDownloads: ver [`docs/EMPAQUETAR-Y-SECRETOS.md`](docs/EMPAQUETAR-Y-SECRETOS.md).
+
 Comprueba que el entorno está listo, sin gastar nada:
 
 ```sh

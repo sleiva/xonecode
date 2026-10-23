@@ -7,7 +7,8 @@ import { PNG } from "pngjs";
 import type { Piel } from "../../../core/turno.js";
 import type { DetalleDeLinea } from "../../../core/actos.js";
 import type { ModelosPort, PeticionExterna } from "../../../core/ports.js";
-import { ConectoresEnMemoria } from "../../../core/ports.js";
+import { ConectoresEnMemoria, InstaladorDeFrameworkEnMemoria } from "../../../core/ports.js";
+import { ficheroDeDispositivo } from "../../../core/dispositivoDeSesion.js";
 import { TOPE_DE_LLAMADA_MS } from "../../../core/conectores.js";
 import { abrirSesionTrueforge, LIMITE_DE_LLAMADAS_DEL_RAIZ, LO_LEIDO_SON_DATOS, notaDeDelegacion, PLAN_PRIMERO, presupuestoDeLlamadas, textoDelBucle, TOPE_DE_ENCARGOS_AL_DESARROLLADOR } from "./sesionTrueforge.js";
 import { TOPE_DE_LLAMADAS_DEL_ESPECIALISTA } from "../../turno/resumenDeContexto.js";
@@ -3941,4 +3942,87 @@ describe("en una tarea: el plan asignado y la captura del desarrollador", () => 
     expect(t).toContain("Captura en el MISMO ESTADO que la maqueta");
     expect(t).toContain("Tu respuesta final nombra la ÚLTIMA captura");
   });
+});
+
+describe("instalar el framework desde una tarea del agente (`instalar_framework`)", () => {
+  /** Una carpeta de artefactos con el aparato de la sesión al lado, como la deja la web. */
+  const conAparato = (): string => {
+    const artefactos = mkdtempSync(join(tmpdir(), "xc-fw-"));
+    writeFileSync(ficheroDeDispositivo(artefactos), JSON.stringify({ id: "emulator-5554", nombre: "Pixel", plataforma: "android", clase: "emulador" }));
+    return artefactos;
+  };
+  const alConductor = (): AIMessageChunk[][] => [
+    [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "device-controller", input: "despliega la app" }) }] })],
+    [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "f1", name: "instalar_framework", args: JSON.stringify({ motivo: "FRAMEWORK_AUSENTE" }) }] })],
+    [new AIMessageChunk({ content: "Instalado." })],
+    [new AIMessageChunk({ content: "Hecho." })],
+  ];
+
+  it("en SUPERVISADO pide aprobación con SU tarjeta —versión, aparato y si se descarga—, no como un fichero; aprobada, instala", async () => {
+    const framework = new InstaladorDeFrameworkEnMemoria({ aparato: "Pixel", titulo: "v5.0.5.8rel", descarga: true, bytes: 40 * 1024 ** 2, instalada: "5.0.2.2dev" });
+    const vistas: { descripcion: string; dispositivo?: unknown; diff: string; fichero?: string }[] = [];
+    const { m } = modelosConGuion(alConductor());
+    const s = await abrirSesionTrueforge({
+      raiz: proyecto(), modelos: m, entorno: ENTORNO, skills: CATALOGO, artefactos: conAparato(), framework,
+      pedirAprobacion: async (pendientes, ficheros, diffs) => {
+        for (const p of pendientes) {
+          vistas.push({
+            descripcion: p.descripcion,
+            dispositivo: p.dispositivo,
+            diff: (diffs.get(p.id) ?? []).map((l) => l.texto).join("\n"),
+            ...(ficheros.has(p.id) ? { fichero: ficheros.get(p.id)! } : {}),
+          });
+        }
+        return new Map(pendientes.map((p) => [p.id, { type: "approve" as const }]));
+      },
+    });
+    await s.turno("despliega", piel().p);
+    expect(vistas).toHaveLength(1);
+    expect(vistas[0]).toMatchObject({ descripcion: expect.stringContaining("v5.0.5.8rel"), dispositivo: { descarga: true } });
+    expect(vistas[0]?.diff).toContain("se descarga de byXOne, 40 MB");
+    expect(vistas[0]?.diff).toContain("ahora tiene 5.0.2.2dev");
+    expect(vistas[0]).not.toHaveProperty("fichero");
+    expect(framework.instalados).toEqual([{ id: "emulator-5554", soloLocal: false }]);
+  }, 20_000);
+
+  it("RECHAZADA, no se instala nada", async () => {
+    const framework = new InstaladorDeFrameworkEnMemoria({ aparato: "Pixel", titulo: "v5.0.5.8rel", descarga: false });
+    const { m } = modelosConGuion(alConductor());
+    const s = await abrirSesionTrueforge({
+      raiz: proyecto(), modelos: m, entorno: ENTORNO, skills: CATALOGO, artefactos: conAparato(), framework,
+      pedirAprobacion: async (pendientes) => new Map(pendientes.map((p) => [p.id, { type: "reject" as const }])),
+    });
+    await s.turno("despliega", piel().p);
+    expect(framework.instalados).toEqual([]);
+  }, 20_000);
+
+  it("en AUTÓNOMO se instala sin preguntar, y se DICE", async () => {
+    const framework = new InstaladorDeFrameworkEnMemoria({ aparato: "Pixel", titulo: "v5.0.5.8rel", descarga: false });
+    let preguntas = 0;
+    const { m } = modelosConGuion(alConductor());
+    const p = piel();
+    const s = await abrirSesionTrueforge({
+      raiz: proyecto(), modelos: m, entorno: ENTORNO, skills: CATALOGO, artefactos: conAparato(), framework,
+      sinAprobacion: () => true,
+      pedirAprobacion: async (pendientes) => {
+        preguntas += 1;
+        return new Map(pendientes.map((x) => [x.id, { type: "approve" as const }]));
+      },
+    });
+    await s.turno("despliega", p.p);
+    expect(preguntas).toBe(0);
+    expect(framework.instalados).toHaveLength(1);
+    expect([...p.lineas, ...p.tokens].join(" ")).toContain("modo autónomo");
+  }, 20_000);
+
+  it("sin el puerto (terminal, run, evals) nadie recibe la tool", async () => {
+    const { m, toolsPorLlamada } = modelosConGuion([
+      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "device-controller", input: "mira" }) }] })],
+      [new AIMessageChunk({ content: "Visto." })],
+      [new AIMessageChunk({ content: "Hecho." })],
+    ]);
+    const s = await abrirSesionTrueforge({ raiz: proyecto(), modelos: m, entorno: ENTORNO, skills: CATALOGO, artefactos: conAparato() });
+    await s.turno("mira", piel().p);
+    expect(toolsPorLlamada.flat()).not.toContain("instalar_framework");
+  }, 20_000);
 });

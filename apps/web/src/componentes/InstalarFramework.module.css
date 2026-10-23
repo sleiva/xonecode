@@ -1,0 +1,48 @@
+/* El selector de versión del framework: un combo con las etiquetas de la elegida debajo. */
+.lista {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 8px 0;
+  min-width: 0;
+}
+
+/* Lo que tiene el aparato AHORA: siempre a la vista, en su propia línea. */
+.aparato {
+  margin: 4px 0 8px;
+  font-size: 14px;
+  color: var(--dsw-alias-label-primary);
+  overflow-wrap: anywhere;
+}
+
+.etiquetas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+}
+
+/* Una pastilla por etiqueta: de dónde sale la versión, si es la recomendada o la instalada. */
+.etiqueta {
+  padding: 1px 8px;
+  border: 1px solid var(--dsw-alias-label-tertiary);
+  border-radius: 999px;
+  font-size: 12px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.etiqueta[data-etiqueta="descargada"],
+.etiqueta[data-etiqueta="instalada"] {
+  border-color: var(--xonecode-azul);
+  color: var(--dsw-alias-label-primary);
+}
+
+.casilla {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+}

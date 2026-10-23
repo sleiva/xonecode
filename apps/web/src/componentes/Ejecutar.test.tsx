@@ -137,6 +137,44 @@ describe("Ejecutar: la medida y el botón", () => {
     expect(screen.queryByRole("button", { name: /ejecutar/i })).toBeNull();
   });
 
+  it("los dos «Copiar…» van al lado de Ejecutar, y cada uno llama a lo suyo", () => {
+    const alCopiarTodo = vi.fn();
+    const alCopiarModificados = vi.fn();
+    render(
+      <Ejecutar
+        veredicto={VEREDICTO}
+        conectado
+        alRevisar={NADA}
+        alLanzar={NADA}
+        alCopiarTodo={alCopiarTodo}
+        alCopiarModificados={alCopiarModificados}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Copiar todos los ficheros" }));
+    fireEvent.click(screen.getByRole("button", { name: "Copiar solo los modificados" }));
+    expect(alCopiarTodo).toHaveBeenCalledTimes(1);
+    expect(alCopiarModificados).toHaveBeenCalledTimes(1);
+  });
+
+  it("los «Copiar…» se apagan igual que Ejecutar: sin cable, con faltas o con uno en curso", () => {
+    const copiar = { alCopiarTodo: NADA, alCopiarModificados: NADA };
+    const casos = [
+      <Ejecutar veredicto={VEREDICTO} conectado={false} alRevisar={NADA} {...copiar} />,
+      <Ejecutar veredicto={{ ...VEREDICTO, listo: false, faltas: ["x"] }} conectado alRevisar={NADA} {...copiar} />,
+      <Ejecutar veredicto={VEREDICTO} lanzamiento={EN_CURSO} conectado alRevisar={NADA} {...copiar} />,
+    ];
+    for (const caso of casos) {
+      render(caso);
+      expect(screen.queryByRole("button", { name: /copiar/i })).toBeNull();
+      cleanup();
+    }
+  });
+
+  it("sin su manejador, un «Copiar…» no se pinta", () => {
+    render(<Ejecutar veredicto={VEREDICTO} conectado alRevisar={NADA} alLanzar={NADA} />);
+    expect(screen.queryByRole("button", { name: /copiar/i })).toBeNull();
+  });
+
   it("sin cable no hay botón, y se dice por qué", () => {
     render(<Ejecutar veredicto={VEREDICTO} conectado={false} alRevisar={NADA} alLanzar={NADA} />);
     expect(screen.queryByRole("button", { name: /ejecutar/i })).toBeNull();
@@ -385,5 +423,96 @@ describe("Ejecutar: el recorrido del lanzamiento", () => {
     render(<Ejecutar conectado alRevisar={NADA} lanzamiento={{ ...EN_CURSO, lineas }} />);
     expect(screen.getByText(/linea 0/)).toBeTruthy();
     expect(screen.getByText(/linea 11/)).toBeTruthy();
+  });
+});
+
+describe("Ejecutar: lo que se enchufa y el último lanzamiento", () => {
+  it("si cambia lo que está A MANO (enchufar o quitar) se vuelve a pedir el veredicto; la misma foto no", () => {
+    const alRevisar = vi.fn();
+    const { rerender } = render(<Ejecutar conectado alRevisar={alRevisar} dispositivos={[PIXEL]} />);
+    expect(alRevisar).toHaveBeenCalledTimes(1);
+    // La misma foto, otro objeto: no es un cambio.
+    rerender(<Ejecutar conectado alRevisar={alRevisar} dispositivos={[{ ...PIXEL }]} />);
+    expect(alRevisar).toHaveBeenCalledTimes(1);
+    // Se desenchufa: el veredicto se pide otra vez.
+    rerender(<Ejecutar conectado alRevisar={alRevisar} dispositivos={[]} />);
+    expect(alRevisar).toHaveBeenCalledTimes(2);
+    // Un apagado que sigue apagado no cuenta: no está a mano.
+    rerender(<Ejecutar conectado alRevisar={alRevisar} dispositivos={[IPHONE]} />);
+    expect(alRevisar).toHaveBeenCalledTimes(2);
+  });
+
+  it("la primera foto no pide otra medida: la de entrar ya va", () => {
+    const alRevisar = vi.fn();
+    const { rerender } = render(<Ejecutar conectado alRevisar={alRevisar} />);
+    rerender(<Ejecutar conectado alRevisar={alRevisar} dispositivos={[PIXEL]} />);
+    expect(alRevisar).toHaveBeenCalledTimes(1);
+  });
+
+  it("un lanzamiento TERMINADO en otro aparato no se enseña: se leía como dicho del nuevo", () => {
+    const acabado: Lanzamiento = { ...EN_CURSO, fase: "comprobando-arranque", estado: "ok", lineas: ["la app está viva"] };
+    const otro = { id: "OTRO", nombre: "SM A920F", plataforma: "android" as const, clase: "fisico" as const };
+    render(<Ejecutar conectado alRevisar={NADA} veredicto={{ ...VEREDICTO, dispositivo: otro }} elegido={otro} lanzamiento={acabado} />);
+    expect(screen.queryByText(/arrancó y está viva/)).toBeNull();
+  });
+
+  it("uno en marcha se enseña siempre, y en el mismo aparato el terminado dice «Último lanzamiento», no la fase", () => {
+    const otro = { id: "OTRO", nombre: "SM A920F", plataforma: "android" as const, clase: "fisico" as const };
+    const { rerender } = render(<Ejecutar conectado alRevisar={NADA} elegido={otro} lanzamiento={EN_CURSO} />);
+    expect(screen.getByText("empaquetando la app")).toBeTruthy();
+    rerender(
+      <Ejecutar
+        conectado
+        alRevisar={NADA}
+        veredicto={VEREDICTO}
+        lanzamiento={{ ...EN_CURSO, fase: "comprobando-arranque", estado: "ok" }}
+      />
+    );
+    expect(screen.getByText("Último lanzamiento")).toBeTruthy();
+    expect(screen.queryByText("comprobando que arrancó")).toBeNull();
+  });
+
+  it("un fallo dice en qué fase se quedó", () => {
+    render(<Ejecutar conectado alRevisar={NADA} lanzamiento={{ ...EN_CURSO, fase: "subiendo", estado: "fallo", motivo: "x" }} />);
+    expect(screen.getByText("Último lanzamiento · se quedó en «subiendo al dispositivo»")).toBeTruthy();
+  });
+});
+
+describe("Ejecutar: actualizar el framework", () => {
+  const framework = { alPedir: vi.fn(), alInstalar: vi.fn(), alCancelar: vi.fn() };
+
+  it("con uno más nuevo sale «Actualizar framework» aunque se pueda lanzar, y abre el selector con ESA versión", () => {
+    const alPedir = vi.fn();
+    render(
+      <Ejecutar
+        conectado
+        alRevisar={NADA}
+        alLanzar={NADA}
+        veredicto={{ ...VEREDICTO, frameworkMasNuevo: { instalada: "5.0.5.9dev", titulo: "v5.0.6.0rel" } }}
+        framework={{
+          ...framework,
+          alPedir,
+          frameworks: {
+            serie: "ABC",
+            instalada: "5.0.5.9dev",
+            opciones: [
+              { origen: "local", titulo: "v5.0.4.4dev", sha256: "a".repeat(64), bytes: 1, preferida: true },
+              { origen: "catalogo", titulo: "v5.0.6.0rel", ficheroId: 7, preferida: false },
+            ],
+          },
+        }}
+      />
+    );
+    expect(screen.getByText(/tiene el framework 5\.0\.5\.9dev; hay uno más nuevo/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Ejecutar en/ })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Actualizar framework" }));
+    expect(alPedir).toHaveBeenCalledWith("ABC");
+    // Elegida la de la actualización, no la recomendada (la local, más VIEJA que la instalada).
+    expect((screen.getByRole("combobox") as HTMLSelectElement).value).toBe("catalogo:7");
+  });
+
+  it("sin el dato no hay botón: «al día» no se afirma ni se deduce", () => {
+    render(<Ejecutar conectado alRevisar={NADA} veredicto={VEREDICTO} framework={framework} />);
+    expect(screen.queryByRole("button", { name: "Actualizar framework" })).toBeNull();
   });
 });

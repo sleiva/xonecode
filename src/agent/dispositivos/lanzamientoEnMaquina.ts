@@ -61,7 +61,8 @@ import {
   type FrameworkEnDispositivo,
 } from "./dispositivosEnMaquina.js";
 import { PUERTO_DEL_HOTSWAP } from "../../core/puertosDeAvd.js";
-import { esperarAlServidor, lanzarYComprobar, type AbrirSocketHotswap } from "./hotswap.js";
+import { abrirHotswap, esperarAlServidor, lanzarYComprobar, type AbrirSocketHotswap } from "./hotswap.js";
+import { compararConAparato, type ResultadoDeComparacion } from "./comparacionEnAparato.js";
 import {
   crearEjecutor,
   TOPE_DE_TRABAJO_MS,
@@ -71,7 +72,7 @@ import {
   type FinDeProceso,
   type Lanzar,
 } from "./procesosEnMaquina.js";
-import { empaquetarProyecto, enMegas, type PaqueteDelProyecto } from "./paqueteDelProyecto.js";
+import { empaquetarProyecto, enMegas, type OpcionesDePaquete, type PaqueteDelProyecto } from "./paqueteDelProyecto.js";
 
 /**
  * Los dos topes son los MISMOS de la instalación, y se reexportan desde aquí para que no haya
@@ -93,12 +94,16 @@ const NOMBRE_DEL_ZIP = "debug_app_update.zip";
  */
 const ACTIVIDAD_DEL_SERVIDOR = "com.xone.android.hotswap.activities.SetupActivity";
 
+/** Cuántos ficheros distintos se nombran uno a uno en el recorrido; el resto se cuenta. */
+const FICHEROS_QUE_SE_NOMBRAN = 10;
+
 /**
  * Las fases del recorrido, en su orden. El tipo y la lista van juntos a propósito: quien pinte
  * las fases (o el test que las exige en orden) tiene una sola definición que leer.
  */
 export type FaseDeLanzamiento =
   | "comprobando"
+  | "comparando"
   | "empaquetando"
   | "subiendo"
   | "reiniciando"
@@ -107,6 +112,7 @@ export type FaseDeLanzamiento =
 
 export const FASES_DE_LANZAMIENTO: readonly FaseDeLanzamiento[] = [
   "comprobando",
+  "comparando",
   "empaquetando",
   "subiendo",
   "reiniciando",
@@ -136,7 +142,16 @@ export interface PeticionDeLanzamiento {
    * el de siempre. Dentro del aparato es siempre `PUERTO_DEL_HOTSWAP`.
    */
   puerto?: number;
+  /**
+   * Qué se copia. `todo` (la omisión, la de «Ejecutar» y «Copiar todos los ficheros») sube el
+   * proyecto entero; `modificados` pregunta antes al aparato (fase `comparando`) y sube solo lo
+   * que tiene distinto o le falta. Con nada distinto acaba bien SIN subir ni relanzar.
+   */
+  modo?: ModoDeCopia;
 }
+
+/** Los dos modos de copiar el proyecto al aparato. */
+export type ModoDeCopia = "todo" | "modificados";
 
 /**
  * La subida, vista por este módulo. Entra por parámetro porque `npm test` no puede abrir una
@@ -186,7 +201,7 @@ export interface DependenciasDeLanzamiento {
     dispositivo: Dispositivo,
     deps?: Pick<DependenciasDeDeteccion, "plataforma" | "entorno" | "home" | "existe" | "ejecutar">
   ) => Promise<FrameworkEnDispositivo>;
-  empaquetarProyecto?: (raiz: string, tope?: number) => PaqueteDelProyecto;
+  empaquetarProyecto?: (raiz: string, tope?: number, opciones?: OpcionesDePaquete) => PaqueteDelProyecto;
   subir?: SubirPaquete;
   /**
    * El constructor del socket de `/hotswap` — así se llama en `hotswap.ts`, que es el módulo al
@@ -194,6 +209,11 @@ export interface DependenciasDeLanzamiento {
    * se abre ningún socket.
    */
   abrirSocket?: AbrirSocketHotswap;
+  /**
+   * La comparación con el aparato del modo `modificados`. Sin ella, la real: abre el canal de
+   * `/hotswap` y pregunta con `getFileChecksum` (`comparacionEnAparato.ts`).
+   */
+  compararConAparato?: (raiz: string, app: string, canal: string) => Promise<ResultadoDeComparacion>;
   /** Cada línea que merezca contarse, con la fase a la que pertenece. */
   alFase?: (fase: FaseDeLanzamiento, linea: string) => void;
   ahora?: () => number;
@@ -395,10 +415,45 @@ export function lanzarEnDispositivo(
       decir("comprobando", "el servidor del framework ya contesta");
     }
 
+    // ---- 1b. comparando: solo en «Copiar solo los modificados» ----------------------------
+    let solo: ReadonlySet<string> | undefined;
+    if (peticion.modo === "modificados") {
+      decir("comparando", "comparando los ficheros del proyecto con los del aparato");
+      const comparar =
+        deps.compararConAparato ??
+        (async (raiz: string, app: string, destino: string) => {
+          const cliente = abrirHotswap(destino, delSocket);
+          try {
+            return await compararConAparato(raiz, app, cliente);
+          } finally {
+            cliente.cerrar();
+          }
+        });
+      const comparacion = await Promise.race([
+        comparar(peticion.raiz, peticion.app, canal),
+        cancelacion.then(() => "cancelada" as const),
+      ]);
+      if (comparacion === "cancelada" || cancelado) return acabar("comparando", { estado: "cancelada" });
+      if (comparacion.estado === "fallo") return acabar("comparando", comparacion);
+      if (comparacion.distintos.length === 0) {
+        decir("comparando", `nada que copiar: el aparato ya tiene los ${comparacion.comparados} ficheros iguales`);
+        return acabar("comparando", { estado: "ok" });
+      }
+      decir(
+        "comparando",
+        `${comparacion.distintos.length} de ${comparacion.comparados} ficheros distintos` +
+          (comparacion.nuevos > 0 ? ` (${comparacion.nuevos} nuevos en el aparato)` : "")
+      );
+      for (const ruta of comparacion.distintos.slice(0, FICHEROS_QUE_SE_NOMBRAN)) decir("comparando", `  ${ruta}`);
+      const resto = comparacion.distintos.length - FICHEROS_QUE_SE_NOMBRAN;
+      if (resto > 0) decir("comparando", `  y ${resto} más`);
+      solo = new Set(comparacion.distintos);
+    }
+
     // ---- 2. empaquetando ----------------------------------------------------------------
     let paquete: PaqueteDelProyecto;
     try {
-      paquete = empaquetar(peticion.raiz);
+      paquete = solo === undefined ? empaquetar(peticion.raiz) : empaquetar(peticion.raiz, undefined, { solo });
     } catch (error) {
       return acabar("empaquetando", { estado: "fallo", motivo: unaLineaDeLaSubida(error) });
     }

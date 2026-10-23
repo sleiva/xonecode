@@ -175,4 +175,11 @@ export interface PendienteDeAprobacion {
    * fondo —el mismo trato que `/sync subir`—: sin una persona que diga que sí, es un no.
    */
   remota?: true;
+  /**
+   * Actúa sobre el APARATO de la sesión, no sobre el proyecto: instalar el framework de XOne
+   * (`instalar_framework`). No es una escritura del proyecto —ni diff, ni verificador, ni informe de
+   * hijos—. `descarga` dice si para ello hay que bajar un APK de byXOne: una tarea de fondo solo la
+   * aplica si NO hace falta (`consolaDeTarea.ts`), porque crear una tarea no autoriza descargar.
+   */
+  dispositivo?: { descarga: boolean };
 }

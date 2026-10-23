@@ -216,7 +216,7 @@ afterEach(() => {
 });
 
 describe("lanzarEnDispositivo", () => {
-  it("recorre las seis fases en orden, y cada una dice lo suyo", async () => {
+  it("recorre las fases en orden, y cada una dice lo suyo (sin comparar: copia todo)", async () => {
     const r = recorrido();
     // Los dos primeros procesos, y el reloj se mueve ANTES del último: el `ms` se mide entre
     // que se empieza y que se acaba, y con el reloj quieto eso sería siempre cero.
@@ -226,7 +226,7 @@ describe("lanzarEnDispositivo", () => {
     const resultado = await r.trabajo.terminado;
 
     expect(resultado).toEqual({ estado: "ok", fase: "comprobando-arranque", ms: 3_000 });
-    expect([...new Set(r.fases.map((f) => f.fase))]).toEqual([...FASES_DE_LANZAMIENTO]);
+    expect([...new Set(r.fases.map((f) => f.fase))]).toEqual(FASES_DE_LANZAMIENTO.filter((f) => f !== "comparando"));
     expect(r.deFase("comprobando")).toEqual([
       "túnel aplicado: 127.0.0.1:8443 es el aparato emulator-5554",
       `framework instalado: ${DEL_FRAMEWORK}`,
@@ -538,10 +538,89 @@ describe("lanzarEnDispositivo", () => {
   });
 });
 
+describe("copiar solo los modificados", () => {
+  const MODIFICADOS: PeticionDeLanzamiento = { ...PETICION, modo: "modificados" };
+
+  it("compara con el aparato y empaqueta SOLO lo distinto, y luego relanza", async () => {
+    const pedidos: { raiz: string; app: string; canal: string }[] = [];
+    const empaquetados: (ReadonlySet<string> | undefined)[] = [];
+    const r = recorrido(
+      {
+        compararConAparato: async (raiz, app, canal) => {
+          pedidos.push({ raiz, app, canal });
+          return { estado: "ok", comparados: 5, distintos: ["Main.xne", "Nueva.js"], nuevos: 1 };
+        },
+        empaquetarProyecto: (_raiz, _tope, opciones) => {
+          empaquetados.push(opciones?.solo);
+          return PAQUETE;
+        },
+      },
+      lanzador(),
+      MODIFICADOS
+    );
+    await atender(r.l, 3);
+    const resultado = await r.trabajo.terminado;
+
+    expect(resultado).toMatchObject({ estado: "ok", fase: "comprobando-arranque" });
+    expect(pedidos).toEqual([{ raiz: PETICION.raiz, app: PETICION.app, canal: "wss://127.0.0.1:8443/hotswap" }]);
+    expect([...empaquetados[0]!]).toEqual(["Main.xne", "Nueva.js"]);
+    expect(r.deFase("comparando")).toEqual([
+      "comparando los ficheros del proyecto con los del aparato",
+      "2 de 5 ficheros distintos (1 nuevos en el aparato)",
+      "  Main.xne",
+      "  Nueva.js",
+    ]);
+    expect(r.subidas).toHaveLength(1);
+  });
+
+  it("con nada distinto acaba bien SIN subir ni reiniciar", async () => {
+    const r = recorrido(
+      { compararConAparato: async () => ({ estado: "ok", comparados: 3, distintos: [], nuevos: 0 }) },
+      lanzador(),
+      MODIFICADOS
+    );
+    await atender(r.l, 1);
+    const resultado = await r.trabajo.terminado;
+
+    expect(resultado).toMatchObject({ estado: "ok", fase: "comparando" });
+    expect(r.subidas).toEqual([]);
+    expect(r.l.hijos).toHaveLength(1); // solo el túnel: ni force-stop ni am start
+    expect(r.deFase("comparando").at(-1)).toBe("nada que copiar: el aparato ya tiene los 3 ficheros iguales");
+  });
+
+  it("si no se puede comparar, falla en comparando con el motivo y no sube nada", async () => {
+    const r = recorrido(
+      { compararConAparato: async () => ({ estado: "fallo", motivo: "no se pudo comparar con el aparato: X" }) },
+      lanzador(),
+      MODIFICADOS
+    );
+    await atender(r.l, 1);
+    const resultado = await r.trabajo.terminado;
+
+    expect(resultado).toMatchObject({ estado: "fallo", fase: "comparando", motivo: "no se pudo comparar con el aparato: X" });
+    expect(r.subidas).toEqual([]);
+  });
+
+  it("sin modo no se compara nada: es Ejecutar de siempre", async () => {
+    let comparado = false;
+    const r = recorrido({
+      compararConAparato: async () => {
+        comparado = true;
+        return { estado: "ok", comparados: 0, distintos: [], nuevos: 0 };
+      },
+    });
+    await atender(r.l, 3);
+    await r.trabajo.terminado;
+    expect(comparado).toBe(false);
+    expect(r.subidas).toHaveLength(1);
+  });
+});
+
 describe("las fases", () => {
-  it("son seis, y en el orden en que se recorren", () => {
+  it("son siete, y en el orden en que se recorren", () => {
     expect([...FASES_DE_LANZAMIENTO]).toEqual([
       "comprobando",
+      "comparando",
       "empaquetando",
       "subiendo",
       "reiniciando",

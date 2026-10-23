@@ -1160,7 +1160,10 @@ describe("los adaptadores de proyecto son los MISMOS en las dos pieles", () => {
     expect(fuenteDeMain()).toMatch(/crearEjecutorReal\(\s*alAbrir,\s*crearCheckpointerDeProyecto,/);
     // Y un quinto: los conectores MCP, el MISMO servicio de Ajustes, que solo la web tiene. Sin este
     // reenvío ningún agente recibiría sus tools, con todos los tests de las piezas en verde.
-    expect(fuenteDeMain()).toMatch(/carpetaDeArtefactosDeSesion,\s*opcionesDeConsola\?\.adjuntos,\s*cargarSettings,\s*opcionesDeConsola\?\.conectores\s*\)/);
+    // Y un sexto: el instalador del framework (la tool `instalar_framework`), por la misma razón.
+    expect(fuenteDeMain()).toMatch(
+      /carpetaDeArtefactosDeSesion,\s*opcionesDeConsola\?\.adjuntos,\s*cargarSettings,\s*opcionesDeConsola\?\.conectores,\s*opcionesDeConsola\?\.framework\s*\)/
+    );
   });
 
   it("y le pasa también las dependencias de proyecto: sin ellas el alta no bajaría nada", () => {

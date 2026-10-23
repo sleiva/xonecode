@@ -355,6 +355,26 @@ describe("una tarea de fondo y un conector MCP", () => {
   });
 });
 
+describe("una tarea de fondo e instalar el framework", () => {
+  it("con la versión ya descargada se aplica, y se dice", async () => {
+    const { consola, aparcado } = montar();
+    const instalar: PendienteDeAprobacion = { ...PENDIENTE, id: "f", descripcion: "quiere instalar el framework v5.0.5.8rel en «Pixel»", dispositivo: { descarga: false } };
+    const decisiones = await consola.aprobacionesTui!([instalar], new Map(), new Map());
+    expect(decisiones.get("f")).toEqual({ type: "approve" });
+    expect(aparcado).toEqual([]);
+  });
+
+  it("si habría que DESCARGARLA se rechaza y la tarea aparca: crearla no autoriza bajar nada", async () => {
+    const { consola, aparcado } = montar();
+    const instalar: PendienteDeAprobacion = { ...PENDIENTE, id: "f", descripcion: "quiere instalar el framework", dispositivo: { descarga: true } };
+    const decisiones = await consola.aprobacionesTui!([instalar, PENDIENTE], new Map([["1", "/src/app.xne"]]), new Map());
+    expect(decisiones.get("f")?.type).toBe("reject");
+    // Lo demás de la tanda sigue su camino.
+    expect(decisiones.get("1")).toEqual({ type: "approve" });
+    expect(aparcado.join(" ")).toContain("Ajustes → Dispositivos");
+  });
+});
+
 describe("una tarea aplica, y aun así estas rutas NO se escriben", () => {
   /** El texto que el modelo vería, venga como cadena o dentro de un `ToolMessage`. */
   function textoDeResultado(resultado: unknown): string {

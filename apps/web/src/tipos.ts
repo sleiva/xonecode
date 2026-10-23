@@ -646,6 +646,7 @@ export type ProgresoDeSubida = { fase: "creando-rama"; rama: string } | { fase: 
  */
 export const FASES_DEL_LANZAMIENTO = [
   "comprobando",
+  "comparando",
   "empaquetando",
   "subiendo",
   "reiniciando",
@@ -991,6 +992,8 @@ export type MensajeAlCliente =
       ms: number;
       motivo?: string;
     }
+  /** Lo que se puede instalar del framework en un aparato (`frameworks`, va a todos). */
+  | ({ clase: "frameworks" } & FrameworksDelAparato)
   /**
    * El veredicto de «¿se puede lanzar la app del proyecto abierto?», que se PIDE
    * (`revisarLanzamiento`) y se contesta a quien lo pidió — no a todos los clientes: la máquina
@@ -1007,6 +1010,10 @@ export type MensajeAlCliente =
       faltas: string[];
       app?: string;
       dispositivo?: DispositivoElegido;
+      /** El aparato no tiene el framework: la pestaña pone «Instalar framework» al lado. */
+      sinFramework?: true;
+      /** Tiene el framework y hay uno posterior: la pestaña pone «Actualizar framework». */
+      frameworkMasNuevo?: { instalada: string; titulo: string };
       medido: string;
       /** Qué se sube cuando no es la copia tal cual (IXCODE-58): con una tarea trabajando, lo terminado. Frase del servidor. */
       origen?: string;
@@ -1631,6 +1638,10 @@ export type MensajeDelCliente =
   /** «Elimina este AVD.» El nombre y nada más: el servidor comprueba que esté en SU última medida,
    *  que no sea el único y que esté apagado. El progreso llega como `instalacion` (`borrar-avd`). */
   | { clase: "eliminarEmulador"; avd: string }
+  /** «¿Qué framework se puede instalar en este aparato?» */
+  | { clase: "frameworks"; serie: string }
+  /** «Instala el framework en este aparato.» El servidor lo comprueba todo contra lo que sirvió. */
+  | { clase: "instalarFramework"; serie: string; eleccion: EleccionDeFramework; bajarVersion?: boolean }
   /** Lo de UN AVD: su puerto del túnel y si arranca sin ventana. Vuelve `dispositivos`. */
   | { clase: "ajusteDeAvd"; avd: string; puerto?: number; sinVentana?: boolean }
   /** «Para este emulador», por su ID de la medida. */
@@ -1865,7 +1876,7 @@ export type MensajeDelCliente =
    * atiende, y el navegador no es fuente sobre ninguno de los tres.
    */
   | { clase: "revisarLanzamiento" }
-  | { clase: "lanzarApp" }
+  | { clase: "lanzarApp"; modo?: "todo" | "modificados" }
   | { clase: "cancelarLanzamiento" }
   /**
    * Llevar un fichero ya guardado al aparato de la sesión. `probar`: si la app no corre, desplegar
@@ -2037,4 +2048,28 @@ export interface DiagnosticoDeNode {
   claudeCode: LineaDeDiagnostico;
   navegador?: LineaDeDiagnostico;
   git?: LineaDeDiagnostico;
+}
+
+/**
+ * Una versión del framework de Android que se puede instalar, tal como la sirve el servidor
+ * (`core/frameworkLocal.ts#OpcionDeInstalacion`, redeclarada: el cliente no importa del host). Las
+ * locales primero; `preferida` es la que se elige por omisión.
+ */
+export type OpcionDeFramework =
+  | { origen: "local"; titulo: string; sha256: string; bytes: number; preferida: boolean }
+  | { origen: "catalogo"; titulo: string; ficheroId: number; bytes?: number; preferida: boolean };
+
+/** Lo que vuelve al elegir: nunca una URL, siempre algo de la lista servida. */
+export type EleccionDeFramework = { local: string } | { catalogo: number };
+
+/** Lo que el servidor ofrece instalar en UN aparato. */
+export interface FrameworksDelAparato {
+  serie: string;
+  opciones: OpcionDeFramework[];
+  /** Por qué no viene el catálogo. Ausente = viene. */
+  motivoDelCatalogo?: string;
+  /** La versión que el aparato tiene ahora. Ausente = no consta. */
+  instalada?: string;
+  /** Medido, y NO tiene el framework. Sin esto ni `instalada`, no se pudo leer. */
+  sinFramework?: true;
 }

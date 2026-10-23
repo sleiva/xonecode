@@ -18,6 +18,7 @@ import { permisosDe } from "../../grafo/perfiles.js";
 import { NOMBRE_INCORPORAR_ADJUNTO } from "../../../core/adjuntos.js";
 import { NOMBRE_TRAER_FUENTE } from "../../../core/fuentes.js";
 import { SCRIPT_A_UTF8 } from "../../../core/comandoExterno.js";
+import { NOMBRE_INSTALAR_FRAMEWORK } from "../../../core/frameworkLocal.js";
 import {
   fuenteDeEjecucion,
   fuenteDeFicheros,
@@ -78,6 +79,11 @@ export function capacidadDeFicheros(opciones: {
  */
 /** Las tools PROPIAS que escriben el proyecto por su cuenta, y por eso paran el turno a preguntar. */
 export const PROPIAS_QUE_ESCRIBEN: readonly string[] = [NOMBRE_INCORPORAR_ADJUNTO, NOMBRE_TRAER_FUENTE];
+/**
+ * Las propias que actúan sobre el APARATO de la sesión (instalar el framework): paran el turno como las
+ * de arriba, pero NO son escrituras del proyecto —su tarjeta y su cuenta van aparte (`sesionTrueforge.ts`)—.
+ */
+export const PROPIAS_DEL_APARATO: readonly string[] = [NOMBRE_INSTALAR_FRAMEWORK];
 
 export function capacidadDePropias(
   tools: readonly ToolDeLangchain[],
@@ -454,7 +460,10 @@ export function capacidadesDelEspecialista(
           capacidadDePropias(
             propias,
             deps.backend,
-            deps.escribeSinPreguntar === true ? [] : PROPIAS_QUE_ESCRIBEN.filter((n) => propias.some((t) => t.name === n))
+            // Las del APARATO paran siempre: no son escrituras del proyecto, y en una tarea su política decide.
+            (deps.escribeSinPreguntar === true ? [...PROPIAS_DEL_APARATO] : [...PROPIAS_QUE_ESCRIBEN, ...PROPIAS_DEL_APARATO]).filter((n) =>
+              propias.some((t) => t.name === n)
+            )
           ),
         ]
       : []),

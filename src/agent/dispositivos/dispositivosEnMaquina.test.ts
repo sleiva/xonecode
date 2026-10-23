@@ -797,7 +797,36 @@ describe("frameworkEnDispositivo", () => {
         args: ["-s", "R58M12ABCDE", "shell", "pm", "list", "packages", "com.xone.android"],
         timeout: TOPES_MS.adb,
       },
+      // Y con el paquete encontrado, su versión: un segundo viaje, con el mismo tope.
+      {
+        binario: "/opt/homebrew/bin/adb",
+        args: ["-s", "R58M12ABCDE", "shell", "dumpsys", "package", "com.xone.android.framework"],
+        timeout: TOPES_MS.adb,
+      },
     ]);
+  });
+
+  it("lee el versionName del paquete encontrado", async () => {
+    let viaje = 0;
+    const ejecutar: NonNullable<DependenciasDeDeteccion["ejecutar"]> = async () =>
+      ++viaje === 1 ? salida("package:com.xone.android.framework\n") : salida("    versionName=5.0.5.8rel\n");
+    expect(await frameworkEnDispositivo(android, { ...conAdb, ejecutar })).toEqual({
+      instalado: true,
+      paquete: "com.xone.android.framework",
+      version: "5.0.5.8rel",
+      detalle: "framework instalado: com.xone.android.framework 5.0.5.8rel",
+    });
+  });
+
+  it("si leer la versión falla, el framework sigue instalado y la versión no consta", async () => {
+    let viaje = 0;
+    const ejecutar: NonNullable<DependenciasDeDeteccion["ejecutar"]> = async () => {
+      if (++viaje === 1) return salida("package:com.xone.android.framework\n");
+      throw new Error("dumpsys colgado");
+    };
+    const r = await frameworkEnDispositivo(android, { ...conAdb, ejecutar });
+    expect(r).toMatchObject({ instalado: true, paquete: "com.xone.android.framework" });
+    expect(r).not.toHaveProperty("version");
   });
 
   it("con los dos flavors instalados gana el standalone, que es el medido", async () => {

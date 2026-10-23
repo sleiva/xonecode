@@ -16,6 +16,7 @@ import type { EsquemaDelProyecto, EstadoDelGestor, MapeoDeEstados, TareaDelGesto
 import type { CambiosDeUnaColeccion } from "../../core/diffDeColecciones.js";
 import type { FotoDeColecciones } from "../../core/fotoDeColecciones.js";
 import type { InformeDeDispositivos, NombreDeHerramienta, Receta } from "../../core/dispositivos.js";
+import type { EleccionDeFramework, OpcionDeInstalacion } from "../../core/frameworkLocal.js";
 import type { AjustesDeDispositivos } from "../../core/settings.js";
 import type { Acto, ConsumoDeTurno, ConsumoPorModelo } from "../../core/actos.js";
 import { puedeReencolar, textoParaReencolar, type EsperaPorPersona, type Tarea } from "../../core/tareas.js";
@@ -150,6 +151,7 @@ export interface SesionDelCable {
  */
 export const FASES_DEL_LANZAMIENTO = [
   "comprobando",
+  "comparando",
   "empaquetando",
   "subiendo",
   "reiniciando",
@@ -764,6 +766,24 @@ export type MensajeAlCliente =
       motivo?: string;
     }
   /**
+   * Las versiones del framework de Android que se pueden instalar en un aparato: las de la copia
+   * local primero (la preferida marcada) y, con credencial de byXOne, las del catálogo que no se
+   * tengan. Va a TODOS los clientes, como `instalacion`: la máquina y su copia local son de todos.
+   * `motivoDelCatalogo` dice por qué no viene el catálogo (sin credencial, sin red…): ausente es
+   * que viene. Ninguna URL viaja: la elección vuelve como sha o id de fichero, y el servidor solo
+   * acepta lo que sirvió aquí.
+   */
+  | {
+      clase: "frameworks";
+      serie: string;
+      opciones: OpcionDeInstalacion[];
+      motivoDelCatalogo?: string;
+      /** La versión que el aparato tiene ahora (`versionName`). Ausente = no consta o no lo tiene. */
+      instalada?: string;
+      /** Medido, y el aparato NO tiene el framework. Ausente con `instalada` ausente = no se pudo leer. */
+      sinFramework?: true;
+    }
+  /**
    * El veredicto de «¿se puede lanzar la app del proyecto abierto, en su dispositivo?».
    *
    * **Va a la consola que lo PIDIÓ, no a todos los clientes** — la regla contraria a
@@ -796,6 +816,17 @@ export type MensajeAlCliente =
        * y en `sesiones[].dispositivo`. Ausente = ninguno elegido, o uno que ya no está.
        */
       dispositivo?: DispositivoElegido;
+      /**
+       * El dispositivo no tiene el framework (`framework-ausente`): como DATO, para que la pestaña
+       * ponga «Instalar framework» al lado de la frase sin deducirlo del texto.
+       */
+      sinFramework?: true;
+      /**
+       * El aparato TIENE el framework y hay uno posterior por números (`actualizacionDisponible`), en la
+       * copia local o en la última foto del catálogo: la pestaña pone «Actualizar framework». Ausente =
+       * no hay ninguno más nuevo, o no se sabe; nunca «está al día» afirmado.
+       */
+      frameworkMasNuevo?: { instalada: string; titulo: string };
       /**
        * CUÁNDO se midió esto. Un veredicto sin fecha es una promesa sin fecha: el framework se
        * mide al conectar y al pulsar «volver a mirar», así que un «todo listo» de hace media
@@ -1709,6 +1740,14 @@ export type MensajeDelCliente =
   | { clase: "crearEmulador"; nombre: string; base?: string; conDatos?: boolean }
   /** Elimina un AVD por su nombre: el servidor lo comprueba contra SU medida (existe, no es el único, está apagado). */
   | { clase: "eliminarEmulador"; avd: string }
+  /** «¿Qué framework se puede instalar en este aparato?» La respuesta es `frameworks`. */
+  | { clase: "frameworks"; serie: string }
+  /**
+   * «Instala el framework en este aparato.» La serie se comprueba contra la última medida y la
+   * elección contra la última lista servida (`frameworks`); va por el cerrojo de la máquina como
+   * una receta (`instalacion` con `receta: "instalar-framework"`). `bajarVersion` es `adb install -d`.
+   */
+  | { clase: "instalarFramework"; serie: string; eleccion: EleccionDeFramework; bajarVersion?: boolean }
   /**
    * Lo de UN AVD: el puerto local del túnel de hotswap y si arranca sin ventana. El AVD tiene
    * que estar en la última medida y el puerto no puede ser de otro; la respuesta es el
@@ -2059,7 +2098,14 @@ export type MensajeDelCliente =
    * `lanzarApp` sobre un proyecto que ya no cumple se contesta con un `lanzamiento` en `fallo`,
    * no lanzando a ciegas.
    */
-  | { clase: "lanzarApp" }
+  | {
+      clase: "lanzarApp";
+      /**
+       * Qué se copia antes de relanzar. Ausente es `todo` («Ejecutar», «Copiar todos los
+       * ficheros»); `modificados` compara antes con el aparato. Otro valor se rechaza con 400.
+       */
+      modo?: "todo" | "modificados";
+    }
   /**
    * Para el lanzamiento en curso. Es parar ESTO, no cerrar nada — la misma distinción que
    * `cancelar` con un turno: el recorrido queda en `cancelada` con lo que ya se había contado.
