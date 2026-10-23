@@ -218,8 +218,9 @@ async function correrReal(opciones: OpcionesRun, escribir: Escribir): Promise<nu
   let bitacora = null as Awaited<ReturnType<typeof sesion.turno>>["bitacora"] | null;
   let cambios: Cambio[];
   let cortadoPorTope = false;
+  let falloDelMotor: string | undefined;
   try {
-    ({ bitacora, cambios, cortadoPorTope } = await sesion.turno(opciones.peticion, piel));
+    ({ bitacora, cambios, cortadoPorTope, falloDelMotor } = await sesion.turno(opciones.peticion, piel));
   } catch (e) {
     if (!(e instanceof CorteSinHumano)) throw e;
     cambios = await instantanea.cambios();
@@ -273,5 +274,11 @@ async function correrReal(opciones: OpcionesRun, escribir: Escribir): Promise<nu
   // sin resolver y nada se aplicó. Sin esta línea caía al camino normal y salía 0 — o sea,
   // CI habría leído como éxito un turno que se quedó a medias.
   if (cortadoPorTope) return 2;
+  // El motor caído (un 429, la red) devuelve el turno «limpio» con nada hecho: sin esta línea salía 0
+  // y CI lo leía como bien (medido el 23-10-2026). Es un fallo del ENTORNO, no del proyecto.
+  if (falloDelMotor !== undefined) {
+    escribir("\n(el motor falló a mitad del turno: es un fallo del entorno, no del proyecto; salida 70)\n");
+    return 70;
+  }
   return bitacora!.corrio("bloqueado") ? 1 : 0;
 }
