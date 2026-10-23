@@ -143,6 +143,13 @@ export interface ResultadoDeTurno {
    */
   comprobacionesVisuales?: string[];
   /**
+   * Lo que el agente DICE que hizo: su respuesta final. Va al juez como AFIRMACIÓN, nunca como hecho (lo medido manda).
+   * Medido en una tarea de Windows (botón Salir en verde): el juez dictó rojo porque «no consta» que Entrar se comprobara
+   * y tomó por defecto nuevo un texto fino que ya lo era; el agente lo había dicho todo y el juez no lo veía.
+   * Ausente = no hubo respuesta (o el motor no la da).
+   */
+  respuestaFinal?: string;
+  /**
    * Los hallazgos del turno, si el verificador corrió. Es lo que el informe del verificador
    * ya declara que viaja «al ejecutor como brief, al juez como hecho»
    * (`core/ports.ts#InformeVerificacion`).

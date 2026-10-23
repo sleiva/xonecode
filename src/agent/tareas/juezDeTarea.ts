@@ -304,6 +304,21 @@ const parrafoDeLoEscrito = (caso: CasoDeJuez): string[] => {
   ];
 };
 
+/** Cuánto de la respuesta del agente ve el juez: lo bastante para lo que comprobó y lo que no tocó, no un informe entero. */
+export const TOPE_DE_RESPUESTA_AL_JUEZ = 3000;
+
+/**
+ * Lo que el agente DICE que hizo, marcado como AFIRMACIÓN (`CasoDeJuez.respuestaDelAgente`). Medido en una tarea real: sin
+ * ello el juez dictó rojo por cosas que el agente había comprobado o que no había tocado. No es contenido de ficheros: es
+ * su informe, y el criterio 3 dice que lo medido gana sobre él.
+ */
+const parrafoDeLoQueDiceElAgente = (caso: CasoDeJuez): string[] => {
+  const r = caso.respuestaDelAgente?.trim();
+  if (r === undefined || r === "") return [];
+  const recortada = r.length > TOPE_DE_RESPUESTA_AL_JUEZ ? `${r.slice(0, TOPE_DE_RESPUESTA_AL_JUEZ)}…` : r;
+  return ["LO QUE DICE EL AGENTE que hizo (AFIRMADO, no medido: contrástalo con lo de arriba y lo de abajo):", recortada, ""];
+};
+
 /** Cuántos planes se nombran: los más recientes, que son los de esta tarea; los demás se cuentan. */
 export const TOPE_DE_PLANES_PARA_EL_JUEZ = 6;
 
@@ -364,13 +379,20 @@ export const CRITERIOS_DEL_JUEZ: readonly string[] = [
   "   explica (otra pantalla, otra funcionalidad) es una DESVIACIÓN, no una mejora: dilo como hallazgo. No es «rojo» por",
   "   sí solo, salvo que el encargo lo prohibiera; lo que sostiene lo pedido (estilos, scripts o recursos de esa",
   "   pantalla) no es desviación.",
-  "3. LO MEDIDO MANDA. Si un plan, un estado o una afirmación dicen una cosa y el verificador o una comprobación visual",
-  "   dicen otra, gana la medida. Lo que nadie midió no se da por hecho.",
+  "3. LO MEDIDO MANDA. El verificador y `comparar_capturas` son MEDIDAS: si un plan, un estado o lo que dice el agente",
+  "   chocan con ellas, gana la medida. El CRÍTICO VISUAL (`xone_critica_visual`, el crítico de pantalla) es una OPINIÓN:",
+  "   solo pesa para el «rojo» si toca algo que el ENCARGO pide, y eso depende de su ALCANCE. En un encargo PUNTUAL",
+  "   (cambiar un botón, un color, un texto) solo cuenta lo de ese elemento; en uno AMPLIO (rediseñar una pantalla contra",
+  "   su maqueta) la pantalla entera es el encargo y lo que el crítico vea en ella sí cuenta. Lo demás es observación. Y",
+  "   lo que este trabajo NO tocó y ya era así —un icono que no se cambió, un estilo que ya estaba— no es un defecto suyo",
+  "   aunque se vea en la captura.",
   "4. COHERENCIA. Si dos hechos de arriba se contradicen (una tarea del plan «hecha» con su comprobación en contra),",
   "   dilo: es un hallazgo aunque no sepas cuál de los dos está mal.",
   "5. SE PUEDE USAR. Un ERROR del verificador en un fichero que este trabajo tocó deja la app sin poder usarse: «rojo».",
   "6. ACABADO. Lo que el encargo cubre y el plan sigue dando por «pendiente» no está terminado.",
   "Cuántos ficheros se cambiaron no es mérito: muchos cambios no hacen un «verde», y pocos y justos no son un «rojo».",
+  "Lo que DICE el agente (si va arriba) no es una medida: úsalo para saber qué se comprobó y por qué algo no es defecto",
+  "suyo, y créelo solo donde nada medido lo contradiga.",
 ];
 
 /**
@@ -397,6 +419,7 @@ function promptDelJuez(caso: CasoDeJuez, planes: readonly PlanEnDisco[]): string
     ...parrafoDeLosPlanes(planes),
     "",
     ...parrafoDelPlanDeLaTarea(caso),
+    ...parrafoDeLoQueDiceElAgente(caso),
     ...parrafoDelVerificador(caso),
     "",
     ...parrafoDeLoVisual(caso),

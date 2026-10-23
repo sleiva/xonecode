@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   CRITERIOS_DEL_JUEZ,
+  TOPE_DE_RESPUESTA_AL_JUEZ,
   ErrorDelJuezDeTarea,
   PAPEL_DEL_JUEZ,
   TOPE_DE_RESUMEN,
@@ -120,6 +121,31 @@ describe("el prompt lleva los HECHOS y nunca contenido de ficheros", () => {
     expect(prompt).toContain("COLL_MISSING_PROGID");
     // La línea es un dato del hallazgo, no una ruta de la máquina.
     expect(prompt).toContain(":3");
+  });
+
+  // Soporte de una tarea en Windows (botón Salir en verde, juez en ROJO): el crítico visual opinó de un icono que no se
+  // tocó y de un texto que ya era fino, y el juez no veía que el agente había comprobado Entrar.
+  it("el crítico visual es OPINIÓN y pesa según el ALCANCE del encargo; lo que dice el agente va como AFIRMADO y recortado", async () => {
+    let prompt = "";
+    const juez = crearJuezDeTarea({
+      invocar: async (_papel, p) => {
+        prompt = p;
+        return JSON.stringify({ veredicto: "verde", resumen: "ok" });
+      },
+    });
+    const larga = "x".repeat(TOPE_DE_RESPUESTA_AL_JUEZ + 50);
+    await juez.juzgar({ encargo: "Salir en verde", raiz: RAIZ, autorizadas: [], cambiados: ["default.css"], respuestaDelAgente: `Entrar no cambió. ${larga}` });
+    const criterios = CRITERIOS_DEL_JUEZ.join("\n");
+    expect(criterios).toContain("es una OPINIÓN");
+    expect(criterios).toMatch(/PUNTUAL[\s\S]*solo cuenta lo de ese elemento/);
+    expect(criterios).toMatch(/AMPLIO[\s\S]*la pantalla entera es el encargo/);
+    expect(criterios).toContain("lo que este trabajo NO tocó y ya era así");
+    expect(prompt).toContain("LO QUE DICE EL AGENTE que hizo (AFIRMADO, no medido");
+    expect(prompt).toContain("Entrar no cambió.");
+    expect(prompt).not.toContain(larga);
+    // Sin respuesta, el párrafo no aparece.
+    await juez.juzgar({ encargo: "x", raiz: RAIZ, autorizadas: [] });
+    expect(prompt).not.toContain("LO QUE DICE EL AGENTE");
   });
 
   it("lleva los criterios EN ORDEN, antes del formato de la respuesta, y la conformidad no es «rojo» por sí sola", async () => {

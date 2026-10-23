@@ -163,6 +163,7 @@ describe("el ejecutor real DEVUELVE lo que el turno informó", () => {
       bloqueantesDesfasados: ["«pend.» de la maqueta NO está en el aparato"],
       pantallasNoEncontradas: ["Menu Listado Entregas"],
       comprobacionesVisuales: ["comparar_capturas sobre /artefactos/c.png: distancia vertical 4%"],
+      respuestaFinal: "Salir ya es verde; Entrar no cambió (lo vi en la captura).",
       hallazgos: [{ code: "COLL_MISSING_PROGID", severidad: "error" as const, mensaje: "falta progid" }],
       preexistentes: 2,
       motivoSinVerificar: "no está xone-simulator en el PATH",

@@ -437,6 +437,13 @@ describe("una sesión con el motor TrueForge", () => {
     expect(r.pendientes).toBe(1);
   }, 20_000);
 
+  // Para el juez de la tarea: lo que el agente DICE que hizo (soporte de Windows: rojo por lo que sí había comprobado).
+  it("el resultado del turno lleva la respuesta final del agente; sin respuesta, no lleva el campo", async () => {
+    const { m } = modelosConGuion([[new AIMessageChunk({ content: "Salir ya es verde; Entrar no cambió." })]]);
+    const s = await abrirSesionTrueforge({ raiz: proyecto(), modelos: m, entorno: ENTORNO, skills: CATALOGO });
+    expect((await s.turno("pon Salir en verde", piel().p)).respuestaFinal).toBe("Salir ya es verde; Entrar no cambió.");
+  }, 20_000);
+
   it("en una TAREA de fondo (`trabajoSinPersona`) el hijo escribe sin parar el turno ni preguntar a nadie", async () => {
     const raiz = proyecto();
     let preguntas = 0;

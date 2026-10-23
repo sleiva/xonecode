@@ -3579,6 +3579,22 @@ describe("el MOTOR cae a mitad del turno", () => {
  * Petición suya (21-10-2026): las tareas de fondo con plan actualizan su estado. Medido en Maset: seis tareas de una noche
  * y sus planes con 0 casillas marcadas. Al cerrar, el juez dice el estado de las tareas del plan y el HARNESS lo escribe.
  */
+/** Soporte de una tarea en Windows (botón Salir en verde): el juez dictó rojo por lo que el agente SÍ había comprobado. */
+describe("el juez recibe lo que el agente DICE que hizo", () => {
+  it("la respuesta final del turno llega al caso del juez como `respuestaDelAgente`", async () => {
+    const juez = juezQueDice({ veredicto: "verde", resumen: "hecho" });
+    const { disco } = discoDeMentira([TAREA()]);
+    const p = proyectoDeMentira();
+    const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE, juez, disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 1 });
+    await corredor.arrancar();
+    await corredor.asentar();
+    p.acabar({ verificador: "verde", pendientes: 0, respuestaFinal: "Salir ya es verde; Entrar no cambió (captura)." });
+    await corredor.asentar();
+    expect(juez.casos[0]!.respuestaDelAgente).toBe("Salir ya es verde; Entrar no cambió (captura).");
+    await corredor.parar();
+  });
+});
+
 describe("al cerrar, el plan de la tarea se actualiza con lo que dice el juez", () => {
   it("el juez recibe el plan; su TASKS.md queda con el estado; la tarea guarda el veredicto de siempre", async () => {
     const dir = mkdtempSync(join(tmpdir(), "xc-plan-"));

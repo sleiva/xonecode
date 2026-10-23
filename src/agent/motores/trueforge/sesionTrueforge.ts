@@ -2807,6 +2807,8 @@ export async function abrirSesionTrueforge(
         // La pregunta que deja ESTE turno: la de un turno anterior se consume al empezar (`enEspera`).
         ...(preguntaEnEspera === undefined ? {} : { preguntaPendiente: consultaDe(preguntaEnEspera.args).pregunta }),
         ...(falloDelMotorDelTurno === undefined ? {} : { falloDelMotor: falloDelMotorDelTurno }),
+        // Lo que el agente DICE que hizo, para el juez de la tarea (`CasoDeJuez.respuestaDelAgente`): afirmado, no medido.
+        ...(respuestaDeLaPasada.trim() === "" ? {} : { respuestaFinal: respuestaDeLaPasada }),
         ...(comprobacionesDelTurno.length === 0 ? {} : { comprobacionesVisuales: comprobacionesDelTurno }),
         ...(pantallasNoEncontradasDelTurno.length === 0 ? {} : { pantallasNoEncontradas: [...pantallasNoEncontradasDelTurno] }),
         // Lo que su respuesta final EXPLICA (lo nombra) no es crítico: va aparte (`omisionExplicada`).

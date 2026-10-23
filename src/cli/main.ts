@@ -768,6 +768,7 @@ export function crearEjecutorReal(
       ...(resultado.bloqueantesDesfasados === undefined ? {} : { bloqueantesDesfasados: resultado.bloqueantesDesfasados }),
       ...(resultado.pantallasNoEncontradas === undefined ? {} : { pantallasNoEncontradas: resultado.pantallasNoEncontradas }),
       ...(resultado.comprobacionesVisuales === undefined ? {} : { comprobacionesVisuales: resultado.comprobacionesVisuales }),
+      ...(resultado.respuestaFinal === undefined ? {} : { respuestaFinal: resultado.respuestaFinal }),
       ...(resultado.hallazgos === undefined ? {} : { hallazgos: resultado.hallazgos }),
       ...(resultado.motivoSinVerificar === undefined
         ? {}

@@ -535,6 +535,8 @@ export interface CasoDeJuez {
   /** Lo que dieron las comprobaciones VISUALES del turno, medido por el harness (`ResultadoDeTurno.comprobacionesVisuales`).
    *  Ausente = no hubo ninguna: y entonces «no consta» sí es la verdad. */
   comprobacionesVisuales?: readonly string[];
+  /** Lo que el agente DICE que hizo (`ResultadoDeTurno.respuestaFinal`): una AFIRMACIÓN que se contrasta, no un hecho. */
+  respuestaDelAgente?: string;
   /**
    * El PLAN de esta tarea, si tiene (`agent/tareas/planesDelProyecto.ts#planDeLaTarea`): su carpeta y sus tareas, con lo que
    * ya dicen. Con él el juez dice qué tareas del plan cumplió (`DictamenDelJuez.tareasDelPlan`) y el harness lo escribe.

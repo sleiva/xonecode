@@ -946,6 +946,8 @@ export function crearCorredorDeTareas(opciones: {
         // Y lo que midieron las comprobaciones visuales: sin ellas, un criterio que pide validar contra la maqueta era
         // un rojo seguro aunque se hubiera validado (medido en Maset).
         ...(medida.comprobacionesVisuales === undefined ? {} : { comprobacionesVisuales: medida.comprobacionesVisuales }),
+        // Y lo que el agente DICE que hizo: sin ello el juez dictó rojo por lo que el agente había comprobado o no tocó.
+        ...(resultado?.respuestaFinal === undefined ? {} : { respuestaDelAgente: resultado.respuestaFinal }),
         // Y su PLAN, si tiene: el juez dice qué tareas del plan cumplió y el harness lo escribe (`actualizarElPlan`).
         ...(plan === undefined ? {} : { plan: { carpeta: plan.carpeta, tareas: leerTareasDelPlan(plan.texto).tareas } }),
       })
