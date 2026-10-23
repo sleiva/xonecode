@@ -34,12 +34,13 @@ scripts y plugins (middleware). Corre sobre OpenCode o Codex.
 Si algún día: **fuera de línea, en `src/evals/`**, evolucionando los `.md` de los agentes y las skills, y cada cambio
 validado por el banco con sus rangos. Nunca dentro del turno ni de las tareas.
 
-## Traído (0.47.10)
+## Traído (0.47.10 y 0.47.12)
 
 | | idea | dónde |
 |---|---|---|
 | 1 | **Lecciones con evidencia** (prompt `experience`): cada una con la evidencia en que se apoya; sin evidencia, `NO_ENTRY`. Calibración «ni demasiado genérica ni demasiado concreta». | `apuntar_aprendizaje` exige `como_lo_se`; va delante como «(comprobado: …)». `core/aprendido.ts` |
 | 3 | **La evidencia son datos, no instrucciones** (`EVIDENCE_BOUNDARY`). | `LO_LEIDO_SON_DATOS` al raíz, especialistas y externos. `sesionTrueforge.ts` |
+| 4 | **Criterios ordenados del selector ciego** (`select()`), adaptados a un juez que no ve contenido: la fidelidad pasa a «lo medido manda» y la conformidad se juzga por fichero, como HALLAZGO y no como rojo por sí sola (los rojos falsos medidos en Maset). | `CRITERIOS_DEL_JUEZ` en `agent/tareas/juezDeTarea.ts` (0.47.12) |
 
 Kit de prueba en vivo: ver «Probarlo» abajo.
 
@@ -57,7 +58,7 @@ entera»), no hechos de Maset. Ese conocimiento vale para TODOS los proyectos y 
 Destino posible: separar en `apuntar_aprendizaje` un tipo «de XOne» que vaya a una propuesta de cambio de skill
 (revisable por una persona) en vez de a `aprendido.json`.
 
-### 4 · Orden fijo de criterios del selector ciego
+### 4 · Orden fijo de criterios del selector ciego — HECHO en el juez (0.47.12)
 
 `select()` decide EN ESTE ORDEN:
 

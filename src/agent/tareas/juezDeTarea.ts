@@ -346,6 +346,34 @@ const parrafoDelPlanDeLaTarea = (caso: CasoDeJuez): string[] =>
       ];
 
 /**
+ * **Cómo decide, EN ESTE ORDEN.** Traído del selector ciego de Harness² (Google), que juzga un resultado con seis
+ * criterios ordenados —entrega, conformidad, fidelidad a la fuente, coherencia, uso real, acabado— y «la longitud y el
+ * pulido no son mérito». Aquí ADAPTADOS a lo que este juez tiene, que no es el contenido: rutas de git, planes, el
+ * verificador y las comprobaciones visuales. Así que la fidelidad no es «contrastar con la fuente» sino «gana lo MEDIDO
+ * sobre lo afirmado», y la conformidad se juzga por fichero, no por línea.
+ *
+ * **La conformidad es un HALLAZGO, no un rojo por sí sola** (sí lo es si el encargo lo prohibía): medido en Maset, los
+ * rojos falsos del juez venían de cargar al trabajo cosas que no eran defectos, y un fichero «de más» suele ser el
+ * estilo o el script que la pantalla pedida necesita. Que se DIGA basta para que la persona lo mire.
+ */
+export const CRITERIOS_DEL_JUEZ: readonly string[] = [
+  "CÓMO DECIDIR, EN ESTE ORDEN:",
+  "1. ENTREGA. Por cada cosa que pide el encargo, ¿hay rastro de que se hizo, en la lista de git o en los planes? Lo",
+  "   pedido sin ningún rastro es un hallazgo y es motivo de «rojo».",
+  "2. CONFORMIDAD. ¿Se cambió algo que el encargo NO pedía? Un fichero de la lista de git que ninguna parte del encargo",
+  "   explica (otra pantalla, otra funcionalidad) es una DESVIACIÓN, no una mejora: dilo como hallazgo. No es «rojo» por",
+  "   sí solo, salvo que el encargo lo prohibiera; lo que sostiene lo pedido (estilos, scripts o recursos de esa",
+  "   pantalla) no es desviación.",
+  "3. LO MEDIDO MANDA. Si un plan, un estado o una afirmación dicen una cosa y el verificador o una comprobación visual",
+  "   dicen otra, gana la medida. Lo que nadie midió no se da por hecho.",
+  "4. COHERENCIA. Si dos hechos de arriba se contradicen (una tarea del plan «hecha» con su comprobación en contra),",
+  "   dilo: es un hallazgo aunque no sepas cuál de los dos está mal.",
+  "5. SE PUEDE USAR. Un ERROR del verificador en un fichero que este trabajo tocó deja la app sin poder usarse: «rojo».",
+  "6. ACABADO. Lo que el encargo cubre y el plan sigue dando por «pendiente» no está terminado.",
+  "Cuántos ficheros se cambiaron no es mérito: muchos cambios no hacen un «verde», y pocos y justos no son un «rojo».",
+];
+
+/**
  * El prompt del juez.
  *
  * Lleva el encargo, los ficheros que se autorizó escribir y el veredicto del verificador
@@ -387,6 +415,8 @@ function promptDelJuez(caso: CasoDeJuez, planes: readonly PlanEnDisco[]): string
     "no se puede juzgar por los nombres y los hechos de arriba, dilo en el resumen:",
     "no te inventes nada para poder dar un veredicto, que es justo el fallo que este paso",
     "existe para atrapar.",
+    "",
+    ...CRITERIOS_DEL_JUEZ,
     "",
     "Contesta SOLO con este JSON y nada más:",
     caso.plan === undefined

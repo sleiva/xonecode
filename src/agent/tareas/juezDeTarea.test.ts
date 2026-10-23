@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  CRITERIOS_DEL_JUEZ,
   ErrorDelJuezDeTarea,
   PAPEL_DEL_JUEZ,
   TOPE_DE_RESUMEN,
@@ -119,6 +120,22 @@ describe("el prompt lleva los HECHOS y nunca contenido de ficheros", () => {
     expect(prompt).toContain("COLL_MISSING_PROGID");
     // La línea es un dato del hallazgo, no una ruta de la máquina.
     expect(prompt).toContain(":3");
+  });
+
+  it("lleva los criterios EN ORDEN, antes del formato de la respuesta, y la conformidad no es «rojo» por sí sola", async () => {
+    let prompt = "";
+    const juez = crearJuezDeTarea({
+      invocar: async (_papel, p) => {
+        prompt = p;
+        return JSON.stringify({ veredicto: "verde", resumen: "ok" });
+      },
+    });
+    await juez.juzgar({ encargo: "añade una colección Clientes", raiz: RAIZ, autorizadas: [], cambiados: ["Clientes.xne"] });
+    expect(prompt).toContain(CRITERIOS_DEL_JUEZ.join("\n"));
+    const orden = ["1. ENTREGA", "2. CONFORMIDAD", "3. LO MEDIDO MANDA", "4. COHERENCIA", "5. SE PUEDE USAR", "6. ACABADO"].map((c) => prompt.indexOf(c));
+    expect(orden.every((i, n) => i >= 0 && (n === 0 || i > orden[n - 1]!))).toBe(true);
+    expect(prompt.indexOf("1. ENTREGA")).toBeLessThan(prompt.indexOf("Contesta SOLO con este JSON"));
+    expect(CRITERIOS_DEL_JUEZ.join(" ")).toMatch(/No es «rojo» por\s+sí solo/);
   });
 
   /**

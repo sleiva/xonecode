@@ -37,6 +37,8 @@ corre solo y escribe sin aprobación. Cuatro estados; `requiere-atencion` = **es
   recortado a la traza de errores (`juezDeTarea#juzgar`).
 - **Lo que GASTÓ la tarea** (`Tarea.gasto`, `core/actos.ts#gastoEntre`): lo que creció el acumulado de su sesión en
   cada pasada, sumado; no el acumulado entero (una continuación comparte el hilo). Finalizadas y `## Gasto` del cierre.
+- **El juez decide con criterios EN ORDEN** (`CRITERIOS_DEL_JUEZ`, de Harness²): entrega, conformidad, lo medido manda,
+  coherencia, se puede usar, acabado. Un fichero que el encargo no explica es HALLAZGO, no rojo por sí solo.
 - **El juez ve los PLANES**, que git no ve (`planesDelProyecto.ts`, por omisión en `crearJuezDeTarea`): carpeta,
   ficheros y antigüedad, nunca contenido. Sus hallazgos se cortan por palabra con «…».
 - **Al juez solo los ERRORES del verificador** (`#parrafoDelVerificador`), y las comprobaciones
