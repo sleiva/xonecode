@@ -17,6 +17,38 @@ export type PeticionDeAprendido =
 /** Lo que contesta: el listado, el texto de una oculta, o la negativa del servidor con su motivo. */
 export type RespuestaDeAprendido = { listado: ListadoDeAprendido } | { texto: string } | { motivo: string };
 
+/**
+ * Un texto con `código` partido en trozos: los de entre dos acentos graves son código. Uno suelto, sin pareja, se queda
+ * como texto con su acento: lo que el agente escribió no se pierde. Sin HTML: React lo escapa.
+ */
+export function trozosConCodigo(texto: string): { codigo: boolean; texto: string }[] {
+  const partes = texto.split("`");
+  // Con un número PAR de partes hay un acento sin cerrar: el último trozo vuelve a llevarlo y va como texto.
+  const sinCerrar = partes.length % 2 === 0;
+  const trozos = partes.map((t, i) => ({ codigo: i % 2 === 1, texto: t }));
+  if (sinCerrar) {
+    const ultimo = trozos.pop()!;
+    trozos.push({ codigo: false, texto: "`" + ultimo.texto });
+  }
+  return trozos.filter((t) => t.texto !== "");
+}
+
+function ConCodigo({ texto }: { texto: string }) {
+  return (
+    <>
+      {trozosConCodigo(texto).map((t, i) =>
+        t.codigo ? (
+          <code key={i} className={estilos.codigo}>
+            {t.texto}
+          </code>
+        ) : (
+          <span key={i}>{t.texto}</span>
+        )
+      )}
+    </>
+  );
+}
+
 interface Medida {
   proyecto: string;
   respondida: boolean;
@@ -238,13 +270,19 @@ export function LoAprendido({
                     <div className={estilos.cabecera}>
                       <div className={estilos.cuerpo}>
                         <div className={estilos.titulo}>
-                          <h3>{e.tema}</h3>
+                          <h3>
+                            <ConCodigo texto={e.tema} />
+                          </h3>
                           <span className={estilos.pastilla} data-alcance={alcance}>
                             {alcance === "proyecto" ? "proyecto" : "XOne"}
                           </span>
                         </div>
-                        <p className={estilos.texto}>{texto ?? "•••••• oculto: puede llevar una clave"}</p>
-                        {e.comoLoSe === undefined ? null : <p className={estilos.comprobado}>Comprobado: {e.comoLoSe}</p>}
+                        <p className={estilos.texto}>{texto === undefined ? "•••••• oculto: puede llevar una clave" : <ConCodigo texto={texto} />}</p>
+                        {e.comoLoSe === undefined ? null : (
+                          <p className={estilos.comprobado}>
+                            Comprobado: <ConCodigo texto={e.comoLoSe} />
+                          </p>
+                        )}
                         <span className={estilos.meta}>
                           {[e.quien, selloDeFecha(e.cuando) ?? e.cuando].filter((t) => t !== undefined).join(" · ")}
                         </span>

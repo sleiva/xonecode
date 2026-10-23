@@ -224,3 +224,12 @@
   border: 0.5px solid var(--dsw-alias-state-error-secondary);
   color: var(--dsw-alias-state-error-primary);
 }
+
+/* El `código` que escribe el agente (`trozosConCodigo`): monoespaciado, sobre la capa de debajo. */
+.codigo {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--dsw-alias-bg-layer-1);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.92em;
+}

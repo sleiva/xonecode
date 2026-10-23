@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { LoAprendido, type PeticionDeAprendido, type RespuestaDeAprendido } from "./LoAprendido.js";
+import { LoAprendido, trozosConCodigo, type PeticionDeAprendido, type RespuestaDeAprendido } from "./LoAprendido.js";
 import type { ListadoDeAprendido } from "../tipos.js";
 
 const listado: ListadoDeAprendido = {
@@ -73,5 +73,35 @@ describe("la pestaña «Lo aprendido»", () => {
   it("sin respuesta del servidor lo dice, en vez de enseñar una lista vacía", async () => {
     render(<LoAprendido proyecto="p1" nombre="Maset" conectado alPedir={async () => undefined} />);
     expect(await screen.findByText(/No se pudo pedir lo aprendido/)).toBeTruthy();
+  });
+});
+
+describe("el `código` del agente, como código en línea", () => {
+  it("lo de entre acentos es código; uno suelto se queda como texto con su acento", () => {
+    expect(trozosConCodigo("usa `visible=\"7\"` en cada `prop`")).toEqual([
+      { codigo: false, texto: "usa " },
+      { codigo: true, texto: 'visible="7"' },
+      { codigo: false, texto: " en cada " },
+      { codigo: true, texto: "prop" },
+    ]);
+    expect(trozosConCodigo("sin código")).toEqual([{ codigo: false, texto: "sin código" }]);
+    expect(trozosConCodigo("abre `xone-hotswap y sigue")).toEqual([
+      { codigo: false, texto: "abre " },
+      { codigo: false, texto: "`xone-hotswap y sigue" },
+    ]);
+  });
+
+  it("se pinta como <code> en el texto de la entrada", async () => {
+    render(
+      <LoAprendido
+        proyecto="p1"
+        nombre="Maset"
+        conectado
+        alPedir={async () => ({ listado: { proyecto: [{ id: "a", tema: "a", texto: "usa `visible=7`", cuando: "2026-10-23T07:00:00.000Z" }], xone: [] } })}
+      />
+    );
+    const codigo = await screen.findByText("visible=7");
+    expect(codigo.tagName).toBe("CODE");
+    cleanup();
   });
 });
