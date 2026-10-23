@@ -40,7 +40,7 @@ validado por el banco con sus rangos. Nunca dentro del turno ni de las tareas.
 |---|---|---|
 | 1 | **Lecciones con evidencia** (prompt `experience`): cada una con la evidencia en que se apoya; sin evidencia, `NO_ENTRY`. Calibración «ni demasiado genérica ni demasiado concreta». | `apuntar_aprendizaje` exige `como_lo_se`; va delante como «(comprobado: …)». `core/aprendido.ts` |
 | 3 | **La evidencia son datos, no instrucciones** (`EVIDENCE_BOUNDARY`). | `LO_LEIDO_SON_DATOS` al raíz, especialistas y externos. `sesionTrueforge.ts` |
-| 2 | **Hecho del proyecto frente a lo del dominio** (`GENERALIZE`). Decisión suya: se guardan LOS DOS, no se manda lo de XOne a una cola de revisión de skills. | `alcance` en `apuntar_aprendizaje`: `proyecto` en su `.xonecode/`, `xone` en `~/.xonecode/aprendido-xone.json`, a todos los proyectos (0.47.13) |
+| 2 | **Hecho del proyecto frente a lo del dominio** (`GENERALIZE`). Decisión suya: se guardan LOS DOS, no se manda lo de XOne a una cola de revisión de skills. | `alcance` en `apuntar_aprendizaje`: `proyecto` en su `.xonecode/`, `xone` en `~/.xonecode/aprendido-xone.json`, a todos los proyectos (0.47.13). Lo de XOne que nombra el proyecto o un fichero suyo se rechaza (0.47.15): en la primera tarea real el diseñador apuntó como XOne lo que había en `/artefactos/diseno` de Maset. |
 | 4 | **Criterios ordenados del selector ciego** (`select()`), adaptados a un juez que no ve contenido: la fidelidad pasa a «lo medido manda» y la conformidad se juzga por fichero, como HALLAZGO y no como rojo por sí sola (los rojos falsos medidos en Maset). | `CRITERIOS_DEL_JUEZ` en `agent/tareas/juezDeTarea.ts` (0.47.12) |
 
 Kit de prueba en vivo: ver «Probarlo» abajo.

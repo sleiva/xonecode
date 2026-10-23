@@ -4,6 +4,8 @@ import {
   conAprendizaje,
   interpretarAprendido,
   motivoDeAprendizajeInaceptable,
+  motivoDeXoneConDatosDelProyecto,
+  nombresDelProyecto,
   TOPE_DE_APRENDIZAJES,
   TOPE_DE_COMO_LO_SE,
   TOPE_DE_TEXTO,
@@ -84,5 +86,19 @@ describe("lo aprendido en un proyecto", () => {
     expect(USO_DE_APUNTAR_APRENDIZAJE).toContain("`xone`");
     expect(USO_DE_APUNTAR_APRENDIZAJE).toContain("nunca usuarios, claves ni nombres de este proyecto");
     expect(USO_DE_APRENDIDO_EXTERNO).toContain("«XOne:»");
+  });
+
+  it("lo de XOne que NOMBRA el proyecto, una colección o un fichero suyo se rechaza: es de este proyecto", () => {
+    const nombres = nombresDelProyecto("Maset", ["EntryPoint.xne", "MenuLiquidacionesGeneral.xne", "icons/liq_card_bg.svg", "app.xml", "default.css"]);
+    // Medido el 23-10-2026: el diseñador apuntó como XOne lo que había en /artefactos/diseno de Maset.
+    expect(motivoDeXoneConDatosDelProyecto({ tema: "qué hay ahora en /artefactos/diseno", texto: "es la de LIQUIDACIONES (MenuLiquidacionesGeneral)", comoLoSe: "lo leí" }, nombres))
+      .toContain("«MenuLiquidacionesGeneral»");
+    expect(motivoDeXoneConDatosDelProyecto({ tema: "t", texto: "en Maset el menú", comoLoSe: "x" }, nombres)).toContain("«Maset»");
+    expect(motivoDeXoneConDatosDelProyecto({ tema: "t", texto: "x", comoLoSe: "lo vi en EntryPoint.xne" }, nombres)).toContain("«EntryPoint»");
+    expect(motivoDeXoneConDatosDelProyecto({ tema: "t", texto: "usa icons/liq_card_bg.svg", comoLoSe: "x" }, nombres)).toContain("liq_card_bg");
+    // Lo de XOne de verdad pasa, y los nombres GENÉRICOS de cualquier app (app.xml, default.css) no cuentan.
+    expect(motivoDeXoneConDatosDelProyecto({ tema: "imgbk anula border-corner-radius", texto: "en un frame; el estilo en default.css y la resolución en app.xml", comoLoSe: "lo vi en el emulador" }, nombres)).toBeUndefined();
+    // Palabra entera: una colección «Menu» no casa dentro de «MenuItem» ni de «menu».
+    expect(motivoDeXoneConDatosDelProyecto({ tema: "t", texto: "el menu y el MenuItem", comoLoSe: "x" }, nombresDelProyecto("P", ["Menu.xne"]))).toBeUndefined();
   });
 });

@@ -1,6 +1,6 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 import {
@@ -10,6 +10,8 @@ import {
   FICHERO_DE_APRENDIDO_DE_XONE,
   interpretarAprendido,
   motivoDeAprendizajeInaceptable,
+  motivoDeXoneConDatosDelProyecto,
+  nombresDelProyecto,
   NOMBRE_APUNTAR_APRENDIZAJE,
   TOPE_DE_COMO_LO_SE,
   TOPE_DE_TEMA,
@@ -17,6 +19,7 @@ import {
   type Aprendizaje,
 } from "../../core/aprendido.js";
 import { NOMBRE_CARPETA } from "../config/configEnDisco.js";
+import { ficherosDelProyecto } from "../turno/ficherosDelProyecto.js";
 
 export { NOMBRE_APUNTAR_APRENDIZAJE };
 
@@ -92,6 +95,11 @@ export function crearApuntarAprendizaje(donde: { raiz: string; quien: string; ah
     async ({ tema, texto, como_lo_se: comoLoSe, alcance }: z.infer<typeof ESQUEMA>) => {
       const motivo = motivoDeAprendizajeInaceptable({ tema, texto, comoLoSe });
       if (motivo !== undefined) return `No se apunta: ${motivo}.`;
+      // Lo de XOne cruza de un proyecto a otro: si nombra algo de ESTE, no es de XOne (`motivoDeXoneConDatosDelProyecto`).
+      if (alcance === "xone") {
+        const ajeno = motivoDeXoneConDatosDelProyecto({ tema, texto, comoLoSe }, nombresDelProyecto(basename(donde.raiz), ficherosDelProyecto(donde.raiz)));
+        if (ajeno !== undefined) return `No se apunta como XOne: ${ajeno}.`;
+      }
       const nuevo: Aprendizaje = { tema, texto, comoLoSe, cuando: (donde.ahora?.() ?? new Date()).toISOString(), quien: donde.quien };
       try {
         if (alcance === "xone") {

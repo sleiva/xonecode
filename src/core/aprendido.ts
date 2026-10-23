@@ -21,7 +21,8 @@
  * de 12 entradas, casi todas eran de XOne en general («el alfa va primero en #AARRGGBB», «imgbk anula
  * border-corner-radius») y se quedaban encerradas en un proyecto. Es la distinción de Harness² entre el hecho del
  * espacio de trabajo y lo que vale para todo el dominio. Lo de XOne no puede llevar usuarios, claves ni nombres del
- * proyecto: cruza de un cliente a otro. Eso se pide en el texto, y no se puede comprobar en código: límite declarado.
+ * proyecto: cruza de un cliente a otro. Se pide en el texto y, en parte, se COMPRUEBA (`motivoDeXoneConDatosDelProyecto`):
+ * medido en la primera tarea real, el diseñador apuntó como XOne «qué hay ahora en /artefactos/diseno» de Maset.
  */
 
 export const FICHERO_DE_APRENDIDO = "aprendido.json";
@@ -64,6 +65,42 @@ export function motivoDeAprendizajeInaceptable(a: { tema: string; texto: string;
   if (texto.length > TOPE_DE_TEXTO) return `el texto es demasiado largo (máximo ${TOPE_DE_TEXTO} caracteres): apunta solo lo que hace falta`;
   if (comoLoSe.length > TOPE_DE_COMO_LO_SE) return `cómo lo sabes es demasiado largo (máximo ${TOPE_DE_COMO_LO_SE} caracteres): di solo cómo lo comprobaste`;
   return undefined;
+}
+
+/**
+ * Nombres de ficheros que tiene CUALQUIER app XOne, o que no dicen nada del proyecto: no cuentan como dato suyo. Las
+ * carpetas de fuentes y de base de datos tampoco (una «Inter-Bold» es de todos).
+ */
+const NOMBRES_GENERICOS = new Set(["app", "appwizard", "default", "funciones", "icon", "index", "mappings"]);
+const CARPETAS_GENERICAS = ["fonts/", "bd/"];
+
+/** Lo que identifica a ESTE proyecto: su nombre y el de sus ficheros (colecciones, iconos…), sin extensión ni carpeta. */
+export function nombresDelProyecto(nombre: string, rutas: Iterable<string>): string[] {
+  const nombres = new Set<string>([nombre]);
+  for (const ruta of rutas) {
+    const normal = ruta.replace(/\\/g, "/").replace(/^\/+/, "");
+    if (CARPETAS_GENERICAS.some((c) => normal.startsWith(c))) continue;
+    const base = normal.slice(normal.lastIndexOf("/") + 1).replace(/\.[^.]+$/, "");
+    if (base.length >= 4 && !NOMBRES_GENERICOS.has(base.toLowerCase())) nombres.add(base);
+  }
+  return [...nombres].filter((n) => n.trim() !== "");
+}
+
+const escapar = (texto: string): string => texto.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * Por qué una entrada de XOne no vale porque NOMBRA el proyecto, o `undefined`. Palabra ENTERA y con sus mayúsculas: una
+ * colección «Menu» no casa en «menu» ni en «MenuItem». No lo atrapa todo (un dato del proyecto sin nombrarlo pasa): es
+ * la guarda de lo medido, no la garantía.
+ */
+export function motivoDeXoneConDatosDelProyecto(a: { tema: string; texto: string; comoLoSe: string }, nombres: readonly string[]): string | undefined {
+  const todo = `${a.tema}\n${a.texto}\n${a.comoLoSe}`;
+  const nombrado = nombres.find((n) => new RegExp(`(?<![\\w-])${escapar(n)}(?![\\w-])`).test(todo));
+  if (nombrado === undefined) return undefined;
+  return (
+    `nombra «${nombrado}», que es de este proyecto: lo de XOne lo leen los encargos de TODOS los proyectos. Si es un ` +
+    "hecho de este proyecto, apúntalo con alcance «proyecto»; si de verdad vale para cualquier app, escríbelo sin nombrar nada suyo"
+  );
 }
 
 const claveDe = (tema: string): string => tema.trim().toLowerCase().replace(/\s+/g, " ");

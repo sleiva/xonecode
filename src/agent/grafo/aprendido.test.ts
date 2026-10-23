@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, statSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -46,5 +46,19 @@ describe("apuntar_aprendizaje, contra el disco", () => {
   it("sin alcance la tool no se ejecuta: el esquema lo exige", async () => {
     const t = crearApuntarAprendizaje({ raiz: mkdtempSync(join(tmpdir(), "xc-aprendido-")), quien: "x" });
     await expect(t.invoke({ tema: "t", texto: "x", como_lo_se: "lo probé" } as never)).rejects.toThrow();
+  });
+
+  it("lo de XOne que nombra una colección del proyecto NO se apunta en el global, y se dice cómo apuntarlo", async () => {
+    const casa = mkdtempSync(join(tmpdir(), "xc-casa-"));
+    const raiz = join(mkdtempSync(join(tmpdir(), "xc-aprendido-")), "Maset");
+    mkdirSync(raiz);
+    writeFileSync(join(raiz, "MenuLiquidacionesGeneral.xne"), "<coll/>");
+    const t = crearApuntarAprendizaje({ raiz, quien: "designer-xone", casa });
+    const r = await t.invoke({ tema: "qué hay en /artefactos/diseno", texto: "la maqueta de MenuLiquidacionesGeneral", como_lo_se: "lo leí", alcance: "xone" });
+    expect(r).toContain("No se apunta como XOne");
+    expect(r).toContain("alcance «proyecto»");
+    expect(leerAprendidoDeXone(casa)).toEqual([]);
+    // El mismo, con alcance proyecto, sí.
+    expect(await t.invoke({ tema: "qué hay en /artefactos/diseno", texto: "la maqueta de MenuLiquidacionesGeneral", como_lo_se: "lo leí", alcance: "proyecto" })).toContain("Apuntado");
   });
 });

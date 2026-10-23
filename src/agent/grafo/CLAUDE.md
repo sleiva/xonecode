@@ -165,8 +165,8 @@ Todas **reaplican `puedeLeerRuta` a mano** (una tool de xonecode no pasa por el 
   (`SECRETOS_QUE_NO_VIAJAN`). Límite: el raíz lo lee al abrir la sesión. **Solo lo COMPROBADO**: sin `como_lo_se`
   se rechaza, y va delante como «(comprobado: …)»; una entrada vieja sin él sigue valiendo (de Harness²).
   **Dos alcances, los dos se guardan**: `proyecto` (su `.xonecode/`) y `xone` (`~/.xonecode/aprendido-xone.json`, a los
-  encargos de TODOS los proyectos, en su propio bloque). Que lo de XOne no lleve datos del proyecto lo pide el texto:
-  no se comprueba en código.
+  encargos de TODOS los proyectos, en su propio bloque). Lo de XOne que NOMBRA el proyecto o un fichero suyo se rechaza
+  (`motivoDeXoneConDatosDelProyecto`, palabra entera); un dato suyo sin nombrarlo pasa: límite declarado.
 - **Lo que quien ESCRIBE debe saber va en developer y designer, no en `REGLAS_XONE`**
   (`ESCRIBIR_XONE_SIN_ROMPER`, `agentesEnDisco.ts`): `REGLAS_XONE` llega a quien no escribe y viaja en cada
   llamada. `TASKS.md` lleva `## Hallazgos`; el diseño se destila en `DISENO.md`.
