@@ -10,7 +10,7 @@ import type { ModelosPort, PeticionExterna } from "../../../core/ports.js";
 import { ConectoresEnMemoria, InstaladorDeFrameworkEnMemoria } from "../../../core/ports.js";
 import { ficheroDeDispositivo } from "../../../core/dispositivoDeSesion.js";
 import { TOPE_DE_LLAMADA_MS } from "../../../core/conectores.js";
-import { abrirSesionTrueforge, LIMITE_DE_LLAMADAS_DEL_RAIZ, LO_LEIDO_SON_DATOS, notaDeDelegacion, PLAN_PRIMERO, presupuestoDeLlamadas, textoDelBucle, TOPE_DE_ENCARGOS_AL_DESARROLLADOR } from "./sesionTrueforge.js";
+import { abrirSesionTrueforge, LIMITE_DE_LLAMADAS_DEL_RAIZ, LO_LEIDO_SON_DATOS, TRABAJO_SIN_PERSONA, notaDeDelegacion, PLAN_PRIMERO, presupuestoDeLlamadas, textoDelBucle, TOPE_DE_ENCARGOS_AL_DESARROLLADOR } from "./sesionTrueforge.js";
 import { TOPE_DE_LLAMADAS_DEL_ESPECIALISTA } from "../../turno/resumenDeContexto.js";
 import { falloDelMotorDe, topeAgotadoDe, traducirEvento } from "./eventosTrueforge.js";
 import { cargarMemoria, interpretarFoto, rutaDeMemoria } from "./memoriaTrueforge.js";
@@ -3948,6 +3948,17 @@ describe("en una tarea: el plan asignado y la captura del desarrollador", () => 
     expect(t).toContain("No leas\n  `default.css` entero");
     expect(t).toContain("Captura en el MISMO ESTADO que la maqueta");
     expect(t).toContain("Tu respuesta final nombra la ÚLTIMA captura");
+  });
+
+  // Medido en Maset (23-10-2026, «el botón Entrar en rojo»): cuatro sintaxis de `launchApplication` tras reiniciar, dos
+  // `--help`, `git` sin tenerlo; y el orquestador delegó en el device-controller, que en una tarea no arranca.
+  it("le dice que la app ya está lanzada, que no adivine sintaxis ni use git, y que lo puntual se captura recortado", () => {
+    const t = textoDelBucle(["designer-xone"], { conCritica: true, pruebaElMismo: true });
+    expect(t).toContain("la app YA está lanzada");
+    expect(t).toContain("no pruebes otra sintaxis a ciegas");
+    expect(t).toContain("No tienes `git` ni shell");
+    expect(t).toContain("`shot name=<control>`");
+    expect(TRABAJO_SIN_PERSONA).toContain("NO delegues capturas ni pruebas en");
   });
 });
 

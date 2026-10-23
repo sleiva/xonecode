@@ -69,6 +69,10 @@ Ante una discrepancia con el código, **el código manda**.
   ninguno. Sin probar aún en Windows. **Límite**: el `execute` libre del device-controller sigue lanzándolos por su nombre.
 - **Un script que NO ARRANCA se le DICE a la persona** (`core/shellDeAgente.ts#scriptQueNoArranca`, aviso grave una vez por
   turno, sin rutas): es la máquina, no el trabajo. Medido: en Windows fallaron los siete y solo lo decía el cierre del agente.
+- **La receta del aparato está en el `--help` de `xone-hotswap`** (la app ya queda lanzada tras reiniciar/recargar,
+  `screen` → `abrir` → `shot name=`), y **un `result:false` del servidor sale con 1**: medido, cuatro sintaxis de
+  `launchApplication` a ciegas porque todas salían con 0. En una tarea el orquestador no delega pruebas en el
+  device-controller ni pide comprobar la rama (`TRABAJO_SIN_PERSONA`).
 - **Quien corre sus scripts PRUEBA ÉL** (`textoDelBucle#pruebaElMismo`, cuando lleva `ejecutar_script`): recarga,
   toca, lee el log y captura sin un hijo; `comparar_capturas` entre retoques y el crítico UNA vez al cerrar cada
   pantalla. Cada `xone-recargar/desplegar-android` cuenta una vuelta. Sus scripts, sin `xone-a-utf8` (`scriptsDeTrueforge`): ese es del hijo de

@@ -119,6 +119,14 @@ if (pedidos.length === 0 || pedidos.includes("--help") || pedidos.includes("-h")
   // un viaje y deja al modelo adivinando argumentos.
   console.error(`xone-hotswap — manda comandos al servidor hotswap de la app (WebSocket).
 
+LA RECETA (lo eficiente, en este orden):
+  1. xone-reiniciar-android  (o xone-recargar-android tras editar): la app YA queda lanzada; NO hace falta launchApplication
+  2. xone-hotswap screen                                 en qué pantalla estás
+  3. xone-hotswap abrir <Colección>                      ir directo a la ventana que pruebas
+  4. xone-hotswap shot name=<control>                    capturar SOLO lo que pruebas (más barato que la pantalla)
+  Si de verdad hay que lanzarla: xone-hotswap launchApplication appName=<app>
+  Un comando que el servidor rechaza (result:false) hace salir con 1: no lo repitas con otra sintaxis a ciegas.
+
   xone-hotswap click name=MAP_BT
   xone-hotswap waitForElement name=BTN_OK timeout=5000 -- click name=BTN_OK
   xone-hotswap screen                        en qué pantalla estás (barato)
@@ -351,6 +359,8 @@ function sinBinarios(respuesta) {
   return copia;
 }
 
+/** Los comandos que el servidor contestó con `result: false`: si hay alguno, se sale con 1. */
+const rechazados = [];
 const ws = new WebSocket(process.env.HOTSWAP_URL ?? urlPorOmision(puertoPedido, seriePedida));
 let saludado = false;
 let pendiente;
@@ -366,7 +376,8 @@ function siguiente() {
   if (comando === undefined) {
     clearTimeout(reloj);
     ws.close();
-    process.exit(0);
+    if (rechazados.length > 0) console.error(`hotswap: el servidor rechazó ${rechazados.join(", ")} (result:false)`);
+    process.exit(rechazados.length > 0 ? 1 : 0);
   }
   pendiente = comando;
   rearmar();
@@ -418,6 +429,9 @@ ws.onmessage = (ev) => {
     // en el contexto del agente. Lo que se conserva es el ORDEN.
     return;
   }
+  // Un rechazo del servidor (`result: false`) cuenta: al final se sale con 1. Antes salía con 0 siempre, y el agente
+  // probaba otra sintaxis a ciegas (medido: cuatro formas de `launchApplication` seguidas, todas «bien»).
+  if (mensaje.result === false) rechazados.push(pendiente?.command ?? "?");
   console.log(JSON.stringify({ comando: pendiente?.command, ...sinBinarios(mensaje) }));
   pendiente = undefined;
   siguiente();

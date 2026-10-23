@@ -517,7 +517,9 @@ un control con el mismo nombre, es el suyo el que recibiría el toque de una per
 ## Ciclo de vida de la app
 
 ### `launchApplication` — las dos plataformas
-Lanza una app XOne por nombre. En Android limpia la caché de imágenes antes de lanzar.
+Lanza una app XOne por nombre: `xone-hotswap launchApplication appName=<app>` (el parámetro es `appName`, con esa grafía).
+En Android limpia la caché de imágenes antes de lanzar. **Normalmente no hace falta**: `xone-reiniciar-android`,
+`xone-recargar-android` y `xone-desplegar-android` ya dejan la app lanzada.
 **(iOS)** es un comando **legado**: solo por WebSocket, no por `POST /command`.
 
 ### `exitApplication` — solo Android

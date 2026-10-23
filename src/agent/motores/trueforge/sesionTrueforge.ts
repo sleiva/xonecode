@@ -319,6 +319,10 @@ export const TRABAJO_SIN_PERSONA = [
   "  que se ve distinto del diseño o falla), «No es un defecto» (un dato de ejemplo de la maqueta —una versión, una",
   "  cifra, un nombre—, el estado en que la pinta —un campo relleno— o una medida que se equivoca, cada uno con su",
   "  porqué), «Sin comprobar» (lo que nadie probó, primero lo que podría romper la app) y «No se puede en XOne».",
+  // Medido en Maset (23-10-2026, «el botón Entrar en rojo»): el orquestador lanzó al device-controller para una «línea
+  // base» —en una tarea no arranca— y le pidió al desarrollador comprobar la rama con `git`, que no tiene.
+  "- Las pruebas en el aparato las hace developer-xone con sus scripts: en una tarea NO delegues capturas ni pruebas en",
+  "  device-controller, que no arranca. Y no le pidas a nadie comprobar la rama o hacer commits: eso lo lleva el harness.",
   `- Como MUCHO ${String(TOPE_DE_ENCARGOS_AL_DESARROLLADOR)} encargos a developer-xone en la tarea, y cada uno largo: dale en el primero la ventana ENTERA`,
   "  y todo lo que necesite saber. Si con eso la pantalla no respeta el diseño, cierra con lo que hay y pon lo que falta en",
   "  «Por arreglar» o «No se puede en XOne», con lo que se midió. Otra «última vuelta» no la arregla.",
@@ -510,6 +514,13 @@ export function textoDelBucle(
           "- El CSS: busca la clase que vas a tocar con `xone_navegacion` (operación `estilos`) o un `grep` de su nombre. No leas",
           "  `default.css` entero, y lo que ya leíste en este encargo no lo vuelvas a leer.",
           "- `describe_image` sobre tu captura solo si `comparar_capturas` no cuadra y necesitas ver por qué: cada una es un modelo aparte.",
+          // Medido en Maset (23-10-2026, «el botón Entrar en rojo»): tras reiniciar probó cuatro sintaxis de `launchApplication`
+          // —todas salían con 0—, pidió dos `--help` y quiso comprobar la rama con `git`, que no tiene.
+          "- Tras `xone-reiniciar-android`, `xone-recargar-android` o `xone-desplegar-android` la app YA está lanzada: no la lances",
+          "  otra vez. No pidas el `--help` de lo que ya está aquí; si un comando sale con error (código 1, `result:false`), lee el",
+          "  mensaje y no pruebes otra sintaxis a ciegas.",
+          "- No tienes `git` ni shell: la rama y los commits los lleva el harness, no los compruebes.",
+          "- Un cambio PUNTUAL (un color, un texto, un botón) se prueba con `shot name=<control>`, no con capturas de la pantalla entera.",
         ]
       : [
           "Tu bucle es: escribe, llama al de pruebas para desplegar y comprobar, lee lo que te devuelve y corrige.",

@@ -193,6 +193,38 @@ describe("el script xone-hotswap real, con --dry-run", () => {
   });
 });
 
+/**
+ * Un comando que el servidor RECHAZA (`result: false`) hace salir con 1. Medido en una tarea de Maset (23-10-2026): el
+ * desarrollador probó cuatro sintaxis de `launchApplication` seguidas porque todas salían con 0.
+ */
+describe("el script xone-hotswap real, contra un servidor de mentira", () => {
+  const script = resolve(__dirname, "../../skills/xone-hotswap/scripts/xone-hotswap");
+  async function correrContra(respuesta: Record<string, unknown>, ...args: string[]): Promise<{ codigo: number | null; err: string }> {
+    const { WebSocketServer } = await import("ws");
+    const servidor = new WebSocketServer({ port: 0, host: "127.0.0.1" });
+    await new Promise<void>((r) => servidor.once("listening", () => r()));
+    servidor.on("connection", (ws) => {
+      ws.send(JSON.stringify({ command: "server_hello" }));
+      ws.on("message", () => ws.send(JSON.stringify(respuesta)));
+    });
+    const puerto = (servidor.address() as { port: number }).port;
+    const { spawn } = await import("node:child_process");
+    const hijo = spawn(process.execPath, [script, ...args], { env: { ...process.env, HOTSWAP_URL: `ws://127.0.0.1:${puerto}/hotswap`, XONECODE_DISPOSITIVO: "" } });
+    let err = "";
+    hijo.stderr.on("data", (d) => (err += String(d)));
+    const codigo = await new Promise<number | null>((r) => hijo.on("close", r));
+    servidor.close();
+    return { codigo, err };
+  }
+
+  it("rechazado (result:false) sale con 1 y lo dice; aceptado, con 0", async () => {
+    const malo = await correrContra({ result: false, status: "Unknown command: launchapplication" }, "launchapplication", "app=maset");
+    expect(malo.codigo).toBe(1);
+    expect(malo.err).toContain("el servidor rechazó launchapplication");
+    expect((await correrContra({ result: true, status: "" }, "launchApplication", "appName=maset")).codigo).toBe(0);
+  }, 20_000);
+});
+
 describe("xone-desplegar-android avisa de que sustituye la base del aparato", () => {
   it("el aviso está en la rama que acaba bien, antes de salir con 0", () => {
     // Medido en Maset: desplegar entero para subir un icono borró dos veces los datos de prueba.
