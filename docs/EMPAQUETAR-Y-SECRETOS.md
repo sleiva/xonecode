@@ -73,6 +73,20 @@ read -rs -p "Secreto de xcode-read: " BYXONE_SECRETO_DE_BUILD; echo; export BYXO
 npm pack
 ```
 
+**O en un fichero local `.env.produccion`**, en la raíz del repo, para no teclearlo cada vez. Los dos
+scripts lo leen con `node --env-file-if-exists=.env.produccion`. Si una variable ya está en el entorno, manda
+la del entorno; si el fichero no existe, se sigue como siempre.
+
+```sh
+# .env.produccion — NUNCA a git (`.gitignore` ignora `.env.*`) y fuera del paquete (no está en `files`)
+BYXONE_CLIENT_ID_DE_BUILD=xcode-read
+BYXONE_SECRETO_DE_BUILD=<el secreto de xcode-read>
+```
+
+Se cambia comodidad por dejar el secreto en disco: déjalo con permisos solo para ti (`chmod 600 .env.produccion`).
+Como `xcode-read` solo lista y descarga, y su secreto acaba igualmente dentro del paquete publicado, el riesgo
+es el mismo que el de repartir el paquete.
+
 Para comprobar que están puestas sin enseñar el secreto (PowerShell):
 
 ```powershell

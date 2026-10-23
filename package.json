@@ -30,9 +30,9 @@
   },
   "scripts": {
     "remoto:traer": "node scripts/traerRemoto.mjs",
-    "build": "rm -rf dist && tsc -p tsconfig.build.json && chmod +x dist/bin.js && node scripts/credencialByxone.mjs --opcional && npm run build:web",
+    "build": "rm -rf dist && tsc -p tsconfig.build.json && chmod +x dist/bin.js && node --env-file-if-exists=.env.produccion scripts/credencialByxone.mjs --opcional && npm run build:web",
     "build:web": "npm run build --workspace apps/web",
-    "prepack": "npm run build && node scripts/credencialByxone.mjs --obligatoria",
+    "prepack": "npm run build && node --env-file-if-exists=.env.produccion scripts/credencialByxone.mjs --obligatoria",
     "web": "npm run build:web && tsx src/bin.ts --web",
     "web:trazas": "XONECODE_TRACE_ERRORES=1 XONECODE_TRACE_TOOLS=1 npm run web",
     "test": "vitest run",
