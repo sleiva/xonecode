@@ -1,0 +1,226 @@
+/* La pestaña «Lo aprendido» del panel del proyecto (`LoAprendido.tsx`, diseño A del lienzo). Ni un color propio: los
+   estados salen de los alias del tema y los botones se COMPONEN de `Boton.module.css`. */
+
+.aprendido {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.barra {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+
+.alcances {
+  display: inline-flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 8px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-layer-2);
+}
+
+.alcance {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.alcance[aria-selected="true"] {
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font-weight: 600;
+}
+
+.cuenta {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+}
+
+.buscar {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+
+.buscar input {
+  width: 240px;
+  max-width: 60vw;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+}
+
+.aviso {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  max-width: 80ch;
+}
+
+.error {
+  margin: 0;
+  color: var(--dsw-alias-state-error-primary);
+  font-size: 12px;
+}
+
+.lista {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.entrada {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-layer-2);
+}
+
+.cabecera {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.cuerpo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  flex: 1 1 360px;
+}
+
+.titulo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.titulo h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.pastilla {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--dsw-alias-state-business-primary);
+  background: var(--dsw-alias-state-business-tertiary);
+}
+
+.pastilla[data-alcance="xone"] {
+  color: var(--dsw-alias-state-success-primary);
+  background: var(--dsw-alias-state-success-tertiary);
+}
+
+.texto {
+  margin: 0;
+  line-height: 1.5;
+  white-space: pre-line;
+}
+
+.comprobado {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.meta {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+}
+
+.acciones {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.secundario {
+  composes: secundario from "./Boton.module.css";
+}
+
+.primario {
+  composes: primario from "./Boton.module.css";
+}
+
+.peligro {
+  composes: peligro from "./Boton.module.css";
+}
+
+.editor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.editor label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+
+.editor input,
+.editor textarea {
+  padding: 7px 10px;
+  border-radius: 6px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 13px;
+}
+
+.editor textarea {
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.confirmar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 0.5px solid var(--dsw-alias-state-error-secondary);
+  color: var(--dsw-alias-state-error-primary);
+}

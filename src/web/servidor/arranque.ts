@@ -218,6 +218,9 @@ import { indiceEnDisco, modeloEnDisco } from "../../agent/navegacion/indiceEnDis
 import { hechosDelProyectoDe } from "../../agent/navegacion/hechosEnDisco.js";
 import type { HechosDelProyecto } from "../../core/hechosDelProyecto.js";
 import { ficherosDelProyecto } from "../../agent/turno/ficherosDelProyecto.js";
+import { escribirAprendido, escribirAprendidoDeXone, leerAprendido, leerAprendidoDeXone } from "../../agent/grafo/aprendido.js";
+import { nombresDelProyecto } from "../../core/aprendido.js";
+import { atenderAprendido } from "./aprendidoDelPanel.js";
 import { fotoDeColecciones, type FotoDeColecciones } from "../../core/fotoDeColecciones.js";
 import type { CambiosDeUnaColeccion } from "../../core/diffDeColecciones.js";
 import { modeloDelCambio } from "../../agent/sesiones/modeloDelCambio.js";
@@ -7300,6 +7303,23 @@ export function montarRutas(
       }
       respuesta.writeHead(200, { "content-type": "application/json" });
       respuesta.end(JSON.stringify({ actos }));
+      return;
+    }
+    if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "aprendido") {
+      // La pestaña «Lo aprendido»: lo del proyecto (su `.xonecode/`) y lo de XOne (la casa), con las reglas de la tool
+      // aplicadas AQUÍ (`aprendidoDelPanel.ts`). Solo con la copia bajada, como Soporte.
+      const identidad = proyectos.find((p) => p.id === mensaje.proyecto);
+      const raiz = entornoElegido === undefined || identidad === undefined ? undefined : vestibulo.raizDeProyecto(entornoElegido, identidad.nombre);
+      const r =
+        raiz === undefined || !esProyectoEnDisco(raiz)
+          ? ({ estado: 409, cuerpo: { motivo: "ese proyecto no tiene copia local en el entorno activo" } } as const)
+          : atenderAprendido(mensaje as unknown as Record<string, unknown>, {
+              leer: (alcance) => (alcance === "xone" ? leerAprendidoDeXone() : leerAprendido(raiz)),
+              escribir: (alcance, lista) => (alcance === "xone" ? escribirAprendidoDeXone(lista) : escribirAprendido(raiz, lista)),
+              nombresDelProyecto: () => nombresDelProyecto(basename(raiz), ficherosDelProyecto(raiz)),
+            });
+      respuesta.writeHead(r.estado, { "content-type": "application/json" });
+      respuesta.end(JSON.stringify(r.cuerpo));
       return;
     }
     if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "soporte" && mensaje.accion === "listar") {

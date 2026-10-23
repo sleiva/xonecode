@@ -44,6 +44,8 @@ export interface Aprendizaje {
   quien?: string;
   /** Cómo se comprobó («entré en el emulador con él», «está en `usuarios.xne`»). Obligatorio al apuntar; las de antes no lo llevan. */
   comoLoSe?: string;
+  /** Lleva un usuario, una clave o un token: el panel lo enseña OCULTO hasta «Ver» (`estaOculto`). Ausente = se decide por el texto. */
+  sensible?: boolean;
 }
 
 /** Cuántos se guardan: al pasar, se va el más viejo. Todos van delante de cada encargo, así que pocos y útiles. */
@@ -104,6 +106,8 @@ export function motivoDeXoneConDatosDelProyecto(a: { tema: string; texto: string
 }
 
 const claveDe = (tema: string): string => tema.trim().toLowerCase().replace(/\s+/g, " ");
+/** El id de una entrada en el panel: su tema normalizado, que ya es único (el mismo tema se sustituye). */
+export const idDeAprendizaje = (a: Pick<Aprendizaje, "tema">): string => claveDe(a.tema);
 
 /** La lista con el nuevo: el mismo tema se SUSTITUYE (y pasa al final, el más reciente); pasado el tope, fuera el más viejo. */
 export function conAprendizaje(lista: readonly Aprendizaje[], nuevo: Aprendizaje): Aprendizaje[] {
@@ -133,7 +137,8 @@ export function interpretarAprendido(texto: string): Aprendizaje[] {
       typeof a.tema === "string" &&
       typeof a.texto === "string" &&
       typeof a.cuando === "string" &&
-      (a.comoLoSe === undefined || typeof a.comoLoSe === "string")
+      (a.comoLoSe === undefined || typeof a.comoLoSe === "string") &&
+      (a.sensible === undefined || typeof a.sensible === "boolean")
   );
 }
 
@@ -174,7 +179,8 @@ export const USO_DE_APUNTAR_APRENDIZAJE =
   "entero— («imgbk en un frame anula border-corner-radius»); ahí nunca usuarios, claves ni nombres de este proyecto, porque " +
   "lo leen los encargos de todos. Ni un consejo general («revisa bien los estilos»), que no cambia nada, ni el detalle de " +
   "tu encargo de hoy, que no vuelve a servir. Lo que supones no se apunta: un dato adivinado es peor que ninguno, porque " +
-  "los encargos siguientes se lo creen. No apuntes lo que ya está en lo aprendido.";
+  "los encargos siguientes se lo creen. Si lleva un usuario, una clave o un token, márcalo `sensible`: la persona lo ve " +
+  "oculto hasta que lo pida. No apuntes lo que ya está en lo aprendido.";
 
 /** Para un hijo de motor EXTERNO, que no tiene la tool: lo cuenta al volver y quien le llamó lo apunta. */
 export const USO_DE_APRENDIDO_EXTERNO =
@@ -182,3 +188,67 @@ export const USO_DE_APRENDIDO_EXTERNO =
   "llegar a una pantalla, una trampa), dilo al final de tu respuesta en un apartado «Aprendido:», una línea por cosa con " +
   "cómo lo comprobaste («usuario 08006, pulsar Entrar — comprobado: entré en el emulador»). Si vale para cualquier app XOne " +
   "y no solo para este proyecto, empieza la línea por «XOne:». Solo lo comprobado, no lo que supones.";
+
+/**
+ * ¿Parece llevar un secreto? Para las entradas de ANTES de la marca `sensible`: medido en Maset, «Usuario 08006, contraseña
+ * vacía» estaba apuntado sin marca. Ante la duda se oculta: ocultar de más cuesta un clic, enseñar de más no tiene vuelta.
+ */
+function pareceSensible(texto: string): boolean {
+  return /contrase[ñn]a|\bclave\b|password|passwd|\bpwd\b|token|secreto|usuario\s+\S+/i.test(texto);
+}
+
+/** ¿El panel lo enseña oculto hasta «Ver»? Por su marca si la tiene; si no, por lo que dice. */
+export function estaOculto(a: Aprendizaje): boolean {
+  return a.sensible ?? pareceSensible(a.texto);
+}
+
+/** Una entrada tal como viaja al panel: lo OCULTO sin su texto, que solo sale con «Ver». */
+export interface AprendizajeDelCable {
+  id: string;
+  tema: string;
+  texto?: string;
+  oculto?: true;
+  comoLoSe?: string;
+  quien?: string;
+  cuando: string;
+}
+
+export function aprendidoParaElCable(lista: readonly Aprendizaje[]): AprendizajeDelCable[] {
+  return lista.map((a) => ({
+    id: idDeAprendizaje(a),
+    tema: a.tema,
+    ...(estaOculto(a) ? { oculto: true as const } : { texto: a.texto }),
+    ...(a.comoLoSe === undefined ? {} : { comoLoSe: a.comoLoSe }),
+    ...(a.quien === undefined ? {} : { quien: a.quien }),
+    cuando: a.cuando,
+  }));
+}
+
+const YA_NO_ESTA = "esa entrada ya no está: la lista ha cambiado, vuelve a abrirla";
+
+/**
+ * La lista con UNA entrada editada desde el panel, en su sitio. Las MISMAS reglas que la tool; un texto ausente es «no lo
+ * he tocado» (el panel no lo tiene si estaba oculto y no se pidió). Un tema que ya usa OTRA entrada se niega: sustituirla
+ * en silencio borraría lo de otro.
+ */
+export function conEntradaEditada(
+  lista: readonly Aprendizaje[],
+  id: string,
+  cambio: { tema: string; texto?: string; comoLoSe: string }
+): { lista: Aprendizaje[] } | { motivo: string } {
+  const i = lista.findIndex((a) => idDeAprendizaje(a) === id);
+  if (i < 0) return { motivo: YA_NO_ESTA };
+  const antes = lista[i]!;
+  const texto = cambio.texto ?? antes.texto;
+  const motivo = motivoDeAprendizajeInaceptable({ tema: cambio.tema, texto, comoLoSe: cambio.comoLoSe });
+  if (motivo !== undefined) return { motivo };
+  if (lista.some((a, j) => j !== i && idDeAprendizaje(a) === claveDe(cambio.tema))) return { motivo: "ya hay otra entrada con ese tema" };
+  const editada: Aprendizaje = { ...antes, tema: cambio.tema.trim(), texto: texto.trim(), comoLoSe: cambio.comoLoSe.trim() };
+  return { lista: lista.map((a, j) => (j === i ? editada : a)) };
+}
+
+/** La lista sin esa entrada. */
+export function sinEntrada(lista: readonly Aprendizaje[], id: string): { lista: Aprendizaje[] } | { motivo: string } {
+  const queda = lista.filter((a) => idDeAprendizaje(a) !== id);
+  return queda.length === lista.length ? { motivo: YA_NO_ESTA } : { lista: queda };
+}

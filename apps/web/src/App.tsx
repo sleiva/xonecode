@@ -4,7 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { Planes } from "./componentes/Planes.js";
 import { Colecciones } from "./componentes/Colecciones.js";
 import type { crearStoreDelCliente } from "./store.js";
-import type { Acto, EstadoDelGestor, FicheroDelProyecto, MapeoDeEstados, TareaDelCable, ActoDeSincronizacion, FotoDelResumen, ListadoDeSoporte, MensajeDelCliente, ModoDeEscritura } from "./tipos.js";
+import type { PeticionDeAprendido, RespuestaDeAprendido } from "./componentes/LoAprendido.js";
+import type { Acto, AprendizajeDelCable, EstadoDelGestor, FicheroDelProyecto, MapeoDeEstados, TareaDelCable, ActoDeSincronizacion, FotoDelResumen, ListadoDeSoporte, MensajeDelCliente, ModoDeEscritura } from "./tipos.js";
 import type { Conexion } from "./conexion.js";
 import { ANCHO_BARRA_POR_OMISION, Maqueta } from "./componentes/Maqueta.js";
 import { Barra } from "./componentes/Barra.js";
@@ -2178,6 +2179,24 @@ export function App({
       return undefined;
     }
   };
+  /**
+   * La pestaña «Lo aprendido» (`LoAprendido.tsx`): cada acción, contestada en la propia respuesta del POST. Una negativa
+   * (409) trae su motivo; lo que no se entiende es «no se pudo», nunca un listado vacío.
+   */
+  const alAprendido = async (id: string, peticion: PeticionDeAprendido): Promise<RespuestaDeAprendido | undefined> => {
+    const r = (await enviar({ clase: "aprendido", proyecto: id, ...peticion })) as Response | undefined;
+    const motivo = await negativaDe(r);
+    if (motivo !== undefined) return { motivo };
+    if (r === undefined || !r.ok) return undefined;
+    try {
+      const cuerpo = (await r.json()) as { proyecto?: unknown; xone?: unknown; texto?: unknown };
+      if (typeof cuerpo.texto === "string") return { texto: cuerpo.texto };
+      if (!Array.isArray(cuerpo.proyecto) || !Array.isArray(cuerpo.xone)) return undefined;
+      return { listado: { proyecto: cuerpo.proyecto as AprendizajeDelCable[], xone: cuerpo.xone as AprendizajeDelCable[] } };
+    } catch {
+      return undefined;
+    }
+  };
   /** La fila del proyecto ABIERTO en el alta, para lo de su copia en el panel. */
   const identidadDelActivo = estado.alta?.proyectos.find((p) => p.id === estado.alta?.proyectoActivo);
 
@@ -3180,6 +3199,7 @@ export function App({
               alProbarConector={(id) => void enviar({ clase: "conector", accion: "probar", id })}
               alAbrirAjustesDeConectores={() => abrirAjustes("conectores")}
               alPedirSoporte={alPedirSoporte}
+              alAprendido={alAprendido}
             />
           </>
         ) : enSesion ? (
@@ -3619,6 +3639,7 @@ export function App({
               {...(estado.diseno !== undefined && estado.diseno.proyecto === proyectoActivoId ? { diseno: estado.diseno } : {})}
               {...(proyectoActivoId === undefined ? {} : { alDiseno: (p: PeticionDeDiseno) => void enviar({ clase: "diseno", ...p, proyecto: proyectoActivoId }) })}
               alPedirSoporte={alPedirSoporte}
+              alAprendido={alAprendido}
             />
           </>
         ) : (

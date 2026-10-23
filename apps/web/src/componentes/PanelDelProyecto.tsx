@@ -27,6 +27,7 @@ import { BarraDeProgreso, Planes, resumenDelPlan } from "./Planes.js";
 import { TarjetaDeEmpezar } from "./TarjetaDeJira.js";
 import { ResumenDeProyecto, type AccionesDeLaCopia, type ProyectoDelResumen } from "./ResumenDeProyecto.js";
 import { SoporteDelProyecto } from "./SoporteDelProyecto.js";
+import { LoAprendido, type PeticionDeAprendido, type RespuestaDeAprendido } from "./LoAprendido.js";
 import conversacion from "../../estilos/ConversationRoot.module.css";
 import pestanas from "./Pestanas.module.css";
 import { TareasDesdeElGestor, type EstadosDelFlujo } from "./TareasDesdeElGestor.js";
@@ -46,7 +47,7 @@ export type PeticionAlGestor = MensajeDelGestor extends infer M ? (M extends { c
  */
 export type ContextoDeGestor = { destino?: string };
 
-export type PestanaDelProyecto = "resumen" | "sincronizacion" | "ejecutar" | "tareas" | "conectores" | "soporte";
+export type PestanaDelProyecto = "resumen" | "sincronizacion" | "ejecutar" | "tareas" | "conectores" | "aprendido" | "soporte";
 
 /** Lo que el panel necesita para el mapeo de estados y el disparo del vínculo (la puerta 2). Lo resuelve `App`. */
 export interface AjusteDeTareasDesdeElGestor {
@@ -82,6 +83,7 @@ const PESTANAS: { id: PestanaDelProyecto; etiqueta: string }[] = [
   { id: "ejecutar", etiqueta: "Ejecutar" },
   { id: "tareas", etiqueta: "Tareas" },
   { id: "conectores", etiqueta: "Conectores" },
+  { id: "aprendido", etiqueta: "Lo aprendido" },
   { id: "soporte", etiqueta: "Soporte" },
 ];
 
@@ -139,6 +141,7 @@ export function PanelDelProyecto({
   diseno,
   alDiseno,
   alPedirSoporte,
+  alAprendido,
   pestanaInicial,
   tareasDesdeElGestor,
 }: {
@@ -215,6 +218,8 @@ export function PanelDelProyecto({
    * pestaña no se pinta: un control sin dato detrás no existe.
    */
   alPedirSoporte?: (proyecto: string) => Promise<ListadoDeSoporte | undefined>;
+  /** Pide a la pestaña «Lo aprendido» lo suyo (`LoAprendido.tsx`). Ausente = la pestaña no se pinta. */
+  alAprendido?: (proyecto: string, peticion: PeticionDeAprendido) => Promise<RespuestaDeAprendido | undefined>;
   /** Dónde se monta, si no es el Resumen: al VOLVER de leer una tarea finalizada, a Tareas, que es de donde se fue
    *  (el panel se desmonta mientras se lee). Solo cuenta al montar. */
   pestanaInicial?: PestanaDelProyecto;
@@ -226,11 +231,14 @@ export function PanelDelProyecto({
   const sinCopia = copia !== undefined && copia.proyecto.local !== true;
   /** Soporte exporta la copia: sin copia, sin el id del proyecto o sin quien pida, no hay pestaña. */
   const hayPestanaDeSoporte = !sinCopia && copia !== undefined && alPedirSoporte !== undefined;
+  /** Lo aprendido vive en la copia (`.xonecode/aprendido.json`): sin copia o sin quien pida, no hay pestaña. */
+  const hayPestanaDeAprendido = !sinCopia && copia !== undefined && alAprendido !== undefined;
   const pestanasALaVista = sinCopia
     ? PESTANAS.filter((p) => p.id === "resumen")
     : PESTANAS.filter(
         (p) =>
           (p.id !== "soporte" || hayPestanaDeSoporte) &&
+          (p.id !== "aprendido" || hayPestanaDeAprendido) &&
           (p.id !== "sincronizacion" || sincronizacion !== undefined) &&
           (p.id !== "ejecutar" || ejecutar !== undefined)
       );
@@ -437,6 +445,8 @@ export function PanelDelProyecto({
             alAbrirAjustes={alAbrirAjustesDeConectores}
           />
           </>
+        ) : pestana === "aprendido" && hayPestanaDeAprendido ? (
+          <LoAprendido proyecto={copia!.proyecto.id} nombre={copia!.proyecto.nombre} conectado={conectado} alPedir={alAprendido!} />
         ) : pestana === "soporte" && hayPestanaDeSoporte ? (
           <SoporteDelProyecto proyecto={copia!.proyecto.id} conectado={conectado} alPedir={alPedirSoporte!} />
         ) : (

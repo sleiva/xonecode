@@ -92,6 +92,11 @@ Ante una discrepancia con el código, **el código manda**.
   (`borrarCopiaDeProyecto`, Windows). 409 con motivo (`motivoParaNoBorrarCopia`) con turno en vuelo
   o tarea sin terminar; una consola abierta no es motivo. **Se lleva su HISTÓRICO de tareas**
   (`borrarTarea` en `copiaLocal`), sin tocar el ticket.
+- **«Lo aprendido»** (`LoAprendido.tsx`, `web/servidor/aprendidoDelPanel.ts`, `{clase:"aprendido"}`, solo con copia):
+  lo del proyecto y lo de XOne para ver, editar, borrar y mover de alcance; las reglas de la tool las aplica el SERVIDOR
+  (409 con motivo). **Lo sensible viaja SIN texto** (`aprendidoParaElCable`) y solo sale con `ver`, en la respuesta del
+  POST a quien lo pide; lo visto se olvida al desmontar. **Límite**: editar mientras una tarea apunta puede pisar su apunte
+  (leer-modificar-escribir sin cerrojo).
 - **Copia «bajada» = `config.json` Y `sync.json`** (`esProyectoEnDisco`); fallo de descarga → `fallos.jsonl`.
 
 - **El Escritorio de su lienzo** (la barra lateral NO se toca, decisión suya): saludo con el entorno al lado,

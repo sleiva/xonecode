@@ -4,7 +4,11 @@ import {
   conAprendizaje,
   interpretarAprendido,
   motivoDeAprendizajeInaceptable,
+  aprendidoParaElCable,
+  conEntradaEditada,
+  estaOculto,
   motivoDeXoneConDatosDelProyecto,
+  sinEntrada,
   nombresDelProyecto,
   TOPE_DE_APRENDIZAJES,
   TOPE_DE_COMO_LO_SE,
@@ -100,5 +104,39 @@ describe("lo aprendido en un proyecto", () => {
     expect(motivoDeXoneConDatosDelProyecto({ tema: "imgbk anula border-corner-radius", texto: "en un frame; el estilo en default.css y la resolución en app.xml", comoLoSe: "lo vi en el emulador" }, nombres)).toBeUndefined();
     // Palabra entera: una colección «Menu» no casa dentro de «MenuItem» ni de «menu».
     expect(motivoDeXoneConDatosDelProyecto({ tema: "t", texto: "el menu y el MenuItem", comoLoSe: "x" }, nombresDelProyecto("P", ["Menu.xne"]))).toBeUndefined();
+  });
+
+  // La pestaña «Lo aprendido» (diseño A, elegido por él): ver, editar, borrar; lo sensible oculto hasta «Ver».
+  describe("para el panel", () => {
+    const clave = { tema: "cómo entrar en la app", texto: "usuario 08006, contraseña vacía", cuando: "2026-10-22T16:52:00.000Z", comoLoSe: "entré" };
+    const xone = { tema: "alfa en SVG", texto: "#RRGGBBAA", cuando: "2026-10-23T08:44:00.000Z", comoLoSe: "medido" };
+
+    it("lo sensible se oculta: por su marca, o si no la tiene, por lo que dice; lo marcado como no sensible se ve", () => {
+      expect(estaOculto(clave)).toBe(true);
+      expect(estaOculto({ ...xone, sensible: true })).toBe(true);
+      expect(estaOculto(xone)).toBe(false);
+      expect(estaOculto({ ...clave, sensible: false })).toBe(false);
+    });
+
+    it("al cable lo oculto va SIN texto: el secreto no viaja hasta pedirlo", () => {
+      const cable = aprendidoParaElCable([clave, xone]);
+      expect(cable[0]).toEqual({ id: "cómo entrar en la app", tema: "cómo entrar en la app", oculto: true, comoLoSe: "entré", cuando: clave.cuando });
+      expect(JSON.stringify(cable)).not.toContain("08006");
+      expect(cable[1]).toMatchObject({ id: "alfa en svg", texto: "#RRGGBBAA" });
+    });
+
+    it("editar respeta las reglas, conserva el texto oculto si no se manda, y no pisa otro tema", () => {
+      const lista = [clave, xone];
+      const r = conEntradaEditada(lista, "cómo entrar en la app", { tema: "entrar en la app", comoLoSe: "lo probé" });
+      expect("lista" in r && r.lista[0]).toMatchObject({ tema: "entrar en la app", texto: clave.texto, comoLoSe: "lo probé" });
+      expect(conEntradaEditada(lista, "alfa en svg", { tema: "alfa en SVG", texto: "x", comoLoSe: "" })).toEqual({ motivo: expect.stringContaining("falta cómo lo sabes") });
+      expect(conEntradaEditada(lista, "alfa en svg", { tema: "Cómo entrar en la app", texto: "x", comoLoSe: "y" })).toEqual({ motivo: expect.stringContaining("ya hay otra") });
+      expect(conEntradaEditada(lista, "no-existe", { tema: "t", texto: "x", comoLoSe: "y" })).toEqual({ motivo: expect.stringContaining("ya no está") });
+    });
+
+    it("borrar quita esa y solo esa; una que ya no está se dice", () => {
+      expect(sinEntrada([clave, xone], "alfa en svg")).toEqual({ lista: [clave] });
+      expect(sinEntrada([clave], "alfa en svg")).toEqual({ motivo: expect.stringContaining("ya no está") });
+    });
   });
 });

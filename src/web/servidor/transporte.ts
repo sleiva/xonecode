@@ -1547,6 +1547,18 @@ export type MensajeDelCliente =
   | { clase: "leerSesion"; proyecto: string; sesion: string }
   /** La pestaña Soporte: chats y tareas del proyecto con su análisis previo (`soporte.ts`). */
   | { clase: "soporte"; accion: "listar"; proyecto: string }
+  /** La pestaña «Lo aprendido» (`web/servidor/aprendidoDelPanel.ts`): contesta en la respuesta del POST. */
+  | {
+      clase: "aprendido";
+      accion: "listar" | "ver" | "guardar" | "borrar" | "mover";
+      proyecto: string;
+      alcance?: "proyecto" | "xone";
+      de?: "proyecto" | "xone";
+      id?: string;
+      tema?: string;
+      texto?: string;
+      comoLoSe?: string;
+    }
   /**
    * Quitar un entorno registrado. El servidor contesta **409 con `{ motivo }`** si no se puede
    * ahora (un proyecto suyo abierto, una tarea sin terminar): la negativa vive allí, y así el

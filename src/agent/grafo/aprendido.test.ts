@@ -61,4 +61,14 @@ describe("apuntar_aprendizaje, contra el disco", () => {
     // El mismo, con alcance proyecto, sí.
     expect(await t.invoke({ tema: "qué hay en /artefactos/diseno", texto: "la maqueta de MenuLiquidacionesGeneral", como_lo_se: "lo leí", alcance: "proyecto" })).toContain("Apuntado");
   });
+
+  it("la marca `sensible` se guarda si el agente la da, y no aparece si no", async () => {
+    const raiz = mkdtempSync(join(tmpdir(), "xc-aprendido-"));
+    const t = crearApuntarAprendizaje({ raiz, quien: "developer-xone" });
+    await t.invoke({ tema: "cómo entrar", texto: "usuario 08006", como_lo_se: "entré", alcance: "proyecto", sensible: true });
+    await t.invoke({ tema: "menú", texto: "pulsar Albaranes", como_lo_se: "lo vi", alcance: "proyecto" });
+    const [a, b] = leerAprendido(raiz);
+    expect(a!.sensible).toBe(true);
+    expect(b).not.toHaveProperty("sensible");
+  });
 });

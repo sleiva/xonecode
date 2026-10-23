@@ -51,13 +51,26 @@ export function leerAprendidoDeXone(casa?: string): Aprendizaje[] {
 }
 
 /** Escritura atómica y 0600 (lo del proyecto puede llevar una contraseña; lo de XOne no debería, pero no se puede comprobar). */
-function apuntarEn(ruta: string, nuevo: Aprendizaje): Aprendizaje[] {
-  const lista = conAprendizaje(leerDe(ruta), nuevo);
+function escribirEn(ruta: string, lista: readonly Aprendizaje[]): void {
   mkdirSync(join(ruta, ".."), { recursive: true });
   const temporal = `${ruta}.${process.pid}.tmp`;
   writeFileSync(temporal, `${JSON.stringify(lista, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
   renameSync(temporal, ruta);
+}
+
+function apuntarEn(ruta: string, nuevo: Aprendizaje): Aprendizaje[] {
+  const lista = conAprendizaje(leerDe(ruta), nuevo);
+  escribirEn(ruta, lista);
   return lista;
+}
+
+/** La lista ENTERA, para el panel (editar, borrar, mover): la decide `core/aprendido.ts`, aquí solo se escribe. */
+export function escribirAprendido(raiz: string, lista: readonly Aprendizaje[]): void {
+  escribirEn(rutaDeAprendido(raiz), lista);
+}
+
+export function escribirAprendidoDeXone(lista: readonly Aprendizaje[], casa?: string): void {
+  escribirEn(rutaDeAprendidoDeXone(casa), lista);
 }
 
 /** Apunta uno en el proyecto, sustituyendo el del mismo tema. */
@@ -83,6 +96,10 @@ const ESQUEMA = z.object({
         "cualquier app (un atributo, algo que exige desplegar); lo leen los encargos de TODOS los proyectos, así que nunca " +
         "usuarios, claves ni nombres de este"
     ),
+  sensible: z
+    .boolean()
+    .optional()
+    .describe("true si lleva un usuario, una clave o un token: el panel de la persona lo enseña oculto hasta que lo pida"),
 });
 
 /**
@@ -92,7 +109,7 @@ const ESQUEMA = z.object({
  */
 export function crearApuntarAprendizaje(donde: { raiz: string; quien: string; ahora?: () => Date; casa?: string }) {
   return tool(
-    async ({ tema, texto, como_lo_se: comoLoSe, alcance }: z.infer<typeof ESQUEMA>) => {
+    async ({ tema, texto, como_lo_se: comoLoSe, alcance, sensible }: z.infer<typeof ESQUEMA>) => {
       const motivo = motivoDeAprendizajeInaceptable({ tema, texto, comoLoSe });
       if (motivo !== undefined) return `No se apunta: ${motivo}.`;
       // Lo de XOne cruza de un proyecto a otro: si nombra algo de ESTE, no es de XOne (`motivoDeXoneConDatosDelProyecto`).
@@ -100,7 +117,14 @@ export function crearApuntarAprendizaje(donde: { raiz: string; quien: string; ah
         const ajeno = motivoDeXoneConDatosDelProyecto({ tema, texto, comoLoSe }, nombresDelProyecto(basename(donde.raiz), ficherosDelProyecto(donde.raiz)));
         if (ajeno !== undefined) return `No se apunta como XOne: ${ajeno}.`;
       }
-      const nuevo: Aprendizaje = { tema, texto, comoLoSe, cuando: (donde.ahora?.() ?? new Date()).toISOString(), quien: donde.quien };
+      const nuevo: Aprendizaje = {
+        tema,
+        texto,
+        comoLoSe,
+        cuando: (donde.ahora?.() ?? new Date()).toISOString(),
+        quien: donde.quien,
+        ...(sensible === undefined ? {} : { sensible }),
+      };
       try {
         if (alcance === "xone") {
           const lista = apuntarAprendizajeDeXone(nuevo, donde.casa);

@@ -1273,6 +1273,26 @@ export interface FilaDeSoporte {
   analisis: AnalisisDeSoporte;
 }
 
+/**
+ * Una entrada de lo aprendido tal como llega al panel (`core/aprendido.ts#AprendizajeDelCable`, redeclarado aquí): lo
+ * SENSIBLE llega con `oculto` y sin `texto`, que solo se pide con «Ver».
+ */
+export interface AprendizajeDelCable {
+  id: string;
+  tema: string;
+  texto?: string;
+  oculto?: true;
+  comoLoSe?: string;
+  quien?: string;
+  cuando: string;
+}
+
+/** Lo aprendido de los dos alcances (`web/servidor/aprendidoDelPanel.ts#ListadoDeAprendido`). */
+export interface ListadoDeAprendido {
+  proyecto: AprendizajeDelCable[];
+  xone: AprendizajeDelCable[];
+}
+
 export interface ListadoDeSoporte {
   chats: FilaDeSoporte[];
   tareas: FilaDeSoporte[];
@@ -1520,6 +1540,18 @@ export type MensajeDelCliente =
   | { clase: "leerSesion"; proyecto: string; sesion: string }
   /** La pestaña Soporte: chats y tareas del proyecto con su análisis previo. */
   | { clase: "soporte"; accion: "listar"; proyecto: string }
+  /** La pestaña «Lo aprendido» (`web/servidor/aprendidoDelPanel.ts`): contesta en la respuesta del POST. */
+  | {
+      clase: "aprendido";
+      accion: "listar" | "ver" | "guardar" | "borrar" | "mover";
+      proyecto: string;
+      alcance?: "proyecto" | "xone";
+      de?: "proyecto" | "xone";
+      id?: string;
+      tema?: string;
+      texto?: string;
+      comoLoSe?: string;
+    }
   /**
    * Quitar un entorno registrado. El servidor contesta **409 con `{ motivo }`** si no se puede
    * ahora (un proyecto suyo abierto, una tarea sin terminar): la negativa vive allí, y así el

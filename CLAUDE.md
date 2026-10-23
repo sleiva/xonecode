@@ -148,8 +148,8 @@ Una línea cada uno; el detalle, en el `CLAUDE.md` de su carpeta (tabla de abajo
 - **deepagents es LEGACY**: lo nuevo va solo a TrueForge, y la elección del motor vive en UN punto
   (`abrirSesionReal`).
 - **Ninguna ruta de la máquina ni ningún secreto viajan por el cable** salvo las excepciones
-  NOMBRADAS (la ruta del workspace; `leerSecreto`, el `codigo` de `motorLocal`, la `url` remota y el
-  authtoken de ngrok).
+  NOMBRADAS (la ruta del workspace; `leerSecreto`, el `codigo` de `motorLocal`, la `url` remota, el
+  authtoken de ngrok y el texto de un aprendido SENSIBLE pedido con «Ver»).
 - **El servidor decide, el cliente pide**: por el cable viaja la intención, y toda negativa con
   motivo la compone el servidor (el cliente repite la regla solo cuando la negativa no le llega).
 - **Ausente ≠ vacío ≠ cero** en disco, cable, store y componente: lo que no consta no se pinta.

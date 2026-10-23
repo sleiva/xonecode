@@ -14752,3 +14752,58 @@ describe("datosDeCierreDeTarea con el gasto", () => {
     expect(datos.gasto).toEqual(gasto);
   });
 });
+
+/**
+ * La pestaña «Lo aprendido» por la RUTA de verdad (`POST /accion`, `{clase: "aprendido"}`): la composición vive en
+ * `montarRutas`, que ningún test de `aprendidoDelPanel.ts` alcanza. Lo de XOne va a la casa del suite (`casaDePruebas`).
+ */
+describe("la pestaña «Lo aprendido», por la ruta", () => {
+  async function montar() {
+    const base = mkdtempSync(join(tmpdir(), "xc-aprendido-ruta-"));
+    const vestibulo = vestibuloDePrueba({ baseDeWorkspace: () => base });
+    const raiz = vestibulo.raizDeProyecto("webstudio", "Tienda");
+    mkdirSync(join(raiz, ".xonecode", "cloudstudio"), { recursive: true });
+    writeFileSync(join(raiz, ".xonecode", "config.json"), "{}");
+    writeFileSync(join(raiz, ".xonecode", "cloudstudio", "sync.json"), "{}");
+    writeFileSync(join(raiz, "MenuClientes.xne"), "<coll/>");
+    writeFileSync(
+      join(raiz, ".xonecode", "aprendido.json"),
+      JSON.stringify([
+        { tema: "cómo entrar", texto: "usuario 08006, contraseña vacía", cuando: "2026-10-22T16:52:00.000Z", comoLoSe: "entré" },
+        { tema: "abrir el menú", texto: "por MenuClientes", cuando: "2026-10-23T07:00:00.000Z", comoLoSe: "lo vi" },
+      ])
+    );
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibulo, {});
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+    const accion = (m: unknown) => postearConCuerpo(servidor.rutas.get(`POST ${RUTA_ACCION}`)!, JSON.stringify(m));
+    return { base, raiz, accion };
+  }
+
+  it("lista los dos alcances SIN el texto sensible, lo da con «ver», y niega pasar a XOne lo que nombra el proyecto", async () => {
+    const { base, raiz, accion } = await montar();
+    const listado = await accion({ clase: "aprendido", accion: "listar", proyecto: "p1" });
+    expect(listado.estado).toBe(200);
+    expect(listado.cuerpo).not.toContain("08006");
+    expect(JSON.parse(listado.cuerpo).proyecto[0]).toMatchObject({ tema: "cómo entrar", oculto: true });
+    const visto = await accion({ clase: "aprendido", accion: "ver", proyecto: "p1", alcance: "proyecto", id: "cómo entrar" });
+    expect(JSON.parse(visto.cuerpo)).toEqual({ texto: "usuario 08006, contraseña vacía" });
+    const movido = await accion({ clase: "aprendido", accion: "mover", proyecto: "p1", de: "proyecto", id: "abrir el menú" });
+    expect(movido.estado).toBe(409);
+    expect(JSON.parse(movido.cuerpo).motivo).toContain("«MenuClientes»");
+    const borrado = await accion({ clase: "aprendido", accion: "borrar", proyecto: "p1", alcance: "proyecto", id: "abrir el menú" });
+    expect(JSON.parse(borrado.cuerpo).proyecto).toHaveLength(1);
+    expect(JSON.parse(readFileSync(join(raiz, ".xonecode", "aprendido.json"), "utf8"))).toHaveLength(1);
+    rmSync(base, { recursive: true, force: true });
+  });
+
+  it("un proyecto sin copia local se niega con motivo", async () => {
+    const { base, accion } = await montar();
+    const r = await accion({ clase: "aprendido", accion: "listar", proyecto: "no-existe" });
+    expect(r.estado).toBe(409);
+    expect(JSON.parse(r.cuerpo).motivo).toContain("no tiene copia local");
+    rmSync(base, { recursive: true, force: true });
+  });
+});

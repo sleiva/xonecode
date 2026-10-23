@@ -167,6 +167,7 @@ Todas **reaplican `puedeLeerRuta` a mano** (una tool de xonecode no pasa por el 
   **Dos alcances, los dos se guardan**: `proyecto` (su `.xonecode/`) y `xone` (`~/.xonecode/aprendido-xone.json`, a los
   encargos de TODOS los proyectos, en su propio bloque). Lo de XOne que NOMBRA el proyecto o un fichero suyo se rechaza
   (`motivoDeXoneConDatosDelProyecto`, palabra entera); un dato suyo sin nombrarlo pasa: límite declarado.
+  `sensible` (lleva usuario, clave o token) lo enseña oculto el panel «Lo aprendido»; sin marca, lo decide el texto.
 - **Lo que quien ESCRIBE debe saber va en developer y designer, no en `REGLAS_XONE`**
   (`ESCRIBIR_XONE_SIN_ROMPER`, `agentesEnDisco.ts`): `REGLAS_XONE` llega a quien no escribe y viaja en cada
   llamada. `TASKS.md` lleva `## Hallazgos`; el diseño se destila en `DISENO.md`.
