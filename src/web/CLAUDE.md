@@ -149,6 +149,9 @@ Ante una discrepancia con el código, **el código manda**.
   EMPEZAR), va al disco; sin `cuando` no se pinta. Hora y copiar siempre a la vista, siempre con el día.
 - **Los dólares del asistente se ESCAPAN** (`protegerDolares.ts`) fuera de código; copiar y Trazas
   llevan el original.
+- **Una miniatura que no carga reintenta UNA vez y luego lo DICE** (`Chat.tsx#MiniaturaDeArtefacto`,
+  `MS_ANTES_DE_REINTENTAR_MINIATURA`), nunca el icono roto; y **toda negativa de `GET /artefacto` se anota** con código y
+  motivo, sin rutas (`trazaDeErrores`). Medido en Windows: la miniatura rota no dejaba rastro salvo con un 500.
 - **Un ARTEFACTO pertenece al tramo pero no se pliega con él** (`Chat.tsx`, `ES_PULSO`): tarjetas FUERA
   del `<details>`, agrupadas, **no cuentan como pasos**. Una IMAGEN, miniatura `<img>` a la ruta HTTP.
 - **El HUECO entre actos**: dos valores, `--dsh-chat-flow-gap` en el HIJO (`Chat.module.css`).

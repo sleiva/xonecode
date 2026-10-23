@@ -452,6 +452,53 @@ function VeredictoEnRojo({
 const esImagen = (acto: Extract<Acto, { tipo: "artefacto" }>): boolean =>
   acto.mime !== undefined && acto.mime.startsWith("image/");
 
+
+/** Cuánto se espera antes del único reintento de una miniatura que no cargó. */
+export const MS_ANTES_DE_REINTENTAR_MINIATURA = 500;
+
+/**
+ * La miniatura de una captura, que no se queda ROTA en silencio. Medido en el soporte de una tarea en Windows: el fichero
+ * estaba en su sitio pero el `<img>` falló al pedirlo nada más anunciarse, y el navegador no reintenta nunca. Aquí, si
+ * falla, se pide UNA vez más (con un parámetro nuevo, para que la caché no devuelva el fallo); si vuelve a fallar, se DICE
+ * «no se pudo cargar» en el mismo hueco, en vez del icono roto. El porqué del servidor queda en su traza de errores.
+ */
+export function MiniaturaDeArtefacto({ src, alt, clase }: { src: string; alt: string; clase: string }) {
+  const [intento, setIntento] = useState<0 | 1 | "fallida">(0);
+  const [esperando, setEsperando] = useState(false);
+  // Otra imagen en el mismo hueco empieza de cero.
+  useEffect(() => {
+    setIntento(0);
+    setEsperando(false);
+  }, [src]);
+  useEffect(() => {
+    if (!esperando) return;
+    const t = setTimeout(() => {
+      setEsperando(false);
+      setIntento(1);
+    }, MS_ANTES_DE_REINTENTAR_MINIATURA);
+    return () => clearTimeout(t);
+  }, [esperando]);
+  if (intento === "fallida") {
+    return (
+      <span className={`${clase} ${estilos.capturaFallida}`} role="img" aria-label={`${alt}: no se pudo cargar`}>
+        no se pudo cargar
+      </span>
+    );
+  }
+  const url = intento === 1 ? `${src}${src.includes("?") ? "&" : "?"}reintento=1` : src;
+  return (
+    <img
+      className={clase}
+      src={url}
+      alt={alt}
+      onError={() => {
+        if (intento === 0) setEsperando(true);
+        else setIntento("fallida");
+      }}
+    />
+  );
+}
+
 /**
  * Las capturas de un tramo, en una FILA de miniaturas.
  *
@@ -503,7 +550,7 @@ function CapturasDelTramo({
           aria-label={`Ampliar ${a.nombre}`}
           title={`${a.nombre} · ${Math.max(1, Math.round(a.bytes / 1024))} KB`}
         >
-          <img className={`${estilos.captura} ${sola ? estilos.capturaSola : ""}`} src={urlDeArtefacto(a.ruta)} alt={a.nombre} />
+          <MiniaturaDeArtefacto clase={`${estilos.captura} ${sola ? estilos.capturaSola : ""}`} src={urlDeArtefacto(a.ruta)} alt={a.nombre} />
         </button>
       ))}
       {ampliada === undefined ? null : (

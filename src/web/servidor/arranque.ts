@@ -231,6 +231,7 @@ import { ficherosDelProyecto } from "../../agent/turno/ficherosDelProyecto.js";
 import { escribirAprendido, escribirAprendidoDeXone, leerAprendido, leerAprendidoDeXone } from "../../agent/grafo/aprendido.js";
 import { nombresDelProyecto } from "../../core/aprendido.js";
 import { atenderAprendido } from "./aprendidoDelPanel.js";
+import { anotarError } from "../../core/trazaDeErrores.js";
 import { fotoDeColecciones, type FotoDeColecciones } from "../../core/fotoDeColecciones.js";
 import type { CambiosDeUnaColeccion } from "../../core/diffDeColecciones.js";
 import { modeloDelCambio } from "../../agent/sesiones/modeloDelCambio.js";
@@ -6518,6 +6519,15 @@ export function montarRutas(
       respuesta.writeHead(codigo, { "Content-Type": "text/plain; charset=utf-8" });
       respuesta.end(texto);
     };
+    /**
+     * Toda NEGATIVA, también anotada (`trazaDeErrores`, con «Depurar»): por qué, con qué nombre y desde dónde, nunca
+     * la ruta. Medido en el soporte de una tarea en Windows: la miniatura salía rota y el paquete no podía decir si fue
+     * un 403, un 404 o el fichero bloqueado, porque solo un 500 dejaba rastro.
+     */
+    const negar = (codigo: number, texto: string, causa: string): void => {
+      anotarError("servir artefacto", new Error(`${codigo} ${causa}: «${nombre ?? ""}» (${pedidaLaSesion ? "sesión pedida" : "conversación abierta"})`));
+      responder(codigo, texto);
+    };
 
     // El nombre sale de la QUERY. `searchParams` decodifica una vez, así que un `%2e%2e`
     // llega ya como `..` y lo caza `esRutaDeArtefacto`; un `%252e%252e` llega con el `%`
@@ -6525,8 +6535,9 @@ export function montarRutas(
     // aquí no hay ningún camino que normalizar.
     const query = new URLSearchParams((peticion.url ?? "").split("?")[1] ?? "");
     const nombre = query.get("n");
+    const pedidaLaSesion = query.get("p") !== null || query.get("s") !== null;
     if (nombre === null || nombre === "") {
-      responder(400, "falta el artefacto");
+      negar(400, "falta el artefacto", "sin nombre");
       return;
     }
     // La MISMA función que decide que escribir ahí no pide aprobación humana. Se comprueba
@@ -6534,7 +6545,7 @@ export function montarRutas(
     // que se apoya solo en la barrera de su lector se queda abierta el día que alguien
     // cambie el lector.
     if (!esRutaDeArtefacto(`${RUTA_ARTEFACTOS}${nombre}`)) {
-      responder(403, "ese nombre no es de un artefacto");
+      negar(403, "ese nombre no es de un artefacto", "el nombre no pasa esRutaDeArtefacto");
       return;
     }
 
@@ -6546,20 +6557,20 @@ export function montarRutas(
     if (pedidoProyecto !== null || pedidaSesion !== null) {
       const resuelta = sesionDelDisco(pedidoProyecto, pedidaSesion);
       if ("motivo" in resuelta) {
-        responder(404, "no hay artefacto");
+        negar(404, "no hay artefacto", `no se resolvió la sesión: ${resuelta.motivo}`);
         return;
       }
       origen = resuelta;
     } else {
       const abierto = vestibulo.proyectoAbierto();
       if (abierto === undefined) {
-        responder(404, "no hay artefacto");
+        negar(404, "no hay artefacto", "no hay proyecto abierto");
         return;
       }
       origen = { raiz: abierto.raiz, sesion: abierto.idDeHilo };
     }
     if (opciones.leerArtefactoCrudo === undefined) {
-      responder(404, "no hay artefacto");
+      negar(404, "no hay artefacto", "esta ejecución no lee artefactos");
       return;
     }
 
@@ -6570,7 +6581,7 @@ export function montarRutas(
       // El mensaje de Node lleva la ruta absoluta: al cliente solo le llega el código, y a
       // `informar` tampoco más, que escribe en el transcript y por tanto viaja.
       informar(`no se pudo servir el artefacto «${nombre}» (${codigoDe(error)})`);
-      responder(500, "no se pudo leer");
+      negar(500, "no se pudo leer", `error al leer (${codigoDe(error)})`);
       return;
     }
     if (!leido.ok) {
@@ -6582,7 +6593,7 @@ export function montarRutas(
         "no-existe": "no hay artefacto",
         "demasiado-grande": "el artefacto es demasiado grande",
       } as const;
-      responder(codigos[leido.motivo], textos[leido.motivo]);
+      negar(codigos[leido.motivo], textos[leido.motivo], `el lector dijo «${leido.motivo}»`);
       return;
     }
 

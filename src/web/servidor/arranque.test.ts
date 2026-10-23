@@ -79,6 +79,7 @@ import { crearGestorJira } from "../../agent/conectores/gestorJira.js";
 import type { AjustesDeDispositivos, Entorno } from "../../core/settings.js";
 import { cargarSettings, rutaSettings } from "../../agent/config/settingsEnDisco.js";
 import { MOTIVOS_DEL_TUNEL } from "../../core/tunel.js";
+import { ponerSumideroDeErrores, type ErrorAnotado } from "../../core/trazaDeErrores.js";
 import type { Dispositivo } from "../../core/dispositivos.js";
 import { MOTIVO_ESPERA_AL_TURNO, type AdjuntoDeTarea, type Tarea } from "../../core/tareas.js";
 import { crearTareasEnDisco, TOPE_DE_ADJUNTO } from "../../agent/tareas/tareasEnDisco.js";
@@ -5577,6 +5578,33 @@ describe("los artefactos de la sesión", () => {
       montarRutas(servidor, vestibuloDePrueba(), lectorDe(html, "text/html"));
       const sinProyecto = servidor.rutas.get(`GET ${RUTA_ARTEFACTO}`)!;
       expect((await pedir(sinProyecto, "/artefacto?n=d.html")).estado).toBe(404);
+    });
+
+    // Soporte de una tarea en Windows (23-10-2026): la miniatura salía rota y el paquete no decía si fue un 403, un 404
+    // o el fichero bloqueado: solo un 500 dejaba rastro. Toda negativa queda anotada, con su motivo y SIN rutas.
+    it("toda negativa al servir un artefacto queda anotada con su código y su motivo, sin rutas", async () => {
+      const anotados: ErrorAnotado[] = [];
+      ponerSumideroDeErrores((a) => void (("fase" in a) ? undefined : anotados.push(a as ErrorAnotado)));
+      try {
+        const noEsta = await abrirProyecto({ leerArtefactoCrudo: async () => ({ ok: false as const, motivo: "no-existe" as const }) });
+        expect((await pedir(noEsta.artefacto, "/artefacto?n=captura.png")).estado).toBe(404);
+        await noEsta.limpiar();
+        const bloqueado = await abrirProyecto({
+          leerArtefactoCrudo: async () => {
+            throw Object.assign(new Error("EBUSY: resource busy or locked, open 'C:\\Users\\X\\captura.png'"), { code: "EBUSY" });
+          },
+        });
+        expect((await pedir(bloqueado.artefacto, "/artefacto?n=captura.png")).estado).toBe(500);
+        await bloqueado.limpiar();
+      } finally {
+        ponerSumideroDeErrores(undefined);
+      }
+      const delArtefacto = anotados.filter((a) => a.donde === "servir artefacto");
+      expect(delArtefacto.map((a) => a.mensaje)).toEqual([
+        expect.stringMatching(/^404 el lector dijo «no-existe»: «captura\.png» \(conversación abierta\)/),
+        expect.stringMatching(/^500 error al leer \(EBUSY\): «captura\.png»/),
+      ]);
+      expect(JSON.stringify(delArtefacto)).not.toMatch(/Users/);
     });
 
     it("un nombre con recorrido no llega ni al lector", async () => {
