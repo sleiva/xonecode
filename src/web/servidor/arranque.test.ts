@@ -6323,6 +6323,21 @@ describe("las tareas en background, por el cable", () => {
       rmSync(base, { recursive: true, force: true });
     });
 
+    // Medido el 23-10-2026: con el entorno sin elegir, la tarea NO se creaba, el servidor lo apuntaba en su log y al cable
+    // le contestaba 204 —«hecho»—, así que la ventana se cerraba como si se hubiera encolado.
+    it("sin gestor, si la tarea NO se puede crear, se contesta 409 con el motivo, no un 204", async () => {
+      const { base, cola, accion, revisado } = await montarVinculado(new GestorDeTareasEnMemoria({ creaConPrefijo: "KAN" }), false);
+      const r = await accion({ clase: "tarea", accion: "crear", proyecto: "no-existe", peticion: "x", encargo: "y" });
+      expect(r.estado).toBe(409);
+      expect(JSON.parse(r.cuerpo).motivo).toMatch(/no-existe.*no se pudo resolver/);
+      expect(cola.verTareas()).toEqual([]);
+      expect(revisado()).toBe(0);
+      const bien = await accion({ clase: "tarea", accion: "crear", proyecto: "p1", peticion: "x", encargo: "y" });
+      expect(bien.estado).toBe(204);
+      expect(cola.verTareas()).toHaveLength(1);
+      rmSync(base, { recursive: true, force: true });
+    });
+
     it("si el gestor no deja crear, NO hay tarea local y se contesta 409 con el motivo", async () => {
       const gestor = new GestorDeTareasEnMemoria({ creaConPrefijo: "KAN", crearFalla: "no tienes permiso para crear en KAN" });
       const { base, cola, accion, revisado } = await montarVinculado(gestor);

@@ -2478,25 +2478,23 @@ export function montarRutas(
     ticket?: TicketDeTarea,
     /** La pantalla de Stitch elegida en «Nueva tarea», tal como llega del cable: se comprueba aquí (`pantallaElegidaValida`). */
     pantallasDeStitch?: unknown
-  ): { id: string } | undefined => {
-    if (opciones.colaDeTareas === undefined) return undefined;
+  ): { id: string } | { motivo: string } => {
+    // El MOTIVO vuelve a quien llamó, además de apuntarse: la ruta lo contesta como 409 (antes, 204 con la tarea sin crear).
+    const negar = (motivo: string): { motivo: string } => {
+      informar(`no se pudo crear la tarea: ${motivo}`);
+      return { motivo };
+    };
+    if (opciones.colaDeTareas === undefined) return { motivo: "esta ejecución no tiene cola de tareas" };
     const proyecto = proyectoParaTarea(proyectoId);
-    if (proyecto === undefined) {
-      informar(`no se pudo crear la tarea: el proyecto «${proyectoId}» no se pudo resolver`);
-      return undefined;
-    }
+    if (proyecto === undefined) return negar(`el proyecto «${proyectoId}» no se pudo resolver`);
     const pantallas = pantallasDeStitch === undefined ? undefined : pantallasElegidasValidas(pantallasDeStitch, disenoVinculadoDe(proyecto.raiz));
-    if (pantallasDeStitch !== undefined && pantallas === undefined) {
-      informar(`no se pudo crear la tarea: ${MOTIVO_PANTALLAS_INVALIDAS}`);
-      return undefined;
-    }
+    if (pantallasDeStitch !== undefined && pantallas === undefined) return negar(MOTIVO_PANTALLAS_INVALIDAS);
     const lista = opciones.colaDeTareas.listar();
     if (borrador !== undefined && !esBorradorLibre(borrador, lista)) {
       // **No se cae a un id nuevo en silencio**, y esa es la decisión: seguir con un uuid
       // dejaría los adjuntos que la persona acaba de subir colgando de una carpeta que
       // ninguna tarea nombra — encolaría el trabajo sin ellos y sin decirlo.
-      informar("no se pudo crear la tarea: ese borrador de adjuntos no vale (o ya es una tarea)");
-      return undefined;
+      return negar("ese borrador de adjuntos no vale (o ya es una tarea)");
     }
     const id = borrador ?? randomUUID();
     const nueva: Tarea = {
@@ -2595,8 +2593,8 @@ export function montarRutas(
     };
     // Con la línea del ticket delante (`encargoConTicket`): en Jira el comentario lleva el encargo SIN ella —ya está en el ticket—.
     const nueva = atenderCrearTarea(destino.proyecto.id, peticion, encargoConTicket(encargo, ticket), borrador, ticket, pantallasDeStitch);
-    if (nueva === undefined) {
-      return { estado: 409, cuerpo: { motivo: `se creó ${creada.clave} en el gestor, pero no la tarea local: créala de nuevo o bórrala allí` } };
+    if ("motivo" in nueva) {
+      return { estado: 409, cuerpo: { motivo: `se creó ${creada.clave} en el gestor, pero no la tarea local (${nueva.motivo}): créala de nuevo o bórrala allí` } };
     }
     opciones.revisarTareas?.();
     emitirTareas();
@@ -8083,10 +8081,13 @@ export function montarRutas(
       }
       if (mensaje.accion === "crear" && opciones.colaDeTareas !== undefined) {
         const creada = atenderCrearTarea(mensaje.proyecto, mensaje.peticion, encargoDeCrear, mensaje.borrador, undefined, mensaje.pantallasDeStitch);
-        if (creada !== undefined) {
-          opciones.revisarTareas?.();
-          emitirTareas();
+        if ("motivo" in creada) {
+          respuesta.writeHead(409, { "content-type": "application/json" });
+          respuesta.end(JSON.stringify({ motivo: creada.motivo }));
+          return;
         }
+        opciones.revisarTareas?.();
+        emitirTareas();
       } else if (mensaje.accion === "augmentar" && opciones.augmentar !== undefined) {
         void atenderAugmentar(opciones.augmentar, mensaje.proyecto, mensaje.peticion, mensaje.borrador, mensaje.pantallasDeStitch);
       } else if (mensaje.accion === "feedback" && opciones.colaDeTareas !== undefined) {
