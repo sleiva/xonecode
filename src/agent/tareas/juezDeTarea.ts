@@ -284,10 +284,15 @@ const parrafoDeLoEscrito = (caso: CasoDeJuez): string[] => {
           "disco no se afirma nada: eso es «no se pudo mirar», no «no cambió nada».",
         ]
       : cambiados.length === 0
-        ? [
-            "Y git dice que la sesión no cambió ningún fichero del proyecto. Es una medida, no",
-            "una suposición: el diff de la sesión contra su «antes» sale vacío.",
-          ]
+        ? caso.entregadosAntes !== undefined
+          ? [
+              "Y git dice que esta pasada no cambió ningún fichero del proyecto. Es una medida, no",
+              "una suposición: el diff desde que empezó esta continuación sale vacío.",
+            ]
+          : [
+              "Y git dice que la sesión no cambió ningún fichero del proyecto. Es una medida, no",
+              "una suposición: el diff de la sesión contra su «antes» sale vacío.",
+            ]
         : [
             `LO QUE CAMBIÓ EN EL PROYECTO, según git (${cambiados.length} fichero(s)):`,
             ...cambiados.map((f) => `- ${f}`),
@@ -295,11 +300,39 @@ const parrafoDeLoEscrito = (caso: CasoDeJuez): string[] => {
             "intención. Por eso «no puedo comprobar si existe X» sobre un fichero de esta lista",
             "no es una respuesta válida: git dice que está y que cambió en este trabajo.",
           ]),
+    ...parrafoDeLasPasadasAnteriores(caso),
     ...(sinAterrizar.length === 0
       ? []
       : [
           `Ojo: de lo autorizado, git no ve cambio en: ${sinAterrizar.join(", ")}. O lo rechazó`,
           "una guarda de ruta, o escribió lo que ya estaba — no des por hecho que aterrizó.",
+        ]),
+  ];
+};
+
+/**
+ * Una CONTINUACIÓN, dicha: lo que ya entregaron las pasadas anteriores del mismo hilo (`CasoDeJuez.entregadosAntes`).
+ *
+ * Medido en Maset (tarea fa556690, 26-10-2026): la lista de git de una continuación se mide desde que se creó, el encargo
+ * es el entero, y el juez dictó rojo por «Git no lista MaestroSalidas… ni el plan», que estaban en el disco, commiteados
+ * por las pasadas anteriores. Lo de antes cuenta como RASTRO para la entrega; lo que se juzga como trabajo de ESTA pasada
+ * (conformidad, acabado) sigue siendo la lista de arriba.
+ */
+const parrafoDeLasPasadasAnteriores = (caso: CasoDeJuez): string[] => {
+  const antes = caso.entregadosAntes;
+  if (antes === undefined) return [];
+  return [
+    "",
+    "Este trabajo es una CONTINUACIÓN de otra tarea en la misma conversación: la lista de arriba es solo lo de ESTA",
+    "pasada, y el encargo es el de la tarea entera.",
+    ...(antes.length === 0
+      ? ["Según git, las pasadas anteriores no cambiaron ningún fichero del proyecto."]
+      : [
+          `LO QUE YA CAMBIARON LAS PASADAS ANTERIORES de esta tarea, según git (${antes.length} fichero(s)):`,
+          ...antes.map((f) => `- ${f}`),
+          "También es un HECHO sobre el disco: cuenta como rastro de la ENTREGA (criterio 1). Que estos ficheros no",
+          "salgan en la lista de esta pasada no es una contradicción con lo que el agente diga de rondas anteriores. La",
+          "conformidad y el acabado de ESTE trabajo se juzgan sobre la lista de esta pasada.",
         ]),
   ];
 };
@@ -373,8 +406,9 @@ const parrafoDelPlanDeLaTarea = (caso: CasoDeJuez): string[] =>
  */
 export const CRITERIOS_DEL_JUEZ: readonly string[] = [
   "CÓMO DECIDIR, EN ESTE ORDEN:",
-  "1. ENTREGA. Por cada cosa que pide el encargo, ¿hay rastro de que se hizo, en la lista de git o en los planes? Lo",
-  "   pedido sin ningún rastro es un hallazgo y es motivo de «rojo».",
+  "1. ENTREGA. Por cada cosa que pide el encargo, ¿hay rastro de que se hizo, en las listas de git (la de esta pasada o,",
+  "   en una continuación, la de las anteriores) o en los planes? Lo pedido sin ningún rastro es un hallazgo y es motivo",
+  "   de «rojo».",
   "2. CONFORMIDAD. ¿Se cambió algo que el encargo NO pedía? Un fichero de la lista de git que ninguna parte del encargo",
   "   explica (otra pantalla, otra funcionalidad) es una DESVIACIÓN, no una mejora: dilo como hallazgo. No es «rojo» por",
   "   sí solo, salvo que el encargo lo prohibiera; lo que sostiene lo pedido (estilos, scripts o recursos de esa",

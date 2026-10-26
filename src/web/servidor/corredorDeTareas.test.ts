@@ -988,10 +988,72 @@ describe("el feedback reanuda una tarea, en su mismo hilo", () => {
     });
     await corredor.arrancar();
     await corredor.asentar();
-    expect(desdes).toEqual(["2026-09-09T09:00:00.000Z"]);
+    // La entrega se mide desde la continuación; la sesión entera se pregunta DESPUÉS, solo para contárselo al juez.
+    expect(desdes).toEqual(["2026-09-09T09:00:00.000Z", undefined]);
     const cerrada = d.estado().find((t) => t.id === "t2")!;
     expect(cerrada.veredicto?.veredicto).toBe("rojo");
     expect(cerrada.cierre?.criticos).toContain(CRITICO_SIN_HACER);
+    await corredor.parar();
+  });
+
+  /**
+   * MEDIDO en Maset (tarea fa556690, 26-10-2026): el juez de la continuación solo veía los 2 ficheros de su pasada y
+   * dictó rojo por «no hay rastro» de la migración y del plan, commiteados por las pasadas anteriores del mismo hilo.
+   */
+  it("una continuación le cuenta al juez lo que entregaron las pasadas anteriores, aparte de lo suyo", async () => {
+    const original = TAREA({ id: "orig", estado: "terminada", sesion: "s-orig", acabada: "2026-09-08T11:00:00.000Z" });
+    const continuacion = tareaReencolada(original, { id: "t2", texto: "acaba", adjuntos: [], ahora: "2026-09-09T09:00:00.000Z" });
+    const juez = juezQueDice({ veredicto: "verde" as const, resumen: "cubierto" });
+    const d = discoDeMentira([original, continuacion]);
+    const corredor = crearCorredorDeTareas({
+      juez,
+      revisable: async (_raiz, _sesion, desde) =>
+        desde === undefined
+          ? { revisable: true, escribio: true, cambiados: ["MaestroSalidas.xne", "MenuSalidas.xne", "doc/PLAN.md"] }
+          : { revisable: true, escribio: true, cambiados: ["MenuSalidas.xne"] },
+      disco: d.disco,
+      abrirParaTarea: async (raiz, sesion) => ({
+        raiz,
+        idDeHilo: sesion ?? "x",
+        correrTarea: async () => ({ verificador: "verde", pendientes: 0 }),
+        cerrar: async () => {},
+      }),
+      pid: 1,
+      concurrencia: () => 1,
+    });
+    await corredor.arrancar();
+    await corredor.asentar();
+    expect(juez.casos).toHaveLength(1);
+    expect(juez.casos[0]!.cambiados).toEqual(["MenuSalidas.xne"]);
+    // Lo de ANTES sin lo de esta pasada: un fichero tocado en las dos ya va en la lista de esta.
+    expect(juez.casos[0]!.entregadosAntes).toEqual(["MaestroSalidas.xne", "doc/PLAN.md"]);
+    await corredor.parar();
+  });
+
+  it("una tarea que NO es continuación no le pregunta a git dos veces ni le pasa «antes» al juez", async () => {
+    const desdes: (string | undefined)[] = [];
+    const juez = juezQueDice({ veredicto: "verde" as const, resumen: "cubierto" });
+    const d = discoDeMentira([TAREA({ id: "t1" })]);
+    const corredor = crearCorredorDeTareas({
+      juez,
+      revisable: async (_raiz, _sesion, desde) => {
+        desdes.push(desde);
+        return { revisable: true, escribio: true, cambiados: ["a.xne"] };
+      },
+      disco: d.disco,
+      abrirParaTarea: async (raiz, sesion) => ({
+        raiz,
+        idDeHilo: sesion ?? "x",
+        correrTarea: async () => ({ verificador: "verde", pendientes: 0 }),
+        cerrar: async () => {},
+      }),
+      pid: 1,
+      concurrencia: () => 1,
+    });
+    await corredor.arrancar();
+    await corredor.asentar();
+    expect(desdes).toEqual([undefined]);
+    expect(juez.casos[0]!.entregadosAntes).toBeUndefined();
     await corredor.parar();
   });
 

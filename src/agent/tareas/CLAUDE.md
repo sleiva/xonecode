@@ -115,7 +115,10 @@ corre solo y escribe sin aprobación. Cuatro estados; `requiere-atencion` = **es
   Una con feedback no edita su encargo (`puedeEditarEncargo`). Una continuación sin acabar FRENA otra (`continuacionEnCurso`,
   por `continuaDe` o por el hilo). Mientras corre, su conversación vuelve a la barra (`App.tsx#sesionesDeFinalizadas`).
   **Su entrega se mide DESDE que se creó** (`revisable(…, desde)`, `sesionGit.ts#cambiosDeSesion`): con la sesión
-  entera heredaba lo escrito por la original y se cerraba sin juez (medido en Maset). El texto propuesto pide HACER lo
+  entera heredaba lo escrito por la original y se cerraba sin juez (medido en Maset). **Pero el JUEZ ve también lo de
+  las pasadas ANTERIORES** (`CasoDeJuez.entregadosAntes`, `juezDeTarea.ts#parrafoDeLasPasadasAnteriores`), aparte y como
+  rastro de la ENTREGA: con solo su pasada juzgaba el encargo entero y dictaba rojo por «no hay rastro» de lo commiteado
+  antes (medido en Maset). La puerta de entrega no lo usa. El texto propuesto pide HACER lo
   pendiente de su último resumen, no resumir. Se le pueden PEGAR o adjuntar capturas (`adjuntosDeBorrador.tsx`, el mismo
   hook que «Nueva tarea»): suben a un BORRADOR que `reencolar` adopta como id, con los de la original copiados sin pisar
   los nuevos; cerrar sin encolar borra el borrador. En Finalizadas la continuación CUELGA de su tarea

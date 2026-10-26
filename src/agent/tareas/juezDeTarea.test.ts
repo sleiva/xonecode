@@ -360,6 +360,48 @@ describe("el prompt lleva los HECHOS y nunca contenido de ficheros", () => {
     expect(prompt).toContain("git no ve cambio en: a.xne");
   });
 
+  /**
+   * MEDIDO en Maset (tarea fa556690, 26-10-2026): la continuación solo veía los 2 ficheros de SU pasada, el encargo
+   * entero pedía migración + plan, y el juez dictó rojo por «Git no lista MaestroSalidas… ni el plan» — que estaban
+   * en el disco, commiteados por las pasadas anteriores de la misma conversación.
+   */
+  describe("una CONTINUACIÓN: lo que entregaron las pasadas anteriores también se le dice", () => {
+    it("las dos listas por separado, y lo de antes cuenta como rastro de la entrega", async () => {
+      const prompt = await promptDe({
+        encargo: "migra Salidas y escribe el plan",
+        raiz: RAIZ,
+        autorizadas: [],
+        cambiados: ["MenuSalidas.xne"],
+        entregadosAntes: ["MaestroSalidas.xne", "doc/PLAN_Cambios_Cliente.md"],
+      });
+      expect(prompt).toContain("LO QUE CAMBIÓ EN EL PROYECTO, según git (1 fichero(s)):\n- MenuSalidas.xne");
+      expect(prompt).toContain("CONTINUACIÓN");
+      expect(prompt).toMatch(/PASADAS ANTERIORES[^\n]*\(2 fichero\(s\)\):\n- MaestroSalidas\.xne\n- doc\/PLAN_Cambios_Cliente\.md/);
+      expect(prompt).toMatch(/ENTREGA/);
+      // Y que la lista corta es de ESTA pasada, no de la sesión: lo de antes no sale ahí y no es una contradicción.
+      expect(prompt).toContain("no es una contradicción");
+    });
+
+    it("sin cambios en esta pasada, se dice de ESTA pasada y no de la sesión entera", async () => {
+      const prompt = await promptDe({ encargo: "x", raiz: RAIZ, autorizadas: [], cambiados: [], entregadosAntes: ["a.xne"] });
+      expect(prompt).not.toContain("git dice que la sesión no cambió ningún fichero");
+      expect(prompt).toContain("esta pasada no cambió ningún fichero");
+      expect(prompt).toContain("- a.xne");
+    });
+
+    it("las anteriores sin ningún cambio también se dice: vacío no es ausente", async () => {
+      const prompt = await promptDe({ encargo: "x", raiz: RAIZ, autorizadas: [], cambiados: ["a.xne"], entregadosAntes: [] });
+      expect(prompt).toContain("CONTINUACIÓN");
+      expect(prompt).toMatch(/pasadas anteriores no cambiaron ningún fichero/);
+    });
+
+    it("una tarea que NO es continuación no habla de pasadas anteriores", async () => {
+      const prompt = await promptDe({ encargo: "x", raiz: RAIZ, autorizadas: [], cambiados: ["a.xne"] });
+      expect(prompt).not.toContain("CONTINUACIÓN");
+      expect(prompt).not.toMatch(/PASADAS ANTERIORES/);
+    });
+  });
+
   it("un turno sin verificador se le DICE, en vez de callarlo", async () => {
     let prompt = "";
     const juez = crearJuezDeTarea({

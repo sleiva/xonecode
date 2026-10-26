@@ -532,6 +532,12 @@ export interface CasoDeJuez {
    *  **Ausente y vacía no son lo mismo**: ausente es «no se pudo preguntar a git» y `[]` es
    *  «git dice que no cambió nada». Colapsarlas inventaría un cargo o lo taparía. */
   cambiados?: readonly string[];
+  /** Solo en una CONTINUACIÓN: lo que git ve cambiado por las pasadas ANTERIORES del mismo hilo (el diff de la sesión
+   *  entera menos `cambiados`, que en una continuación se mide desde que se creó). Sin esto el juez juzgaba el encargo
+   *  ENTERO con solo la última pasada delante — medido en Maset (fa556690): rojo por «no hay rastro» de la migración y
+   *  del plan, commiteados por las pasadas anteriores. Rastro para la ENTREGA, no trabajo de esta pasada. Ausente = no es
+   *  una continuación, o no se pudo preguntar; `[]` = las anteriores no cambiaron nada. */
+  entregadosAntes?: readonly string[];
   /** Lo que dieron las comprobaciones VISUALES del turno, medido por el harness (`ResultadoDeTurno.comprobacionesVisuales`).
    *  Ausente = no hubo ninguna: y entonces «no consta» sí es la verdad. */
   comprobacionesVisuales?: readonly string[];

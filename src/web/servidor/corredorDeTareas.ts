@@ -888,6 +888,21 @@ export function crearCorredorDeTareas(opciones: {
       revision = { revisable: false };
     }
     /**
+     * Y en una continuación, lo que entregaron las pasadas ANTERIORES, solo para el JUEZ: la entrega se sigue midiendo desde
+     * que se creó (arriba). Medido en Maset (fa556690): sin esto el juez juzgaba el encargo entero con solo la última pasada
+     * delante y dictaba rojo por «no hay rastro» de lo commiteado antes. Si no se puede preguntar, se queda ausente.
+     */
+    let entregadosAntes: readonly string[] | undefined;
+    if (tarea.continuaDe !== undefined && revision.cambiados !== undefined) {
+      const deEstaPasada = new Set(revision.cambiados);
+      try {
+        const entera = await opciones.revisable(tarea.proyecto.raiz, sesion);
+        entregadosAntes = entera.cambiados?.filter((f) => !deEstaPasada.has(f));
+      } catch {
+        entregadosAntes = undefined;
+      }
+    }
+    /**
      * Las rutas autorizadas se normalizan UNA vez y sirven para las dos cosas: la cuenta que
      * mide la condición de «nada aterrizó» y la lista que ve el juez. Normalizadas por el
      * MISMO sitio que las guarda en el índice, así que son exactamente las que verá la
@@ -943,6 +958,7 @@ export function crearCorredorDeTareas(opciones: {
          */
         ...(medida.preexistentes === undefined ? {} : { preexistentes: medida.preexistentes }),
         ...(medida.cambiados === undefined ? {} : { cambiados: medida.cambiados }),
+        ...(entregadosAntes === undefined ? {} : { entregadosAntes }),
         // Y lo que midieron las comprobaciones visuales: sin ellas, un criterio que pide validar contra la maqueta era
         // un rojo seguro aunque se hubiera validado (medido en Maset).
         ...(medida.comprobacionesVisuales === undefined ? {} : { comprobacionesVisuales: medida.comprobacionesVisuales }),
