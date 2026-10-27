@@ -65,4 +65,13 @@ discrepancia, **el código manda**.
 - **Antes de usar el túnel se comprueba DE QUIÉN es** (`lib/dispositivo.mjs#asegurarTunel`, `adb forward --list`): de otro, sale con 2 y lo dice; de nadie, lo repone. Ejecutar y la recarga lo reponen sin mirar (límite). `emulator-*` sin AVD cae al de siempre y lo DICE. Mismo `--serie` en todos los scripts. **`adb forward` del agente se RECHAZA** (`motivoDeComandoRechazado`); `adb reverse` no (no toca puertos locales).
 - **Crear un AVD va por el MISMO corredor y cerrojo** (`crearAvd`); «sin ventana» = `-no-window -no-audio -no-metrics`, por eso existe «Parar» (`Ajustes.tsx`, `CrearEmulador.tsx`).
 - **Límites**: framework fuera de sitio (dos APK) no se persigue; `enUso` (`PastillaDeDispositivo.tsx`, `Ejecutar.tsx`) mira las consolas de persona y, con su TÍTULO, las de TAREA en marcha (`tarea`, IXCODE-58; se reemite al cambiar las tareas); al abrir o cerrar una de persona no se refresca, y va por `basename(raiz)` (mismo nombre en dos entornos se confunde).
+- **La GRANJA de dispositivos XOne** (`core/granja.ts`, `granjaEnDisco.ts`, `granjaEnRed.ts`, `arranque.ts#ajusteDeGranjaCableado`,
+  `AjustesDeGranja.tsx`): dirección y huella en `settings.json#granja`, el token en `~/.xonecode/granja.json` (0600, nunca al
+  cable ni a la shell). **Origen = el del PROYECTO si lo dice, si no el GLOBAL** (`origenEnVigor`: la granja como aparato
+  por omisión de Ajustes → General), como el modo de escritura: el del proyecto se fija en el panel → Resumen o en la
+  pastilla del chat (`config.json#origenDeDispositivos`, `local` también se escribe; quitarlo vuelve al global). **El certificado
+  autofirmado se fija por HUELLA antes de mandar el token** (TLS abierto a mano; con `agent: false` Node IGNORA
+  `createConnection`, medido). Con la granja, el aparato de la sesión es `DISPOSITIVO_DE_GRANJA` (`dispositivoSegunOrigen`; un
+  iPhone se queda). **Fase 1: nada llega aún a ella** —los scripts de Android se niegan (`TEXTO_DE_GRANJA`), Ejecutar da
+  `granja-sin-camino` y la recarga no aplica—; pedir copia, liberarla al acabar el turno y la skill `xone-granja` son lo siguiente.
 - **Con una tarea trabajando, Ejecutar sube LO TERMINADO** (`sesionGit.ts#exportarLoTerminado`, IXCODE-58): el árbol del commit anterior al primero que selló la tarea desde que empezó (o `HEAD`), exportado a una carpeta temporal con un índice privado; nunca el disco a medias. El veredicto lo dice antes (`lanzable.origen`); si no se puede separar, falla diciéndolo.

@@ -51,6 +51,7 @@ const CLASE: Record<DispositivoDeLaSesion["clase"], string> = {
   emulador: "emulador",
   simulador: "simulador",
   fisico: "dispositivo físico",
+  granja: "granja de dispositivos",
 };
 
 /**
@@ -63,6 +64,15 @@ export function lineaDelDispositivo(d: DispositivoDeLaSesion | undefined): strin
     return (
       "[Dispositivo de esta sesión: ninguno elegido. Si hay que probar en un aparato, los scripts de " +
       "xone-hotswap prefieren un EMULADOR (o simulador) conectado antes que un dispositivo físico.]"
+    );
+  }
+  if (d.clase === "granja") {
+    // Fase 1: el proyecto ya elige la granja, pero nada llega todavía a ella. Se DICE para que el
+    // agente no busque un aparato de este equipo por su cuenta; la garantía la ponen los scripts.
+    return (
+      "[Dispositivo de esta sesión: la GRANJA de dispositivos XOne, que este proyecto usa en vez de los " +
+      "aparatos de este equipo. Los scripts de xone-hotswap todavía no llegan a ella: no pruebes en ningún " +
+      "aparato y dilo en tu respuesta. Lo cambia la persona en la pastilla del chat.]"
     );
   }
   const plataforma = d.plataforma === "android" ? "Android" : "iOS";

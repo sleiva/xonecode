@@ -38,6 +38,8 @@ import {
   guardarModoDeProyecto,
   guardarConectoresDeProyecto,
   guardarModoDeEscrituraDeProyecto,
+  guardarOrigenDeDispositivosDeProyecto,
+  origenDeDispositivosDelProyecto,
   guardarGestorDeProyecto,
   guardarCloudStudioDeProyecto,
   guardarModelosDeProyecto,
@@ -450,5 +452,24 @@ it("guardarModoDeEscrituraDeProyecto conserva el resto de claves y quita la suya
   expect(JSON.parse(readFileSync(ruta, "utf8"))).toEqual({ tema: "xone", modoDeEscritura: "supervisado" });
   guardarModoDeEscrituraDeProyecto(p, undefined);
   expect(JSON.parse(readFileSync(ruta, "utf8"))).toEqual({ tema: "xone" });
+  rmSync(p, { recursive: true, force: true });
+});
+
+it("guardarOrigenDeDispositivosDeProyecto escribe granja o local, undefined la quita, y se lee por la raíz", () => {
+  const p = mkdtempSync(join(tmpdir(), "xc-cfg-"));
+  const ruta = rutaConfigDeProyecto(p);
+  mkdirSync(join(p, NOMBRE_CARPETA), { recursive: true });
+  writeFileSync(ruta, JSON.stringify({ tema: "xone" }));
+
+  expect(origenDeDispositivosDelProyecto(p)).toBeUndefined();
+  guardarOrigenDeDispositivosDeProyecto(p, "granja");
+  expect(JSON.parse(readFileSync(ruta, "utf8"))).toEqual({ tema: "xone", origenDeDispositivos: "granja" });
+  expect(origenDeDispositivosDelProyecto(p)).toBe("granja");
+  // `local` SÍ se escribe: pisa a un global que diga granja.
+  guardarOrigenDeDispositivosDeProyecto(p, "local");
+  expect(JSON.parse(readFileSync(ruta, "utf8"))).toEqual({ tema: "xone", origenDeDispositivos: "local" });
+  guardarOrigenDeDispositivosDeProyecto(p, undefined);
+  expect(JSON.parse(readFileSync(ruta, "utf8"))).toEqual({ tema: "xone" });
+  expect(origenDeDispositivosDelProyecto(p)).toBeUndefined();
   rmSync(p, { recursive: true, force: true });
 });

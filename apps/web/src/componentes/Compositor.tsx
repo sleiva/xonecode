@@ -7,6 +7,7 @@ import { nombreDeAdjuntoSeguro } from "../nombreDeAdjunto.js";
 import { PastillaDeModelo } from "./PastillaDeModelo.js";
 import { PastillaDeEsfuerzo } from "./PastillaDeEsfuerzo.js";
 import { PastillaDeDispositivo } from "./PastillaDeDispositivo.js";
+import type { EstadoDeGranja } from "../store.js";
 import { SelectorDeModo } from "./SelectorDeModo.js";
 import { IconoDeAnexar, IconoDeEnviar } from "./IconosDelCompositor.js";
 import pastillas from "./PastillaDeModelo.module.css";
@@ -92,6 +93,9 @@ export function Compositor({
   alElegirModoDeEscritura,
   alElegirDispositivo,
   dispositivosEnUso,
+  origenDeDispositivos,
+  granja,
+  alCambiarOrigenDeDispositivos,
   proyectoActual,
   alMedirDispositivos,
   alSubirAdjunto,
@@ -182,6 +186,13 @@ export function Compositor({
   alElegirDispositivo?: (id: string | undefined) => void;
   /** Qué aparato usa cada consola abierta; la pastilla avisa de los de OTRAS. Ausente = no avisa. */
   dispositivosEnUso?: { id: string; proyecto: string }[];
+  /**
+   * El origen de los aparatos del proyecto (este equipo o la granja) y la granja de Ajustes. Ausente
+   * `alCambiarOrigenDeDispositivos` = esta consola no ofrece la granja y la pastilla es la de siempre.
+   */
+  origenDeDispositivos?: "local" | "granja";
+  granja?: EstadoDeGranja;
+  alCambiarOrigenDeDispositivos?: (origen: "local" | "granja") => void;
   /** El proyecto de esta consola, para no avisarse a sí misma. */
   proyectoActual?: string;
   /** Volver a medir la máquina desde el menú de la pastilla. Ausente = no se ofrece. */
@@ -444,7 +455,11 @@ export function Compositor({
                 alElegir={alElegirDispositivo}
                 {...(alMedirDispositivos === undefined ? {} : { alMedir: alMedirDispositivos })}
                 {...(dispositivosEnUso === undefined ? {} : { enUso: dispositivosEnUso })}
-                {...(proyectoActual === undefined ? {} : { proyectoActual })}
+                {...(proyectoActual === undefined ? {} : { proyectoActual, proyecto: proyectoActual })}
+                {...(alCambiarOrigenDeDispositivos === undefined || origenDeDispositivos === undefined
+                  ? {}
+                  : { origen: origenDeDispositivos, alCambiarOrigen: alCambiarOrigenDeDispositivos })}
+                {...(granja === undefined ? {} : { granja })}
               />
             </div>
           )}

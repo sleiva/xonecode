@@ -34,6 +34,7 @@
  * amplía en silencio, y lo que se amplía en silencio es lo que acaba sin frase.
  */
 import { esAlcanzable, type Dispositivo } from "./dispositivos.js";
+import { ID_DE_GRANJA } from "./granja.js";
 import {
   type ConexionDeclarada,
   conexionesDeApp,
@@ -92,7 +93,9 @@ export type CausaDeBloqueo =
   | { causa: "app-xml-ilegible"; motivo: string }
   | { causa: "falta-el-fichero-de-la-conexion"; connstring: string }
   | { causa: "falta-la-base" }
-  | { causa: "plataforma-sin-camino"; plataforma: Dispositivo["plataforma"] };
+  | { causa: "plataforma-sin-camino"; plataforma: Dispositivo["plataforma"] }
+  /** El proyecto usa la granja de dispositivos (`core/granja.ts`), y Ejecutar todavía no llega a ella. */
+  | { causa: "granja-sin-camino" };
 
 /**
  * Lo que el veredicto necesita, ya resuelto por quien SÍ puede tocar el disco y la máquina.
@@ -180,7 +183,9 @@ export function puedeLanzarse(entrada: EntradaDeVeredicto): Veredicto {
     causas.push(
       entrada.elegido === undefined
         ? { causa: "sin-dispositivo-elegido" }
-        : { causa: "dispositivo-desconocido" },
+        : entrada.elegido === ID_DE_GRANJA
+          ? { causa: "granja-sin-camino" }
+          : { causa: "dispositivo-desconocido" },
     );
   } else {
     if (!esAlcanzable(dispositivo.estado)) {
@@ -303,6 +308,8 @@ const ETIQUETA_DE_ESTADO: Record<Dispositivo["estado"], string> = {
  */
 export function motivoDeBloqueo(causa: CausaDeBloqueo): string {
   switch (causa.causa) {
+    case "granja-sin-camino":
+      return "Este proyecto usa la granja de dispositivos, y Ejecutar todavía no llega a ella. Para lanzar en un aparato de este equipo, elige «Este equipo» en la pastilla del compositor.";
     case "sin-dispositivo-elegido":
       return "Esta sesión no tiene ningún dispositivo elegido: elígelo en la pastilla del compositor, junto al modelo —es donde se elige el de ESTA sesión—, y vuelve a intentarlo.";
     case "dispositivo-desconocido":

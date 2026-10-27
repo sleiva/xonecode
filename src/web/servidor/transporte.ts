@@ -42,6 +42,7 @@ import type { Esfuerzo } from "../../core/esfuerzo.js";
 import type { AutenticacionDeConector, ConectorDelCable, DefinicionDeConector, FilaDeCatalogo } from "../../core/conectores.js";
 import type { EstadoDeMotorLocal } from "../../core/motoresLocales.js";
 import type { DiagnosticoDeNode } from "../../core/diagnosticoDeNode.js";
+import type { OrigenDeDispositivos, PruebaDeGranja } from "../../core/granja.js";
 
 /** El vínculo del proyecto con su gestor, tal como cruza el cable: el del `config.json` más el
  *  nombre del sitio si esta ejecución ya lo sabe (lo dijo `sitios()`), y el del PROYECTO si ya
@@ -183,6 +184,19 @@ export type MensajeAlCliente =
    * el SECRETO en el fragmento: es el TERCER secreto del cable, tras `leerSecreto` y el `codigo` de `motorLocal`, y por eso
    * `remoto` no está en la lista de salida del puente (`core/remoto.ts`).
    */
+  /**
+   * La granja de dispositivos de este equipo (Ajustes → Dispositivos → Granja, `core/granja.ts`): la
+   * dirección, si HAY token (nunca el token: vive en `~/.xonecode/granja.json` y no cruza), la huella
+   * del certificado aceptado y la última prueba con su hora. `motivo` lo compone el servidor para todo
+   * lo que no es `conectada`: el cliente lo pinta y no repite la regla. Ausente `direccion` = sin granja.
+   */
+  | {
+      clase: "granja";
+      direccion?: string;
+      hayToken: boolean;
+      huella?: string;
+      prueba?: PruebaDeGranja & { medido: string; motivo?: string };
+    }
   | {
       clase: "remoto";
       estado: "apagada" | "abriendo" | "activa" | "reconectando" | "error";
@@ -960,7 +974,12 @@ export type MensajeAlCliente =
        * no se manda: eso lo resuelve el cliente contra la última medida, que es la única que
        * lo sabe en este instante.
        */
-      dispositivoActivo?: { id: string; nombre: string; plataforma: "android" | "ios"; clase: "emulador" | "simulador" | "fisico" };
+      dispositivoActivo?: { id: string; nombre: string; plataforma: "android" | "ios"; clase: "emulador" | "simulador" | "fisico" | "granja" };
+      /**
+       * El proyecto abierto usa la GRANJA de dispositivos (`config.json#origenDeDispositivos`). Ausente =
+       * este equipo, que es la omisión: la pastilla pinta «Este equipo | Granja» con esto.
+       */
+      origenDeDispositivos?: "granja";
       /**
        * La sesión abierta es una RELECTURA: se reabrió y del hilo no queda memoria
        * (`ConsolaDeProyecto.historica`, que lo PREGUNTA al checkpointer del proyecto en vez
@@ -1245,6 +1264,11 @@ export interface FotoDelResumen {
    * «como el global», que no es lo mismo que no saberlo.
    */
   modoDeEscritura?: { proyecto?: "supervisado" | "autonomo" };
+  /**
+   * El origen de los aparatos que dice ESTE proyecto (`config.json#origenDeDispositivos`); dentro, ausente es
+   * «como el global». Solo con copia y con la granja montada: si no, el campo no viaja y el control no se pinta.
+   */
+  origenDeDispositivos?: { proyecto?: OrigenDeDispositivos };
 }
 
 export interface EstadoDeSync {
@@ -1569,6 +1593,8 @@ export type MensajeDelCliente =
    *  (IXCODE-31). 200 con `{ proyecto? }`, 409 con `{ motivo }` sin copia o con un id ajeno, y
    *  400 con un modo que no existe. Mismo trato que `resumen`: el ID, nunca una ruta. */
   | { clase: "copiaLocal"; accion: "modoDeEscritura"; proyecto: string; modo?: "supervisado" | "autonomo" }
+  /** El origen de los aparatos de un proyecto (panel → Resumen). Sin `origen` se QUITA: manda el global. */
+  | { clase: "copiaLocal"; accion: "origenDeDispositivos"; proyecto: string; origen?: OrigenDeDispositivos }
   /** Fijar el modo con que nacen las sesiones nuevas en cualquier proyecto (Ajustes > General). */
   | { clase: "modoPorDefecto"; modo: "supervisado" | "autonomo" }
   /** Fijar —o quitar, sin `id`— el aparato de las sesiones nuevas (IXCODE-51). Solo el ID: el resto
@@ -1852,6 +1878,17 @@ export type MensajeDelCliente =
   /** Parar el turno en vuelo. Aborta el `stream` del grafo (`SesionReal.cancelar`) y deja
    *  la sesión viva: es parar ESTO, no cerrar la conversación. */
   | { clase: "cancelar" }
+  /**
+   * La granja de Ajustes. `guardar`: la dirección (vacía la QUITA) y/o el token tecleado, o
+   * `quitarToken`; el token es un SECRETO del cable —no se apunta, no se devuelve y solo sale hacia
+   * `~/.xonecode/granja.json`—. `probar`: `/api/me` + `/api/state`. `aceptarHuella`: la huella NUEVA
+   * que dio la última prueba, y solo esa.
+   */
+  | { clase: "granja"; accion: "guardar"; direccion?: string; token?: string; quitarToken?: true }
+  | { clase: "granja"; accion: "probar" }
+  | { clase: "granja"; accion: "aceptarHuella"; huella: string }
+  /** El origen de los aparatos del proyecto ABIERTO (la pastilla): este equipo o la granja. */
+  | { clase: "origenDeDispositivos"; origen: OrigenDeDispositivos }
   /** La sesión remota: encenderla, revocar su enlace (apagar y volver a encender) o apagarla. */
   | { clase: "remoto"; accion: "encender" | "revocar" | "apagar" }
   /** El interruptor de Ajustes: escribe `remoto.habilitado`; desactivar apaga antes lo encendido. */

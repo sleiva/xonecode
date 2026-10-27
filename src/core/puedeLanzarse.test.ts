@@ -77,7 +77,7 @@ function etiquetas(parcial: Partial<EntradaDeVeredicto>): string[] {
  * La segunda mitad es lo que impide un miembro muerto. El `switch` de `motivoDeBloqueo` es
  * exhaustivo, así que una causa nueva no compila hasta que tenga frase — pero nada obliga a que
  * alguien la EMITA, y una causa que nadie emite es una regla escrita y muerta: una frase que
- * ninguna pantalla va a enseñar nunca. Las diez se producen con una entrada posible; el día que
+ * ninguna pantalla va a enseñar nunca. Las once se producen con una entrada posible; el día que
  * una no se pueda, el sitio para decirlo es una nota aquí, no una entrada inventada.
  */
 const CAUSAS_CON_EJEMPLO: { causa: CausaDeBloqueo; entrada: Partial<EntradaDeVeredicto> }[] = [
@@ -85,6 +85,10 @@ const CAUSAS_CON_EJEMPLO: { causa: CausaDeBloqueo; entrada: Partial<EntradaDeVer
   {
     causa: { causa: "dispositivo-desconocido" },
     entrada: { dispositivo: undefined, framework: undefined, elegido: "emulator-5554" },
+  },
+  {
+    causa: { causa: "granja-sin-camino" },
+    entrada: { dispositivo: undefined, framework: undefined, elegido: "granja" },
   },
   {
     causa: { causa: "dispositivo-no-alcanzable", nombre: "Pixel 8", estado: "no-disponible" },
@@ -171,6 +175,10 @@ describe("puedeLanzarse", () => {
     expect(etiquetas({ dispositivo: undefined, framework: undefined, elegido: "emulator-5554" })).toEqual([
       "dispositivo-desconocido",
     ]);
+  });
+
+  it("con la GRANJA elegida la causa es el camino que falta, no un aparato desconocido", () => {
+    expect(etiquetas({ dispositivo: undefined, framework: undefined, elegido: "granja" })).toEqual(["granja-sin-camino"]);
   });
 
   it("un dispositivo apagado se dice con su nombre y su estado", () => {
@@ -389,7 +397,7 @@ describe("puedeLanzarse", () => {
 
 describe("motivoDeBloqueo: una frase por causa, y cada una dice dónde se arregla", () => {
   it("la lista de arriba cubre cada causa una vez (si añades una, añádela aquí)", () => {
-    expect(CAUSAS_CON_EJEMPLO).toHaveLength(10);
+    expect(CAUSAS_CON_EJEMPLO).toHaveLength(11);
     expect(new Set(CAUSAS_CON_EJEMPLO.map((c) => c.causa.causa)).size).toBe(CAUSAS_CON_EJEMPLO.length);
   });
 

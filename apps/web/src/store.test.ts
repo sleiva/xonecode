@@ -557,6 +557,17 @@ describe("el dispositivo de la sesión, en el alta", () => {
     expect(s.leer().alta?.dispositivoActivo).toBeUndefined();
   });
 
+  it("la granja solo con su forma, y el origen del proyecto solo si es granja", () => {
+    const s = crearStoreDelCliente();
+    const granja = { id: "granja", nombre: "Granja", plataforma: "android", clase: "granja" };
+    s.aplicar(alta({ dispositivoActivo: granja, origenDeDispositivos: "granja" }));
+    expect(s.leer().alta?.dispositivoActivo).toEqual(granja);
+    expect(s.leer().alta?.origenDeDispositivos).toBe("granja");
+    s.aplicar(alta({ dispositivoActivo: { ...granja, id: "R58" }, origenDeDispositivos: "nube" }));
+    expect(s.leer().alta?.dispositivoActivo).toBeUndefined();
+    expect(s.leer().alta?.origenDeDispositivos).toBeUndefined();
+  });
+
   it("una plataforma o una clase que no existen no cuelan", () => {
     const s = crearStoreDelCliente();
     s.aplicar(alta({ dispositivoActivo: { id: "x", nombre: "X", plataforma: "windows", clase: "fisico" } }));
@@ -2231,6 +2242,24 @@ describe("store: lo pendiente de subir (la pestaña Sincronización)", () => {
     s.marcarDesconectado();
     expect(s.leer().pendientesDeSubida).toBeUndefined();
     expect(s.leer().parchesDeSubida).toBeUndefined();
+  });
+
+  it("granja: lista blanca campo a campo; un token que se colara no se guarda", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "granja", direccion: "https://g:8090", hayToken: true, token: "xfarm_secreto" } as never);
+    expect(s.leer().granja).toEqual({ direccion: "https://g:8090", hayToken: true });
+    s.aplicar({
+      clase: "granja",
+      hayToken: true,
+      direccion: "https://g:8090",
+      prueba: { estado: "conectada", usuario: "ana", rol: "normal", resumen: { telefonos: 2, copias: { tuyas: 0, libres: 4 }, frameworks: ["5.0.6.5"] }, medido: "2026-10-27T10:00:00Z" },
+    });
+    expect(s.leer().granja?.prueba).toMatchObject({ estado: "conectada", usuario: "ana" });
+    // Una prueba con forma rota no se pinta; sin `hayToken` el mensaje entero no vale.
+    s.aplicar({ clase: "granja", hayToken: false, prueba: { estado: "conectada", medido: "x" } } as never);
+    expect(s.leer().granja).toEqual({ hayToken: false });
+    s.aplicar({ clase: "granja", direccion: "x" } as never);
+    expect(s.leer().granja).toEqual({ hayToken: false });
   });
 
   it("remoto: la vía y lo de ngrok pasan por lista blanca, campo a campo", () => {

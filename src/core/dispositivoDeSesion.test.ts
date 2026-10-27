@@ -25,6 +25,25 @@ describe("el dispositivo de la sesión, para el agente", () => {
  * La regla que de verdad decide, la de los SCRIPTS (`skills/xone-hotswap/lib/dispositivo.mjs`).
  * Se prueba desde aquí para que `npm test` la cubra: los scripts no tienen suite propia.
  */
+describe("la granja como aparato de la sesión", () => {
+  it("el fichero solo la acepta con su forma; nunca cae a un móvil llamado «granja»", () => {
+    expect(dispositivoDeTexto(JSON.stringify({ id: "granja", nombre: "x", plataforma: "android", clase: "granja" }))).toEqual({
+      id: "granja",
+      nombre: "Granja",
+      plataforma: "android",
+      clase: "granja",
+    });
+    expect(dispositivoDeTexto(JSON.stringify({ id: "R58N", nombre: "x", plataforma: "android", clase: "granja" }))).toBeUndefined();
+    expect(dispositivoDeTexto(JSON.stringify({ id: "granja", nombre: "x", plataforma: "ios", clase: "granja" }))).toBeUndefined();
+  });
+
+  it("la línea del turno dice que es la granja y que no se prueba en este equipo", () => {
+    const linea = lineaDelDispositivo({ id: "granja", nombre: "Granja", plataforma: "android", clase: "granja" });
+    expect(linea).toMatch(/GRANJA/);
+    expect(linea).not.toMatch(/--serie|adb -s/);
+  });
+});
+
 describe("los scripts de xone-hotswap eligen aparato", () => {
   const lib = async (): Promise<{
     serieAndroid: (
@@ -70,6 +89,14 @@ describe("los scripts de xone-hotswap eligen aparato", () => {
     const { serieAndroid } = await lib();
     const entorno = conFichero({ id: "UDID-1", nombre: "iPhone", plataforma: "ios", clase: "simulador" });
     expect(() => serieAndroid(undefined, { entorno, adb: "/no/existe", negar })).toThrow(/iPhone/);
+  });
+
+  it("con la GRANJA en la sesión, un script de Android se niega en vez de caer a un aparato de este equipo", async () => {
+    const { serieAndroid, puedeArrancarEmulador } = await lib();
+    const entorno = conFichero({ id: "granja", nombre: "Granja", plataforma: "android", clase: "granja" });
+    expect(() => serieAndroid(undefined, { entorno, adb: "/no/existe", negar })).toThrow(/GRANJA.*pastilla/s);
+    expect(() => serieAndroid("emulator-5554", { entorno, adb: "/no/existe", negar })).toThrow(/GRANJA/);
+    expect(puedeArrancarEmulador(entorno)).toMatch(/Granja/);
   });
 
   it("arrancar un emulador solo se puede sin aparato o con un EMULADOR en la sesión", async () => {

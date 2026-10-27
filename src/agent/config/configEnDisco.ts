@@ -34,6 +34,7 @@ import {
 } from "../../core/modelos.js";
 import type { Papel } from "../../core/ports.js";
 import type { ModoDeEscritura } from "../../core/modoDeEscritura.js";
+import type { OrigenDeDispositivos } from "../../core/granja.js";
 import { renombrarSobreSync } from "../renombrarSobre.js";
 
 export const NOMBRE_CARPETA = ".xonecode";
@@ -325,6 +326,23 @@ export function guardarModoDeEscrituraDeProyecto(
 }
 
 /**
+ * De dónde sacan los aparatos las sesiones de este proyecto (`core/granja.ts`). `undefined` QUITA la
+ * clave (vuelve a mandar el global, `origenEnVigor`); `local` SÍ se escribe: en un proyecto es una
+ * elección que pisa a un global que diga granja.
+ */
+export function guardarOrigenDeDispositivosDeProyecto(
+  raiz: string,
+  origen: OrigenDeDispositivos | undefined,
+): { ruta: string; origenDeDispositivos: OrigenDeDispositivos | undefined } {
+  const ruta = rutaConfigDeProyecto(raiz);
+  const base = leerObjetoCrudoOAbortar(ruta);
+  const { origenDeDispositivos: _viejo, ...sinOrigen } = base;
+  const fusionado = origen === undefined ? sinOrigen : { ...base, origenDeDispositivos: origen };
+  escribirAtomico(ruta, JSON.stringify(fusionado, null, 2) + "\n");
+  return { ruta, origenDeDispositivos: origen };
+}
+
+/**
  * El gestor de tareas vinculado a este proyecto (IXCODE-11): a qué conector, sitio y
  * proyecto remoto. `undefined` QUITA la clave del fichero en vez de dejarla vacía o nula
  * —un `gestorDeTareas: {}` sería una forma más de dato incompleto que `validar` tendría
@@ -452,6 +470,15 @@ export function cloudstudioDelProyecto(raiz: string): ConfigDeFichero["cloudstud
 export function modoDeEscrituraDelProyecto(raiz: string): ModoDeEscritura | undefined {
   try {
     return cargar(raiz).config.proyecto?.modoDeEscritura;
+  } catch {
+    return undefined;
+  }
+}
+
+/** El origen que dice ESTE proyecto, o `undefined` (manda el global). Un `config.json` ilegible no dice nada. */
+export function origenDeDispositivosDelProyecto(raiz: string): OrigenDeDispositivos | undefined {
+  try {
+    return cargar(raiz).config.proyecto?.origenDeDispositivos;
   } catch {
     return undefined;
   }

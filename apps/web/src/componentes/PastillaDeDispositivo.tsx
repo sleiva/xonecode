@@ -4,6 +4,8 @@ import type { DispositivoElegido, InformeDeDispositivos } from "../tipos.js";
 import { etiquetaDeEstado, inventario, seLlegaAlDispositivo } from "../inventarioDeDispositivos.js";
 import { IconoDeChevron, IconoDeDispositivo } from "./IconosDelCompositor.js";
 import estilos from "./PastillaDeModelo.module.css";
+import conmutador from "./SelectorDeModo.module.css";
+import type { EstadoDeGranja } from "../store.js";
 
 /**
  * Con qué dispositivo trabaja ESTA sesión, al lado de la pastilla del modelo.
@@ -43,6 +45,11 @@ export function PastillaDeDispositivo({
   titulo = "Dispositivo de esta sesión",
   pie = "Se guarda con la sesión. La usan la pestaña Ejecutar para lanzar la app y el agente cuando prueba en un aparato; sin elegir ninguno, prefiere un emulador.",
   enLinea = false,
+  origen,
+  proyecto,
+  granja,
+  alCambiarOrigen,
+  ofrecerGranja = false,
 }: {
   /** El de la sesión, tal como lo cuenta el servidor. Ausente = ninguno elegido. */
   elegido?: DispositivoElegido;
@@ -75,6 +82,22 @@ export function PastillaDeDispositivo({
    * desplaza, un menú en absoluto lo recortaría el borde. La lista y sus reglas son las MISMAS.
    */
   enLinea?: boolean;
+  /**
+   * De dónde saca los aparatos el PROYECTO de esta sesión (la granja de dispositivos, `core/granja.ts`).
+   * Ausente = esta consola no ofrece la granja, y el menú es el de siempre.
+   */
+  origen?: "local" | "granja";
+  /** El nombre del proyecto, para decir de QUIÉN es la elección («Maset usa»). */
+  proyecto?: string;
+  /** La granja de Ajustes, para decir si está configurada y qué contestó la última prueba. */
+  granja?: EstadoDeGranja;
+  /** Cambia el origen del proyecto. Ausente = no se ofrece el conmutador. */
+  alCambiarOrigen?: (origen: "local" | "granja") => void;
+  /**
+   * Ofrecer la granja como una fila más, SIN conmutador: es el aparato por omisión de Ajustes → General, donde
+   * elegirla es elegir el origen global. Solo con la granja configurada.
+   */
+  ofrecerGranja?: boolean;
 }) {
   const [abierta, setAbierta] = useState(false);
   const envoltura = useRef<HTMLDivElement>(null);
@@ -91,12 +114,24 @@ export function PastillaDeDispositivo({
    * de la fila dice el estado con palabras.
    */
   const orden = (d: (typeof todos)[number]): number => (d.plataforma === "android" ? 0 : 1);
-  const disponibles = todos.filter((d) => seLlegaAlDispositivo(d)).sort((a, b) => orden(a) - orden(b));
-  const fisicosApagados = fisicos.filter((d) => !seLlegaAlDispositivo(d));
-  const virtualesApagados = virtuales.filter((d) => !seLlegaAlDispositivo(d));
+  // Con la granja, los Android de este equipo no se ofrecen: el Android ES la granja. iOS sigue local.
+  const enGranja = origen === "granja";
+  const ofrecible = (d: (typeof todos)[number]): boolean => !enGranja || d.plataforma === "ios";
+  const disponibles = todos.filter((d) => ofrecible(d) && seLlegaAlDispositivo(d)).sort((a, b) => orden(a) - orden(b));
+  const fisicosApagados = fisicos.filter((d) => ofrecible(d) && !seLlegaAlDispositivo(d));
+  const virtualesApagados = virtuales.filter((d) => ofrecible(d) && !seLlegaAlDispositivo(d));
   // ¿El elegido sigue estando? Con `informe` ausente no se afirma ninguna de las dos cosas:
-  // no hay medida contra la que comprobarlo, y decir «no está» sería inventarlo.
-  const presente = informe === undefined || todos.some((d) => d.id === elegido?.id);
+  // no hay medida contra la que comprobarlo, y decir «no está» sería inventarlo. La granja no se mide aquí.
+  const presente = elegido?.clase === "granja" || informe === undefined || todos.some((d) => d.id === elegido?.id);
+  const granjaConfigurada = granja?.direccion !== undefined && granja.hayToken;
+  /** Lo que se dice bajo la fila de la granja: si está configurada y qué contestó la última prueba. */
+  const detalleDeGranja = !granjaConfigurada
+    ? "sin configurar"
+    : granja?.prueba?.estado === "conectada"
+      ? `${granja.prueba.resumen.copias.libres} copias libres en ${granja.prueba.resumen.telefonos} teléfonos`
+      : granja?.prueba !== undefined
+        ? "no conecta: mira Ajustes → Dispositivos → Granja"
+        : "se pide una copia libre al probar";
 
   // Las entradas de esta misma consola no avisan de nada: el aparato es suyo. Una TAREA sí, aunque sea del mismo
   // proyecto: es otra consola probando en ese teléfono (IXCODE-58).
@@ -193,7 +228,57 @@ export function PastillaDeDispositivo({
           <div className={estilos.titulo} role="presentation">
             {titulo}
           </div>
+          {origen === undefined || alCambiarOrigen === undefined ? null : (
+            <div className={estilos.espera}>
+              {/* De QUIÉN es la elección: del proyecto, para todas sus sesiones. */}
+              <div className={estilos.titulo} role="presentation">
+                {proyecto === undefined ? "Este proyecto usa" : `${proyecto} usa`}
+              </div>
+              <div className={conmutador.pista} role="group" aria-label="Origen de los aparatos del proyecto">
+                {(["local", "granja"] as const).map((o) => (
+                  <button
+                    key={o}
+                    type="button"
+                    className={conmutador.mitad}
+                    aria-pressed={origen === o}
+                    data-puesto={origen === o ? "" : undefined}
+                    disabled={!conectado}
+                    onClick={() => {
+                      if (origen !== o) alCambiarOrigen(o);
+                    }}
+                  >
+                    {o === "local" ? "Este equipo" : "Granja"}
+                  </button>
+                ))}
+              </div>
+              <div>Vale para todas las sesiones de este proyecto.</div>
+            </div>
+          )}
           <div className={estilos.modelos}>
+            {enGranja ? (
+              <>
+                <div className={estilos.titulo} role="presentation">
+                  Granja XOne
+                </div>
+                {granjaConfigurada ? (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className={estilos.modelo}
+                    data-actual={elegido?.clase === "granja" ? "" : undefined}
+                    {...(elegido?.clase === "granja" ? { "aria-current": "true" as const } : {})}
+                    onClick={() => elegir("granja")}
+                  >
+                    Un teléfono de la granja · {detalleDeGranja}
+                  </button>
+                ) : (
+                  <p className={estilos.espera}>
+                    La granja no está configurada: pon su dirección y tu token en Ajustes → Dispositivos → Granja.
+                  </p>
+                )}
+              </>
+            ) : (
+              <>
             <button
               type="button"
               role="menuitem"
@@ -203,6 +288,25 @@ export function PastillaDeDispositivo({
             >
               Ninguno
             </button>
+                {ofrecerGranja && granjaConfigurada ? (
+                  <div className={estilos.grupo}>
+                    <div className={estilos.titulo} role="presentation">
+                      Granja XOne
+                    </div>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className={estilos.modelo}
+                      data-actual={elegido?.clase === "granja" ? "" : undefined}
+                      {...(elegido?.clase === "granja" ? { "aria-current": "true" as const } : {})}
+                      onClick={() => elegir("granja")}
+                    >
+                      Un teléfono de la granja · {detalleDeGranja}
+                    </button>
+                  </div>
+                ) : null}
+              </>
+            )}
             {/* El elegido que ya no está sigue en la lista y lo DICE: quitarlo de la vista
                 haría desaparecer la elección sin que nadie la haya deshecho. */}
             {elegido !== undefined && !presente ? (
@@ -210,9 +314,9 @@ export function PastillaDeDispositivo({
                 {elegido.nombre} · no está en la última medida
               </button>
             ) : null}
-            {grupo("Disponibles ahora", disponibles)}
-            {grupo("Teléfonos y tablets", fisicosApagados)}
-            {grupo("Simuladores y emuladores", virtualesApagados)}
+            {grupo(enGranja ? "iPhone en este equipo" : "Disponibles ahora", disponibles)}
+            {grupo(enGranja ? "iPhone de este equipo, apagados" : "Teléfonos y tablets", fisicosApagados)}
+            {grupo(enGranja ? "Simuladores de iOS" : "Simuladores y emuladores", virtualesApagados)}
             {informe === undefined ? (
               <p className={estilos.espera}>Todavía no ha llegado ninguna medida de este equipo.</p>
             ) : todos.length === 0 ? (
@@ -228,7 +332,11 @@ export function PastillaDeDispositivo({
               </button>
             </div>
           )}
-          <p className={estilos.espera}>{pie}</p>
+          <p className={estilos.espera}>
+            {enGranja
+              ? "No se reserva ningún teléfono: al probar se pedirá una copia libre a la granja, y al acabar el turno se liberará. Todavía no se prueba en ella: Ejecutar y el agente lo dicen."
+              : pie}
+          </p>
         </div>
       ) : null}
     </div>

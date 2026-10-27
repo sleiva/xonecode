@@ -177,3 +177,98 @@ describe("PastillaDeDispositivo", () => {
     });
   });
 });
+
+describe("PastillaDeDispositivo con la granja", () => {
+  const GRANJA = {
+    direccion: "https://101.101.101.10:8090",
+    hayToken: true,
+    prueba: {
+      estado: "conectada" as const,
+      usuario: "ana",
+      rol: "normal" as const,
+      resumen: { telefonos: 2, copias: { tuyas: 0, libres: 4 }, frameworks: ["5.0.6.5"] },
+      medido: "2026-10-27T10:00:00Z",
+    },
+  };
+  const ELEGIDA = { id: "granja", nombre: "Granja", plataforma: "android" as const, clase: "granja" as const };
+
+  it("sin `alCambiarOrigen` no hay conmutador: la pastilla de siempre", () => {
+    render(<PastillaDeDispositivo informe={INFORME} alElegir={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: /sin dispositivo/i }));
+    expect(screen.queryByRole("group", { name: /origen/i })).toBeNull();
+  });
+
+  it("dice de QUIÉN es la elección y cambiarla manda el origen", () => {
+    const alCambiarOrigen = vi.fn();
+    render(
+      <PastillaDeDispositivo informe={INFORME} alElegir={() => {}} origen="local" proyecto="Maset" granja={GRANJA} alCambiarOrigen={alCambiarOrigen} />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /sin dispositivo/i }));
+    expect(screen.getByText("Maset usa")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Este equipo" }).getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(screen.getByRole("button", { name: "Granja" }));
+    expect(alCambiarOrigen).toHaveBeenCalledWith("granja");
+  });
+
+  it("en la granja no se ofrecen los Android de este equipo, sí los iPhone, y la fila dice lo que hay", () => {
+    const alElegir = vi.fn();
+    render(
+      <PastillaDeDispositivo
+        elegido={ELEGIDA}
+        informe={INFORME}
+        alElegir={alElegir}
+        origen="granja"
+        proyecto="Maset"
+        granja={GRANJA}
+        alCambiarOrigen={() => {}}
+      />,
+    );
+    // La granja no está en la medida y no por eso «no está».
+    fireEvent.click(screen.getByRole("button", { name: /^Granja/ }));
+    const filas = screen.getAllByRole("menuitem").map((b) => b.textContent ?? "");
+    expect(filas.some((t) => t.includes("Galaxy S21"))).toBe(false);
+    expect(filas.some((t) => t.includes("iPhone 16"))).toBe(true);
+    const granja = screen.getByRole("menuitem", { name: /Un teléfono de la granja/ });
+    expect(granja.textContent).toContain("4 copias libres en 2 teléfonos");
+    expect(screen.queryByText(/no está en la última medida/)).toBeNull();
+    fireEvent.click(granja);
+    expect(alElegir).toHaveBeenCalledWith("granja");
+  });
+
+  it("con la granja sin configurar no se puede elegir, y dice dónde se configura", () => {
+    render(
+      <PastillaDeDispositivo informe={INFORME} alElegir={() => {}} origen="granja" granja={{ hayToken: false }} alCambiarOrigen={() => {}} />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /sin dispositivo/i }));
+    expect(screen.queryByRole("menuitem", { name: /Un teléfono de la granja/ })).toBeNull();
+    expect(screen.getByText(/Ajustes → Dispositivos → Granja/)).toBeTruthy();
+  });
+});
+
+describe("PastillaDeDispositivo como aparato por omisión (Ajustes → General)", () => {
+  it("con `ofrecerGranja` y la granja configurada, la granja es una fila más y se elige por su id", () => {
+    const alElegir = vi.fn();
+    render(
+      <PastillaDeDispositivo
+        informe={INFORME}
+        alElegir={alElegir}
+        ofrecerGranja
+        granja={{ direccion: "https://g:8090", hayToken: true }}
+        enLinea
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /sin dispositivo/i }));
+    // Sin conmutador: aquí elegirla ES el origen global.
+    expect(screen.queryByRole("group", { name: /origen/i })).toBeNull();
+    // Y los Android de este equipo siguen: no es un proyecto en la granja.
+    expect(screen.getByRole("menuitem", { name: /Galaxy S21/ })).toBeTruthy();
+    fireEvent.click(screen.getByRole("menuitem", { name: /Un teléfono de la granja/ }));
+    expect(alElegir).toHaveBeenCalledWith("granja");
+  });
+
+  it("sin granja configurada no se ofrece", () => {
+    render(<PastillaDeDispositivo informe={INFORME} alElegir={() => {}} ofrecerGranja granja={{ hayToken: false }} />);
+    fireEvent.click(screen.getByRole("button", { name: /sin dispositivo/i }));
+    expect(screen.queryByRole("menuitem", { name: /granja/i })).toBeNull();
+  });
+});

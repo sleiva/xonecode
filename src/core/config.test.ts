@@ -229,6 +229,16 @@ describe("validar", () => {
     expect(avisos[0]!.texto).toMatch(/Ajustes/);
   });
 
+  it("origenDeDispositivos: granja en el proyecto vale; desconocido o en el global se descarta diciéndolo", () => {
+    expect(validar({ origenDeDispositivos: "granja" }, RUTA, "proyecto")).toEqual({ config: { origenDeDispositivos: "granja" }, avisos: [] });
+    const raro = validar({ origenDeDispositivos: "nube" }, RUTA, "proyecto");
+    expect(raro.config.origenDeDispositivos).toBeUndefined();
+    expect(raro.avisos[0]!.texto).toContain("origenDeDispositivos");
+    const global = validar({ origenDeDispositivos: "granja" }, RUTA, "global");
+    expect(global.config.origenDeDispositivos).toBeUndefined();
+    expect(global.avisos[0]!.texto).toMatch(/pastilla/);
+  });
+
   it("acepta disenoVinculado con un `projects/<id>` y nombre; lo demás se descarta con aviso", () => {
     const bueno = validar({ disenoVinculado: { proyecto: "projects/839", nombre: "Maset" } }, RUTA, "proyecto");
     expect(bueno.config.disenoVinculado).toEqual({ proyecto: "projects/839", nombre: "Maset" });

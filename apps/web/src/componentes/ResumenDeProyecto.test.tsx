@@ -292,6 +292,47 @@ describe("con qué modo nacen las conversaciones nuevas del proyecto (IXCODE-31)
   });
 });
 
+describe("de dónde saca los aparatos el proyecto (la granja)", () => {
+  const copia: ProyectoDelResumen = { id: "p1", nombre: "Maset", local: true };
+  function montar(foto: FotoDelResumen, alFijar?: Parameters<typeof ResumenDeProyecto>[0]["alFijarOrigenDelProyecto"]) {
+    return render(
+      <ResumenDeProyecto
+        proyecto={copia}
+        alDescargar={vi.fn()}
+        alAbrirCarpeta={() => Promise.resolve(undefined)}
+        alBorrarCopia={() => Promise.resolve(undefined)}
+        alPedirResumen={() => Promise.resolve(foto)}
+        {...(alFijar === undefined ? {} : { alFijarOrigenDelProyecto: alFijar })}
+        origenGlobal="granja"
+      />
+    );
+  }
+
+  it("sin el campo en la foto (sin granja) no se pinta", async () => {
+    montar({ tareas: [] }, vi.fn());
+    await asentar();
+    expect(screen.queryByRole("region", { name: "Aparatos" })).toBeNull();
+  });
+
+  it("nombra el global, fija este equipo y «como el global» viaja como quitar", async () => {
+    const alFijar = vi.fn(() => Promise.resolve({ guardado: { proyecto: "local" as const } }));
+    montar({ tareas: [], origenDeDispositivos: {} }, alFijar);
+    await asentar();
+    const combo = within(screen.getByRole("region", { name: "Aparatos" })).getByRole("combobox") as HTMLSelectElement;
+    expect(combo.value).toBe("global");
+    expect(combo.selectedOptions[0]!.textContent).toBe("Como el global (la granja)");
+    await act(async () => {
+      fireEvent.change(combo, { target: { value: "local" } });
+    });
+    expect(alFijar).toHaveBeenCalledWith("p1", "local");
+    expect(combo.value).toBe("local");
+    await act(async () => {
+      fireEvent.change(combo, { target: { value: "global" } });
+    });
+    expect(alFijar).toHaveBeenLastCalledWith("p1", undefined);
+  });
+});
+
 describe("«Subir» en la tarjeta de lo pendiente", () => {
   const CON_PENDIENTES = () =>
     Promise.resolve({ tareas: [], sync: { proyecto: "Tienda", rama: "main", pendientes: 3 } } as FotoDelResumen);

@@ -16,6 +16,7 @@ import { esModoDeEscritura, type ModoDeEscritura } from "./modoDeEscritura.js";
 import { dispositivoDeValor, type DispositivoDeLaSesion } from "./dispositivoElegido.js";
 import { motivoDeModeloDeMotorInaceptable } from "./motoresLocales.js";
 import { motivoDeDominioInaceptable } from "./tunel.js";
+import { direccionDeGranja } from "./granja.js";
 
 export interface Entorno {
   id: string;
@@ -229,6 +230,39 @@ export interface Settings {
    * abrir sigue siendo el elegido, y Ejecutar dice que no está en vez de cambiar a otro.
    */
   dispositivoPorDefecto?: DispositivoDeLaSesion;
+  /** Dónde está la granja de dispositivos y qué certificado se le aceptó (`core/granja.ts`). Ausente = no hay granja. */
+  granja?: AjustesDeGranja;
+}
+
+/**
+ * La granja de dispositivos de ESTE equipo (Ajustes → Dispositivos → Granja). Una sola: describe el
+ * equipo, como `dispositivos`. **El token NO va aquí** sino en `~/.xonecode/granja.json` (0600): este
+ * fichero no guarda secretos.
+ */
+export interface AjustesDeGranja {
+  /** La URL base ya normalizada (`direccionDeGranja`): `https://192.168.1.40:8090`. */
+  direccion: string;
+  /**
+   * La huella SHA-256 del certificado aceptado (`AB:CD:…`, como `getPeerCertificate().fingerprint256`).
+   * Se fija la primera vez que la granja contesta bien; ausente = aún no se ha aceptado ninguno.
+   * Cambiar la dirección la BORRA: es otra máquina.
+   */
+  huella?: string;
+}
+
+/** Una huella SHA-256 con la forma de Node: 32 octetos en hexadecimal mayúscula separados por `:`. */
+export function esHuellaDeCertificado(valor: unknown): valor is string {
+  return typeof valor === "string" && /^([0-9A-F]{2}:){31}[0-9A-F]{2}$/.test(valor);
+}
+
+/** La dirección vuelve a pasar por `direccionDeGranja`; una huella sin forma se descarta y queda sin aceptar. */
+function validarGranja(candidato: unknown): AjustesDeGranja | undefined {
+  if (typeof candidato !== "object" || candidato === null) return undefined;
+  const { direccion, huella } = candidato as { direccion?: unknown; huella?: unknown };
+  if (typeof direccion !== "string") return undefined;
+  const normalizada = direccionDeGranja(direccion);
+  if (!("url" in normalizada)) return undefined;
+  return { direccion: normalizada.url, ...(esHuellaDeCertificado(huella) ? { huella } : {}) };
 }
 
 
@@ -323,12 +357,15 @@ export function validarSettings(bruto: unknown): { settings: Settings; avisos: A
   const concurrenciaDeTareas = validarConcurrenciaDeTareas(objeto.concurrenciaDeTareas);
   const depurar = typeof objeto.depurar === "boolean" ? objeto.depurar : undefined;
   const modoDeEscritura = esModoDeEscritura(objeto.modoDeEscritura) ? objeto.modoDeEscritura : undefined;
+  // La granja SÍ puede ser el aparato por omisión: es el origen global, y cada proyecto lo puede pisar
+  // (`config.json#origenDeDispositivos`, `dispositivoElegido.ts#origenEnVigor`).
   const dispositivoPorDefecto = dispositivoDeValor(objeto.dispositivoPorDefecto);
   const modeloDeOpencode =
     typeof objeto.modeloDeOpencode === "string" && motivoDeModeloDeMotorInaceptable(objeto.modeloDeOpencode) === undefined
       ? objeto.modeloDeOpencode
       : undefined;
   const remoto = validarRemoto(objeto.remoto, avisos);
+  const granja = validarGranja(objeto.granja);
   return {
     settings: {
       entornos,
@@ -340,6 +377,7 @@ export function validarSettings(bruto: unknown): { settings: Settings; avisos: A
       ...(dispositivoPorDefecto === undefined ? {} : { dispositivoPorDefecto }),
       ...(modeloDeOpencode === undefined ? {} : { modeloDeOpencode }),
       ...(remoto === undefined ? {} : { remoto }),
+      ...(granja === undefined ? {} : { granja }),
     },
     avisos,
   };

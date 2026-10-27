@@ -27,6 +27,7 @@ import {
 import { formaDeProyecto, motivoDeProyectoInaceptable, type MapeoDeEstados, type VinculoGuardado } from "./gestorDeTareas.js";
 import type { Papel } from "./ports.js";
 import { esModoDeEscritura, type ModoDeEscritura } from "./modoDeEscritura.js";
+import { esOrigenDeDispositivos, type OrigenDeDispositivos } from "./granja.js";
 import { motivoDeProyectoDeStitchInaceptable, type DisenoVinculado } from "./disenoVinculado.js";
 
 /** La configuración: modelos y proveedores. Nunca claves. */
@@ -85,6 +86,13 @@ export interface ConfigDeFichero {
    * sitios para el mismo valor global son dos valores.
    */
   modoDeEscritura?: ModoDeEscritura;
+  /**
+   * De dónde sacan los aparatos las sesiones de este proyecto (`core/granja.ts`): `granja` usa la
+   * granja de dispositivos de Ajustes; ausente = este equipo. **Solo en el config.json del
+   * PROYECTO**, como `modoDeEscritura`: la granja (dirección y token) es del equipo, pero usarla
+   * lo decide cada proyecto.
+   */
+  origenDeDispositivos?: OrigenDeDispositivos;
 }
 
 /** Las credenciales, que viven en OTRO fichero y solo global. */
@@ -376,6 +384,23 @@ export function validar(
       } else {
         avisos.push({
           texto: `«${ruta}»: «modoDeEscritura» debe ser «supervisado» o «autonomo»; se descarta.`,
+          severidad: "aviso",
+        });
+      }
+      continue;
+    }
+
+    if (clave === "origenDeDispositivos") {
+      if (procedencia === "global") {
+        avisos.push({
+          texto: `«${ruta}»: «origenDeDispositivos» es de proyecto; se elige en la pastilla de dispositivo del chat; se descarta.`,
+          severidad: "aviso",
+        });
+      } else if (esOrigenDeDispositivos(valor)) {
+        config.origenDeDispositivos = valor;
+      } else {
+        avisos.push({
+          texto: `«${ruta}»: «origenDeDispositivos» debe ser «local» o «granja»; se descarta.`,
           severidad: "aviso",
         });
       }

@@ -94,7 +94,8 @@ export interface DispositivoElegido {
   id: string;
   nombre: string;
   plataforma: "android" | "ios";
-  clase: "emulador" | "simulador" | "fisico";
+  /** `granja`: la granja de dispositivos XOne (`core/granja.ts`), no un aparato de este equipo. */
+  clase: "emulador" | "simulador" | "fisico" | "granja";
 }
 
 /**

@@ -25,6 +25,9 @@ import { MS_DE_PREPARACION,
   ajusteDeDepuracionCableado,
   ajusteDeModoPorDefectoCableado,
   ajusteDeDispositivoPorDefectoCableado,
+  ajusteDeGranjaCableado,
+  origenDeDispositivosCableado,
+  type ServicioDeGranja,
   emuladoresCableados,
   recargaCableada,
   ficherosCableados,
@@ -15223,5 +15226,275 @@ describe("el vigía de lo que se enchufa", () => {
     const fuente = readFileSync(new URL("./arranque.ts", import.meta.url), "utf8");
     expect(fuente).toMatch(/vigilarDispositivos: \(alCambiar\) =>\s+vigilarDispositivosAndroid\(alCambiar/);
     expect(fuente).toMatch(/cable\.pararVigia\(\);/);
+  });
+});
+
+/**
+ * La granja de dispositivos: Ajustes → Granja por el cable, el origen de cada proyecto en la pastilla y
+ * la composición de producción (`ajusteDeGranjaCableado`) con su TOFU.
+ */
+describe("la granja de dispositivos", () => {
+  const HUELLA = Array.from({ length: 32 }, () => "AB").join(":");
+  const OTRA = Array.from({ length: 32 }, () => "CD").join(":");
+
+  /** Un servicio en memoria; `probar` devuelve lo que se le diga. El token se guarda aparte para poder buscarlo en el cable. */
+  function servicioFalso(pruebas: PruebaDeGranjaEnTest[] = []) {
+    const estado: { direccion?: string; huella?: string; token?: string; origenes: Map<string, "local" | "granja"> } = {
+      origenes: new Map(),
+    };
+    const servicio: ServicioDeGranja = {
+      configuracion: () => ({
+        ...(estado.direccion === undefined ? {} : { direccion: estado.direccion }),
+        ...(estado.huella === undefined ? {} : { huella: estado.huella }),
+        hayToken: estado.token !== undefined,
+      }),
+      guardarDireccion: (d) => {
+        if (d !== estado.direccion) delete estado.huella;
+        if (d === undefined) delete estado.direccion;
+        else estado.direccion = d;
+      },
+      aceptarHuella: (h) => void (estado.huella = h),
+      guardarToken: (t) => ((estado.token = t), { ok: true }),
+      quitarToken: () => void delete estado.token,
+      probar: async () => pruebas.shift() ?? { estado: "no-responde" },
+      origenDelProyecto: (raiz) => estado.origenes.get(raiz),
+      guardarOrigenDelProyecto: (raiz, origen) => void (origen === undefined ? estado.origenes.delete(raiz) : estado.origenes.set(raiz, origen)),
+    };
+    return { servicio, estado };
+  }
+  type PruebaDeGranjaEnTest = Awaited<ReturnType<ServicioDeGranja["probar"]>>;
+
+  const enviarComoTexto = async (accion: (m: unknown) => Promise<{ estado: number }>, m: unknown): Promise<number> => (await accion(m)).estado;
+
+  async function montado(vestibulo: Vestibulo, extra: Parameters<typeof montarRutas>[2]) {
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibulo, extra);
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+    const accion = (mensaje: unknown) => postearConCuerpo(servidor.rutas.get(`POST ${RUTA_ACCION}`)!, JSON.stringify(mensaje));
+    const ultimaGranja = () => cliente.recibidos.filter((m) => m.clase === "granja").at(-1) as Record<string, unknown> | undefined;
+    return { accion, cliente, ultimaGranja };
+  }
+
+  it("bienvenida sin granja; guardar valida TODO antes de escribir y el token nunca vuelve por el cable", async () => {
+    const { servicio, estado } = servicioFalso([
+      { estado: "conectada", usuario: "ana", rol: "normal", resumen: { telefonos: 2, copias: { tuyas: 0, libres: 4 }, frameworks: ["5.0.6.4"] }, huella: HUELLA },
+    ]);
+    const { accion, cliente, ultimaGranja } = await montado(vestibuloDePrueba(), { granja: servicio });
+    expect(ultimaGranja()).toEqual({ clase: "granja", hayToken: false });
+
+    // Dirección mala: 409 con motivo y NADA escrito, tampoco el token que venía con ella.
+    const malo = await accion({ clase: "granja", accion: "guardar", direccion: "http://192.168.1.40:8090", token: "xfarm_AbCdEf123456" });
+    expect(malo.estado).toBe(409);
+    expect(JSON.parse(malo.cuerpo).motivo).toMatch(/https/);
+    expect(estado).toEqual({ origenes: new Map() });
+    // Token sin forma: tampoco se escribe la dirección buena.
+    expect((await accion({ clase: "granja", accion: "guardar", direccion: "192.168.1.40", token: "sk-123" })).estado).toBe(409);
+    expect(estado.direccion).toBeUndefined();
+
+    // Bueno: se guarda normalizado y, con dirección y token, se prueba solo.
+    expect((await accion({ clase: "granja", accion: "guardar", direccion: "192.168.1.40", token: "xfarm_AbCdEf123456" })).estado).toBe(204);
+    await asentar();
+    await asentar();
+    expect(estado.direccion).toBe("https://192.168.1.40:8090");
+    const anunciado = ultimaGranja()!;
+    expect(anunciado).toMatchObject({ clase: "granja", direccion: "https://192.168.1.40:8090", hayToken: true });
+    expect((anunciado.prueba as { estado: string }).estado).toBe("conectada");
+    expect(JSON.stringify(cliente.recibidos)).not.toContain("xfarm_AbCdEf123456");
+  });
+
+  it("una prueba que no conecta lleva el motivo del SERVIDOR; aceptarHuella solo admite la que dio la prueba", async () => {
+    const { servicio, estado } = servicioFalso([
+      { estado: "huella-distinta", aceptada: HUELLA, ahora: OTRA },
+      { estado: "token-rechazado" },
+    ]);
+    Object.assign(estado, { direccion: "https://g:8090", huella: HUELLA, token: "xfarm_AbCdEf123456" });
+    const { accion, ultimaGranja } = await montado(vestibuloDePrueba(), { granja: servicio });
+    expect((await accion({ clase: "granja", accion: "probar" })).estado).toBe(204);
+    await asentar();
+    const prueba = ultimaGranja()!.prueba as { estado: string; motivo?: string; medido?: string };
+    expect(prueba.estado).toBe("huella-distinta");
+    expect(prueba.motivo).toMatch(/certificado/);
+    expect(typeof prueba.medido).toBe("string");
+
+    // Una huella cualquiera, no.
+    expect((await accion({ clase: "granja", accion: "aceptarHuella", huella: "00:11" })).estado).toBe(409);
+    expect(estado.huella).toBe(HUELLA);
+    // La que dio la prueba, sí: se guarda y se vuelve a probar.
+    expect((await accion({ clase: "granja", accion: "aceptarHuella", huella: OTRA })).estado).toBe(204);
+    await asentar();
+    expect(estado.huella).toBe(OTRA);
+    expect((ultimaGranja()!.prueba as { estado: string }).estado).toBe("token-rechazado");
+  });
+
+  it("quitar la dirección y el token deja la granja vacía y olvida la prueba", async () => {
+    const { servicio, estado } = servicioFalso();
+    Object.assign(estado, { direccion: "https://g:8090", token: "xfarm_AbCdEf123456" });
+    const { accion, ultimaGranja } = await montado(vestibuloDePrueba(), { granja: servicio });
+    expect((await accion({ clase: "granja", accion: "guardar", direccion: "", quitarToken: true })).estado).toBe(204);
+    await asentar();
+    expect(ultimaGranja()).toEqual({ clase: "granja", hayToken: false });
+  });
+
+  it("sin servicio de granja, ni bienvenida ni acciones", async () => {
+    const { accion, ultimaGranja } = await montado(vestibuloDePrueba(), {});
+    expect(ultimaGranja()).toBeUndefined();
+    expect((await accion({ clase: "granja", accion: "probar" })).estado).toBe(409);
+  });
+
+  it("el origen del proyecto ajusta el aparato de la sesión, viaja en el alta, y la granja solo se elige con él", async () => {
+    const base = mkdtempSync(join(tmpdir(), "xonecode-granja-"));
+    const servidor = servidorDeMentira();
+    const vestibulo = vestibuloDePrueba({ baseDeWorkspace: () => base });
+    const raiz = vestibulo.raizDeProyecto("webstudio", "Tienda");
+    mkdirSync(join(raiz, ".xonecode", "cloudstudio"), { recursive: true });
+    writeFileSync(join(raiz, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+    writeFileSync(join(raiz, ".xonecode", "cloudstudio", "sync.json"), "{}");
+    const { servicio, estado } = servicioFalso();
+    montarRutas(servidor, vestibulo, {
+      granja: servicio,
+      detectarDispositivos: async () => ({
+        sistema: "mac" as const,
+        herramientas: [],
+        dispositivos: [{ id: "emulator-5554", nombre: "pixel8", plataforma: "android", clase: "emulador", estado: "arrancado" } as Dispositivo],
+        avds: [],
+        recetas: [],
+        medido: "2026-10-27T10:00:00.000Z",
+      }),
+    });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+    const alta = () => cliente.recibidos.filter((m) => m.clase === "alta").at(-1) as Record<string, unknown>;
+    await asentar();
+    await enviarMensaje(accion, { clase: "sesion", proyecto: "p1" });
+    await asentar();
+    await enviarMensaje(accion, { clase: "dispositivo", id: "emulator-5554" });
+    await asentar();
+    expect(vestibulo.proyectoAbierto()!.dispositivo?.id).toBe("emulator-5554");
+    // Con origen local, la granja no se puede elegir.
+    await enviarMensaje(accion, { clase: "dispositivo", id: "granja" });
+    await asentar();
+    expect(vestibulo.proyectoAbierto()!.dispositivo?.id).toBe("emulator-5554");
+    expect(alta().origenDeDispositivos).toBeUndefined();
+
+    // Pasar a la granja: el emulador deja de estar elegido y el alta lo dice.
+    expect(await enviarMensaje(accion, { clase: "origenDeDispositivos", origen: "granja" })).toBe(204);
+    await asentar();
+    expect(estado.origenes.get(raiz)).toBe("granja");
+    expect(vestibulo.proyectoAbierto()!.dispositivo).toEqual({ id: "granja", nombre: "Granja", plataforma: "android", clase: "granja" });
+    expect(alta().origenDeDispositivos).toBe("granja");
+    expect(alta().dispositivoActivo).toMatchObject({ clase: "granja" });
+    // Y elegir un Android de este equipo con la granja sigue siendo la granja.
+    await enviarMensaje(accion, { clase: "dispositivo", id: "emulator-5554" });
+    await asentar();
+    expect(vestibulo.proyectoAbierto()!.dispositivo?.clase).toBe("granja");
+
+    // Volver a este equipo: la granja pasa a ninguno.
+    await enviarMensaje(accion, { clase: "origenDeDispositivos", origen: "local" });
+    await asentar();
+    expect(vestibulo.proyectoAbierto()!.dispositivo).toBeUndefined();
+    expect(alta().origenDeDispositivos).toBeUndefined();
+    expect(await enviarMensaje(accion, { clase: "origenDeDispositivos", origen: "nube" } as never)).toBe(400);
+    await vestibulo.cerrar();
+    rmSync(base, { recursive: true, force: true });
+  });
+
+  it("panel → Resumen: la foto trae el origen del proyecto, se fija y se quita por id (sin origen = el global)", async () => {
+    const base = mkdtempSync(join(tmpdir(), "xc-granja-resumen-"));
+    const raiz = join(base, "webstudio", "Tienda");
+    mkdirSync(join(raiz, ".xonecode", "cloudstudio"), { recursive: true });
+    writeFileSync(join(raiz, ".xonecode", "config.json"), "{}");
+    writeFileSync(join(raiz, ".xonecode", "cloudstudio", "sync.json"), "{}");
+    const { servicio, estado } = servicioFalso();
+    const { accion } = await montado(vestibuloDePrueba({ baseDeWorkspace: () => base }), { granja: servicio });
+    let foto = JSON.parse((await accion({ clase: "copiaLocal", accion: "resumen", proyecto: "p1" })).cuerpo);
+    expect(foto.origenDeDispositivos).toEqual({});
+    const r = await accion({ clase: "copiaLocal", accion: "origenDeDispositivos", proyecto: "p1", origen: "granja" });
+    expect(r.estado).toBe(200);
+    expect(JSON.parse(r.cuerpo)).toEqual({ proyecto: "granja" });
+    expect(estado.origenes.get(raiz)).toBe("granja");
+    foto = JSON.parse((await accion({ clase: "copiaLocal", accion: "resumen", proyecto: "p1" })).cuerpo);
+    expect(foto.origenDeDispositivos).toEqual({ proyecto: "granja" });
+    expect(JSON.parse((await accion({ clase: "copiaLocal", accion: "origenDeDispositivos", proyecto: "p1" })).cuerpo)).toEqual({});
+    expect(estado.origenes.has(raiz)).toBe(false);
+    expect((await accion({ clase: "copiaLocal", accion: "origenDeDispositivos", proyecto: "p1", origen: "nube" })).estado).toBe(400);
+    expect((await accion({ clase: "copiaLocal", accion: "origenDeDispositivos", proyecto: "otro", origen: "granja" })).estado).toBe(409);
+    rmSync(base, { recursive: true, force: true });
+  });
+
+  it("la granja como aparato por omisión global: se guarda solo si esta ejecución la monta", async () => {
+    let enDisco: DispositivoElegido | undefined;
+    const { servicio } = servicioFalso();
+    const con = await montado(vestibuloDePrueba(), {
+      granja: servicio,
+      dispositivoPorDefecto: () => enDisco,
+      guardarDispositivoPorDefecto: (d) => void (enDisco = d),
+    });
+    expect(await enviarComoTexto(con.accion, { clase: "dispositivoPorDefecto", id: "granja" })).toBe(204);
+    await asentar();
+    expect(enDisco).toEqual({ id: "granja", nombre: "Granja", plataforma: "android", clase: "granja" });
+    enDisco = undefined;
+    const sin = await montado(vestibuloDePrueba(), { dispositivoPorDefecto: () => enDisco, guardarDispositivoPorDefecto: (d) => void (enDisco = d) });
+    await enviarComoTexto(sin.accion, { clase: "dispositivoPorDefecto", id: "granja" });
+    await asentar();
+    expect(enDisco).toBeUndefined();
+  });
+
+  it("origenDeDispositivosCableado: manda el del proyecto; sin él, la granja si el global es la granja", () => {
+    const casa = mkdtempSync(join(tmpdir(), "xc-granja-origen-"));
+    const raiz = mkdtempSync(join(tmpdir(), "xc-granja-proy-"));
+    try {
+      mkdirSync(join(raiz, ".xonecode"), { recursive: true });
+      writeFileSync(join(raiz, ".xonecode", "config.json"), "{}");
+      const origen = origenDeDispositivosCableado({ casa });
+      expect(origen(raiz)).toBe("local");
+      ajusteDeDispositivoPorDefectoCableado({ casa }).guardarDispositivoPorDefecto({ id: "granja", nombre: "Granja", plataforma: "android", clase: "granja" });
+      expect(origen(raiz)).toBe("granja");
+      writeFileSync(join(raiz, ".xonecode", "config.json"), JSON.stringify({ origenDeDispositivos: "local" }));
+      expect(origen(raiz)).toBe("local");
+    } finally {
+      rmSync(casa, { recursive: true, force: true });
+      rmSync(raiz, { recursive: true, force: true });
+    }
+  });
+
+  it("ajusteDeGranjaCableado: la primera huella que conecta se fija, y otra dirección la borra", async () => {
+    const casa = mkdtempSync(join(tmpdir(), "xc-granja-casa-"));
+    try {
+      const respuestas: Record<string, unknown> = {
+        "/api/me": { user: "ana", role: "normal" },
+        "/api/state": { devices: [] },
+      };
+      const pedidas: (string | undefined)[] = [];
+      const { granja } = ajusteDeGranjaCableado({
+        casa,
+        hablar: async (p) => {
+          pedidas.push(p.huellaAceptada);
+          return { tipo: "respuesta", http: 200, cuerpo: respuestas[p.ruta], huella: HUELLA };
+        },
+      });
+      expect(granja.configuracion()).toEqual({ hayToken: false });
+      expect((await granja.probar()).estado).toBe("sin-configurar");
+      granja.guardarDireccion("https://192.168.1.40:8090");
+      expect(granja.guardarToken("xfarm_AbCdEf123456")).toEqual({ ok: true });
+      expect((await granja.probar()).estado).toBe("conectada");
+      expect(granja.configuracion()).toEqual({ direccion: "https://192.168.1.40:8090", huella: HUELLA, hayToken: true });
+      // La segunda vez ya se EXIGE la aceptada.
+      await granja.probar();
+      expect(pedidas.at(-1)).toBe(HUELLA);
+      // La misma dirección conserva la huella; otra la borra.
+      granja.guardarDireccion("https://192.168.1.40:8090");
+      expect(granja.configuracion().huella).toBe(HUELLA);
+      granja.guardarDireccion("https://10.0.0.2:8090");
+      expect(granja.configuracion().huella).toBeUndefined();
+      granja.quitarToken();
+      expect(granja.configuracion().hayToken).toBe(false);
+      // El token no está en settings.json.
+      expect(readFileSync(join(casa, ".xonecode", "settings.json"), "utf8")).not.toContain("xfarm_");
+    } finally {
+      rmSync(casa, { recursive: true, force: true });
+    }
   });
 });

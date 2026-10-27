@@ -66,7 +66,7 @@ export function preferirEmulador(salidaDeAdbDevices) {
   return listos.find((serial) => serial.startsWith("emulator-"));
 }
 
-const CLASE = { emulador: "emulador", simulador: "simulador", fisico: "dispositivo físico" };
+const CLASE = { emulador: "emulador", simulador: "simulador", fisico: "dispositivo físico", granja: "granja de dispositivos" };
 
 /** Cómo se nombra el aparato de la sesión en una negativa: nombre, clase, plataforma e id. */
 function nombreDelAparato(d) {
@@ -98,10 +98,20 @@ export function puedeArrancarEmulador(entorno = process.env) {
   return textoDeOtroAparato(elegido, "no se levanta un emulador por su cuenta");
 }
 
+/**
+ * Lo que se dice cuando la sesión usa la GRANJA de dispositivos (`core/granja.ts`): estos scripts
+ * todavía no llegan a ella, y caer a un aparato de este equipo sería probar donde nadie lo eligió.
+ */
+export const TEXTO_DE_GRANJA =
+  "Este proyecto usa la GRANJA de dispositivos XOne, y los scripts de xone-hotswap todavía no llegan a ella: " +
+  "no se prueba en ningún aparato de este equipo. Dilo en tu respuesta; si hace falta este equipo, que la " +
+  "persona lo cambie en la pastilla del chat.";
+
 /** El serial de Android: el de la sesión (siempre), si no `--serie`, si no un emulador. Y dice de dónde salió. */
 export function serieAndroid(explicita, { entorno = process.env, adb = rutaDeAdb(entorno), ejecutar = ejecutarAdb, negar = negarYSalir } = {}) {
   const elegido = dispositivoDeLaSesion(entorno);
   if (elegido?.plataforma === "ios") return negar(textoDeOtroAparato(elegido, "este script es de Android"));
+  if (elegido?.clase === "granja") return negar(TEXTO_DE_GRANJA);
   if (elegido?.plataforma === "android") {
     if (explicita && explicita !== elegido.id) return negar(textoDeOtroAparato(elegido, `se ha pedido --serie ${explicita}`));
     return { serie: elegido.id, porque: `el de la sesión: ${elegido.nombre}` };

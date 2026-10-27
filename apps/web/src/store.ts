@@ -50,6 +50,7 @@ import type {
   InformeDeDispositivos,
   AjustesDeDispositivos,
   DispositivoElegido,
+  PruebaDeGranja,
   ConsumoDeTurno,
   ConsumoPorModelo,
   SesionDelCable,
@@ -210,6 +211,9 @@ export interface EstadoDelCliente {
   /** La sesión remota; ausente = el interruptor está apagado y no se pinta nada. Se tira al
    *  caerse el cable: la ráfaga de reconexión lo vuelve a traer. */
   remoto?: EstadoRemoto;
+  /** La granja de dispositivos de Ajustes. Ausente = esta ejecución no la monta, y ni la pestaña ni la
+   *  elección de la pastilla se pintan. Nunca lleva el token: solo si lo hay. */
+  granja?: EstadoDeGranja;
   /** El modo con que nacen las sesiones nuevas (IXCODE-31, Ajustes > General). Ausente = el
    *  servidor no lo dice, y el control no se pinta. */
   modoPorDefecto?: ModoDeEscritura;
@@ -546,6 +550,8 @@ export interface EstadoDelCliente {
     sesionActiva?: string;
     /** Con qué dispositivo trabaja la sesión. Ausente = ninguno elegido. */
     dispositivoActivo?: DispositivoElegido;
+    /** El proyecto abierto usa la granja. Ausente = este equipo. */
+    origenDeDispositivos?: "granja";
     /** La sesión abierta es una relectura que el agente no recuerda. Ausente = no. */
     historica?: boolean;
     /** El modo de escritura de la sesión abierta. Ausente = no hay sesión, y entonces la
@@ -632,8 +638,63 @@ function esDispositivoElegido(v: unknown): v is DispositivoElegido {
     typeof d.id === "string" &&
     typeof d.nombre === "string" &&
     (d.plataforma === "android" || d.plataforma === "ios") &&
-    (d.clase === "emulador" || d.clase === "simulador" || d.clase === "fisico")
+    (d.clase === "emulador" ||
+      d.clase === "simulador" ||
+      d.clase === "fisico" ||
+      // La granja tiene UNA forma: id `granja`, Android.
+      (d.clase === "granja" && d.id === "granja" && d.plataforma === "android"))
   );
+}
+
+/** La granja de Ajustes tal como la pinta el cliente: el mensaje `granja` sin su clase. */
+export interface EstadoDeGranja {
+  direccion?: string;
+  hayToken: boolean;
+  huella?: string;
+  prueba?: PruebaDeGranja & { medido: string; motivo?: string };
+}
+
+/**
+ * La prueba de la granja, campo a campo: lo que no tiene la forma de su estado no se pinta. El
+ * `motivo` lo trae el servidor; el cliente no lo compone.
+ */
+export function pruebaDeGranjaDe(v: unknown): EstadoDeGranja["prueba"] | undefined {
+  if (typeof v !== "object" || v === null) return undefined;
+  const p = v as Record<string, unknown>;
+  if (typeof p.medido !== "string") return undefined;
+  const base = { medido: p.medido, ...(typeof p.motivo === "string" ? { motivo: p.motivo } : {}) };
+  switch (p.estado) {
+    case "conectada": {
+      const r = p.resumen as Record<string, unknown> | undefined;
+      const copias = r?.copias as Record<string, unknown> | undefined;
+      if (typeof p.usuario !== "string" || (p.rol !== "admin" && p.rol !== "normal")) return undefined;
+      if (typeof r?.telefonos !== "number" || typeof copias?.tuyas !== "number" || typeof copias?.libres !== "number") return undefined;
+      const frameworks = Array.isArray(r.frameworks) ? r.frameworks.filter((f): f is string => typeof f === "string") : [];
+      return {
+        estado: "conectada",
+        usuario: p.usuario,
+        rol: p.rol,
+        resumen: { telefonos: r.telefonos, copias: { tuyas: copias.tuyas, libres: copias.libres }, frameworks },
+        ...(typeof p.huella === "string" ? { huella: p.huella } : {}),
+        ...base,
+      };
+    }
+    case "sin-configurar":
+      return p.falta === "direccion" || p.falta === "token" ? { estado: "sin-configurar", falta: p.falta, ...base } : undefined;
+    case "no-responde":
+      return { estado: "no-responde", ...(typeof p.codigo === "string" ? { codigo: p.codigo } : {}), ...base };
+    case "token-rechazado":
+    case "debe-cambiar-contrasena":
+      return { estado: p.estado, ...base };
+    case "huella-distinta":
+      return typeof p.aceptada === "string" && typeof p.ahora === "string"
+        ? { estado: "huella-distinta", aceptada: p.aceptada, ahora: p.ahora, ...base }
+        : undefined;
+    case "respuesta-inesperada":
+      return { estado: "respuesta-inesperada", ...(typeof p.http === "number" ? { http: p.http } : {}), ...base };
+    default:
+      return undefined;
+  }
 }
 
 /**
@@ -1701,6 +1762,21 @@ export function crearStoreDelCliente(): {
           mutar({ workspace: m["ruta"], puedeElegirCarpeta: m["puedeElegir"] === true });
           return;
         }
+        case "granja": {
+          // Lista blanca por campo: lo que no se nombra aquí no llega. El token no viaja nunca.
+          const m = mensaje as Record<string, unknown>;
+          if (typeof m["hayToken"] !== "boolean") return;
+          const prueba = pruebaDeGranjaDe(m["prueba"]);
+          mutar({
+            granja: {
+              hayToken: m["hayToken"],
+              ...(typeof m["direccion"] === "string" ? { direccion: m["direccion"] } : {}),
+              ...(typeof m["huella"] === "string" ? { huella: m["huella"] } : {}),
+              ...(prueba === undefined ? {} : { prueba }),
+            },
+          });
+          return;
+        }
         case "remoto": {
           const m = mensaje as Record<string, unknown>;
           // Lista blanca por campo, también de lo de ngrok: lo que no se nombra aquí no llega.
@@ -2414,6 +2490,7 @@ export function crearStoreDelCliente(): {
             proyectoActivo?: unknown;
             sesionActiva?: unknown;
             dispositivoActivo?: unknown;
+            origenDeDispositivos?: unknown;
             historica?: unknown;
             modoDeEscritura?: unknown;
             trabajoAlAbrir?: unknown;
@@ -2573,6 +2650,7 @@ export function crearStoreDelCliente(): {
               // foto —un id sin nombre— pintaría un serial crudo en la pastilla, que es
               // justo lo que guardar la foto viene a evitar.
               ...(esDispositivoElegido(m.dispositivoActivo) ? { dispositivoActivo: m.dispositivoActivo } : {}),
+              ...(m.origenDeDispositivos === "granja" ? { origenDeDispositivos: "granja" as const } : {}),
               // Solo si es exactamente `true`: es una afirmación sobre lo que el agente NO
               // recuerda, y cualquier otra cosa se lee como «no».
               ...(m.historica === true ? { historica: true } : {}),

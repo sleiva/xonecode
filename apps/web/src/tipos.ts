@@ -669,6 +669,17 @@ export type MensajeAlCliente =
    * el SECRETO en el fragmento: es el TERCER secreto del cable, tras `leerSecreto` y el `codigo` de `motorLocal`, y por eso
    * `remoto` no está en la lista de salida del puente (`core/remoto.ts`).
    */
+  /**
+   * La granja de dispositivos de este equipo (Ajustes → Dispositivos → Granja). Nunca trae el token:
+   * solo si lo hay. `prueba.motivo` lo compone el servidor para todo lo que no es `conectada`.
+   */
+  | {
+      clase: "granja";
+      direccion?: string;
+      hayToken: boolean;
+      huella?: string;
+      prueba?: PruebaDeGranja & { medido: string; motivo?: string };
+    }
   | {
       clase: "remoto";
       estado: "apagada" | "abriendo" | "activa" | "reconectando" | "error";
@@ -1094,6 +1105,8 @@ export type MensajeAlCliente =
       /** Con qué dispositivo trabaja la sesión. La FOTO, no solo el id: los ids no son
        *  estables y al reabrir hay que poder decir «no está ahora» en vez de un serial. */
       dispositivoActivo?: DispositivoElegido;
+      /** El proyecto abierto usa la GRANJA de dispositivos. Ausente = este equipo. */
+      origenDeDispositivos?: "granja";
       /** La sesión abierta es una relectura y el agente no la recuerda. Ausente = no. */
       historica?: boolean;
       /**
@@ -1245,6 +1258,8 @@ export interface FotoDelResumen {
   /** El modo con que nacen las sesiones nuevas de este proyecto (IXCODE-31). Presente solo con
    *  copia; `proyecto` ausente dentro = «como el global». */
   modoDeEscritura?: { proyecto?: ModoDeEscritura };
+  /** El origen de los aparatos que dice ESTE proyecto; dentro, ausente = «como el global». Ausente el campo = no se pinta. */
+  origenDeDispositivos?: { proyecto?: "local" | "granja" };
 }
 
 /**
@@ -1539,6 +1554,8 @@ export type MensajeDelCliente =
   /** Fijar —o quitar, sin `modo`— el modo de las sesiones nuevas del proyecto (IXCODE-31): 200
    *  con `{ proyecto? }`, 409 con `{ motivo }`. */
   | { clase: "copiaLocal"; accion: "modoDeEscritura"; proyecto: string; modo?: ModoDeEscritura }
+  /** El origen de los aparatos de un proyecto (panel → Resumen). Sin `origen` se quita: manda el global. */
+  | { clase: "copiaLocal"; accion: "origenDeDispositivos"; proyecto: string; origen?: "local" | "granja" }
   /** Fijar el modo de las sesiones nuevas en cualquier proyecto (Ajustes > General). */
   | { clase: "modoPorDefecto"; modo: ModoDeEscritura }
   /** Fijar —o quitar, sin `id`— el aparato de las sesiones nuevas (IXCODE-51). Solo el ID. */
@@ -1707,6 +1724,12 @@ export type MensajeDelCliente =
   | { clase: "cuerpoDeSkill"; nombre: string }
   /** Parar el turno en vuelo, dejando la sesión viva. */
   | { clase: "cancelar" }
+  /** La granja de Ajustes: guardar (dirección vacía la quita; el token es un secreto), probar y aceptar la huella nueva. */
+  | { clase: "granja"; accion: "guardar"; direccion?: string; token?: string; quitarToken?: true }
+  | { clase: "granja"; accion: "probar" }
+  | { clase: "granja"; accion: "aceptarHuella"; huella: string }
+  /** El origen de los aparatos del proyecto abierto (la pastilla): este equipo o la granja. */
+  | { clase: "origenDeDispositivos"; origen: "local" | "granja" }
   /** La sesión remota: encenderla, revocar su enlace (apagar y volver a encender) o apagarla. */
   | { clase: "remoto"; accion: "encender" | "revocar" | "apagar" }
   /** El interruptor de Ajustes → Sesión remota (escribe `remoto.habilitado`). */
@@ -1936,8 +1959,26 @@ export interface DispositivoElegido {
   id: string;
   nombre: string;
   plataforma: "android" | "ios";
-  clase: "emulador" | "simulador" | "fisico";
+  /** `granja`: la granja de dispositivos XOne, no un aparato de este equipo (id `granja`). */
+  clase: "emulador" | "simulador" | "fisico" | "granja";
 }
+
+/** Redeclarado de `core/granja.ts`: lo que se cuenta de la granja tras probarla. */
+export interface ResumenDeGranja {
+  telefonos: number;
+  copias: { tuyas: number; libres: number };
+  frameworks: string[];
+}
+
+/** Redeclarado de `core/granja.ts`: cómo acabó «Probar conexión». */
+export type PruebaDeGranja =
+  | { estado: "conectada"; usuario: string; rol: "admin" | "normal"; resumen: ResumenDeGranja; huella?: string }
+  | { estado: "sin-configurar"; falta: "direccion" | "token" }
+  | { estado: "no-responde"; codigo?: string }
+  | { estado: "token-rechazado" }
+  | { estado: "debe-cambiar-contrasena" }
+  | { estado: "huella-distinta"; aceptada: string; ahora: string }
+  | { estado: "respuesta-inesperada"; http?: number };
 
 /** Redeclarado de `core/dispositivos.ts`. */
 export type NombreDeHerramienta = "adb" | "emulator" | "xcrun" | "devicectl";

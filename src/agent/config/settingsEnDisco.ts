@@ -31,6 +31,7 @@ import { MODO_POR_OMISION, type ModoDeEscritura } from "../../core/modoDeEscritu
 import type { DispositivoDeLaSesion } from "../../core/dispositivoElegido.js";
 import {
   AjustesDeDispositivos,
+  type AjustesDeGranja,
   Entorno,
   Settings,
   TOPE_DE_CONCURRENCIA_DE_TAREAS,
@@ -390,6 +391,23 @@ export function guardarDispositivoPorDefecto(casa: string | undefined, dispositi
     dispositivo === undefined
       ? sin
       : { ...sin, dispositivoPorDefecto: { id: dispositivo.id, nombre: dispositivo.nombre, plataforma: dispositivo.plataforma, clase: dispositivo.clase } };
+  escribirAtomico(ruta, JSON.stringify(fusionado, null, 2) + "\n");
+  return { ruta };
+}
+
+/**
+ * Guarda la granja de dispositivos (dirección y huella aceptada), sin tocar nada más del fichero.
+ * `undefined` la QUITA. La dirección llega ya normalizada (`core/granja.ts#direccionDeGranja`) y
+ * `validarSettings` la vuelve a pasar por la regla al leer. El token NO pasa por aquí.
+ */
+export function guardarGranja(casa: string | undefined, granja: AjustesDeGranja | undefined): { ruta: string } {
+  const ruta = rutaSettings(casa ?? homedir());
+  const crudo = leerCrudoOAbortar(ruta);
+  const sin = Object.fromEntries(Object.entries(crudo).filter(([k]) => k !== "granja"));
+  const fusionado =
+    granja === undefined
+      ? sin
+      : { ...sin, granja: { direccion: granja.direccion, ...(granja.huella === undefined ? {} : { huella: granja.huella }) } };
   escribirAtomico(ruta, JSON.stringify(fusionado, null, 2) + "\n");
   return { ruta };
 }

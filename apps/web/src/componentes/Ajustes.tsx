@@ -14,7 +14,7 @@ import {
   IconBrowseOutline16,
   IconSearchOutline16,
 } from "@deepseek-ai/dsh-client-ui-primitives";
-import type { EstadoDelCliente, EstadoRemoto } from "../store.js";
+import type { EstadoDeGranja, EstadoDelCliente, EstadoRemoto } from "../store.js";
 import type {
   AgenteDelCable,
   SkillDelCable,
@@ -170,6 +170,7 @@ import { selloDeFecha } from "../selloDeFecha.js";
 import { IconoDeEntorno } from "./IconoDeEntorno.js";
 import { IconoDeProveedor } from "./IconoDeProveedor.js";
 import { PastillaDeModelo } from "./PastillaDeModelo.js";
+import { AjustesDeGranja, type CambioDeGranja } from "./AjustesDeGranja.js";
 import estilos from "./Ajustes.module.css";
 /** El `onClose` de la ventana de Ajustes: no cierra. Solo su botón lo hace. */
 const SIN_CERRAR_AJUSTES = (): void => {};
@@ -436,6 +437,10 @@ export function Ajustes({
   secreto,
   dispositivos,
   ajustesDeDispositivos,
+  granja,
+  alGuardarGranja,
+  alProbarGranja,
+  alAceptarHuellaDeGranja,
   alCambiarDispositivos,
   alActualizarDispositivos,
   alAbrirCarpetaDeHerramienta,
@@ -625,6 +630,12 @@ export function Ajustes({
    * miran todos.
    */
   ajustesDeDispositivos?: AjustesDeDispositivos;
+  /** La granja de dispositivos. Ausente = esta ejecución no la monta y no hay pestaña Granja. */
+  granja?: EstadoDeGranja;
+  /** Guarda dirección y/o token; devuelve el motivo si el servidor se negó. */
+  alGuardarGranja?: (cambio: CambioDeGranja) => Promise<string | undefined>;
+  alProbarGranja?: () => void;
+  alAceptarHuellaDeGranja?: (huella: string) => Promise<string | undefined>;
   /**
    * Guarda los cuatro interruptores y las dos rutas personalizadas. Se manda el objeto
    * ENTERO y no lo que cambió: el servidor lo guarda junto, y así no hay dos ideas de cuál
@@ -1349,6 +1360,8 @@ export function Ajustes({
    * falta para no tener que abrirlas es que cada una DIGA si le falta algo (`faltanDe`).
    */
   const [plataformaAbierta, setPlataformaAbierta] = useState<Dispositivo["plataforma"]>("android");
+  /** La pestaña Granja, aparte de las de plataforma: no mide nada de este equipo. */
+  const [granjaAbierta, setGranjaAbierta] = useState(false);
 
   /** La pestaña de General abierta. Cambiarla no pierde nada: el borrador de la carpeta vive aquí, no en su panel. */
   const [pestanaDeGeneral, setPestanaDeGeneral] = useState<PestanaDeGeneral>("inicio");
@@ -1492,7 +1505,7 @@ export function Ajustes({
                       type="button"
                       role="tab"
                       className={estilos.pestana}
-                      aria-selected={p === plataformaAbierta}
+                      aria-selected={p === plataformaAbierta && !granjaAbierta}
                       aria-disabled={deshabilitada ? true : undefined}
                       disabled={deshabilitada}
                       title={deshabilitada ? TITULO_IOS_REQUIERE_MAC : undefined}
@@ -1507,8 +1520,15 @@ export function Ajustes({
                             ? ETIQUETA_DE_PLATAFORMA[p]
                             : `${ETIQUETA_DE_PLATAFORMA[p]}, ${faltan} por instalar`
                       }
-                      data-actual={p === plataformaAbierta ? "" : undefined}
-                      onClick={deshabilitada ? undefined : () => setPlataformaAbierta(p)}
+                      data-actual={p === plataformaAbierta && !granjaAbierta ? "" : undefined}
+                      onClick={
+                        deshabilitada
+                          ? undefined
+                          : () => {
+                              setPlataformaAbierta(p);
+                              setGranjaAbierta(false);
+                            }
+                      }
                     >
                       {ETIQUETA_DE_PLATAFORMA[p]}
                       {/* Y solo cuando falta algo: un cero es el control sin dato detrás que
@@ -1522,8 +1542,32 @@ export function Ajustes({
                     </button>
                   );
                 })}
+                {/* La granja solo si esta ejecución la monta: un control sin dato detrás no se pinta. */}
+                {granja === undefined ? null : (
+                  <button
+                    type="button"
+                    role="tab"
+                    className={estilos.pestana}
+                    aria-selected={granjaAbierta}
+                    data-actual={granjaAbierta ? "" : undefined}
+                    onClick={() => setGranjaAbierta(true)}
+                  >
+                    Granja
+                  </button>
+                )}
               </div>
 
+              {granjaAbierta && granja !== undefined ? (
+                <div role="tabpanel" className={estilos.panelDePestana} aria-label="Granja">
+                  <AjustesDeGranja
+                    granja={granja}
+                    conectado={conectado}
+                    alGuardar={alGuardarGranja ?? (async () => "esta consola no puede guardar la granja")}
+                    alProbar={alProbarGranja ?? (() => undefined)}
+                    alAceptarHuella={alAceptarHuellaDeGranja ?? (async () => "esta consola no puede aceptar la huella")}
+                  />
+                </div>
+              ) : (
               <div role="tabpanel" className={estilos.panelDePestana} aria-label={ETIQUETA_DE_PLATAFORMA[plataformaAbierta]}>
               {/*
                 DOS bloques y no una lista, porque son dos cosas distintas: un requisito está
@@ -1975,6 +2019,7 @@ export function Ajustes({
                 })()
               )}
               </div>
+              )}
 
               {/*
                 Lo de TODA la máquina, fuera de las pestañas: la foto y su hora, qué no se
@@ -2267,6 +2312,7 @@ export function Ajustes({
                   {...(alActualizarDispositivos === undefined ? {} : { alMedir: alActualizarDispositivos })}
                   activo={conectado && alCambiarDispositivoPorDefecto !== undefined}
                   alElegir={(id) => alCambiarDispositivoPorDefecto?.(id)}
+                  {...(granja === undefined ? {} : { granja })}
                 />
               )}
 

@@ -24,6 +24,8 @@
  */
 
 import { ficheroDeDispositivoDeSesion, lineaDelDispositivo } from "../../core/dispositivoDeSesion.js";
+import { dispositivoSegunOrigen } from "../../core/dispositivoElegido.js";
+import type { OrigenDeDispositivos } from "../../core/granja.js";
 import { conAdjuntos } from "../../core/adjuntos.js";
 import { listarAdjuntosDeSesion } from "../../agent/sesiones/adjuntosDeSesion.js";
 import { crearRegistroDeFallos } from "../../agent/turno/registroDeFallos.js";
@@ -484,6 +486,13 @@ export interface OpcionesDelVestibulo {
    * acababan en el emulador. Ausente = ninguno.
    */
   dispositivoPorDefecto?: () => DispositivoElegido | undefined;
+  /**
+   * De dónde sacan los aparatos las sesiones del proyecto de esa raíz (`config.json#origenDeDispositivos`).
+   * Se pregunta en CADA apertura y el aparato se ajusta a él (`dispositivoSegunOrigen`): con la granja,
+   * una sesión nace con ella y una reabierta con un Android de este equipo pasa a la granja. Ausente =
+   * este equipo.
+   */
+  origenDeDispositivos?: (raiz: string) => OrigenDeDispositivos;
   /**
    * Lo que la consola de PROYECTO necesita y `consolaWeb` no puede saber: `/sync`, los
    * escritores de config del proyecto, el tema. Depende de la RAÍZ, que no existe hasta
@@ -1553,8 +1562,10 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
     let historica = reabierta?.historica ?? false;
     if (historica && (await opciones.hayMemoriaDeHilo?.(raiz, sesion!)) === true) historica = false;
     // Una reabierta, el suyo (o ninguno); una NUEVA, el de por defecto (IXCODE-51).
-    let dispositivo: DispositivoElegido | undefined =
-      reabierta !== undefined ? reabierta.dispositivo : opciones.dispositivoPorDefecto?.();
+    let dispositivo: DispositivoElegido | undefined = dispositivoSegunOrigen(
+      reabierta !== undefined ? reabierta.dispositivo : opciones.dispositivoPorDefecto?.(),
+      opciones.origenDeDispositivos?.(raiz) ?? "local",
+    );
     // El fichero que leen los scripts del `device-controller` (`core/dispositivoDeSesion.ts`)
     // queda como la pastilla DESDE QUE SE ABRE: también sin elección, que borra uno viejo.
     escribirDispositivoDeSesion(raiz, idSesion, dispositivo);

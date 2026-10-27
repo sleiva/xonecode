@@ -14,6 +14,7 @@ import {
   guardarModeloDeOpencode,
   guardarModoPorDefecto,
   guardarDispositivoPorDefecto,
+  guardarGranja,
   guardarAjustesDeRemoto,
   modeloDeOpencodeGuardado,
 
@@ -294,6 +295,26 @@ describe("settingsEnDisco", () => {
     guardarDispositivoPorDefecto(c, undefined);
     expect(readFileSync(rutaSettings(c), "utf8")).not.toContain("dispositivoPorDefecto");
     expect(cargarSettings(c).settings.entornos.map((e) => e.id)).toEqual(["a"]);
+  });
+
+  it("guardarGranja escribe dirección y huella, una huella sin forma se descarta al leer, y undefined la quita", () => {
+    const c = casa();
+    guardarEntorno(c, { id: "a", nombre: "A", url: "https://a/mcp" });
+    const huella = Array.from({ length: 32 }, () => "AB").join(":");
+    guardarGranja(c, { direccion: "https://192.168.1.40:8090", huella });
+    expect(cargarSettings(c).settings.granja).toEqual({ direccion: "https://192.168.1.40:8090", huella });
+    guardarGranja(c, { direccion: "https://192.168.1.40:8090", huella: "no-es-una-huella" });
+    expect(cargarSettings(c).settings.granja).toEqual({ direccion: "https://192.168.1.40:8090" });
+    guardarGranja(c, undefined);
+    expect(readFileSync(rutaSettings(c), "utf8")).not.toContain("granja");
+    expect(cargarSettings(c).settings.entornos.map((e) => e.id)).toEqual(["a"]);
+  });
+
+  it("una dirección de granja que no pasa la regla no se carga (http fuera de loopback)", () => {
+    const c = casa();
+    mkdirSync(join(c, ".xonecode"), { recursive: true });
+    writeFileSync(join(c, ".xonecode", "settings.json"), JSON.stringify({ entornos: [], granja: { direccion: "http://192.168.1.40:8090" } }));
+    expect(cargarSettings(c).settings.granja).toBeUndefined();
   });
 
   it("guardarAjustesDeRemoto guarda la vía y el dominio sin tocar el interruptor ni el servidor", () => {

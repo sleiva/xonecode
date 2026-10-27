@@ -102,6 +102,14 @@ export const MS_ENTRE_LECTURAS_DE_PLANES = 3000;
  * y en la respuesta de fijarlo. Lo que no se entiende es `undefined` —«no consta»—, nunca
  * «como el global», que es un dato.
  */
+/** Como `modoDelProyectoDe`, para el origen de los aparatos: `{}` = como el global; lo que no se entiende, nada. */
+function origenDelProyectoDe(valor: unknown): { proyecto?: "local" | "granja" } | undefined {
+  if (typeof valor !== "object" || valor === null) return undefined;
+  const proyecto = (valor as { proyecto?: unknown }).proyecto;
+  if (proyecto === undefined) return {};
+  return proyecto === "local" || proyecto === "granja" ? { proyecto } : undefined;
+}
+
 function modoDelProyectoDe(valor: unknown): { proyecto?: ModoDeEscritura } | undefined {
   if (typeof valor !== "object" || valor === null) return undefined;
   const proyecto = (valor as { proyecto?: unknown }).proyecto;
@@ -126,6 +134,21 @@ async function negativaOFalloDe(respuesta: unknown): Promise<string | undefined>
 }
 
 async function negativaDe(respuesta: unknown): Promise<string | undefined> {
+  const r = respuesta as Response | undefined;
+  if (r?.status !== 409) return undefined;
+  try {
+    const cuerpo = (await r.json()) as { motivo?: unknown };
+    return typeof cuerpo.motivo === "string" ? cuerpo.motivo : "el servidor se negó";
+  } catch {
+    return "el servidor se negó";
+  }
+}
+
+/**
+ * El motivo de un 409 del servidor (`{ motivo }`), o `undefined` si no se negó. La regla es suya: el
+ * cliente pinta su texto y no lo compone.
+ */
+async function motivoDeNegativa(respuesta: unknown): Promise<string | undefined> {
   const r = respuesta as Response | undefined;
   if (r?.status !== 409) return undefined;
   try {
@@ -2169,19 +2192,39 @@ export function App({
     },
     // El global, para que el desplegable diga «Como el global (…)» con el valor de verdad.
     ...(estado.modoPorDefecto === undefined ? {} : { modoGlobal: estado.modoPorDefecto }),
+    // El origen de los aparatos del proyecto (la granja), con la MISMA costura que el modo.
+    alFijarOrigenDelProyecto: async (id: string, origen: "local" | "granja" | undefined) => {
+      const r = (await enviar({
+        clase: "copiaLocal",
+        accion: "origenDeDispositivos",
+        proyecto: id,
+        ...(origen === undefined ? {} : { origen }),
+      })) as Response | undefined;
+      if (r === undefined) return { motivo: "no se pudo hablar con el servidor" };
+      if (!r.ok) return { motivo: (await negativaDe(r)) ?? "el servidor no lo ha guardado" };
+      try {
+        return { guardado: origenDelProyectoDe(await r.json()) ?? {} };
+      } catch {
+        return { motivo: "el servidor contestó algo que no se entiende" };
+      }
+    },
+    // El global: la granja si el aparato por omisión de Ajustes → General es la granja.
+    origenGlobal: estado.dispositivoPorDefecto?.elegido?.clase === "granja" ? ("granja" as const) : ("local" as const),
     alPedirResumen: async (id) => {
       const r = (await enviar({ clase: "copiaLocal", accion: "resumen", proyecto: id })) as Response | undefined;
       if (r === undefined || !r.ok) return undefined;
       try {
-        const cuerpo = (await r.json()) as { tareas?: unknown; sync?: unknown; modoDeEscritura?: unknown };
+        const cuerpo = (await r.json()) as { tareas?: unknown; sync?: unknown; modoDeEscritura?: unknown; origenDeDispositivos?: unknown };
         if (!Array.isArray(cuerpo.tareas) || !cuerpo.tareas.every((t) => typeof t === "string")) return undefined;
         const modo = modoDelProyectoDe(cuerpo.modoDeEscritura);
+        const origen = origenDelProyectoDe(cuerpo.origenDeDispositivos);
         return {
           tareas: cuerpo.tareas as string[],
           ...(typeof cuerpo.sync === "object" && cuerpo.sync !== null
             ? { sync: cuerpo.sync as NonNullable<FotoDelResumen["sync"]> }
             : {}),
           ...(modo === undefined ? {} : { modoDeEscritura: modo }),
+          ...(origen === undefined ? {} : { origenDeDispositivos: origen }),
         };
       } catch {
         return undefined;
@@ -2561,6 +2604,10 @@ export function App({
       // todos los clientes. Ausentes mientras no lleguen — no se afirma un equipo vacío.
       {...(estado.dispositivos === undefined ? {} : { dispositivos: estado.dispositivos })}
       {...(estado.ajustesDeDispositivos === undefined ? {} : { ajustesDeDispositivos: estado.ajustesDeDispositivos })}
+      {...(estado.granja === undefined ? {} : { granja: estado.granja })}
+      alGuardarGranja={async (cambio) => motivoDeNegativa(await enviar({ clase: "granja", accion: "guardar", ...cambio }))}
+      alProbarGranja={() => void enviar({ clase: "granja", accion: "probar" })}
+      alAceptarHuellaDeGranja={async (huella) => motivoDeNegativa(await enviar({ clase: "granja", accion: "aceptarHuella", huella }))}
       conectado={estado.conectado}
       // Guardar y volver a medir van en el MISMO mensaje: configurar sin remedir dejaría la
       // pantalla enseñando la foto de la configuración anterior.
@@ -3488,6 +3535,15 @@ export function App({
               alElegirDispositivo={(id) => void enviar(id === undefined ? { clase: "dispositivo" } : { clase: "dispositivo", id })}
               {...(estado.enUsoDeDispositivos === undefined ? {} : { dispositivosEnUso: estado.enUsoDeDispositivos })}
               {...(nombreDelProyectoActivo === undefined ? {} : { proyectoActual: nombreDelProyectoActivo })}
+              // El origen de los aparatos del PROYECTO (este equipo o la granja), solo si esta ejecución
+              // monta la granja y hay proyecto abierto: un control sin dato detrás no se pinta.
+              {...(estado.granja === undefined || nombreDelProyectoActivo === undefined
+                ? {}
+                : {
+                    granja: estado.granja,
+                    origenDeDispositivos: estado.alta?.origenDeDispositivos ?? ("local" as const),
+                    alCambiarOrigenDeDispositivos: (origen: "local" | "granja") => void enviar({ clase: "origenDeDispositivos", origen }),
+                  })}
               // El MISMO mensaje que el «Refrescar» de «Tu equipo»: medir es una sola acción.
               alMedirDispositivos={actualizarDispositivos}
               // El modo de escritura de la sesión. Ausente = no hay sesión abierta, y

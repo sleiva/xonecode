@@ -462,4 +462,24 @@ describe("dispositivoPorDefecto en settings.json (IXCODE-51)", () => {
       expect(validarSettings({ entornos: [], dispositivoPorDefecto: malo }).settings.dispositivoPorDefecto).toBeUndefined();
     }
   });
+
+  it("la granja puede ser el aparato por omisión (el origen global), solo con su forma", () => {
+    const granja = { id: "granja", nombre: "Granja", plataforma: "android", clase: "granja" };
+    expect(validarSettings({ entornos: [], dispositivoPorDefecto: granja }).settings.dispositivoPorDefecto).toEqual(granja);
+    expect(validarSettings({ entornos: [], dispositivoPorDefecto: { ...granja, id: "R58" } }).settings.dispositivoPorDefecto).toBeUndefined();
+  });
+});
+
+describe("granja en settings.json", () => {
+  it("guarda la dirección normalizada y una huella con forma; sin forma, sin huella", () => {
+    const huella = Array.from({ length: 32 }, () => "0F").join(":");
+    expect(validarSettings({ entornos: [], granja: { direccion: "192.168.1.40", huella } }).settings.granja).toEqual({
+      direccion: "https://192.168.1.40:8090",
+      huella,
+    });
+    expect(validarSettings({ entornos: [], granja: { direccion: "https://g:8090", huella: "ab:cd" } }).settings.granja).toEqual({
+      direccion: "https://g:8090",
+    });
+    expect(validarSettings({ entornos: [], granja: { huella } }).settings.granja).toBeUndefined();
+  });
 });

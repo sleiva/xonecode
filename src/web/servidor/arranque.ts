@@ -87,7 +87,7 @@ import {
 
 import type { Dispositivo, Herramienta, InformeDeDispositivos } from "../../core/dispositivos.js";
 import { esAlcanzable } from "../../core/dispositivos.js";
-import { PLATAFORMAS_DE_DISPOSITIVO, remotoEnVigor, type AjustesDeDispositivos } from "../../core/settings.js";
+import { PLATAFORMAS_DE_DISPOSITIVO, esHuellaDeCertificado, remotoEnVigor, type AjustesDeDispositivos, type AjustesDeGranja } from "../../core/settings.js";
 import type { NombreDeHerramienta } from "../../core/dispositivos.js";
 import type { ViaRemota } from "../../core/settings.js";
 import { motivoDeDominioInaceptable } from "../../core/tunel.js";
@@ -168,6 +168,7 @@ import {
   guardarDepurar,
   guardarModoPorDefecto,
   guardarDispositivoPorDefecto,
+  guardarGranja,
   guardarAjustesDeRemoto as guardarAjustesDeRemotoEnDisco,
   guardarWorkspace as guardarWorkspaceEnDisco,
   guardarDispositivos,
@@ -197,7 +198,24 @@ import {
 } from "../../core/modoDeEscritura.js";
 import { megasDeLasMudanzas, mudarWorkspaceLegado, type ResultadoDeMudanza } from "../../agent/config/mudanzaEnDisco.js";
 import { elegirCarpetaEnMaquina, haySelectorDeCarpeta } from "../../agent/config/selectorEnMaquina.js";
-import { cloudstudioDelProyecto, guardarModoDeEscrituraDeProyecto, modoDeEscrituraDelProyecto } from "../../agent/config/configEnDisco.js";
+import {
+  cloudstudioDelProyecto,
+  guardarModoDeEscrituraDeProyecto,
+  guardarOrigenDeDispositivosDeProyecto,
+  modoDeEscrituraDelProyecto,
+  origenDeDispositivosDelProyecto,
+} from "../../agent/config/configEnDisco.js";
+import { guardarTokenDeGranja, quitarTokenDeGranja, tokenDeGranja } from "../../agent/dispositivos/granjaEnDisco.js";
+import { probarGranja, type Hablar } from "../../agent/dispositivos/granjaEnRed.js";
+import {
+  direccionDeGranja,
+  esFormaDeTokenDeGranja,
+  esOrigenDeDispositivos,
+  motivoDePruebaDeGranja,
+  type OrigenDeDispositivos,
+  type PruebaDeGranja,
+} from "../../core/granja.js";
+import { DISPOSITIVO_DE_GRANJA, dispositivoSegunOrigen, origenEnVigor } from "../../core/dispositivoElegido.js";
 import { abrirEnSistema, olvidarEntorno as olvidarCredencialesDeEntorno, rutaAuthPorDefecto } from "../../agent/cloudstudio/cloudstudioMcp.js";
 import { nombreDePersona } from "../../agent/config/persona.js";
 import { cambiosDeSesion, exportarLoTerminado, fotoDeApertura, olvidarSesion, parcheDeSesion } from "../../agent/sesiones/sesionGit.js";
@@ -934,6 +952,11 @@ export interface OpcionesDeMontaje {
   /** Fija —o quita, con `undefined`— el de un proyecto. */
   guardarModoDelProyecto?: (raiz: string, modo: ModoDeEscritura | undefined) => void;
   /**
+   * La granja de dispositivos de este equipo y el origen de cada proyecto (`ServicioDeGranja`,
+   * `ajusteDeGranjaCableado`). Ausente = Ajustes no pinta la pestaña Granja y la pastilla no ofrece elegirla.
+   */
+  granja?: ServicioDeGranja;
+  /**
    * Augmenta una petición en un encargo revisado (`agent/tareas/aumentador.ts`, Task 9). Ausente =
    * el botón «Preparar el encargo» no está disponible.
    */
@@ -1600,6 +1623,7 @@ export function montarRutas(
       ...(activo === undefined ? {} : { proyectoActivo: activo }),
       ...(abierto?.sesion === undefined ? {} : { sesionActiva: abierto.sesion }),
       ...(abierto?.dispositivo === undefined ? {} : { dispositivoActivo: abierto.dispositivo }),
+      ...(abierto !== undefined && origenDe(abierto.raiz) === "granja" ? { origenDeDispositivos: "granja" as const } : {}),
       ...(abierto?.historica === true ? { historica: true } : {}),
       /**
        * **El modo de escritura de la sesión abierta**: supervisado o autónomo.
@@ -2150,6 +2174,8 @@ export function montarRutas(
     const modoPorDefecto = mensajeDeModoPorDefecto();
     // Y el aparato de las sesiones nuevas (IXCODE-51), en la misma sección.
     const dispositivoPorDefecto = mensajeDeDispositivoPorDefecto();
+    // Y la granja (Ajustes → Dispositivos → Granja), con la última prueba si la hubo.
+    const granja = mensajeDeGranja();
     // Y los conectores MCP, tras el workspace y por la misma regla: solo si esta ejecución
     // los monta, y entonces la ventana de Ajustes no se abre con la sección en blanco.
     const conectores = mensajeDeConectores();
@@ -2174,6 +2200,7 @@ export function montarRutas(
       if (depuracion !== undefined) cliente(depuracion);
       if (modoPorDefecto !== undefined) cliente(modoPorDefecto);
       if (dispositivoPorDefecto !== undefined) cliente(dispositivoPorDefecto);
+      if (granja !== undefined) cliente(granja);
       // La sesión remota, SIEMPRE que esta ejecución la monta: con `habilitado`, que es lo que
       // pinta el interruptor de Ajustes (y, apagado, no hay botón en el chat). Un puente abierto
       // con el interruptor quitado a mano en `settings.json` sale igual, para poder apagarlo.
@@ -2367,6 +2394,68 @@ export function montarRutas(
     if (opciones.dispositivoPorDefecto === undefined) return undefined;
     const dispositivo = opciones.dispositivoPorDefecto();
     return { clase: "dispositivoPorDefecto", ...(dispositivo === undefined ? {} : { dispositivo }) };
+  };
+
+  /**
+   * La última «Probar conexión» de la granja, con su hora. Viaja con la configuración y se OLVIDA al
+   * cambiar la dirección o el token: una prueba de otra dirección afirmaría algo que nadie probó.
+   */
+  let pruebaDeGranja: (PruebaDeGranja & { medido: string }) | undefined;
+  /** El mensaje `granja` entero, compuesto en UN sitio. El token no está en él: solo si lo hay. */
+  const mensajeDeGranja = (): Extract<MensajeAlCliente, { clase: "granja" }> | undefined => {
+    if (opciones.granja === undefined) return undefined;
+    const c = opciones.granja.configuracion();
+    const prueba =
+      pruebaDeGranja === undefined
+        ? undefined
+        : pruebaDeGranja.estado === "conectada"
+          ? pruebaDeGranja
+          : { ...pruebaDeGranja, motivo: motivoDePruebaDeGranja(pruebaDeGranja) };
+    return {
+      clase: "granja",
+      ...(c.direccion === undefined ? {} : { direccion: c.direccion }),
+      hayToken: c.hayToken,
+      ...(c.huella === undefined ? {} : { huella: c.huella }),
+      ...(prueba === undefined ? {} : { prueba }),
+    };
+  };
+  let probandoGranja: Promise<void> | undefined;
+  /** Prueba la granja y lo anuncia a todos. Dos peticiones a la vez comparten la prueba en vuelo. */
+  const probarGranjaYAnunciar = (): Promise<void> => {
+    const servicio = opciones.granja;
+    if (servicio === undefined) return Promise.resolve();
+    if (probandoGranja !== undefined) return probandoGranja;
+    probandoGranja = (async () => {
+      try {
+        pruebaDeGranja = { ...(await servicio.probar()), medido: new Date().toISOString() };
+      } catch (error) {
+        // `probarGranja` no lanza; lo que puede lanzar es guardar la huella aceptada (TOFU) en disco.
+        informar(`granja: no se pudo guardar el resultado de la prueba (${codigoDe(error) ?? "error"})`);
+      } finally {
+        probandoGranja = undefined;
+      }
+      const mensaje = mensajeDeGranja();
+      if (mensaje !== undefined) emitir(mensaje);
+    })();
+    return probandoGranja;
+  };
+  /**
+   * El origen EN VIGOR de los aparatos del proyecto de esa raíz (`origenEnVigor`): el suyo, si no el global (la granja
+   * como aparato por omisión). Sin servicio de granja, siempre este equipo.
+   */
+  const origenDe = (raiz: string): OrigenDeDispositivos =>
+    opciones.granja === undefined ? "local" : origenEnVigor(opciones.granja.origenDelProyecto(raiz), opciones.dispositivoPorDefecto?.());
+  /**
+   * Tras cambiar el origen de un proyecto: si es el ABIERTO, su aparato se ajusta en el acto (`dispositivoSegunOrigen`) y se
+   * reanuncian el alta y quién usa qué. Las demás consolas del proyecto (tareas en marcha) lo toman al abrir la siguiente sesión.
+   */
+  const ajustarAbiertaAlOrigen = (raiz: string): void => {
+    const abierta = vestibulo.proyectoAbierto();
+    if (abierta === undefined || !mismaRuta(abierta.raiz, raiz)) return;
+    const ajustado = dispositivoSegunOrigen(abierta.dispositivo, origenDe(raiz));
+    if (ajustado !== abierta.dispositivo) abierta.elegirDispositivo(ajustado);
+    void anunciarAlta().catch(contar);
+    if (informeDeDispositivos !== undefined) emitir(mensajeDeDispositivos(informeDeDispositivos));
   };
 
   /**
@@ -5341,6 +5430,7 @@ export function montarRutas(
    */
   const destinoDeRecarga = async (abierto: ConsolaDeProyecto): Promise<DestinoDeRecarga | { motivo: string }> => {
     if (abierto.dispositivo === undefined) return { motivo: "no hay un aparato elegido en la sesión" };
+    if (abierto.dispositivo.clase === "granja") return { motivo: "este proyecto usa la granja, y la recarga todavía no llega a ella" };
     const { dispositivo } = dispositivoDeLaSesion(abierto.dispositivo, informeDeDispositivos);
     // La foto de Dispositivos solo se toma al conectar y al pulsar «Refrescar»: un emulador
     // arrancado después no está en ella, y decir «la app no corre» mandaría a buscar donde no es.
@@ -7514,13 +7604,58 @@ export function montarRutas(
               const proyecto = opciones.modoDelProyecto(raiz);
               return proyecto === undefined ? {} : { proyecto };
             })();
+      // Y de dónde saca los aparatos (la granja): con la misma regla, solo con copia y con la granja montada.
+      const origenDeDispositivos =
+        opciones.granja === undefined || !esProyectoEnDisco(raiz)
+          ? undefined
+          : (() => {
+              const proyecto = opciones.granja.origenDelProyecto(raiz);
+              return proyecto === undefined ? {} : { proyecto };
+            })();
       const foto: FotoDelResumen = {
         tareas,
         ...(sync === undefined ? {} : { sync }),
         ...(modoDeEscritura === undefined ? {} : { modoDeEscritura }),
+        ...(origenDeDispositivos === undefined ? {} : { origenDeDispositivos }),
       };
       respuesta.writeHead(200, { "content-type": "application/json" });
       respuesta.end(JSON.stringify(foto));
+      return;
+    }
+    if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "copiaLocal" && mensaje.accion === "origenDeDispositivos") {
+      // Como el modo: del cable llega el ID y, opcional, el origen; la raíz la pone el servidor. Sin `origen` se QUITA.
+      const pedido = (mensaje as { origen?: unknown }).origen;
+      if (pedido !== undefined && !esOrigenDeDispositivos(pedido)) {
+        respuesta.writeHead(400);
+        respuesta.end();
+        return;
+      }
+      const identidad = proyectos.find((p) => p.id === mensaje.proyecto);
+      const raiz = entornoElegido === undefined || identidad === undefined
+        ? undefined
+        : vestibulo.raizDeProyecto(entornoElegido, identidad.nombre);
+      if (raiz === undefined || !esProyectoEnDisco(raiz) || opciones.granja === undefined) {
+        respuesta.writeHead(409, { "content-type": "application/json" });
+        respuesta.end(JSON.stringify({
+          motivo: raiz === undefined
+            ? "ese proyecto no está en el listado del entorno activo"
+            : opciones.granja === undefined
+              ? "esta ejecución no tiene granja de dispositivos"
+              : "el proyecto no tiene copia local: el origen se guarda en su configuración",
+        }));
+        return;
+      }
+      try {
+        opciones.granja.guardarOrigenDelProyecto(raiz, pedido);
+      } catch (error) {
+        respuesta.writeHead(409, { "content-type": "application/json" });
+        respuesta.end(JSON.stringify({ motivo: `no se pudo guardar en la configuración del proyecto (${codigoDe(error) ?? "su config.json no se puede leer"})` }));
+        return;
+      }
+      ajustarAbiertaAlOrigen(raiz);
+      const proyecto = opciones.granja.origenDelProyecto(raiz);
+      respuesta.writeHead(200, { "content-type": "application/json" });
+      respuesta.end(JSON.stringify(proyecto === undefined ? {} : { proyecto }));
       return;
     }
     if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "copiaLocal" && mensaje.accion === "modoDeEscritura") {
@@ -8561,7 +8696,10 @@ export function montarRutas(
       // está en ella no se guarda (es una foto vieja del cliente); se reemite lo que hay.
       const pedido = (mensaje as { id?: unknown }).id;
       if (pedido === undefined) opciones.guardarDispositivoPorDefecto?.(undefined);
-      else if (typeof pedido === "string") {
+      // La granja como aparato por omisión es el ORIGEN global (`origenEnVigor`): solo si esta ejecución la monta.
+      else if (pedido === DISPOSITIVO_DE_GRANJA.id) {
+        if (opciones.granja !== undefined) opciones.guardarDispositivoPorDefecto?.(DISPOSITIVO_DE_GRANJA);
+      } else if (typeof pedido === "string") {
         const d = informeDeDispositivos?.dispositivos.find((x) => x.id === pedido);
         if (d !== undefined) {
           opciones.guardarDispositivoPorDefecto?.({ id: d.id, nombre: d.nombre, plataforma: d.plataforma, clase: d.clase });
@@ -8713,6 +8851,108 @@ export function montarRutas(
       respuesta.end();
       return;
     }
+    if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "granja") {
+      const servicio = opciones.granja;
+      const negar = (codigo: number, motivo: string): void => {
+        respuesta.writeHead(codigo, { "content-type": "application/json" });
+        respuesta.end(JSON.stringify({ motivo }));
+      };
+      if (servicio === undefined) return negar(409, "esta ejecución no tiene granja de dispositivos");
+      if (mensaje.accion === "probar") {
+        void probarGranjaYAnunciar().catch(contar);
+        respuesta.writeHead(204);
+        respuesta.end();
+        return;
+      }
+      if (mensaje.accion === "aceptarHuella") {
+        // Solo la huella NUEVA que dio la última prueba: aceptar una cualquiera llegada por el cable
+        // dejaría fijar un certificado que nadie ha visto contestar.
+        const pedida = (mensaje as { huella?: unknown }).huella;
+        if (pruebaDeGranja?.estado !== "huella-distinta" || pedida !== pruebaDeGranja.ahora || !esHuellaDeCertificado(pedida)) {
+          return negar(409, "esa huella no es la que dio la última prueba: vuelve a probar la conexión");
+        }
+        try {
+          servicio.aceptarHuella(pedida);
+        } catch (error) {
+          return negar(409, `no se pudo guardar la huella (${codigoDe(error) ?? "error"})`);
+        }
+        pruebaDeGranja = undefined;
+        void probarGranjaYAnunciar().catch(contar);
+        respuesta.writeHead(204);
+        respuesta.end();
+        return;
+      }
+      if (mensaje.accion === "guardar") {
+        // Se VALIDA todo antes de escribir nada: una dirección buena con un token sin forma no deja
+        // media configuración guardada. El token es un secreto: no se apunta ni se devuelve.
+        const { direccion, token, quitarToken } = mensaje as { direccion?: unknown; token?: unknown; quitarToken?: unknown };
+        let nueva: { url: string | undefined } | undefined;
+        if (typeof direccion === "string") {
+          if (direccion.trim() === "") nueva = { url: undefined };
+          else {
+            const normalizada = direccionDeGranja(direccion);
+            if ("motivo" in normalizada) return negar(409, normalizada.motivo);
+            nueva = { url: normalizada.url };
+          }
+        }
+        const tecleado = typeof token === "string" && token.trim() !== "" ? token.trim() : undefined;
+        if (tecleado !== undefined && !esFormaDeTokenDeGranja(tecleado)) {
+          return negar(409, "eso no parece un token de la granja: empieza por xfarm_ y se crea en su web, menú ☰ → «Tokens de acceso»");
+        }
+        try {
+          if (tecleado !== undefined) {
+            const guardado = servicio.guardarToken(tecleado);
+            if (!guardado.ok) return negar(409, guardado.motivo);
+          } else if (quitarToken === true) servicio.quitarToken();
+          if (nueva !== undefined) servicio.guardarDireccion(nueva.url);
+        } catch (error) {
+          return negar(409, `no se pudo guardar la granja (${codigoDe(error) ?? "error"})`);
+        }
+        pruebaDeGranja = undefined;
+        respuesta.writeHead(204);
+        respuesta.end();
+        // Con dirección y token, se prueba sola: es lo primero que alguien quiere saber al guardar.
+        const ahora = servicio.configuracion();
+        if (ahora.direccion !== undefined && ahora.hayToken) void probarGranjaYAnunciar().catch(contar);
+        else {
+          const aviso = mensajeDeGranja();
+          if (aviso !== undefined) emitir(aviso);
+        }
+        return;
+      }
+      respuesta.writeHead(400);
+      respuesta.end();
+      return;
+    }
+    if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "origenDeDispositivos") {
+      // El proyecto ABIERTO, por la raíz que pone el servidor. El aparato de la sesión se ajusta al
+      // origen en el acto (`dispositivoSegunOrigen`): un Android de este equipo no puede seguir
+      // elegido en un proyecto que dice usar la granja.
+      const origen = (mensaje as { origen?: unknown }).origen;
+      if (!esOrigenDeDispositivos(origen)) {
+        respuesta.writeHead(400);
+        respuesta.end();
+        return;
+      }
+      const abierta = vestibulo.proyectoAbierto();
+      const servicio = opciones.granja;
+      if (servicio === undefined || abierta === undefined || !esProyectoEnDisco(abierta.raiz)) {
+        respuesta.writeHead(409, { "content-type": "application/json" });
+        respuesta.end(JSON.stringify({ motivo: "no hay un proyecto con copia local abierto: el origen se guarda en su configuración" }));
+        return;
+      }
+      try {
+        servicio.guardarOrigenDelProyecto(abierta.raiz, origen);
+      } catch (error) {
+        respuesta.writeHead(409, { "content-type": "application/json" });
+        respuesta.end(JSON.stringify({ motivo: `no se pudo guardar en la configuración del proyecto (${codigoDe(error) ?? "su config.json no se puede leer"})` }));
+        return;
+      }
+      ajustarAbiertaAlOrigen(abierta.raiz);
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
     if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "remoto") {
       // Con el interruptor apagado se contesta igual y no se ENCIENDE nada: ni se carga el
       // paquete. Apagar sí se atiende siempre, pero solo actúa si hay algo encendido.
@@ -8807,11 +9047,18 @@ export function montarRutas(
       const abierta = vestibulo.proyectoAbierto();
       const pedido = (mensaje as { id?: unknown }).id;
       if (abierta !== undefined) {
-        if (pedido === undefined) abierta.elegirDispositivo(undefined);
-        else if (typeof pedido === "string") {
+        // Lo elegido pasa por el ORIGEN del proyecto (`dispositivoSegunOrigen`): con la granja, un Android
+        // de este equipo —o «ninguno»— es la granja; sin ella, la granja no se puede elegir.
+        const origen = origenDe(abierta.raiz);
+        if (pedido === undefined) abierta.elegirDispositivo(dispositivoSegunOrigen(undefined, origen));
+        else if (pedido === DISPOSITIVO_DE_GRANJA.id) {
+          if (origen === "granja") abierta.elegirDispositivo(DISPOSITIVO_DE_GRANJA);
+        } else if (typeof pedido === "string") {
           const d = informeDeDispositivos?.dispositivos.find((x) => x.id === pedido);
           if (d !== undefined) {
-            abierta.elegirDispositivo({ id: d.id, nombre: d.nombre, plataforma: d.plataforma, clase: d.clase });
+            abierta.elegirDispositivo(
+              dispositivoSegunOrigen({ id: d.id, nombre: d.nombre, plataforma: d.plataforma, clase: d.clase }, origen),
+            );
           }
         }
         // Suelto: `anunciarAlta` consulta CloudStudio y el `POST` no puede quedarse
@@ -9730,6 +9977,90 @@ export function ajusteDeDispositivoPorDefectoCableado(opciones: { casa?: string 
 }
 
 /**
+ * La granja de dispositivos de este equipo y el origen de cada proyecto (`core/granja.ts`), como los
+ * usan Ajustes, la pastilla y el vestíbulo. La dirección y la huella van a `settings.json`, el token a
+ * `~/.xonecode/granja.json` y el origen al `config.json` del proyecto; el token se lee AQUÍ, al probar,
+ * y no sale de este servicio.
+ */
+export interface ServicioDeGranja {
+  configuracion: () => { direccion?: string; huella?: string; hayToken: boolean };
+  /** Fija la dirección ya normalizada, o la QUITA con `undefined`. Otra dirección borra la huella: es otra máquina. */
+  guardarDireccion: (direccion: string | undefined) => void;
+  /** Acepta la huella del certificado (la primera, o una nueva que la persona confirmó). */
+  aceptarHuella: (huella: string) => void;
+  guardarToken: (token: string) => { ok: true } | { ok: false; motivo: string };
+  quitarToken: () => void;
+  /** Prueba con lo que hay en disco. La PRIMERA huella que conteste bien se acepta y se guarda (TOFU). */
+  probar: () => Promise<PruebaDeGranja>;
+  /** Lo que dice ESTE proyecto (`config.json#origenDeDispositivos`), o `undefined`: entonces manda el global. */
+  origenDelProyecto: (raiz: string) => OrigenDeDispositivos | undefined;
+  /** Fija el del proyecto, o lo QUITA con `undefined` (vuelve a mandar el global). */
+  guardarOrigenDelProyecto: (raiz: string, origen: OrigenDeDispositivos | undefined) => void;
+}
+
+/**
+ * El origen EN VIGOR de un proyecto, cableado: su `config.json` y, si no dice nada, el aparato por omisión del
+ * `settings.json` de la casa. Lo usa el vestíbulo al abrir cada sesión; extraída por el patrón de fallo de siempre.
+ */
+export function origenDeDispositivosCableado(opciones: { casa?: string } = {}): (raiz: string) => OrigenDeDispositivos {
+  const global = ajusteDeDispositivoPorDefectoCableado(opciones.casa === undefined ? {} : { casa: opciones.casa });
+  return (raiz) => origenEnVigor(origenDeDispositivosDelProyecto(raiz), global.dispositivoPorDefecto());
+}
+
+/**
+ * `ServicioDeGranja` cableado contra el disco y la red. Extraída por el patrón de fallo de siempre: la
+ * regla del TOFU y «otra dirección borra la huella» son composición, y aquí quedan probadas.
+ */
+export function ajusteDeGranjaCableado(opciones: { casa?: string; hablar?: Hablar } = {}): { granja: ServicioDeGranja } {
+  const casa = opciones.casa;
+  const ajustes = (): AjustesDeGranja | undefined => cargarSettings(casa).settings.granja;
+  const token = (): string | undefined => tokenDeGranja(casa === undefined ? {} : { casa });
+  return {
+    granja: {
+      configuracion: () => {
+        const a = ajustes();
+        return {
+          ...(a === undefined ? {} : { direccion: a.direccion }),
+          ...(a?.huella === undefined ? {} : { huella: a.huella }),
+          hayToken: token() !== undefined,
+        };
+      },
+      guardarDireccion: (direccion) => {
+        const actual = ajustes();
+        if (direccion === undefined) return void guardarGranja(casa, undefined);
+        const huella = actual?.direccion === direccion ? actual.huella : undefined;
+        guardarGranja(casa, { direccion, ...(huella === undefined ? {} : { huella }) });
+      },
+      aceptarHuella: (huella) => {
+        const actual = ajustes();
+        if (actual !== undefined) guardarGranja(casa, { ...actual, huella });
+      },
+      guardarToken: (t) => guardarTokenDeGranja(t, casa === undefined ? {} : { casa }),
+      quitarToken: () => quitarTokenDeGranja(casa === undefined ? {} : { casa }),
+      probar: async () => {
+        const a = ajustes();
+        const t = token();
+        const prueba = await probarGranja(
+          {
+            ...(a === undefined ? {} : { direccion: a.direccion }),
+            ...(t === undefined ? {} : { token: t }),
+            ...(a?.huella === undefined ? {} : { huella: a.huella }),
+          },
+          opciones.hablar === undefined ? {} : { hablar: opciones.hablar },
+        );
+        // TOFU: la primera huella que contesta BIEN queda aceptada. Una prueba que no conectó no fija nada.
+        if (prueba.estado === "conectada" && a !== undefined && a.huella === undefined && prueba.huella !== undefined) {
+          guardarGranja(casa, { ...a, huella: prueba.huella });
+        }
+        return prueba;
+      },
+      origenDelProyecto: origenDeDispositivosDelProyecto,
+      guardarOrigenDelProyecto: (raiz, origen) => void guardarOrigenDeDispositivosDeProyecto(raiz, origen),
+    },
+  };
+}
+
+/**
  * La opción `conectores` de `montarRutas`, cableada — extraída por el MISMO motivo que
  * `ajusteDeWorkspaceCableado`: un literal inline dentro de `arrancarConsolaWeb` no quedaría
  * probado, y esa composición concreta —que la fábrica de verdad (`servicioDeConectoresCableado`)
@@ -10393,6 +10724,8 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
     ...(({ modoPorDefecto: _paraElVestibulo, ...resto }) => resto)(ajusteDeModoPorDefectoCableado()),
     // El aparato de las sesiones nuevas (IXCODE-51), con la MISMA disciplina.
     ...ajusteDeDispositivoPorDefectoCableado(),
+    // La granja de dispositivos y el origen de cada proyecto, con la MISMA disciplina.
+    ...ajusteDeGranjaCableado(),
     // Los conectores MCP, con la MISMA disciplina: la composición extraída y probada
     // (`ajusteDeConectoresCableado`), nunca un literal aquí dentro.
     // Y el gestor de tareas (IXCODE-11) llama por ESE mismo servicio: los dos salen de
@@ -10694,6 +11027,8 @@ function vestibuloReal(
     modoPorDefecto: ajusteDeModoPorDefectoCableado().modoPorDefecto,
     // Y con qué aparato (IXCODE-51): también una tarea, que sin él iba al emulador.
     dispositivoPorDefecto: ajusteDeDispositivoPorDefectoCableado().dispositivoPorDefecto,
+    // Y el origen de los aparatos del proyecto (el suyo, o el global): con la granja, la sesión nace —o se reabre— con ella.
+    origenDeDispositivos: origenDeDispositivosCableado(),
     // Se resuelve UNA vez, aquí, y no en cada `anunciarAlta`: `git config`/`os.userInfo`
     // no cambian a media conexión, y repetir el subproceso en cada anuncio del alta sería
     // gastar sin motivo. Nunca viaja hacia CloudStudio ni hacia ningún acto —

@@ -716,6 +716,33 @@ describe("vestíbulo", () => {
       await v.cerrar();
     });
 
+    it("en un proyecto con GRANJA, una sesión nueva nace con ella aunque el de por defecto sea un Android", async () => {
+      const v = crearVestibulo({
+        ...dobles(),
+        origenDeTrabajo: "global",
+        dispositivoPorDefecto: () => MOVIL,
+        origenDeDispositivos: (raiz) => (raiz === "/w/granja" ? "granja" : "local"),
+      });
+      expect((await v.abrirProyecto({ raiz: "/w/granja" })).dispositivo).toEqual({
+        id: "granja",
+        nombre: "Granja",
+        plataforma: "android",
+        clase: "granja",
+      });
+      expect((await v.abrirProyecto({ raiz: "/w/local" })).dispositivo).toEqual(MOVIL);
+      await v.cerrar();
+    });
+
+    it("una REABIERTA con un Android de este equipo pasa a la granja si su proyecto ya la usa", async () => {
+      const s = sesionesEnMemoria();
+      const v = crearVestibulo({ ...dobles(), origenDeTrabajo: "global", sesiones: s.puerto, origenDeDispositivos: () => "granja" });
+      const id = s.puerto.crear("/w/a");
+      s.puerto.elegirDispositivo?.("/w/a", id, MOVIL);
+      const abierta = await v.abrirProyecto({ raiz: "/w/a", sesion: id });
+      expect(abierta.dispositivo?.clase).toBe("granja");
+      await v.cerrar();
+    });
+
     it("una sesión sin esfuerzo guardado abre SIN esfuerzo, no con uno inventado", async () => {
       const s = sesionesEnMemoria();
       const v = crearVestibulo({ ...dobles(), origenDeTrabajo: "global", sesiones: s.puerto });
