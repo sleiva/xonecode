@@ -4102,6 +4102,26 @@ nada más. Cinco cosas:
   4096. Y solo `anthropic` tiene fila, igual que `ollama` no tiene fila en la tabla de
   contexto: los demás clientes no tienen este fallo, y fijarles un tope a ciegas sería
   recortarles la salida por una razón que no existe.
+- **El turno sube a 32.768 (0.48.7), por modelo, y lo sin streaming se queda en 16.384.**
+  Medido en el soporte de Maset del 27-10-2026: un analista de Sonnet 5.5 repitió 30 veces el
+  mismo `write_file` de `TASKS.md`, cada vuelta cortada en 16.384 de salida (≈490 k tokens, 52
+  min). El tope del turno es `min(32.768, techo del modelo)`: el techo va en una tabla por
+  prefijo (`TECHOS_DE_SALIDA`, 128K la familia actual, 64K la 4.5, 4K-8K la 3.x) porque pedir
+  por encima es un 400. El juez, el aumentador y el juez visual siguen sin streaming, y el SDK
+  (0.115.0, `calculateNonstreamingTimeout`) LANZA por encima de ~21.333: el recorte a 16.384 lo
+  hace `ChatAnthropicConRazonamiento._generateNonStreaming`, sobre el mismo cliente. Subir el
+  tope NO arregla el bucle —solo lo hace más raro y cada vuelta más cara—.
+- **El corte de Claude no se veía, y su `write_file` se EJECUTABA a medias.** Medido con el
+  cliente de verdad (`@langchain/anthropic` 1.5.2, stream con `message_delta` en
+  `max_tokens`): `response_metadata` no trae `finish_reason`, el `stop_reason` queda en
+  `additional_kwargs`, y `tool_calls` sale «reparado» (`{file_path, content: "# Tar"}`). La
+  guarda de `modeloLangchain.ts` solo miraba `finish_reason`, así que en Maset cada vuelta del
+  analista mandaba un `TASKS.md` cortado. Ahora se reconocen las dos formas; la respuesta de la
+  tool lleva delante una nota que dice el tope, la ruta y que hay que PARTIR el trabajo (sin
+  ella el modelo solo veía un error de JSON y repetía la misma llamada); y tras dos respuestas
+  seguidas cortadas con una tool call no se vuelve a llamar al modelo: el hilo cierra con texto,
+  como al detener, y lo lee quien lo llamó. Dos y no tres: la nota da UNA ocasión de cambiar, y
+  cada vuelta de más es un tope de salida entero tirado.
 - **Omitir `thinking` significa tres cosas distintas, así que es una TABLA y no un campo
   fijo.** La dependencia manda `thinking: undefined` si no se le fija, o sea que omite el
   parámetro. Y omitirlo: en **Opus 5 y Sonnet 5** ya corre adaptativo (no hace falta pedir

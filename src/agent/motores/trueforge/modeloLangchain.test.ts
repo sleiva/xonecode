@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import winston from "winston";
 import { AIMessageChunk, type BaseMessage } from "@langchain/core/messages";
 import { AgentThread, AgentThreadOrchestrator, EventType, NOOP_AGENT_TRACING, ToolSet, toolResultResponse } from "./trueforge.js";
-import { aMensajesDeLangchain, modeloParaTrueforge } from "./modeloLangchain.js";
+import { ChatAnthropic } from "@langchain/anthropic";
+import { CORTES_SEGUIDOS_ANTES_DE_PARAR, aMensajesDeLangchain, cortadaPorTopeDeSalida, modeloParaTrueforge } from "./modeloLangchain.js";
 
 /** Un modelo de LangChain de pega: por cada llamada, un guion de trozos. Apunta lo que recibe. */
 function modeloGuionizado(guiones: AIMessageChunk[][]) {
@@ -104,7 +105,12 @@ describe("una llamada con los argumentos ROTOS no se pierde", () => {
   /** Un turno contra el orquestador real con UNA llamada a `read_file` cuyos trozos son `trozos`; devuelve
    *  lo que la tool llegó a recibir y lo que vio el modelo en su segunda llamada. */
   async function turnoConLlamada(trozos: AIMessageChunk[]) {
-    const { modelo, recibidos } = modeloGuionizado([trozos, [new AIMessageChunk({ content: "Lo repito." })]]);
+    return turnoConGuiones([trozos, [new AIMessageChunk({ content: "Lo repito." })]]);
+  }
+
+  /** Lo mismo con un guion por llamada al modelo; `ultimo` es el texto con el que acabó el hilo. */
+  async function turnoConGuiones(guiones: AIMessageChunk[][]) {
+    const { modelo, recibidos } = modeloGuionizado(guiones);
     const leidos: unknown[] = [];
     const source = {
       name: "xone",
@@ -142,7 +148,9 @@ describe("una llamada con los argumentos ROTOS no se pierde", () => {
     let r = await it2.next();
     while (!r.done) r = await it2.next();
     const respuesta = recibidos[1]?.find((x) => x.getType() === "tool");
-    return { leidos, llamadasAlModelo: recibidos.length, respuesta: String(respuesta?.content) };
+    const mensajes = (raiz.toSnapshot() as { context?: { role: string; content?: unknown }[] }).context ?? [];
+    const ultimo = String([...mensajes].reverse().find((m) => m.role === "assistant")?.content ?? "");
+    return { leidos, llamadasAlModelo: recibidos.length, respuesta: String(respuesta?.content), recibidos, ultimo };
   }
 
   it("un JSON que LangChain no puede leer llega al modelo como error de la tool, sin ejecutarse", async () => {
@@ -164,6 +172,41 @@ describe("una llamada con los argumentos ROTOS no se pierde", () => {
     expect(r.respuesta).toMatch(/JSON|Unterminated/i);
   }, 20_000);
 
+  /** Una respuesta cortada a mitad de `write_file`, con el corte como lo deja `@langchain/anthropic` en streaming. */
+  const cortadaComoAnthropic = (idDeLlamada: string) => [
+    new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: idDeLlamada, name: "read_file", args: '{"file_path":"/planes/TASKS.md","content":"# Tar' }] }),
+    new AIMessageChunk({ content: "", additional_kwargs: { stop_reason: "max_tokens" }, usage_metadata: { input_tokens: 10, output_tokens: 32_768, total_tokens: 32_778 } }),
+  ];
+
+  it("el corte de Claude (stop_reason en additional_kwargs) tampoco se ejecuta reparado, y el modelo sabe por qué", async () => {
+    // Medido en Maset: con Anthropic `finish_reason` no llega, la llamada salía reparada y se ejecutaba.
+    const r = await turnoConLlamada(cortadaComoAnthropic("c1"));
+    expect(r.leidos).toEqual([]);
+    expect(r.respuesta).toMatch(/TOPE DE SALIDA/);
+    expect(r.respuesta).toContain("32768");
+    expect(r.respuesta).toContain("/planes/TASKS.md");
+    expect(r.respuesta).toMatch(/JSON|Unterminated/i);
+  }, 20_000);
+
+  it(`tras ${CORTES_SEGUIDOS_ANTES_DE_PARAR} cortes seguidos no se vuelve a llamar al modelo: el hilo cierra diciéndolo`, async () => {
+    const r = await turnoConGuiones([cortadaComoAnthropic("c1"), cortadaComoAnthropic("c2"), [new AIMessageChunk({ content: "no debería llegar" })]]);
+    expect(r.leidos).toEqual([]);
+    expect(r.llamadasAlModelo).toBe(CORTES_SEGUIDOS_ANTES_DE_PARAR);
+    expect(r.ultimo).toMatch(/No he podido terminar/);
+    expect(r.ultimo).toContain("/planes/TASKS.md");
+  }, 20_000);
+
+  it("una respuesta sana entre dos cortes reinicia la cuenta", async () => {
+    const sana = [
+      new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "s1", name: "read_file", args: '{"file_path":"/app.xml"}' }] }),
+      new AIMessageChunk({ content: "", response_metadata: { finish_reason: "tool_calls" } }),
+    ];
+    const r = await turnoConGuiones([cortadaComoAnthropic("c1"), sana, cortadaComoAnthropic("c2"), [new AIMessageChunk({ content: "Hecho." })]]);
+    expect(r.llamadasAlModelo).toBe(4);
+    expect(r.leidos).toEqual([{ file_path: "/app.xml" }]);
+    expect(r.ultimo).toBe("Hecho.");
+  }, 20_000);
+
   it("y una llamada sana en una respuesta que acabó bien sigue igual", async () => {
     const r = await turnoConLlamada([
       new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "c1", name: "read_file", args: '{"file_path":"/app.xml"}' }] }),
@@ -171,6 +214,36 @@ describe("una llamada con los argumentos ROTOS no se pierde", () => {
     ]);
     expect(r.leidos).toEqual([{ file_path: "/app.xml" }]);
   }, 20_000);
+});
+
+describe("cortadaPorTopeDeSalida, contra el cliente de Anthropic de verdad", () => {
+  it("su stream con stop_reason max_tokens se reconoce, aunque response_metadata no lo traiga", async () => {
+    const cliente = new ChatAnthropic({ model: "claude-sonnet-5-5", apiKey: "sk-ant-de-pega", maxTokens: 32_768 });
+    const eventos = [
+      { type: "message_start", message: { id: "m1", type: "message", role: "assistant", model: "claude-sonnet-5-5", content: [], stop_reason: null, usage: { input_tokens: 10, output_tokens: 1 } } },
+      { type: "content_block_start", index: 0, content_block: { type: "tool_use", id: "t1", name: "write_file", input: {} } },
+      { type: "content_block_delta", index: 0, delta: { type: "input_json_delta", partial_json: '{"file_path":"/planes/TASKS.md","content":"# Tar' } },
+      { type: "message_delta", delta: { stop_reason: "max_tokens", stop_sequence: null }, usage: { output_tokens: 32_768 } },
+      { type: "message_stop" },
+    ];
+    (cliente as unknown as { createStreamWithRetry: () => Promise<unknown> }).createStreamWithRetry = async () => ({
+      async *[Symbol.asyncIterator]() {
+        for (const e of eventos) yield e;
+      },
+      controller: new AbortController(),
+    });
+    let acumulado: AIMessageChunk | undefined;
+    for await (const t of await cliente.stream("hola")) acumulado = acumulado === undefined ? t : acumulado.concat(t);
+    // La forma medida: LangChain «repara» los argumentos y el corte solo consta en additional_kwargs.
+    expect(acumulado?.tool_calls?.[0]?.args).toEqual({ file_path: "/planes/TASKS.md", content: "# Tar" });
+    expect((acumulado?.response_metadata as { finish_reason?: unknown }).finish_reason).toBeUndefined();
+    expect(cortadaPorTopeDeSalida(acumulado)).toBe(true);
+  });
+
+  it("una respuesta que acabó bien no cuenta como cortada", () => {
+    expect(cortadaPorTopeDeSalida(new AIMessageChunk({ content: "ok", additional_kwargs: { stop_reason: "end_turn" } }))).toBe(false);
+    expect(cortadaPorTopeDeSalida(new AIMessageChunk({ content: "ok", response_metadata: { finish_reason: "stop" } }))).toBe(false);
+  });
 });
 
 describe("el uso de una llamada lleva el razonamiento, cuando el proveedor lo dice (IXCODE-18)", () => {

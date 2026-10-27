@@ -22,8 +22,11 @@ Ante una discrepancia con el código, **el código manda**.
 - **Los de motor EXTERNO son hijos por el MISMO `SubagenteExternoPort`** (`modeloExterno.ts`): `AgentThread` de una
   llamada cuyo «modelo» es `correr()`, sin tools; no cuenta como de nuestro modelo; un fallo se DEVUELVE como texto.
   **Parar mata al hijo** (`PeticionExterna.senal`); **dos hijos que escriben no corren a la vez** (`escritoresEnSerie`).
-- **Argumentos rotos** (`modeloLangchain.ts`): `invalid_tool_calls` y el JSON «reparado» con `finish_reason: "length"`
-  van al núcleo CRUDOS, que devuelve el error del JSON; ni se tiran ni se ejecutan cortados.
+- **Argumentos rotos** (`modeloLangchain.ts`): `invalid_tool_calls` y el JSON «reparado» de una respuesta cortada por el
+  tope de salida van al núcleo CRUDOS, que devuelve el error del JSON; ni se tiran ni se ejecutan cortados. El corte se
+  reconoce en sus DOS formas (`cortadaPorTopeDeSalida`: `finish_reason` de los compatibles, `stop_reason` en
+  `additional_kwargs` de Anthropic), su respuesta lleva delante la nota de PARTIR el trabajo (`notaDelCorte`), y tras
+  `CORTES_SEGUIDOS_ANTES_DE_PARAR` cortes seguidos no se llama al modelo: el hilo cierra con texto.
 
 ## Ver, memoria y compactación
 

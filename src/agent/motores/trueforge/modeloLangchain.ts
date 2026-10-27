@@ -22,6 +22,57 @@ import { razonamientoDe, razonamientoVisibleDe, textoDe } from "../../turno/puen
 /** Lo que llega al padre si, tras un corte, el resumen no dejó texto. */
 const RELLENO_DEL_CORTE = "[Detenido a petición de la persona a mitad de una llamada, antes de poder resumir lo hecho.]";
 
+/**
+ * Tras cuántas respuestas SEGUIDAS cortadas por el tope de salida con una tool call dentro ya no se
+ * vuelve a llamar al modelo. Medido en el soporte de Maset (27-10-2026): un analista de Sonnet 5.5
+ * repitió 30 veces el mismo `write_file` de `TASKS.md`, cada vuelta cortada en 16.384 de salida —unos
+ * 490 k tokens y 52 minutos— hasta que la persona canceló. Con la nota del corte (`notaDelCorte`) el
+ * modelo tiene UNA ocasión de partir el trabajo; si la segunda también se corta, no va a cambiar.
+ */
+export const CORTES_SEGUIDOS_ANTES_DE_PARAR = 2;
+
+/**
+ * ¿Acabó la respuesta por TOPE de salida? Cada cliente lo dice en un sitio: los compatibles con
+ * OpenAI, `response_metadata.finish_reason: "length"`; `@langchain/anthropic` 1.5.2 en streaming deja
+ * el `stop_reason: "max_tokens"` del `message_delta` en `additional_kwargs` (medido con el cliente de
+ * verdad: `response_metadata` no trae nada). Mirar solo el primero dejaba pasar los cortes de Claude, y
+ * LangChain «reparaba» su `write_file`: medio fichero escrito sin avisar.
+ */
+export function cortadaPorTopeDeSalida(mensaje: AIMessageChunk | undefined): boolean {
+  if (mensaje === undefined) return false;
+  const meta = mensaje.response_metadata as { finish_reason?: unknown; stop_reason?: unknown } | undefined;
+  const extra = mensaje.additional_kwargs as { stop_reason?: unknown } | undefined;
+  return meta?.finish_reason === "length" || meta?.stop_reason === "max_tokens" || extra?.stop_reason === "max_tokens";
+}
+
+/** La ruta que nombran unos argumentos, aunque estén cortados: es lo que se lee primero. */
+function rutaDeArgumentos(argumentos: string): string | undefined {
+  return /"(?:file_path|path)"\s*:\s*"([^"]{1,300})"/.exec(argumentos)?.[1];
+}
+
+/**
+ * Lo que se le antepone a la respuesta de una tool call que se cortó: sin esto el modelo solo ve el
+ * error del JSON y repite la MISMA llamada, que se vuelve a cortar.
+ */
+function notaDelCorte(tool: string, argumentos: string, salida: number): string {
+  const ruta = rutaDeArgumentos(argumentos);
+  return (
+    `[Cortada por el TOPE DE SALIDA] Tu respuesta llegó al máximo de tokens de salida${salida > 0 ? ` (${salida})` : ""} ` +
+    `en mitad de esta llamada a \`${tool}\`${ruta === undefined ? "" : ` sobre \`${ruta}\``}: sus argumentos llegaron incompletos ` +
+    "y NO se ha ejecutado. No la repitas igual: volvería a cortarse. Parte el trabajo en piezas más pequeñas: crea el " +
+    "fichero con una parte corta y añade el resto con `edit_file` en varias llamadas, o reparte el contenido en varios ficheros."
+  );
+}
+
+/** Con lo que se cierra el hilo tras `CORTES_SEGUIDOS_ANTES_DE_PARAR` cortes: lo lee quien lo llamó o la persona. */
+function textoDelParoPorCortes(ruta: string | undefined): string {
+  return (
+    `No he podido terminar: ${CORTES_SEGUIDOS_ANTES_DE_PARAR} respuestas seguidas se cortaron al llegar al máximo de ` +
+    `salida${ruta === undefined ? "" : ` intentando escribir \`${ruta}\``}, y no se aplicó ninguna. Hay que partir ese ` +
+    "trabajo en piezas más pequeñas (por ejemplo, un fichero por fase) y volver a pedirlo."
+  );
+}
+
 /** Lo mínimo que se usa de un modelo de LangChain: atarle las tools y pedirle un stream. */
 interface ModeloDeLangchain {
   bindTools?: (tools: unknown[]) => ModeloDeLangchain;
@@ -111,6 +162,11 @@ export function modeloParaTrueforge(opciones: {
   alRazonar?: (salida: number, razonamiento: number) => void;
 }): ILLM {
   let secuencia = 0;
+  /** Las tool calls cortadas por el tope, por id, con su nota: se reponen IGUAL en cada llamada, que la caché lo agradece. */
+  const notasDeCorte = new Map<string, string>();
+  /** Respuestas seguidas cortadas con una tool call dentro, y la ruta de la última. */
+  let cortesSeguidos = 0;
+  let rutaDelUltimoCorte: string | undefined;
 
   async function* crear(cuerpo: LLMCreateParamsStreaming | LLMCreateParams): AsyncGenerator<
     ExtendedChatCompletionChunk,
@@ -120,13 +176,38 @@ export function modeloParaTrueforge(opciones: {
     const base = opciones.modelo() as ModeloDeLangchain;
     const tools = (cuerpo as { tools?: unknown[] }).tools ?? [];
     const modelo = tools.length > 0 && typeof base.bindTools === "function" ? base.bindTools(tools) : base;
-    const mensajes = aMensajesDeLangchain((cuerpo as { messages: MensajeOpenAi[] }).messages);
+    const mensajes = aMensajesDeLangchain(
+      (cuerpo as { messages: MensajeOpenAi[] }).messages.map((m) => {
+        const nota = m.role === "tool" && m.tool_call_id !== undefined ? notasDeCorte.get(m.tool_call_id) : undefined;
+        return nota === undefined ? m : { ...m, content: `${nota}\n\n${textoDeContenido(m.content)}` };
+      }),
+    );
     const senal = opciones.senal?.();
     const id = `xc-${++secuencia}`;
     const creado = Math.floor(Date.now() / 1000);
     const nombre = opciones.nombre ?? "xonecode";
     let relleno = opciones.soloTexto?.();
     const corte = relleno === undefined ? opciones.corte?.() : undefined;
+
+    // Tras `CORTES_SEGUIDOS_ANTES_DE_PARAR` cortes seguidos no se llama al modelo: el hilo se cierra
+    // con texto, como al detener, y lo lee quien lo llamó. Una respuesta sin tool calls cierra el hilo.
+    if (relleno === undefined && cortesSeguidos >= CORTES_SEGUIDOS_ANTES_DE_PARAR) {
+      const texto = textoDelParoPorCortes(rutaDelUltimoCorte);
+      cortesSeguidos = 0;
+      rutaDelUltimoCorte = undefined;
+      yield {
+        id,
+        object: "chat.completion.chunk",
+        created: creado,
+        model: nombre,
+        choices: [{ index: 0, delta: { role: "assistant", content: texto }, finish_reason: null }],
+      } as ExtendedChatCompletionChunk;
+      return {
+        output: { role: "assistant", content: texto },
+        usage: { input_tokens: 0, output_tokens: 0, total_tokens: 0 },
+        finish_reason: "stop",
+      } as RawAssistantMessageWithUsage;
+    }
 
     const senalDelStream =
       corte === undefined ? senal : senal === undefined ? corte.senal : AbortSignal.any([senal, corte.senal]);
@@ -190,11 +271,12 @@ export function modeloParaTrueforge(opciones: {
      *   en la prueba real de las tareas encadenadas el turno cerró como si `proponer_tareas` no se
      *   hubiera llamado. Ahora sigue con sus argumentos TAL CUAL: el núcleo de TrueForge no los puede
      *   leer y le contesta al modelo con el error del JSON (`executeToolCalls`), que puede repetirla.
-     * - La respuesta acabó por TOPE de salida (`finish_reason: "length"`): LangChain «repara» un JSON
+     * - La respuesta acabó por TOPE de salida (`cortadaPorTopeDeSalida`): LangChain «repara» un JSON
      *   cortado —cierra comillas y llaves— y lo da por bueno, así que un `write_file` cortado escribiría
-     *   medio fichero sin avisar. Ahí van los argumentos CRUDOS, sin reparar, y fallan igual.
+     *   medio fichero sin avisar. Ahí van los argumentos CRUDOS, sin reparar, y fallan igual; y su
+     *   respuesta lleva delante la nota del corte (`notasDeCorte`).
      */
-    const cortadaPorTope = (acumulado?.response_metadata as { finish_reason?: unknown } | undefined)?.finish_reason === "length";
+    const cortadaPorTope = cortadaPorTopeDeSalida(acumulado);
     const crudos = new Map<string, string>();
     for (const t of acumulado?.tool_call_chunks ?? []) if (t.id !== undefined) crudos.set(t.id, t.args ?? "");
     const ilegibles = (acumulado?.invalid_tool_calls ?? []).filter((t) => t.name !== undefined);
@@ -206,9 +288,18 @@ export function modeloParaTrueforge(opciones: {
       })),
       ...ilegibles.map((t) => ({ id: t.id, name: t.name!, argumentos: t.args ?? "" })),
     ];
-    const llamadas = relleno === undefined ? todas : [];
+    const llamadas = (relleno === undefined ? todas : []).map((t, i) => ({ ...t, id: t.id ?? `${id}-${i}` }));
     if (relleno !== undefined && todas.length > 0) opciones.alTirarLlamadas?.(todas.length);
     const uso = acumulado?.usage_metadata;
+    if (llamadas.length > 0) {
+      if (cortadaPorTope) {
+        cortesSeguidos++;
+        for (const t of llamadas) notasDeCorte.set(t.id, notaDelCorte(t.name, t.argumentos, uso?.output_tokens ?? 0));
+        rutaDelUltimoCorte = llamadas.map((t) => rutaDeArgumentos(t.argumentos)).find((r) => r !== undefined);
+      } else {
+        cortesSeguidos = 0;
+      }
+    }
     const razonamiento = acumulado === undefined ? "" : razonamientoDe(acumulado);
     const contenido = acumulado === undefined ? "" : textoDe(acumulado);
     if (uso?.output_token_details?.reasoning !== undefined) opciones.alRazonar?.(uso.output_tokens ?? 0, uso.output_token_details.reasoning);
@@ -219,8 +310,8 @@ export function modeloParaTrueforge(opciones: {
         ...(llamadas.length === 0
           ? {}
           : {
-              tool_calls: llamadas.map((t, i) => ({
-                id: t.id ?? `${id}-${i}`,
+              tool_calls: llamadas.map((t) => ({
+                id: t.id,
                 type: "function" as const,
                 function: { name: t.name, arguments: t.argumentos },
               })),
