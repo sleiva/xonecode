@@ -1,6 +1,6 @@
 {
   "name": "xonecode",
-  "version": "0.55.0",
+  "version": "0.56.0",
   "description": "Consola CLI y harness de agente para desarrollar aplicaciones XOne",
   "type": "module",
   "license": "MIT",
