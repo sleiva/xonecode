@@ -72,3 +72,15 @@ export function planesDelProyecto(raiz: string): PlanEnDisco[] {
   }
   return salida.sort((a, b) => b.modificado - a.modificado);
 }
+
+/**
+ * Los planes para pegarlos al turno (`core/planesAbiertos.ts`), **sin que un fallo tumbe el turno**: es el trato de
+ * `hechosDelProyectoDe`. Adelantar el plan abarata retomar; no poder leerlo deja la petición como estaba.
+ */
+export function planesParaElTurno(raiz: string): PlanEnDisco[] {
+  try {
+    return planesDelProyecto(raiz);
+  } catch {
+    return [];
+  }
+}

@@ -377,6 +377,29 @@ describe("una sesión con el motor TrueForge", () => {
     expect(enLocal).not.toContain("prueba en la granja");
   }, 30_000);
 
+  it("el orquestador recibe por dónde va cada plan abierto con su petición, leído del disco (el «continúa» barato)", async () => {
+    const raiz = proyecto();
+    mkdirSync(join(raiz, ".xonecode", "planes", "busme"), { recursive: true });
+    writeFileSync(
+      join(raiz, ".xonecode", "planes", "busme", "TASKS.md"),
+      "# Busme\n\n### T1 — Inicio\n**Estado:** hecha\n\n### T2 — Hoja\n**Estado:** pendiente\n- [ ] abre\n",
+    );
+    const { m, vistos } = modelosConGuion(guionDeEscritura());
+    const s = await abrirSesionTrueforge({
+      raiz,
+      modelos: m,
+      entorno: ENTORNO,
+      skills: CATALOGO,
+      pedirAprobacion: async (ps) => new Map(ps.map((p) => [p.id, { type: "approve" as const }])),
+    });
+    await s.turno("continúa", piel().p);
+    const primera = vistos[0]!.join("\n");
+    expect(primera).toContain("PLANES ABIERTOS");
+    expect(primera).toContain("  - T2 Hoja — pendiente, 0/1 criterios (ficha: offset=5 limit=4)");
+    // Al hijo no: él recibe el encargo, y el plan y la tarea se los pasa quien encarga.
+    expect(vistos[1]!.join("\n")).not.toContain("PLANES ABIERTOS");
+  });
+
   it("un especialista que hace artefactos recibe OpenUI montado de verdad; el orquestador, no", async () => {
     const { m, toolsPorLlamada, vistos } = modelosConGuion(guionDeEscritura());
     const s = await abrirSesionTrueforge({

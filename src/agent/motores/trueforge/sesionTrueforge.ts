@@ -139,6 +139,8 @@ import { parsear } from "../../../core/modelos.js";
 import { cargar as cargarConfig } from "../../config/configEnDisco.js";
 import { hechosDelProyectoDe } from "../../navegacion/hechosEnDisco.js";
 import { conHechosDelProyecto } from "../../../core/hechosDelProyecto.js";
+import { conPlanesAbiertos } from "../../../core/planesAbiertos.js";
+import { planesParaElTurno } from "../../planesEnDisco.js";
 import { crearBusquedaRegex } from "../../grafo/busquedaRegex.js";
 import { crearBuscarIcono, recibeBuscarIcono } from "../../grafo/buscarIcono.js";
 import { crearBuscarFuente, crearTraerFuente, recibeFuentes } from "../../grafo/fuentesDeGoogle.js";
@@ -2496,12 +2498,16 @@ export async function abrirSesionTrueforge(
         // deepagents: en el prompt de sistema envejecería dentro de la sesión—. Solo en la
         // petición ORIGINAL: la respuesta a una pregunta no es un encargo nuevo, y el mensaje de
         // una reparación ya lleva sus hallazgos. Un índice que no carga deja la petición sola.
+        // Detrás, por dónde va cada plan abierto (`core/planesAbiertos.ts`): un «continúa» releía el TASKS.md entero.
         const loteInicial: unknown[] =
           enEspera === undefined
             ? [
                 {
                   type: EventType.USER_MESSAGE,
-                  content: conHechosDelProyecto(peticion, await hechosDelProyectoDe(cargarIndice, ficherosDelProyecto(raiz))),
+                  content: conPlanesAbiertos(
+                    conHechosDelProyecto(peticion, await hechosDelProyectoDe(cargarIndice, ficherosDelProyecto(raiz))),
+                    planesParaElTurno(raiz),
+                  ),
                 },
               ]
             : [{ type: "user.tool_response", thread_id: enEspera.hilo, tool_call_id: enEspera.id, content: respuestaAPregunta(enEspera.args, peticion) }];

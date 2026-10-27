@@ -282,3 +282,12 @@ describe("conEstadoDeTarea", () => {
     expect(conEstadoDeTarea(plan, "T9", "hecha")).toBeUndefined();
   });
 });
+
+describe("dónde está la ficha de cada tarea", () => {
+  it("la línea de su cabecera y cuántas ocupa, también con el «Bloqueada por» en la viñeta", () => {
+    const texto = "# P\n\n- **T1 — Uno.** Bloqueada por: ninguna.\n  - [ ] algo\n- **T2 — Dos.** Bloqueada por: T1.\n";
+    const [t1, t2] = leerTareasDelPlan(texto).tareas;
+    expect([t1!.linea, t1!.lineas]).toEqual([3, 2]);
+    expect([t2!.linea, t2!.lineas]).toEqual([5, 2]);
+  });
+});

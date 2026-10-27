@@ -9942,3 +9942,20 @@ la mayor parte de sus `execute` no eran pruebas sino rodeos para lo que el canal
   `-no-snapshot-load`).
 - **Lo que NO se ha hecho:** una memoria de reentrada más corta para el device-controller (23–42 K por encargo). Falta
   medir cuánto de esa memoria usa de verdad antes de recortarla.
+
+## El «continúa» no relee el plan entero (27-10-2026)
+
+Medido en los soportes de Busme: en cada «continúa» el orquestador releía el `TASKS.md` entero —3 o 4 veces por
+sesión, 12–15 K caracteres cada vez— y en 741324ab el desarrollador leyó además dos veces el `TASKS.md` (55 K en total)
+y dos el `PLAN.md` (41 K). Todo eso se queda en la ventana el resto del turno: con ello iba a 114–126 K.
+
+- **Detrás de la petición del raíz va por dónde va cada plan** (`core/planesAbiertos.ts`), igual que los hechos del
+  proyecto y por lo mismo: rehecho en cada turno, porque los especialistas marcan casillas dentro de él. Por plan
+  abierto: tareas finalizadas de cuántas y, por cada tarea abierta, su progreso (el de la pestaña Planes), criterios,
+  bloqueos y el `offset`/`limit` exactos de su ficha (`TareaDelPlan.linea`/`lineas`). Medido con los dos planes reales
+  de Maset: 900 caracteres frente a los 10–16 K de leer el `TASKS.md`; el plan terminado no sale.
+- **El TASKS.md sigue mandando**: el bloque dice DÓNDE mirar, no sustituye la ficha. Se lee la ficha de la tarea que se
+  va a encargar y el `offset`/`limit` se pasa al especialista; `TRABAJAR_CON_PLAN` le dice que lea solo esa ficha.
+- Topes contados, no callados: 4 planes (los más recientes) y 15 tareas abiertas por plan.
+- **Sin medir todavía en un turno real**: cuántos caracteres de plan se leen por sesión y la ventana máxima, antes y
+  después, con `XONECODE_TRACE_TOOLS=1` y `xonecode traza`. Solo TrueForge.

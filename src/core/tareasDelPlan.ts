@@ -38,6 +38,9 @@ export interface TareaDelPlan {
   progreso: ProgresoDeTarea;
   /** El markdown de la sección, sin su cabecera: la ficha que se abre al pulsarla. */
   cuerpo: string;
+  /** La línea de su cabecera (desde 1) y cuántas ocupa la ficha con ella: para leer SOLO esa tarea con `offset`/`limit`. */
+  linea: number;
+  lineas: number;
 }
 
 /**
@@ -164,7 +167,7 @@ export function leerTareasDelPlan(texto: string): TareasDelPlan {
   const lineas = texto.replace(/\r\n/g, "\n").split("\n");
   const titulo = lineas.find((l) => /^#\s+/.test(l))?.replace(/^#\s+/, "").trim();
   const tareas: TareaDelPlan[] = [];
-  let actual: { numero: string; titulo: string; lineas: string[] } | undefined;
+  let actual: { numero: string; titulo: string; lineas: string[]; linea: number; extra: number } | undefined;
 
   const cerrar = (): void => {
     if (actual === undefined) return;
@@ -196,11 +199,14 @@ export function leerTareasDelPlan(texto: string): TareasDelPlan {
       criterios: { hechos, total },
       progreso: progresoDeTarea(estado, { hechos, total }),
       cuerpo: actual.lineas.join("\n").trim(),
+      linea: actual.linea,
+      // `extra` es el «Bloqueada por» de la viñeta, que se añadió a `lineas` sin ser una línea del fichero.
+      lineas: 1 + actual.lineas.length - actual.extra,
     });
     actual = undefined;
   };
 
-  for (const l of lineas) {
+  for (const [i, l] of lineas.entries()) {
     const cabecera = cabeceraDeTarea(l);
     if (cabecera !== undefined) {
       cerrar();
@@ -209,6 +215,8 @@ export function leerTareasDelPlan(texto: string): TareasDelPlan {
         numero: cabecera.numero,
         titulo: cabecera.titulo,
         lineas: enLinea === null || enLinea === undefined ? [] : [`**Bloqueada por:** ${enLinea[1]!}`],
+        linea: i + 1,
+        extra: enLinea === null || enLinea === undefined ? 0 : 1,
       };
       continue;
     }

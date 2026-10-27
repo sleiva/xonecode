@@ -47,6 +47,10 @@ Ante una discrepancia con el código, **el código manda**.
   texto, sin respuesta: el modelo copia la FORMA de sus llamadas. Una encarnación viva por especialista; un hijo que falló o se detuvo no deja memoria; uno cortado por su presupuesto
   sí, sin la orden de parar (`sinOrdenDePresupuesto`). Solo en
   memoria; `XONECODE_SIN_MEMORIA_DE_ESPECIALISTAS=1` la apaga.
+- **Los planes abiertos van detrás de la petición del raíz** (`core/planesAbiertos.ts`, `planesEnDisco.ts#planesParaElTurno`),
+  con los hechos del proyecto y rehechos en cada turno: tareas abiertas, progreso y `offset`/`limit` de su ficha (el
+  parser los da: `TareaDelPlan.linea`/`lineas`). Sin planes abiertos, o si no se pueden leer, la petición va sola. Al
+  hijo no: su plan y su tarea se los pasa quien encarga.
 
 ## Lo que lee la persona
 

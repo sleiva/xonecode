@@ -696,7 +696,8 @@ export function sembrarAgentes(base: string = homedir()): Siembra {
  */
 const TRABAJAR_CON_PLAN = [
   "SI TU ENCARGO NOMBRA UN PLAN (`/planes/<nombre>/`):",
-  "- Lee su `TASKS.md` ANTES de tocar nada y trabaja la tarea que te toque, no el plan entero.",
+  "- Lee en su `TASKS.md` la ficha de la tarea que te toque ANTES de tocar nada (si el encargo da su `offset` y",
+  "  `limit`, solo esa: el plan entero no hace falta) y trabaja esa tarea, no el plan entero.",
   "  Su `PLAN.md` y su `CONTEXT.md` están al lado si te falta contexto; no los redescubras.",
   "- Y ACTUALÍZALO TAREA A TAREA, no al final: al cerrar cada una, ANTES de empezar la siguiente,",
   "  marca sus criterios comprobados con `marcar_criterios_del_plan` —lo que viste o mediste tú, y",
