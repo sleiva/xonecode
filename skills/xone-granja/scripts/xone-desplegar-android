@@ -1,0 +1,4 @@
+#!/usr/bin/env node
+// El de `xone-hotswap`, que ya va a la copia de la granja de la sesión: ver `../lib/reenvio.mjs`.
+import { reenviar } from "../lib/reenvio.mjs";
+reenviar("xone-desplegar-android");

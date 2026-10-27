@@ -23,6 +23,8 @@
  *   (`modeloExterno.ts`).
  * - NO: un presupuesto GLOBAL por turno (la suma de todos los hilos), que deepagents tampoco tiene.
  */
+import { origenDeDispositivosEnVigor } from "../../dispositivos/origenEnDisco.js";
+import { skillsSegunOrigen, type OrigenDeDispositivos } from "../../../core/granja.js";
 import { TOPE_DE_PREGUNTAS_CONTESTADAS_SOLAS, opcionRecomendada } from "../../../core/modoDeEscritura.js";
 import { claseDeTrabajo } from "../../../core/esfuerzo.js";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
@@ -790,6 +792,8 @@ function preguntaDeLaFoto(foto: FotoDeHilo | undefined): Pendiente | undefined {
 
 export interface OpcionesDeSesionTrueforge {
   raiz: string;
+  /** El origen de los aparatos del proyecto (granja o este equipo); por omisión, leído del disco en cada uso. */
+  origenDeDispositivos?: (raiz: string) => OrigenDeDispositivos;
   modelos: ModelosPort;
   entorno: Entorno;
   /**
@@ -1225,8 +1229,15 @@ export async function abrirSesionTrueforge(
    * prompt del orquestador y la factoría de hijos salen de ESTA lista, así que no puede ofrecer
    * uno que luego no se monte.
    */
-  const especialistas = (): Agente[] =>
-    cargarAgentes(raiz).agentes.filter((a) => a.motor === "modelo" || motoresDisponibles.has(a.motor as MotorExterno));
+  const especialistas = (): Agente[] => {
+    // Y con la skill del aparato del ORIGEN de este proyecto (decisión suya): con la granja, `xone-hotswap` pasa a
+    // `xone-granja`. Leído en CADA llamada, como los `.md`: cambiar el origen con la sesión abierta alcanza al siguiente
+    // encargo. De esta lista salen el prompt del orquestador, los scripts y los hijos, también los externos.
+    const origen = (opciones.origenDeDispositivos ?? origenDeDispositivosEnVigor)(raiz);
+    return cargarAgentes(raiz)
+      .agentes.filter((a) => a.motor === "modelo" || motoresDisponibles.has(a.motor as MotorExterno))
+      .map((a) => ({ ...a, skills: skillsSegunOrigen(a.skills, origen) }));
+  };
   /**
    * **Las tools PROPIAS, con el MISMO reparto que deepagents** (`xoneAgent.ts`): son las mismas
    * funciones, adaptadas (`toolsPropias.ts`), no una copia.

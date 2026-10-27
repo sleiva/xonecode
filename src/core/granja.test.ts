@@ -5,6 +5,7 @@ import {
   esOrigenDeDispositivos,
   motivoDePruebaDeGranja,
   resumenDeGranja,
+  skillsSegunOrigen,
   usuarioDeGranja,
 } from "./granja.js";
 
@@ -112,5 +113,17 @@ describe("motivoDePruebaDeGranja", () => {
     expect(motivoDePruebaDeGranja({ estado: "token-rechazado" })).toContain("401");
     expect(motivoDePruebaDeGranja({ estado: "sin-configurar", falta: "token" })).toContain("token");
     expect(motivoDePruebaDeGranja({ estado: "respuesta-inesperada", http: 404 })).toContain("404");
+  });
+});
+
+describe("skillsSegunOrigen", () => {
+  it("con la granja, xone-hotswap pasa a xone-granja en su sitio; sin ella, al revés", () => {
+    expect(skillsSegunOrigen(["xone-development", "xone-hotswap", "archify"], "granja")).toEqual(["xone-development", "xone-granja", "archify"]);
+    expect(skillsSegunOrigen(["xone-granja", "archify"], "local")).toEqual(["xone-hotswap", "archify"]);
+    expect(skillsSegunOrigen(["xone-development"], "granja")).toEqual(["xone-development"]);
+  });
+
+  it("no repite: si el .md ya declaraba las dos, queda una", () => {
+    expect(skillsSegunOrigen(["xone-hotswap", "xone-granja"], "granja")).toEqual(["xone-granja"]);
   });
 });

@@ -352,6 +352,31 @@ describe("una sesión con el motor TrueForge", () => {
     expect(con.toolsPorLlamada[1]).not.toContain("proponer_tareas");
   }, 20_000);
 
+  it("la skill del aparato sigue al ORIGEN del proyecto: con la granja, el hijo ve xone-granja y no xone-hotswap", async () => {
+    const catalogo = [...CATALOGO, { nombre: "xone-granja", descripcion: "prueba en la granja", tokens: 1 }];
+    const sistemaDelHijo = async (origen: "local" | "granja"): Promise<string> => {
+      const { m, vistos } = modelosConGuion(guionDeEscritura());
+      const s = await abrirSesionTrueforge({
+        raiz: proyecto(),
+        modelos: m,
+        entorno: ENTORNO,
+        skills: catalogo,
+        origenDeDispositivos: () => origen,
+        pedirAprobacion: async (ps) => new Map(ps.map((p) => [p.id, { type: "approve" as const }])),
+      });
+      await s.turno("escribe una nota", piel().p);
+      // La segunda llamada es la del hijo `developer-xone`, cuyo `.md` declara xone-hotswap.
+      return vistos[1]!.join("\n");
+    };
+    // Se mira el ANUNCIO de la skill (su descripción del catálogo): el SCRIPT `xone-hotswap` existe en las dos.
+    const enGranja = await sistemaDelHijo("granja");
+    expect(enGranja).toContain("prueba en la granja");
+    expect(enGranja).not.toContain("manda al aparato");
+    const enLocal = await sistemaDelHijo("local");
+    expect(enLocal).toContain("manda al aparato");
+    expect(enLocal).not.toContain("prueba en la granja");
+  }, 30_000);
+
   it("un especialista que hace artefactos recibe OpenUI montado de verdad; el orquestador, no", async () => {
     const { m, toolsPorLlamada, vistos } = modelosConGuion(guionDeEscritura());
     const s = await abrirSesionTrueforge({

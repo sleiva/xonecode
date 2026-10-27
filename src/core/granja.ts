@@ -175,3 +175,22 @@ export function motivoDePruebaDeGranja(prueba: Exclude<PruebaDeGranja, { estado:
       return `Eso no parece la granja${prueba.http === undefined ? "" : ` (contestó ${prueba.http})`}: revisa la dirección.`;
   }
 }
+
+/** La skill del aparato de cada origen: la de los aparatos de este equipo y la de la granja. */
+export const SKILL_DE_APARATO_LOCAL = "xone-hotswap";
+export const SKILL_DE_APARATO_EN_GRANJA = "xone-granja";
+
+/**
+ * Las skills de un agente, según el ORIGEN de los aparatos de su proyecto (decisión suya): en un proyecto con la granja,
+ * `xone-hotswap` se SUSTITUYE por `xone-granja`, y al revés en uno de este equipo. Así el agente ve UNA forma de probar,
+ * la que vale para ese proyecto, y los `.md` de los agentes no cambian. El orden se conserva y no se repite ninguna.
+ */
+export function skillsSegunOrigen(skills: readonly string[], origen: OrigenDeDispositivos): string[] {
+  const [quitar, poner] = origen === "granja" ? [SKILL_DE_APARATO_LOCAL, SKILL_DE_APARATO_EN_GRANJA] : [SKILL_DE_APARATO_EN_GRANJA, SKILL_DE_APARATO_LOCAL];
+  const salida: string[] = [];
+  for (const s of skills) {
+    const nombre = s === quitar ? poner : s;
+    if (!salida.includes(nombre)) salida.push(nombre);
+  }
+  return salida;
+}

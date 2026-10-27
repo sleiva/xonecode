@@ -209,6 +209,7 @@ import { guardarTokenDeGranja, quitarTokenDeGranja, tokenDeGranja } from "../../
 import { probarGranja, type ConexionDeGranja, type Hablar } from "../../agent/dispositivos/granjaEnRed.js";
 import { crearGestorDeCopias, servirReleDeGranja } from "../../agent/dispositivos/releDeGranja.js";
 import { lanzarEnGranja, type EntradaDeLanzamientoEnGranja } from "../../agent/dispositivos/lanzamientoEnGranja.js";
+import { origenDeDispositivosEnVigor } from "../../agent/dispositivos/origenEnDisco.js";
 import { nombreDeCopia } from "../../core/canalDeGranja.js";
 import {
   direccionDeGranja,
@@ -10043,8 +10044,8 @@ export interface ServicioDeGranja {
  * `settings.json` de la casa. Lo usa el vestíbulo al abrir cada sesión; extraída por el patrón de fallo de siempre.
  */
 export function origenDeDispositivosCableado(opciones: { casa?: string } = {}): (raiz: string) => OrigenDeDispositivos {
-  const global = ajusteDeDispositivoPorDefectoCableado(opciones.casa === undefined ? {} : { casa: opciones.casa });
-  return (raiz) => origenEnVigor(origenDeDispositivosDelProyecto(raiz), global.dispositivoPorDefecto());
+  // La MISMA lectura que usa TrueForge para elegir la skill del aparato (`origenEnDisco.ts`): dos copias divergirían.
+  return (raiz) => origenDeDispositivosEnVigor(raiz, opciones.casa);
 }
 
 /**

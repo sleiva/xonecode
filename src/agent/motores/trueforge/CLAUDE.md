@@ -17,6 +17,8 @@ Ante una discrepancia con el código, **el código manda**.
   en `agent/turno/verificacion.ts`.
 - **`core/` no importa `@truefoundry/` ni `winston`** (`imports.test.ts`); **fuera de `core/` solo lo importa
   `agent/motores/trueforge/trueforge.ts`** (`frontera.test.ts`).
+- **La skill del aparato sigue al ORIGEN del proyecto** (`especialistas()`, leído en cada llamada): con la granja,
+  `xone-hotswap` → `xone-granja` (`core/granja.ts#skillsSegunOrigen`). De esa lista salen prompt, scripts e hijos.
 - **Reparto de deepagents**: raíz de solo lectura y sin skills, cada especialista de su `.md`, **la aprobación de un hijo
   vuelve a SU `thread_id`**. El prompt de un hijo va en su SISTEMA por `instructionBuilders`.
 - **Los de motor EXTERNO son hijos por el MISMO `SubagenteExternoPort`** (`modeloExterno.ts`): `AgentThread` de una
