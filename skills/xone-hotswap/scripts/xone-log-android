@@ -22,7 +22,8 @@
  *   xone-log-android --serie emulator-5554
  */
 import { execFileSync } from "node:child_process";
-import { serieAndroid, rutaDeAdb } from "../lib/dispositivo.mjs";
+import { canalDeGranja, serieAndroid, rutaDeAdb } from "../lib/dispositivo.mjs";
+import { comandoEnGranja, excepcionDeGetLog } from "../lib/granja.mjs";
 
 const PAQUETE = "com.xone.android.framework";
 
@@ -46,6 +47,39 @@ const opcion = (nombre) => {
   const i = args.indexOf(`--${nombre}`);
   return i >= 0 ? args[i + 1] : undefined;
 };
+/**
+ * **Con la GRANJA, el log sale de `getLog` por el canal**, sin adb: medido, trae el `logcat` de ESTA copia y nada de
+ * las demás, más `exception` y `stackTrace` si la app reventó. No se puede vaciar (no hay `logcat -c` por el canal):
+ * para aislar lo de una acción, se mira la hora de las líneas.
+ */
+const granja = canalDeGranja();
+if (granja !== undefined) {
+  process.stderr.write("dispositivo: la copia de la granja de esta sesión\n");
+  if (args.includes("--limpiar")) {
+    console.log("En la granja el log no se puede vaciar: pide el log después de la acción y mira la hora de las líneas.");
+    process.exit(0);
+  }
+  let respuesta;
+  try {
+    respuesta = await comandoEnGranja(granja, { command: "getLog" });
+  } catch (error) {
+    console.error(error.message);
+    process.exit(1);
+  }
+  const cuantas = Number(opcion("lineas") ?? 200);
+  const logcat = typeof respuesta?.logcat === "string" ? respuesta.logcat.split("\n").slice(-cuantas).join("\n") : "";
+  const salida = ["--- la copia de la granja (solo su log) ---"];
+  salida.push(args.includes("--todo") ? logcat : args.includes("--app") ? soloDeLaApp(logcat) : soloInteresante(logcat));
+  // La granja rellena `exception` con un aviso cuando no la hay: solo se enseña una de verdad, con su traza.
+  const excepcion = excepcionDeGetLog(respuesta);
+  if (excepcion !== undefined) {
+    salida.push("", "--- excepción ---", excepcion);
+    if (typeof respuesta?.stackTrace === "string" && respuesta.stackTrace.trim() !== "") salida.push("", "--- traza ---", respuesta.stackTrace.trim());
+  }
+  console.log(salida.join("\n"));
+  process.exit(0);
+}
+
 // `--serie`, el dispositivo elegido en la sesión o un emulador (`../lib/dispositivo.mjs`). Se
 // dice por stderr con cuál y por qué: con varios aparatos, callarlo haría adivinar dónde pasó.
 const { serie, porque } = serieAndroid(opcion("serie"));
@@ -102,7 +136,10 @@ if (caidas !== "") {
 
 /** Los `console.log` de la app (etiqueta XOneJavaScript) y los errores del host, en su orden. */
 function soloDeLaApp(texto) {
-  const filas = texto.split("\n").filter((l) => /\sXOneJavaScript\s*:/.test(l) || /\s[EF]\s/.test(l) || /Caused by:|Exception/.test(l));
+  // Los dos formatos: `… V XOneJavaScript: x` (adb, threadtime) y `… V/XOneJavaScript(123): x` (la granja, brief).
+  const filas = texto
+    .split("\n")
+    .filter((l) => /\bXOneJavaScript\s*(\(\s*\d+\))?\s*:/.test(l) || /\s[EF](\s|\/)/.test(l) || /Caused by:|Exception/.test(l));
   return filas.length === 0
     ? "(la app no ha escrito nada con console.log ni ha dado errores en esas líneas; si esperabas una línea, no se ejecutó ese código)"
     : filas.join("\n");
@@ -113,7 +150,8 @@ function soloInteresante(texto) {
   const filas = texto.split("\n").filter((l) => {
     if (/^\s*$/.test(l)) return false;
     // El nivel va tras el PID/TID: `09-18 08:21:17.053 815 880 E Tag: mensaje`.
-    if (/\s[EWF]\s/.test(l)) return true;
+    // O `… W/Tag(123): mensaje` en el formato de la granja.
+    if (/\s[EWF]\s/.test(l) || /\s[EWF]\/[^(]+\(\s*\d+\):/.test(l)) return true;
     // Y el cuerpo de una traza de Java, que no lleva nivel en cada línea.
     return /\bat [\w$.]+\(|Caused by:|Exception|Error:/.test(l);
   });

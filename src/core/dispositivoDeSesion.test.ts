@@ -37,10 +37,12 @@ describe("la granja como aparato de la sesión", () => {
     expect(dispositivoDeTexto(JSON.stringify({ id: "granja", nombre: "x", plataforma: "ios", clase: "granja" }))).toBeUndefined();
   });
 
-  it("la línea del turno dice que es la granja y que no se prueba en este equipo", () => {
+  it("la línea del turno dice que es la granja, que la copia se libera al acabar el turno y que adb no llega", () => {
     const linea = lineaDelDispositivo({ id: "granja", nombre: "Granja", plataforma: "android", clase: "granja" });
     expect(linea).toMatch(/GRANJA/);
-    expect(linea).not.toMatch(/--serie|adb -s/);
+    expect(linea).not.toMatch(/adb -s/);
+    expect(linea).toMatch(/sin --serie/);
+    expect(linea).toMatch(/LIBERA/);
   });
 });
 

@@ -77,7 +77,10 @@ discrepancia, **el código manda**.
   copia libre en la primera conexión (medido: conectarse a la puerta COGE la copia) y mantiene UNA conexión hacia la granja
   (una segunda ECHA a la primera; sin conexión, a los diez minutos la granja la libera y la BORRA), repartiendo las
   respuestas en orden FIFO. `reset` en el `finally` del turno (`vestibulo.alAcabarTurno`) y al cerrar la consola.
-  `file_upload`/`file_download` van por el mismo relé. Llegan `xone-hotswap` y `xone-recargar-android`; los scripts de `adb`
-  se niegan (`TEXTO_DE_GRANJA`), Ejecutar da `granja-sin-camino` y la recarga al guardar no aplica (fase 3, con la skill
-  `xone-granja`).
+  `file_upload`/`file_download`/`screenshot`/`restart` van por el mismo relé. **Todo sin adb** (`skills/xone-hotswap/lib/granja.mjs`):
+  desplegar = subir el ZIP **con `bd/`** (la copia empieza VACÍA en cada turno; `empaquetarProyecto({conBase})`) + `launchApplication`,
+  sin reiniciar; captura por la API (JPEG, con diálogos); log por `getLog` (solo de esa copia; su `exception` trae un aviso falso
+  cuando no hay, `excepcionDeGetLog`); reiniciar = `restart` y reintentar el lanzamiento (sin el ancla, `Permission Denial`).
+  Ejecutar usa `lanzamientoEnGranja.ts` (veredicto con `granja`, sin aparato ni framework) y la recarga al guardar va por el
+  canal solo si la sesión YA tiene copia. Una copia abierta sin saludo ya es nuestra: se apunta y se reintenta.
 - **Con una tarea trabajando, Ejecutar sube LO TERMINADO** (`sesionGit.ts#exportarLoTerminado`, IXCODE-58): el árbol del commit anterior al primero que selló la tarea desde que empezó (o `HEAD`), exportado a una carpeta temporal con un índice privado; nunca el disco a medias. El veredicto lo dice antes (`lanzable.origen`); si no se puede separar, falla diciéndolo.

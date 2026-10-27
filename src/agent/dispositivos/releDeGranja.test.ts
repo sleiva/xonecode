@@ -124,14 +124,29 @@ describe("el gestor de copias de la granja", () => {
     expect(b.cierres[0]).toMatch(/Ajustes/);
   });
 
-  it("una copia que no saluda no se queda: se cierra y se dice", async () => {
-    const f = canalFalso({ saluda: false });
-    const { g } = gestor(async () => f.canal);
+  it("una copia que se abre sin saludar YA es nuestra: se apunta (para liberarla) y se reintenta sobre la misma", async () => {
+    const muda = canalFalso({ saluda: false });
+    const buena = canalFalso();
+    const abrir = vi.fn().mockResolvedValueOnce(muda.canal).mockResolvedValueOnce(buena.canal);
+    const { g, liberadas } = gestor(abrir, { pausaDeReintento: 1 });
+    const a = cliente();
+    await g.conectarCliente("s1", a.c);
+    expect(abrir).toHaveBeenCalledTimes(2);
+    expect(abrir.mock.calls[1]).toEqual([{ serial: "P3", numero: 1, telefono: "Pixel 3" }]);
+    expect(a.recibidos).toEqual([HOLA]);
+    expect(g.copiaDe("s1")?.numero).toBe(1);
+    await g.liberar("s1");
+    expect(liberadas).toHaveLength(1);
+  });
+
+  it("si nunca saluda se dice, y la copia queda apuntada para liberarla igual", async () => {
+    const { g, liberadas } = gestor(async () => canalFalso({ saluda: false }).canal, { pausaDeReintento: 1 });
     const a = cliente();
     await g.conectarCliente("s1", a.c);
     expect(a.cierres[0]).toMatch(/no saludó/);
-    expect(f.estaCerrado()).toBe(true);
-    expect(g.copiaDe("s1")).toBeUndefined();
+    expect(g.copiaDe("s1")?.numero).toBe(1);
+    await g.liberar("s1");
+    expect(liberadas).toEqual([{ serial: "P3", numero: 1, telefono: "Pixel 3" }]);
   });
 
   it("si el canal cae, el siguiente cliente lo reabre sobre la MISMA copia", async () => {

@@ -49,6 +49,12 @@ function listado(raiz: string, prefijo = ""): string[] {
 }
 
 describe("empaquetarProyecto", () => {
+  it("con la BASE (la granja): bd/ y los .db viajan; .env, .git y .xonecode siguen fuera", () => {
+    const paquete = empaquetarProyecto(nuevoProyecto(), undefined, { conBase: true });
+    expect(paquete.ficheros).toEqual(expect.arrayContaining(["bd/gestion.db", "bd/gestion.db-wal", "files/datos.db", "app.ini"]));
+    expect(paquete.ficheros.some((f) => f.startsWith(".git/") || f.startsWith(".xonecode/") || f === ".env")).toBe(false);
+  });
+
   it("entra el proyecto menos la base, git, la carpeta interna y las claves", () => {
     const paquete = empaquetarProyecto(nuevoProyecto());
 

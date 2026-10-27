@@ -15444,6 +15444,54 @@ describe("la granja de dispositivos", () => {
     expect(enDisco).toBeUndefined();
   });
 
+  it("Ejecutar con la granja: veredicto sin aparato ni framework, y el lanzamiento va a SU lanzador con la sesión", async () => {
+    const base = mkdtempSync(join(tmpdir(), "xonecode-granja-ejecutar-"));
+    const servidor = servidorDeMentira();
+    const vestibulo = vestibuloDePrueba({ baseDeWorkspace: () => base });
+    const raiz = vestibulo.raizDeProyecto("webstudio", "Tienda");
+    mkdirSync(join(raiz, ".xonecode", "cloudstudio"), { recursive: true });
+    mkdirSync(join(raiz, "bd"), { recursive: true });
+    writeFileSync(join(raiz, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+    writeFileSync(join(raiz, ".xonecode", "cloudstudio", "sync.json"), "{}");
+    writeFileSync(join(raiz, "app.xml"), '<?xml version="1.0"?><xml><app/></xml>');
+    writeFileSync(join(raiz, "app.ini"), "name=Tienda\n");
+    writeFileSync(join(raiz, "bd", "gestion.db"), "x");
+    const { servicio, estado } = servicioFalso();
+    Object.assign(estado, { direccion: "https://g:8090", token: "xfarm_AbCdEf123456" });
+    const pedidas: unknown[] = [];
+    montarRutas(servidor, vestibulo, {
+      granja: servicio,
+      existeEnProyecto: (r, rel) => existsSync(join(r, rel)),
+      leerFichero: async (r, rel) => ({ texto: readFileSync(join(r, rel), "utf8") }) as never,
+      lanzarEnGranja: (entrada, { alFase }) => {
+        pedidas.push(entrada);
+        alFase("subiendo", "subiendo");
+        return { cancelar: () => {}, terminado: Promise.resolve({ estado: "ok" as const, fase: "comprobando-arranque" as const, ms: 5 }) };
+      },
+    });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+    await asentar();
+    await enviarMensaje(accion, { clase: "sesion", proyecto: "p1" });
+    await asentar();
+    await enviarMensaje(accion, { clase: "origenDeDispositivos", origen: "granja" });
+    await asentar();
+    expect(vestibulo.proyectoAbierto()!.dispositivo?.clase).toBe("granja");
+    await enviarMensaje(accion, { clase: "revisarLanzamiento" } as never);
+    await asentar();
+    const lanzable = cliente.recibidos.filter((m) => m.clase === "lanzable").at(-1) as Record<string, unknown> | undefined;
+    expect(lanzable).toMatchObject({ listo: true, faltas: [], dispositivo: { clase: "granja" } });
+    await enviarMensaje(accion, { clase: "lanzarApp" });
+    await asentar();
+    await asentar();
+    expect(pedidas).toEqual([{ sesion: vestibulo.proyectoAbierto()!.idDeHilo, raiz, app: "Tienda" }]);
+    const ultimo = cliente.recibidos.filter((m) => m.clase === "lanzamiento").at(-1) as Record<string, unknown>;
+    expect(ultimo).toMatchObject({ estado: "ok", dispositivo: { clase: "granja" } });
+    await vestibulo.cerrar();
+    rmSync(base, { recursive: true, force: true });
+  });
+
   it("origenDeDispositivosCableado: manda el del proyecto; sin él, la granja si el global es la granja", () => {
     const casa = mkdtempSync(join(tmpdir(), "xc-granja-origen-"));
     const raiz = mkdtempSync(join(tmpdir(), "xc-granja-proy-"));

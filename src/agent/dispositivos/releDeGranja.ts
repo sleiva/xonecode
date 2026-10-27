@@ -20,7 +20,7 @@ import { randomBytes } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { Duplex } from "node:stream";
 import { WebSocketServer } from "ws";
-import { EnrutadorDeCanal, copiasLibres, nombreDeCopia, type CopiaDeGranja } from "../../core/canalDeGranja.js";
+import { EnrutadorDeCanal, copiasLibres, mismaCopia, nombreDeCopia, type CopiaDeGranja } from "../../core/canalDeGranja.js";
 import {
   abrirCanalDeGranja,
   hablarConGranja,
@@ -34,6 +34,12 @@ import {
 
 /** Lo que se espera al saludo del canal de la copia tras abrirlo: el servidor del teléfono saluda en cuanto acepta. */
 export const TOPE_DE_SALUDO_DE_GRANJA_MS = 15_000;
+
+/** Cuántas veces se reabre una copia que se abrió sin saludar (recién liberada, su canal aún arrancando). */
+export const REINTENTOS_DE_SALUDO = 3;
+
+/** Entre reintento y reintento: lo que tarda una copia recién limpiada en levantar su canal. */
+export const PAUSA_DE_REINTENTO_DE_GRANJA_MS = 2_000;
 
 /** Un cliente LOCAL del canal (un script, la recarga): a quién darle sus respuestas. */
 export interface ClienteDelCanal {
@@ -54,8 +60,9 @@ export interface DependenciasDeCopias {
   informar: (texto: string) => void;
   /** Cambió la copia de una sesión (cogida o liberada): para decirlo en la pastilla. */
   alCambiarCopia?: (sesion: string, copia: CopiaDeGranja | undefined) => void;
-  /** Cuánto se espera el saludo; los tests lo acortan. */
+  /** Cuánto se espera el saludo y entre reintentos; los tests lo acortan. */
   topeDeSaludo?: number;
+  pausaDeReintento?: number;
 }
 
 interface EstadoDeSesion {
@@ -96,6 +103,7 @@ export function crearGestorDeCopias(deps: DependenciasDeCopias): GestorDeCopias 
   const abrirCanal = deps.abrirCanal ?? abrirCanalDeGranja;
   const liberarEnGranja = deps.liberar ?? liberarCopiaDeGranja;
   const topeDeSaludo = deps.topeDeSaludo ?? TOPE_DE_SALUDO_DE_GRANJA_MS;
+  const pausaDeReintento = deps.pausaDeReintento ?? PAUSA_DE_REINTENTO_DE_GRANJA_MS;
 
   const estado = (sesion: string): EstadoDeSesion => {
     let e = sesiones.get(sesion);
@@ -140,8 +148,11 @@ export function crearGestorDeCopias(deps: DependenciasDeCopias): GestorDeCopias 
     if (conexion === undefined) {
       return { motivo: "la granja no está configurada: pon su dirección y tu token en Ajustes → Dispositivos → Granja" };
     }
-    /** Abre el canal de UNA copia: lo abierto, o por qué no; `ocupada` = es de otro. */
-    const intentar = async (copia: CopiaDeGranja): Promise<"ok" | "ocupada" | { motivo: string }> => {
+    /**
+     * Abre el canal de UNA copia: lo abierto, o por qué no; `ocupada` = es de otro. `cogida` = la conexión se ABRIÓ (y
+     * eso ya la hace nuestra, medido) aunque luego no saludara: hay que apuntarla para liberarla, nunca dejarla suelta.
+     */
+    const intentar = async (copia: CopiaDeGranja): Promise<"ok" | "ocupada" | { motivo: string; cogida?: true }> => {
       const r = await abrirCanal(conexion, copia);
       if ("tipo" in r) {
         if (r.tipo === "ocupada") return "ocupada";
@@ -151,13 +162,32 @@ export function crearGestorDeCopias(deps: DependenciasDeCopias): GestorDeCopias 
       e.canal = r;
       if (!(await enganchar(e, r))) {
         e.canal = undefined;
-        return { motivo: `la copia ${nombreDeCopia(copia)} no saludó` };
+        return { motivo: `la copia ${nombreDeCopia(copia)} no saludó`, cogida: true };
       }
       return "ok";
     };
+    /**
+     * Medido: una copia recién liberada por otro turno sale `running` pero su servidor del canal aún no escucha; la
+     * conexión se abre (y la coge) y se cierra sin saludo. Se reintenta sobre la MISMA, que ya es nuestra.
+     */
+    const conReintentos = async (copia: CopiaDeGranja): Promise<Awaited<ReturnType<typeof intentar>>> => {
+      let r = await intentar(copia);
+      for (let vez = 1; vez <= REINTENTOS_DE_SALUDO && typeof r === "object" && r.cogida === true; vez++) {
+        await new Promise((x) => setTimeout(x, pausaDeReintento));
+        r = await intentar(copia);
+      }
+      return r;
+    };
+    /** Una copia que ya es nuestra (cogida al conectarse): se apunta y se dice, salude o no. */
+    const apuntar = (copia: CopiaDeGranja): void => {
+      if (e.copia !== undefined && mismaCopia(e.copia, copia)) return;
+      e.copia = copia;
+      deps.informar(`granja: copia del turno ${nombreDeCopia(copia)}`);
+      deps.alCambiarCopia?.(sesion, copia);
+    };
     // Con copia ya cogida (el canal cayó), se reabre la MISMA: lo desplegado en ella sigue ahí.
     if (e.copia !== undefined) {
-      const r = await intentar(e.copia);
+      const r = await conReintentos(e.copia);
       if (r === "ok") return e.copia;
       if (r !== "ocupada") return r;
       deps.informar(`granja: la copia ${nombreDeCopia(e.copia)} ya no es nuestra (se liberó o la cogió otro); se pide otra`);
@@ -171,16 +201,15 @@ export function crearGestorDeCopias(deps: DependenciasDeCopias): GestorDeCopias 
       if (copia === undefined) {
         return descartadas.length === 0 ? { motivo: "no hay ninguna copia libre en la granja ahora mismo" } : { motivo: "otros cogieron las copias libres mientras se pedía una: vuelve a intentarlo" };
       }
-      const r = await intentar(copia);
+      const r = await conReintentos(copia);
       if (r === "ocupada") {
         // Otro se la llevó entre la foto y la conexión: la siguiente.
         descartadas.push(copia);
         continue;
       }
+      // Abierta = nuestra, aunque no saludara: se apunta para que el fin del turno la libere.
+      if (r === "ok" || r.cogida === true) apuntar(copia);
       if (r !== "ok") return r;
-      e.copia = copia;
-      deps.informar(`granja: copia del turno ${nombreDeCopia(copia)}`);
-      deps.alCambiarCopia?.(sesion, copia);
       return copia;
     }
   };
@@ -254,7 +283,7 @@ const TOPE_DE_FICHEROS_MS = 10 * 60_000;
 
 /**
  * El pegamento de red: un servidor en LOOPBACK con, por sesión, `ws://127.0.0.1:<p>/granja/<clave>/hotswap` (el canal) y
- * `/granja/<clave>/file_upload|file_download` (reenviados a la API de la copia con el token y la huella). La clave es
+ * `/granja/<clave>/file_upload|file_download|screenshot|restart` (reenviados a la API de la copia con el token y la huella). La clave es
  * aleatoria por sesión: el relé solo escucha en loopback, como un `adb forward`, y la clave impide hablarle a la copia
  * de otra sesión. El token no sale nunca de aquí hacia el cliente local.
  */
@@ -302,7 +331,15 @@ export async function servirReleDeGranja(gestor: GestorDeCopias, conexion: () =>
   const atenderFicheros = async (peticion: IncomingMessage, respuesta: ServerResponse): Promise<void> => {
     const { sesion, resto, busqueda } = partes(peticion.url);
     const metodo = peticion.method === "POST" ? "POST" : peticion.method === "GET" ? "GET" : undefined;
-    if (sesion === undefined || metodo === undefined || (resto !== "file_upload" && resto !== "file_download")) {
+    // Lo que la API de la copia ofrece y los scripts necesitan sin conocer el token: los ficheros, la CAPTURA de su
+    // pantalla virtual (`adb screencap` no la ve; esta sí pinta los diálogos) y `restart` (el `force-stop` de la granja:
+    // destruye la pantalla y la recrea vacía, y CIERRA el canal, que el relé reabre en la siguiente conexión).
+    const permitido =
+      (resto === "file_upload" && metodo === "POST") ||
+      (resto === "file_download" && metodo === "GET") ||
+      (resto === "screenshot" && metodo === "GET") ||
+      (resto === "restart" && metodo === "POST");
+    if (sesion === undefined || metodo === undefined || !permitido) {
       respuesta.writeHead(404).end();
       return;
     }
@@ -316,11 +353,17 @@ export async function servirReleDeGranja(gestor: GestorDeCopias, conexion: () =>
       const v = peticion.headers[nombre];
       if (typeof v === "string") cabeceras[nombre] = v;
     }
+    // La granja exige JSON en todo POST de su API (415 sin él): `restart` va con su cuerpo `{}`, y entonces la longitud
+    // es la de ESE cuerpo y no la de la petición local (medido: con el `content-length: 0` del script, 400).
+    if (resto === "restart") {
+      cabeceras["content-type"] = "application/json";
+      cabeceras["content-length"] = "2";
+    }
     const r = await pedirAGranja(c, {
       metodo,
       ruta: `${rutaDeCopia(copia)}/${resto}${busqueda}`,
       cabeceras,
-      ...(metodo === "POST" ? { cuerpo: peticion } : {}),
+      ...(resto === "restart" ? { cuerpo: Buffer.from("{}") } : metodo === "POST" ? { cuerpo: peticion } : {}),
       tope: TOPE_DE_FICHEROS_MS,
     });
     if (r.tipo === "huella-distinta") return negar(502, "el certificado de la granja ha cambiado");

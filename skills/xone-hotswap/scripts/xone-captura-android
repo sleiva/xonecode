@@ -25,7 +25,8 @@
 import { execFileSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
 import { join, basename } from "node:path";
-import { serieAndroid, rutaDeAdb, NODE } from "../lib/dispositivo.mjs";
+import { canalDeGranja, serieAndroid, rutaDeAdb, NODE } from "../lib/dispositivo.mjs";
+import { capturaDeGranja } from "../lib/granja.mjs";
 import { guardarGeometria } from "../lib/geometria.mjs";
 
 const args = process.argv.slice(2);
@@ -57,8 +58,11 @@ const opcion = (nombre) => {
 };
 // `--serie`, el dispositivo elegido en la sesión o un emulador (`../lib/dispositivo.mjs`). Se
 // dice por stderr con cuál y por qué: con varios aparatos, callarlo haría adivinar dónde pasó.
-const { serie, porque } = serieAndroid(opcion("serie"));
+// Con la GRANJA, la captura es la de su API (JPEG de la pantalla virtual de la copia, con los diálogos): sin adb.
+const granja = canalDeGranja();
+const { serie, porque } = granja !== undefined ? { serie: undefined, porque: "la granja" } : serieAndroid(opcion("serie"));
 if (serie !== undefined) process.stderr.write(`dispositivo: ${serie} (${porque})\n`);
+if (granja !== undefined) process.stderr.write("dispositivo: la copia de la granja de esta sesión\n");
 
 // `basename` y no la cadena tal cual: el nombre lo elige el modelo, y un `../` aquí escribiría
 // fuera de la carpeta de la sesión. Misma regla que `esRutaDeArtefacto` en el host.
@@ -76,8 +80,10 @@ const pedido = opcion("nombre");
  * Se AÑADE en vez de rechazar: lo que el modelo quería está claro y un «no» aquí cuesta otro
  * viaje para lo mismo.
  */
-const conExtension = (n) => (/\.[A-Za-z0-9]{2,4}$/.test(n) ? n : `${n}.png`);
-const nombre = pedido === undefined ? `captura-${Date.now()}.png` : conExtension(basename(pedido));
+// La de la granja es JPEG: la extensión dice lo que hay dentro, o el chat no la pinta bien.
+const extension = granja === undefined ? "png" : "jpg";
+const conExtension = (n) => (/\.[A-Za-z0-9]{2,4}$/.test(n) ? n : `${n}.${extension}`);
+const nombre = pedido === undefined ? `captura-${Date.now()}.${extension}` : conExtension(basename(pedido));
 if (nombre === "" || nombre === "." || nombre === "..") {
   console.error("ese nombre no vale para un fichero.");
   process.exit(1);
@@ -86,11 +92,14 @@ if (nombre === "" || nombre === "." || nombre === "..") {
 let bytes;
 try {
   // `exec-out` y no `shell`: `shell` traduce los finales de línea y corrompe el PNG.
-  bytes = execFileSync(rutaDeAdb(), [...(serie ? ["-s", serie] : []), "exec-out", "screencap", "-p"], {
-    maxBuffer: 256 * 1024 * 1024,
-  });
+  bytes =
+    granja !== undefined
+      ? await capturaDeGranja(granja)
+      : execFileSync(rutaDeAdb(), [...(serie ? ["-s", serie] : []), "exec-out", "screencap", "-p"], {
+          maxBuffer: 256 * 1024 * 1024,
+        });
 } catch (error) {
-  console.error(`no se pudo capturar con adb: ${error.message}`);
+  console.error(granja !== undefined ? error.message : `no se pudo capturar con adb: ${error.message}`);
   process.exit(1);
 }
 
@@ -126,7 +135,8 @@ if (!args.includes("--igualmente")) {
         encoding: "utf8",
         maxBuffer: 64 * 1024 * 1024,
       });
-    const pid = enElAparato("shell", "pidof", "com.xone.android.framework").trim().split(/\s+/)[0];
+    // Con la granja no hay adb que mirar (y sin `-s` iría a un aparato de ESTE equipo): el log está en xone-log-android.
+    const pid = granja !== undefined ? "" : enElAparato("shell", "pidof", "com.xone.android.framework").trim().split(/\s+/)[0];
     if (pid) {
       const log = enElAparato("logcat", "-d", "--pid", pid, "-t", "600");
       const filas = log.split("\n");

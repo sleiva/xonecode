@@ -48,6 +48,11 @@ export interface PeticionDeRecarga {
   serie: string;
   /** El puerto LOCAL del túnel: el del AVD, o el de fábrica para un físico. */
   puerto: number;
+  /**
+   * El canal LOCAL de la granja de la sesión (`releDeGranja.ts`): con él no hay túnel de adb, se habla por el relé con
+   * la copia que la sesión ya tiene. Ausente = un aparato de este equipo.
+   */
+  canal?: string;
   /** El nombre de la app, el MISMO que usa Ejecutar (`puedeLanzarse`). */
   app: string;
   /** La ruta relativa al proyecto, con `/`. */
@@ -73,12 +78,12 @@ export async function recargarEnAparato(
   const clase = claseDeRecarga(peticion.ruta, peticion.bytes);
   if (clase === "no-aplica") return { estado: "no-aplica" };
 
-  const tunel = await (deps.aplicarTunel ?? aplicarTunelReal)(peticion.serie, peticion.puerto);
+  const tunel = peticion.canal !== undefined ? undefined : await (deps.aplicarTunel ?? aplicarTunelReal)(peticion.serie, peticion.puerto);
   if (tunel !== undefined) return { estado: "sin-app", motivo: tunel };
 
   let cliente: ClienteHotswap | undefined;
   try {
-    cliente = abrirHotswap(destinoDe(peticion.puerto), deps.abrirSocket === undefined ? {} : { abrirSocket: deps.abrirSocket });
+    cliente = abrirHotswap(destinoDe(peticion), deps.abrirSocket === undefined ? {} : { abrirSocket: deps.abrirSocket });
     const c = cliente;
     const pedir = (nombre: string, extra?: Record<string, unknown>): Promise<RespuestaHotswap> =>
       conTope(c.comando(nombre, extra), `${nombre} no contestó en ${TOPE_DE_RESPUESTA_MS / 1000} s`);
@@ -127,7 +132,7 @@ export async function recargarEnAparato(
       cliente.cerrar();
       cliente = undefined;
       const arranque = await lanzarYComprobar(peticion.app, {
-        destino: destinoDe(peticion.puerto),
+        destino: destinoDe(peticion),
         ...(deps.abrirSocket === undefined ? {} : { abrirSocket: deps.abrirSocket }),
       });
       return arranque.viva
@@ -170,7 +175,7 @@ export async function recargarEnAparato(
 }
 
 /** A qué aparato y app va una recarga: lo resuelve el servidor, no el cliente. */
-export type DestinoDeRecarga = Pick<PeticionDeRecarga, "serie" | "puerto" | "app">;
+export type DestinoDeRecarga = Pick<PeticionDeRecarga, "serie" | "puerto" | "app" | "canal">;
 
 /**
  * Lee el fichero del proyecto con las MISMAS guardas que el lector de Ficheros
@@ -196,20 +201,21 @@ export async function recargarFicheroDelProyecto(
 
 /** Relanzar la app, a petición de la persona. Nunca lanza. */
 export async function relanzarEnAparato(
-  peticion: Pick<PeticionDeRecarga, "serie" | "puerto" | "app">,
+  peticion: Pick<PeticionDeRecarga, "serie" | "puerto" | "app" | "canal">,
   deps: DependenciasDeRecarga = {}
 ): Promise<ResultadoDeRecarga> {
-  const tunel = await (deps.aplicarTunel ?? aplicarTunelReal)(peticion.serie, peticion.puerto);
+  const tunel = peticion.canal !== undefined ? undefined : await (deps.aplicarTunel ?? aplicarTunelReal)(peticion.serie, peticion.puerto);
   if (tunel !== undefined) return { estado: "sin-app", motivo: tunel };
   const arranque = await lanzarYComprobar(peticion.app, {
-    destino: destinoDe(peticion.puerto),
+    destino: destinoDe(peticion),
     ...(deps.abrirSocket === undefined ? {} : { abrirSocket: deps.abrirSocket }),
   });
   return arranque.viva ? { estado: "relanzada" } : { estado: "fallo", motivo: arranque.motivo ?? "la app no volvió a contestar" };
 }
 
-function destinoDe(puerto: number): string {
-  return `wss://127.0.0.1:${puerto}/hotswap`;
+/** El canal de la granja si lo hay; si no, el túnel de adb al puerto del aparato. */
+function destinoDe(peticion: Pick<PeticionDeRecarga, "puerto" | "canal">): string {
+  return peticion.canal ?? `wss://127.0.0.1:${peticion.puerto}/hotswap`;
 }
 
 function conTope<T>(promesa: Promise<T>, motivo: string): Promise<T> {

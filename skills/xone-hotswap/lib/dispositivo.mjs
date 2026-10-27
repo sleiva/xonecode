@@ -103,9 +103,10 @@ export function puedeArrancarEmulador(entorno = process.env) {
  * todavía no llegan a ella, y caer a un aparato de este equipo sería probar donde nadie lo eligió.
  */
 export const TEXTO_DE_GRANJA =
-  "Este proyecto usa la GRANJA de dispositivos XOne: a la copia de la granja solo llegan xone-hotswap y " +
-  "xone-recargar-android (por el canal); este script todavía no, y no se prueba en ningún aparato de este equipo. " +
-  "Dilo en tu respuesta; si hace falta este equipo, que la persona lo cambie en la pastilla del chat.";
+  "Este proyecto usa la GRANJA de dispositivos XOne: este script es de un aparato de ESTE equipo y no se usa. Con la " +
+  "granja, xone-desplegar-android, xone-recargar-android, xone-hotswap, xone-captura-android, xone-log-android y " +
+  "xone-reiniciar-android ya van a la copia de la sesión, sin --serie. Si hace falta este equipo, que la persona lo " +
+  "cambie en la pastilla del chat.";
 
 /**
  * El canal LOCAL de la granja de la sesión (`agent/dispositivos/releDeGranja.ts`), o `undefined`. Lo escribe XOneCode

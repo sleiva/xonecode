@@ -110,11 +110,14 @@ function nombreQueNoViaja(nombre: string): boolean {
  * que nadie pidió. Al extraer, cada entrada crea sus carpetas padre, como en
  * `extraerZipBase64`.
  */
-function viaja(virtual: string): boolean {
+function viaja(virtual: string, conBase = false): boolean {
   if (!puedeLeerRuta(virtual)) return false; // /.env, /.git, /.xonecode
   const partes = virtual.split("/").slice(1); // sin el "/" inicial
+  const nombre = partes[partes.length - 1] ?? "";
+  // Con la base (la granja), `bd/` y los ficheros de base viajan; la basura del SO, no.
+  if (conBase) return !(BASURA_DEL_SO as readonly string[]).includes(nombre);
   if (partes[0] === "bd") return false;
-  return !nombreQueNoViaja(partes[partes.length - 1] ?? "");
+  return !nombreQueNoViaja(nombre);
 }
 
 /**
@@ -129,15 +132,15 @@ function viaja(virtual: string): boolean {
  * Se filtra ANTES de mirar la entrada: lo que no viaja ni se lista, y así `.xonecode/`
  * —cientos de megas de checkpoints— no se recorre para nada.
  */
-function recorrer(directorio: string, prefijo: string, salida: Candidato[]): void {
+function recorrer(directorio: string, prefijo: string, salida: Candidato[], conBase = false): void {
   // Sin `try`: un proyecto que no se puede leer no se empaqueta. Tragares el error sería
   // subir un paquete incompleto y no decirlo, que es peor que fallar.
   for (const nombre of readdirSync(directorio)) {
     const ruta = prefijo === "" ? nombre : `${prefijo}/${nombre}`;
-    if (!viaja(`/${ruta}`)) continue;
+    if (!viaja(`/${ruta}`, conBase)) continue;
     const info = lstatSync(join(directorio, nombre));
     if (info.isDirectory()) {
-      recorrer(join(directorio, nombre), ruta, salida);
+      recorrer(join(directorio, nombre), ruta, salida, conBase);
       continue;
     }
     if (!info.isFile()) continue; // enlaces, sockets, FIFOs: no hay bytes que subir
@@ -178,6 +181,13 @@ export interface OpcionesDePaquete {
    * el destino —añade y sobrescribe—, así que uno parcial deja intacto lo que no lleva.
    */
   solo?: ReadonlySet<string>;
+  /**
+   * Con la BASE (`bd/` y los `*.db`): para la GRANJA de dispositivos, donde la regla de arriba se invierte. Allí la copia
+   * se pide VACÍA en cada turno (la limpia `reset` al liberarla), así que no tiene «su base en el dispositivo» que
+   * conservar, y sin `bd/gestion.db` la app abre con «Base de datos no encontrada». Medido en la granja real: con ella
+   * dentro, la app llega a su colección; sin ella, el diálogo de error.
+   */
+  conBase?: true;
 }
 
 /**
@@ -202,7 +212,7 @@ export function empaquetarProyecto(
   opciones: OpcionesDePaquete = {}
 ): PaqueteDelProyecto {
   const recorridos: Candidato[] = [];
-  recorrer(raiz, "", recorridos);
+  recorrer(raiz, "", recorridos, opciones.conBase === true);
   // `solo` RECORTA lo que viaja, nunca lo amplía: una ruta que `viaja` rechaza no entra aunque
   // venga en la lista, porque el filtro es el mismo recorrido de siempre.
   const solo = opciones.solo;

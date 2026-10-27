@@ -208,6 +208,7 @@ import {
 import { guardarTokenDeGranja, quitarTokenDeGranja, tokenDeGranja } from "../../agent/dispositivos/granjaEnDisco.js";
 import { probarGranja, type ConexionDeGranja, type Hablar } from "../../agent/dispositivos/granjaEnRed.js";
 import { crearGestorDeCopias, servirReleDeGranja } from "../../agent/dispositivos/releDeGranja.js";
+import { lanzarEnGranja, type EntradaDeLanzamientoEnGranja } from "../../agent/dispositivos/lanzamientoEnGranja.js";
 import { nombreDeCopia } from "../../core/canalDeGranja.js";
 import {
   direccionDeGranja,
@@ -962,6 +963,10 @@ export interface OpcionesDeMontaje {
   copiaDeGranja?: (idDeHilo: string) => string | undefined;
   /** Se apunta a los cambios de copia (cogida o liberada): el alta se reanuncia para que la pastilla lo diga. */
   suscribirCopiasDeGranja?: (oyente: () => void) => void;
+  /** El canal local de la granja de un hilo (`releDeGranja.ts`): la recarga al guardar habla por él. */
+  canalDeGranja?: (idDeHilo: string) => string;
+  /** Ejecutar en la GRANJA (`lanzamientoEnGranja.ts`). Ausente = esta ejecución no llega a ella (`granja-sin-camino`). */
+  lanzarEnGranja?: (entrada: EntradaDeLanzamientoEnGranja, oyentes: { alFase: (fase: FaseDeLanzamiento, linea: string) => void }) => LanzamientoEnCurso;
   /**
    * Augmenta una petición en un encargo revisado (`agent/tareas/aumentador.ts`, Task 9). Ausente =
    * el botón «Preparar el encargo» no está disponible.
@@ -4505,7 +4510,9 @@ export function montarRutas(
     if (abierto === undefined) return undefined;
     const raiz = abierto.raiz;
     const { dispositivo, elegido } = dispositivoDeLaSesion(abierto.dispositivo, informeDeDispositivos);
-    const framework = dispositivo === undefined ? undefined : await medirFramework(dispositivo);
+    // Con la GRANJA y camino a ella, el aparato y su framework los pone la granja: no hay nada que medir aquí.
+    const enGranja = abierto.dispositivo?.clase === "granja" && opciones.lanzarEnGranja !== undefined;
+    const framework = dispositivo === undefined || enGranja ? undefined : await medirFramework(dispositivo);
 
     const [xml, ini] = await Promise.all([leerDescriptor(raiz, "app.xml"), leerDescriptor(raiz, "app.ini")]);
     // ¿El fichero NO está, o está y no se deja leer? No es la misma cosa ni se arregla en el
@@ -4517,6 +4524,7 @@ export function montarRutas(
     const veredicto = puedeLanzarse({
       dispositivo,
       ...(elegido === undefined ? {} : { elegido }),
+      ...(enGranja ? { granja: opciones.granja?.conexion() === undefined ? ("sin-configurar" as const) : ("lista" as const) } : {}),
       framework,
       xml: xml.texto,
       ...(xml.texto !== undefined || falta ? {} : { motivoDeLectura: xml.motivo ?? "no se pudo leer" }),
@@ -4567,7 +4575,8 @@ export function montarRutas(
   const atenderRevisarLanzamiento = async (): Promise<void> => {
     const medida = await medirLanzamiento();
     if (medida === undefined) return;
-    const foto = medida.dispositivo === undefined ? undefined : fotoDeDispositivo(medida.dispositivo);
+    const foto =
+      medida.abierto.dispositivo?.clase === "granja" ? DISPOSITIVO_DE_GRANJA : medida.dispositivo === undefined ? undefined : fotoDeDispositivo(medida.dispositivo);
     emitir({
       clase: "lanzable",
       proyecto: medida.proyecto,
@@ -4626,7 +4635,8 @@ export function montarRutas(
       alAcabar?.("fallo", "no hay ningún proyecto abierto");
       return;
     }
-    const foto = medida.dispositivo === undefined ? undefined : fotoDeDispositivo(medida.dispositivo);
+    const enGranja = medida.abierto.dispositivo?.clase === "granja" && opciones.lanzarEnGranja !== undefined;
+    const foto = enGranja ? DISPOSITIVO_DE_GRANJA : medida.dispositivo === undefined ? undefined : fotoDeDispositivo(medida.dispositivo);
     const fallar = (motivo: string): void => {
       emitir({
         clase: "lanzamiento",
@@ -4648,7 +4658,7 @@ export function montarRutas(
       fallar(motivoDeBloqueo(primeraFalta));
       return;
     }
-    if (medida.dispositivo === undefined) {
+    if (medida.dispositivo === undefined && !enGranja) {
       // Inalcanzable con el veredicto vacío —sin dispositivo siempre hay causa—, pero el tipo
       // no lo sabe y lanzar sin dispositivo no se puede ni componer.
       fallar(SIN_NOMBRE_DE_APP);
@@ -4658,7 +4668,7 @@ export function montarRutas(
       fallar(SIN_NOMBRE_DE_APP);
       return;
     }
-    if (lanzar === undefined) {
+    if (lanzar === undefined && !enGranja) {
       fallar(SIN_CAMINO_DE_LANZAMIENTO);
       return;
     }
@@ -4725,9 +4735,15 @@ export function montarRutas(
       // doble mal hecho, o un bug suyo en el camino síncrono— dejaría el recorrido en
       // `corriendo` para siempre y el botón muerto, que es justo lo que este `try` existe para
       // evitar. Su contrato es no lanzar nunca; esto es por si deja de cumplirlo.
-      const enCurso: LanzamientoEnCurso = lanzar(
+      // En la GRANJA, su lanzador: la copia de ESTA sesión (la del turno, o una nueva que se libera al acabar el siguiente).
+      const enCurso: LanzamientoEnCurso = enGranja
+        ? opciones.lanzarEnGranja!(
+            { sesion: medida.abierto.idDeHilo, raiz: raizDelPaquete, app: medida.app, ...(modo === "todo" ? {} : { modo }) },
+            { alFase },
+          )
+        : lanzar!(
         {
-          dispositivo: medida.dispositivo,
+          dispositivo: medida.dispositivo!,
           raiz: raizDelPaquete,
           app: medida.app,
           // «Ejecutar» y «Copiar todos» no lo mandan: el lanzador sin modo sube el proyecto entero.
@@ -4735,8 +4751,8 @@ export function montarRutas(
           // El puerto LOCAL del túnel es el de SU aparato: con dos aparatos y el mismo puerto,
           // el `adb forward` del segundo le quita el túnel al primero sin error. Un físico
           // tiene el suyo por su serie (IXCODE-32): antes iba al 8443 del primer AVD.
-          ...(medida.dispositivo.plataforma === "android"
-            ? { puerto: puertoDeDispositivo(ajustesDeDispositivos(), medida.dispositivo) }
+          ...(medida.dispositivo!.plataforma === "android"
+            ? { puerto: puertoDeDispositivo(ajustesDeDispositivos(), medida.dispositivo!) }
             : {}),
         },
         { alFase }
@@ -5442,7 +5458,17 @@ export function montarRutas(
    */
   const destinoDeRecarga = async (abierto: ConsolaDeProyecto): Promise<DestinoDeRecarga | { motivo: string }> => {
     if (abierto.dispositivo === undefined) return { motivo: "no hay un aparato elegido en la sesión" };
-    if (abierto.dispositivo.clase === "granja") return { motivo: "este proyecto usa la granja, y la recarga todavía no llega a ella" };
+    if (abierto.dispositivo.clase === "granja") {
+      // Solo con una copia YA cogida en esta sesión (desplegada en este turno): guardar no pide una copia vacía.
+      const canal = opciones.canalDeGranja?.(abierto.idDeHilo);
+      if (canal === undefined || opciones.copiaDeGranja?.(abierto.idDeHilo) === undefined) {
+        return { motivo: "la sesión no tiene ahora una copia de la granja: despliega (Ejecutar) y entonces cada guardado recarga" };
+      }
+      const ini = await leerDescriptor(abierto.raiz, "app.ini");
+      const app = ini.texto === undefined ? undefined : nombreDeApp(ini.texto);
+      if (app === undefined) return { motivo: "app.ini no dice el nombre de la app (name=)" };
+      return { serie: DISPOSITIVO_DE_GRANJA.id, puerto: 0, app, canal };
+    }
     const { dispositivo } = dispositivoDeLaSesion(abierto.dispositivo, informeDeDispositivos);
     // La foto de Dispositivos solo se toma al conectar y al pulsar «Refrescar»: un emulador
     // arrancado después no está en ella, y decir «la app no corre» mandaría a buscar donde no es.
@@ -10768,6 +10794,14 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
       return copia === undefined ? undefined : nombreDeCopia(copia);
     },
     suscribirCopiasDeGranja: (oyente) => void (avisarCopiaDeGranja = oyente),
+    // Ejecutar en la granja, por el MISMO gestor de copias y el mismo canal que los scripts.
+    ...(releDeGranja === undefined
+      ? {}
+      : {
+          canalDeGranja: (id: string) => releDeGranja.urlDe(id),
+          lanzarEnGranja: (entrada: EntradaDeLanzamientoEnGranja, oyentes: { alFase: (fase: FaseDeLanzamiento, linea: string) => void }) =>
+            lanzarEnGranja({ copias: copiasDeGranja, conexion: granjaDelEquipo.granja.conexion, canal: (s) => releDeGranja.urlDe(s) }, entrada, oyentes),
+        }),
     // Los conectores MCP, con la MISMA disciplina: la composición extraída y probada
     // (`ajusteDeConectoresCableado`), nunca un literal aquí dentro.
     // Y el gestor de tareas (IXCODE-11) llama por ESE mismo servicio: los dos salen de

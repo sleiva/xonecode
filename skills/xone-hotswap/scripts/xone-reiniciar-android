@@ -22,7 +22,8 @@
  */
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
-import { serieAndroid, rutaDeAdb, NODE, dormir, PUERTO_DEL_HOTSWAP, puertoConMotivo, asegurarTunel } from "../lib/dispositivo.mjs";
+import { canalDeGranja, serieAndroid, rutaDeAdb, NODE, dormir, PUERTO_DEL_HOTSWAP, puertoConMotivo, asegurarTunel } from "../lib/dispositivo.mjs";
+import { esperarAppEnGranja, lanzarEnGranja, reiniciarCopia } from "../lib/granja.mjs";
 
 const PAQUETE = "com.xone.android.framework";
 const ACTIVIDAD = `${PAQUETE}/com.xone.android.hotswap.activities.SetupActivity`;
@@ -46,6 +47,41 @@ const opcion = (nombre) => {
   const i = args.indexOf(`--${nombre}`);
   return i >= 0 ? args[i + 1] : undefined;
 };
+/**
+ * **Con la GRANJA, reiniciar es `restart` de la copia** (su API), nunca `am force-stop`/`am start`: la granja los
+ * prohíbe (su pantalla virtual se rompería). Medido: `restart` destruye la pantalla, la recrea VACÍA y cierra el canal;
+ * lo desplegado sigue en la copia, así que `--app` la vuelve a lanzar.
+ */
+const granja = canalDeGranja();
+if (granja !== undefined) {
+  process.stderr.write("dispositivo: la copia de la granja de esta sesión\n");
+  try {
+    console.log("1/2 reiniciando la copia de la granja (restart)");
+    await reiniciarCopia(granja);
+    const app = opcion("app");
+    if (app === undefined) {
+      console.log("2/2 copia reiniciada: la pantalla está vacía. Ninguna app cargada.");
+      process.exit(0);
+    }
+    console.log(`2/2 lanzando ${app}`);
+    const lanzada = await lanzarEnGranja(granja, app);
+    if (lanzada?.result !== true) {
+      console.error(`la copia no aceptó lanzar «${app}»: ${String(lanzada?.status || lanzada?.exceptionMessage || "").slice(0, 200)}`);
+      process.exit(1);
+    }
+    const viva = await esperarAppEnGranja(granja);
+    if (viva.viva) {
+      console.log(`«${app}» viva en «${viva.pantalla.collection}».`);
+      process.exit(0);
+    }
+    console.error(`«${app}» NO está viva: ${viva.motivo}. Si nunca se ha subido en este turno, primero xone-desplegar-android.`);
+    process.exit(1);
+  } catch (error) {
+    console.error(error.message);
+    process.exit(1);
+  }
+}
+
 // `--serie`, el dispositivo elegido en la sesión o un emulador (`../lib/dispositivo.mjs`). Se
 // dice por stderr con cuál y por qué: con varios aparatos, callarlo haría adivinar dónde pasó.
 const { serie, porque } = serieAndroid(opcion("serie"));

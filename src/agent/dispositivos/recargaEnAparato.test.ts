@@ -65,6 +65,19 @@ describe("recargarEnAparato", () => {
     expect(f.cerrados()).toBeGreaterThan(0);
   });
 
+  it("con el CANAL de la granja: sin túnel de adb, y por el relé de la sesión", async () => {
+    const f = framework(vivaYAcepta);
+    let tuneles = 0;
+    const canal = "ws://127.0.0.1:53063/granja/clave/hotswap";
+    const r = await recargarEnAparato(
+      { ...peticion("Inicio.xne", '<coll name="Inicio"></coll>'), serie: "granja", puerto: 0, canal },
+      { abrirSocket: f.abrirSocket, aplicarTunel: async () => void tuneles++ },
+    );
+    expect(r).toEqual({ estado: "aplicada", clase: "coleccion" });
+    expect(tuneles).toBe(0);
+    expect(f.urls).toEqual([canal]);
+  });
+
   it("un .xne Latin-1: a DISCO van sus bytes; a memoria, UTF-8 con el prólogo diciendo UTF-8 (medido)", async () => {
     const f = framework(vivaYAcepta);
     const bytes = new Uint8Array([

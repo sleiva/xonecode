@@ -49,7 +49,8 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { basename, join, relative, sep } from "node:path";
 import { deflateRawSync } from "node:zlib";
-import { serieAndroid, rutaDeAdb, NODE, dormir, PUERTO_DEL_HOTSWAP, puertoConMotivo, asegurarTunel } from "../lib/dispositivo.mjs";
+import { serieAndroid, rutaDeAdb, NODE, dormir, PUERTO_DEL_HOTSWAP, puertoConMotivo, asegurarTunel, canalDeGranja } from "../lib/dispositivo.mjs";
+import { comandoEnGranja, esperarAppEnGranja, excepcionDeGetLog, subirAGranja } from "../lib/granja.mjs";
 
 const PAQUETE = "com.xone.android.framework";
 const ACTIVIDAD = `${PAQUETE}/com.xone.android.hotswap.activities.SetupActivity`;
@@ -169,6 +170,42 @@ Necesita \`adb\` en el PATH; el ZIP lo construye él mismo.
 Si la app no arranca, lo primero que hay que mirar es si existe bd/gestion.db: la genera XOne
 Studio o \`xone-db-tools\`, no esto, y sin ella la app muere aunque el verificador esté en verde.`);
   process.exit(0);
+}
+
+/**
+ * **Con la GRANJA, desplegar es subir el ZIP y lanzar**, por el canal de la sesión y sin adb (medido en la granja real:
+ * ni túnel, ni permisos —la granja los concede al limpiar la copia—, ni reiniciar nada; con la app abierta, subir y lanzar
+ * la recarga). El ZIP lleva `bd/` SIEMPRE: la copia se pidió vacía en este turno y se BORRA al acabarlo, así que no tiene
+ * base propia que conservar.
+ */
+const granja = canalDeGranja();
+if (granja !== undefined) {
+  process.stderr.write("dispositivo: la copia de la granja de esta sesión (se libera al acabar el turno)\n");
+  const appDeGranja = nombreDeLaApp();
+  try {
+    console.log("1/3 empaquetando el proyecto (con bd/)");
+    const cuerpo = crearZip(process.cwd(), [".xonecode", ".git"]);
+    console.log(`2/3 subiendo ${cuerpo.length} bytes a la copia de la granja`);
+    await subirAGranja(granja, cuerpo, appDeGranja);
+    console.log(`3/3 lanzando ${appDeGranja} y esperando a que llegue a una colección`);
+    await comandoEnGranja(granja, { command: "launchApplication", appName: appDeGranja });
+    const viva = await esperarAppEnGranja(granja);
+    if (viva.viva) {
+      console.log(`«${appDeGranja}» viva en «${viva.pantalla.collection}». Para mirarla: xone-hotswap screen, o xone-captura-android si es algo VISUAL.`);
+      console.log("Recuerda: la copia se libera (y se borra) al acabar este turno; el siguiente turno vuelve a desplegar.");
+      process.exit(0);
+    }
+    console.error(`la app NO está viva: ${viva.motivo}.`);
+    const log = await comandoEnGranja(granja, { command: "getLog" }).catch(() => undefined);
+    const excepcion = excepcionDeGetLog(log);
+    if (excepcion !== undefined) console.error(`XOne dice: ${excepcion.slice(0, 600)}`);
+    if (!existsSync("bd")) console.error("El proyecto no tiene bd/: la base la genera XOne Studio, no esto, y sin ella la app no abre.");
+    else console.error("Mira el detalle con xone-log-android.");
+    process.exit(1);
+  } catch (error) {
+    console.error(error.message);
+    process.exit(1);
+  }
 }
 
 // `--serie`, el dispositivo elegido en la sesión o un emulador (`../lib/dispositivo.mjs`). Se

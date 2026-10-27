@@ -37,6 +37,11 @@ describe("copiasLibres", () => {
     expect(copiasLibres({ devices: "no" })).toEqual([]);
   });
 
+  it("una copia con el canal marcado como caído (hotswap.ok false) no se pide", () => {
+    const e = { devices: [telefono("P3", "Pixel 3", "ready", [{ number: 1, owner: null, state: "running", hotswap: { ok: false } }, { number: 2, owner: null, state: "running", hotswap: { ok: true } }])] };
+    expect(copiasLibres(e).map((c) => c.numero)).toEqual([2]);
+  });
+
   it("se nombra por teléfono y número", () => {
     expect(nombreDeCopia({ serial: "P3", numero: 2, telefono: "Pixel 3" })).toBe("Pixel 3 · copia 2");
   });

@@ -92,10 +92,12 @@ export type CausaDeBloqueo =
   | { causa: "sin-app-xml" }
   | { causa: "app-xml-ilegible"; motivo: string }
   | { causa: "falta-el-fichero-de-la-conexion"; connstring: string }
-  | { causa: "falta-la-base" }
+  | { causa: "falta-la-base"; enGranja?: true }
   | { causa: "plataforma-sin-camino"; plataforma: Dispositivo["plataforma"] }
-  /** El proyecto usa la granja de dispositivos (`core/granja.ts`), y Ejecutar todavía no llega a ella. */
-  | { causa: "granja-sin-camino" };
+  /** El proyecto usa la granja de dispositivos (`core/granja.ts`), y esta consola no tiene camino a ella. */
+  | { causa: "granja-sin-camino" }
+  /** El proyecto usa la granja, y la granja no está configurada (dirección o token). */
+  | { causa: "granja-sin-configurar" };
 
 /**
  * Lo que el veredicto necesita, ya resuelto por quien SÍ puede tocar el disco y la máquina.
@@ -129,6 +131,12 @@ export interface EntradaDeVeredicto {
   ini: string | undefined;
   /** ¿Existe esa ruta del proyecto? Inyectado: `core/` no toca el disco. */
   existe: (rutaRelativa: string) => boolean;
+  /**
+   * El aparato es la GRANJA de dispositivos (`core/granja.ts`), con camino para lanzar: el eje del aparato y del
+   * framework lo pone ELLA (la copia se pide al lanzar, con el framework ya instalado). `lista` = configurada;
+   * `sin-configurar` = falta dirección o token. Ausente = un aparato de este equipo, como siempre.
+   */
+  granja?: "lista" | "sin-configurar";
 }
 
 export interface Veredicto {
@@ -179,7 +187,10 @@ export function puedeLanzarse(entrada: EntradaDeVeredicto): Veredicto {
   const causas: CausaDeBloqueo[] = [];
   const { dispositivo } = entrada;
 
-  if (dispositivo === undefined) {
+  if (entrada.granja !== undefined) {
+    // La GRANJA pone el aparato y el framework: solo puede faltar configurarla.
+    if (entrada.granja === "sin-configurar") causas.push({ causa: "granja-sin-configurar" });
+  } else if (dispositivo === undefined) {
     causas.push(
       entrada.elegido === undefined
         ? { causa: "sin-dispositivo-elegido" }
@@ -253,7 +264,9 @@ export function puedeLanzarse(entrada: EntradaDeVeredicto): Veredicto {
       causas.push(
         declarada
           ? { causa: "falta-el-fichero-de-la-conexion", connstring: ruta }
-          : { causa: "falta-la-base" },
+          : entrada.granja !== undefined
+            ? { causa: "falta-la-base", enGranja: true }
+            : { causa: "falta-la-base" },
       );
     }
   }
@@ -309,7 +322,9 @@ const ETIQUETA_DE_ESTADO: Record<Dispositivo["estado"], string> = {
 export function motivoDeBloqueo(causa: CausaDeBloqueo): string {
   switch (causa.causa) {
     case "granja-sin-camino":
-      return "Este proyecto usa la granja de dispositivos, y Ejecutar todavía no llega a ella. Para lanzar en un aparato de este equipo, elige «Este equipo» en la pastilla del compositor.";
+      return "Este proyecto usa la granja de dispositivos, y esta consola no tiene camino a ella. Para lanzar en un aparato de este equipo, elige «Este equipo» en la pastilla del compositor.";
+    case "granja-sin-configurar":
+      return "Este proyecto usa la granja de dispositivos y no está configurada: pon su dirección y tu token en Ajustes → Dispositivos → Granja.";
     case "sin-dispositivo-elegido":
       return "Esta sesión no tiene ningún dispositivo elegido: elígelo en la pastilla del compositor, junto al modelo —es donde se elige el de ESTA sesión—, y vuelve a intentarlo.";
     case "dispositivo-desconocido":
@@ -338,6 +353,10 @@ export function motivoDeBloqueo(causa: CausaDeBloqueo): string {
       // el PROYECTO, y una app que ya se lanzó antes en ese dispositivo tiene allí su copia, así
       // que volver a lanzarla no la necesita. No se puede preguntar al aparato todavía, así que
       // lo honesto es decir que no se puede prometer — y lo que hay que hacer si ese es el caso.
+      if (causa.enGranja === true) {
+        // En la granja la copia empieza VACÍA en cada turno: no hay «su copia de antes» que salve el caso.
+        return `El proyecto no tiene ${RUTA_DE_LA_BASE}, que es la base local de XOne, y en la granja la copia empieza vacía en cada turno: sin ella la app abre con «Base de datos no encontrada». La genera el simulador fuera de XOneCode —XOneCode no la crea—: abre el proyecto en XOne Studio y arráncalo una vez, o tráela de donde se generó.`;
+      }
       return `El proyecto no tiene ${RUTA_DE_LA_BASE}, que es la base local de XOne: la usa POR DEFECTO, se declare en app.xml o no, y sin ella la app recibe el lanzamiento y muere en un diálogo «Error opening database». La genera el simulador fuera de XOneCode —XOneCode no la crea—, así que hay que abrir el proyecto en XOne Studio y arrancarlo una vez, o traerla de donde se generó. (Se mira el proyecto, no el aparato: si esta app ya se lanzó antes en ese dispositivo, allí sigue su copia y no hace falta esto.)`;
     case "plataforma-sin-camino":
       return `Lanzar desde XOneCode todavía solo está montado para Android —el túnel, el canal y la subida son los de esa plataforma—, así que sobre ${nombreDePlataforma(causa.plataforma)} no hay camino. Elige un dispositivo de Android en Ajustes → Dispositivos, o lanza la app desde XOne Studio.`;

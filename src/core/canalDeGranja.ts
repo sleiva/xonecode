@@ -17,7 +17,8 @@ export interface CopiaDeGranja {
 }
 
 /**
- * Las copias que se pueden pedir, en el orden en que se prueban: de teléfonos `ready`, `running` y sin dueño. Primero
+ * Las copias que se pueden pedir, en el orden en que se prueban: de teléfonos `ready`, `running`, sin dueño y con su
+ * canal sin marcar como caído (`hotswap.ok`). Primero
  * las del teléfono con MÁS libres —reparte la carga y deja a otros las de los teléfonos casi llenos—; dentro de un
  * teléfono, por número. Las ya `descartadas` (otro se la llevó entre medias) no vuelven a salir.
  */
@@ -34,8 +35,10 @@ export function copiasLibres(estado: unknown, descartadas: readonly CopiaDeGranj
     const libres: CopiaDeGranja[] = [];
     for (const s of t.slots) {
       if (typeof s !== "object" || s === null) continue;
-      const c = s as { number?: unknown; owner?: unknown; state?: unknown };
+      const c = s as { number?: unknown; owner?: unknown; state?: unknown; hotswap?: { ok?: unknown } };
       if (typeof c.number !== "number" || c.state !== "running" || (c.owner !== null && c.owner !== undefined)) continue;
+      // Su canal no contestó en la última comprobación de la granja: pedirla sería coger una copia muda.
+      if (c.hotswap?.ok === false) continue;
       const copia = { serial: t.serial, numero: c.number, telefono: modelo };
       if (!descartadas.some((x) => mismaCopia(x, copia))) libres.push(copia);
     }
