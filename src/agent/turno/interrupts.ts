@@ -1,4 +1,5 @@
 import { collectPending, buildResume, type Decision, type PendingInterrupt } from "../../vendor/hitl.js";
+import { conTrozoAnadido } from "../../core/anadirAFichero.js";
 import type { PendienteDeAprobacion } from "../../core/events.js";
 import { diffDeLineas, type LineaDeDiff } from "../../core/diff.js";
 import { NOMBRE_INCORPORAR_ADJUNTO } from "../../core/adjuntos.js";
@@ -87,7 +88,9 @@ export function cambioDe(
   if (p.tool === "write_file") {
     const despues = p.args.content;
     if (typeof despues !== "string") return undefined;
-    return { ruta, lineas: diffDeLineas(leer(ruta), despues) };
+    // Con `append` lo escrito es lo de antes MÁS el trozo: sin esto la tarjeta enseñaba el fichero entero como borrado.
+    const antes = leer(ruta);
+    return { ruta, lineas: diffDeLineas(antes, p.args.append === true ? conTrozoAnadido(antes, despues) : despues) };
   }
 
   if (p.tool === "edit_file") {

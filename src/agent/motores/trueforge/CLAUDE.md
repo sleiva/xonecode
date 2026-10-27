@@ -29,6 +29,11 @@ Ante una discrepancia con el código, **el código manda**.
   reconoce en sus DOS formas (`cortadaPorTopeDeSalida`: `finish_reason` de los compatibles, `stop_reason` en
   `additional_kwargs` de Anthropic), su respuesta lleva delante la nota de PARTIR el trabajo (`notaDelCorte`), y tras
   `CORTES_SEGUIDOS_ANTES_DE_PARAR` cortes seguidos no se llama al modelo: el hilo cierra con texto.
+- **Un documento largo se escribe POR PARTES** (`write_file` con `append: true`, `core/anadirAFichero.ts`): solo
+  documentos (`.md`, `/planes/`, `/doc/`), lo que se valida (`TASKS.md`) y se aprueba (`interrupts.ts#cambioDe`) es el
+  fichero RESULTANTE, y los `append` a un mismo fichero van en serie (leer y escribir; la cola del backend solo cubre el
+  `write`). El analista escribe el `TASKS.md` una fase por llamada (`xone-plan-builder`, `PLAN_DE_DESARROLLO`).
+  **Límite**: el `write_file` de deepagents IGNORA `append` y sobrescribe con el trozo (medido); no se protege.
 
 ## Ver, memoria y compactación
 

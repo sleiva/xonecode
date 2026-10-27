@@ -9975,3 +9975,20 @@ y dos el `PLAN.md` (41 K). Todo eso se queda en la ventana el resto del turno: c
   FORMA, no por entropía (un GUID o un hash son datos de soporte). Límites: el checkpoint de SQLite, un fichero de más de
   `TOPE_PARA_TAPAR`, un texto que no es UTF-8 y un secreto sin nombre al lado viajan sin tapar; el aviso solo en la web.
 - **Lo que no es código:** cuánto pesa Opus como developer externo en Busme hay que mirarlo en la facturación.
+
+## Planes por fase y `append` (27-10-2026)
+
+Medido en Maset: el analista mandó el `TASKS.md` de `fase2-d365` entero en un `write_file`, 30 veces, cada una cortada
+en el tope de salida. Los pasos 1–3 de esta tanda paran el bucle; esto quita la causa.
+
+- **`write_file` con `append: true`** (TrueForge, `core/anadirAFichero.ts`): añade al final, crea si no existe, y solo
+  para documentos (`.md`, `/planes/`, `/doc/`): en un `.xne` daría un XML con dos raíces. `edit_file` ya podía añadir,
+  pero con un ancla copiada exacta del final del fichero. Lo que se valida (`motivoDeTasksInaceptable`) y lo que enseña
+  la tarjeta de aprobación es el fichero RESULTANTE. Dos `append` en paralelo al mismo fichero se pisaban (leer y
+  escribir; la cola del backend solo cubre el `write`): van en su propia cola, y el test falla sin ella.
+- **El `TASKS.md` se escribe por FASES dentro del mismo fichero**, no como un índice con un fichero por fase: el parser,
+  la pestaña Planes, `marcar_criterios_del_plan` y el resumen de planes abiertos leen UN `TASKS.md`, y un `## Fase N`
+  entre tareas ya lo entienden (test). Para un desarrollo de más de unas quince tareas, un PLAN por fase.
+- La nota del corte propone `append` para un documento y `edit_file` para el código.
+- **Límite**: el `write_file` de deepagents ignora `append` y sobrescribe con el trozo (medido con su tool real). No se
+  protege: solo se usa TrueForge.

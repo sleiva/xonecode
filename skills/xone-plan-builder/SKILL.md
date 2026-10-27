@@ -151,7 +151,7 @@ Pregunta al usuario:
 - ¿Las dependencias son correctas —cada tarea solo depende de las que genuinamente la bloquean?
 - ¿Falta fusionar o partir alguna?
 
-Itera hasta que el usuario apruebe el desglose. Luego escribe `TASKS.md`.
+Itera hasta que el usuario apruebe el desglose. Luego escribe `TASKS.md`, por fases (ver «Escribirlo por FASES»).
 
 ## TASKS.md
 
@@ -188,6 +188,23 @@ Ver [TASKS-FORMAT.md](references/TASKS-FORMAT.md) para la plantilla completa. Re
 
 {si aplica: qué conjunto de tareas forma un hito comprobable en el aparato}
 ```
+
+## Escribirlo por FASES, nunca de una vez
+
+Un `TASKS.md` entero en una sola llamada puede no caber en una respuesta: se corta a medias y no se escribe nada.
+Medido en un proyecto real: treinta intentos del mismo plan, todos cortados. Así que se escribe por partes:
+
+1. **Primera llamada:** `write_file` con la cabecera y las tareas de la PRIMERA fase (hasta su primer hito).
+2. **Una llamada por fase siguiente:** `write_file` con `append: true` y solo las tareas de esa fase, bajo un
+   `## Fase N — {nombre}`. Si tu `write_file` no admite `append`, añade al final con `edit_file`.
+3. **Última llamada:** `append` con `## Orden de ejecución`, `## Hitos` y `## Hallazgos` (vacía).
+
+Cada llamada, como mucho unas ocho tareas. Cada parte tiene que valer por sí misma: tareas enteras, con sus casillas
+(un `TASKS.md` con una tarea sin `- [ ]` no se escribe).
+
+**Si el desarrollo pasa de unas quince tareas, un PLAN por fase** (`/planes/<nombre>-fase1/`, `-fase2/`…), cada uno
+con su `PLAN.md` y su `TASKS.md`, y la siguiente fase dependiendo del hito que cierra la anterior. Un plan enorme se
+relee entero cada vez que alguien lo retoma.
 
 ## Reglas
 

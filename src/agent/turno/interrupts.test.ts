@@ -64,6 +64,17 @@ describe("cambioDe", () => {
     return (ruta) => contenido[ruta] ?? "";
   }
 
+  it("write_file con append enseña SOLO lo añadido: lo de antes sigue, no sale como borrado", () => {
+    const vista = cambioDe(
+      pendiente({ args: { file_path: "/doc/M.md", content: "## Uso\n", append: true } }),
+      disco({ "/doc/M.md": "# Manual" })
+    );
+    expect(vista?.lineas).toEqual([
+      { tipo: "igual", texto: "# Manual" },
+      { tipo: "anadido", texto: "## Uso" },
+    ]);
+  });
+
   it("write_file sobre un fichero EXISTENTE difa disco contra el contenido nuevo", () => {
     const vista = cambioDe(
       pendiente({ args: { file_path: "app.xml", content: "<app>\nnuevo\n</app>" } }),

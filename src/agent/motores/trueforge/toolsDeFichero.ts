@@ -24,7 +24,8 @@ import { NOMBRE_DESCRIBIR_IMAGEN } from "../../grafo/describirImagen.js";
 import { posix } from "node:path";
 import micromatch from "micromatch";
 import { toolResultResponse } from "./trueforge.js";
-import { REGLA_DE_ESCRITURAS_EN_PARALELO } from "../../../core/serieDeEscrituras.js";
+import { crearSerieDeEscrituras, REGLA_DE_ESCRITURAS_EN_PARALELO } from "../../../core/serieDeEscrituras.js";
+import { admiteAnadir, conTrozoAnadido } from "../../../core/anadirAFichero.js";
 import { desalojarSiGrande, MAXIMO_DE_COINCIDENCIAS, truncarSiLargo } from "./recortes.js";
 import { motivoDeTasksInaceptable, RUTA_DE_TASKS } from "../../../core/tareasDelPlan.js";
 import { motivoDeComandoRechazado, motivoDeOtroAparato } from "../../../core/shellDeAgente.js";
@@ -75,8 +76,12 @@ const ESQUEMAS: Record<ToolDeFichero, { descripcion: string; propiedades: Record
     obligatorias: ["file_path"],
   },
   write_file: {
-    descripcion: `Writes a NEW file with the given content. An existing .xne, .js or .css is refused: change it with edit_file. ${REGLA_DE_ESCRITURAS_EN_PARALELO}`,
-    propiedades: { file_path: cadena, content: cadena },
+    descripcion:
+      "Writes a NEW file with the given content. An existing .xne, .js or .css is refused: change it with edit_file. " +
+      "With append: true the content is ADDED at the end of the file (created if missing), only for documents (a .md, " +
+      "or anything under /planes/ or /doc/): write a LONG document in parts —the first part, then one append per section " +
+      `or phase— so no single call gets near your output limit. ${REGLA_DE_ESCRITURAS_EN_PARALELO}`,
+    propiedades: { file_path: cadena, content: cadena, append: { type: "boolean" } },
     obligatorias: ["file_path", "content"],
   },
   edit_file: {
@@ -169,6 +174,23 @@ export function textoDeReescrituraRechazada(ruta: string): string {
 }
 
 /** ¿Existe ya? Se pregunta al MISMO backend, con una lectura de una línea: un error es que no (y si era otra cosa, la escritura lo dirá). */
+/**
+ * Los `append` a un mismo fichero, de uno en uno: son leer-y-escribir, y dos en paralelo leerían el mismo «antes» y el
+ * segundo borraría el trozo del primero (`core/serieDeEscrituras.ts`). La cola del backend no basta: protege cada
+ * `write`, no la lectura de antes.
+ */
+const anadidosEnSerie = crearSerieDeEscrituras();
+
+/** El contenido ENTERO de un fichero, o `""` si no existe. */
+async function contenidoDe(backend: BackendDeFicheros, ruta: string): Promise<string> {
+  try {
+    const r = (await backend.read(ruta, 0, Number.MAX_SAFE_INTEGER)) as Resultado & { content?: unknown };
+    return r.error === undefined && typeof r.content === "string" ? r.content : "";
+  } catch {
+    return "";
+  }
+}
+
 async function existe(backend: BackendDeFicheros, ruta: string): Promise<boolean> {
   try {
     const r = (await backend.read(ruta, 0, 1)) as Resultado;
@@ -234,17 +256,35 @@ async function ejecutar(
       return { texto: lecturaAcotada(r.content, offset + 1), error: false };
     }
     case "write_file": {
-      if (seReescribeConEdit(s(args.file_path)) && (await existe(backend, s(args.file_path)))) {
+      const anadir = args.append === true;
+      if (anadir && !admiteAnadir(s(args.file_path))) {
+        return {
+          texto: `append solo vale para documentos (un .md, o lo que hay en /planes/ o /doc/), y ${s(args.file_path)} no lo es: cámbialo con edit_file.`,
+          error: true,
+        };
+      }
+      if (!anadir && seReescribeConEdit(s(args.file_path)) && (await existe(backend, s(args.file_path)))) {
         return { texto: textoDeReescrituraRechazada(s(args.file_path)), error: true };
       }
-      // Un TASKS.md sin casillas no se escribe: sin ellas no hay nada que marcar al comprobar (`motivoDeTasksInaceptable`).
-      if (RUTA_DE_TASKS.test(s(args.file_path))) {
-        const motivo = motivoDeTasksInaceptable(s(args.content));
-        if (motivo !== undefined) return { texto: motivo, error: true };
-      }
-      const r = (await backend.write(s(args.file_path), s(args.content))) as Resultado;
-      if (r.error !== undefined) return { texto: r.error, error: true };
-      return { texto: `Successfully wrote to ${s(args.file_path)}`, error: false };
+      // Con `append`, lo que se escribe es lo que había MÁS el trozo, y es eso lo que se valida y se aprueba.
+      const escribir = async (): Promise<{ texto: string; error: boolean } | string> => {
+        const contenido = anadir ? conTrozoAnadido(await contenidoDe(backend, s(args.file_path)), s(args.content)) : s(args.content);
+        // Un TASKS.md sin casillas no se escribe: sin ellas no hay nada que marcar al comprobar (`motivoDeTasksInaceptable`).
+        if (RUTA_DE_TASKS.test(s(args.file_path))) {
+          const motivo = motivoDeTasksInaceptable(contenido);
+          if (motivo !== undefined) return { texto: motivo, error: true };
+        }
+        const r = (await backend.write(s(args.file_path), contenido)) as Resultado;
+        if (r.error !== undefined) return { texto: r.error, error: true };
+        return contenido;
+      };
+      const hecho = anadir ? await anadidosEnSerie(s(args.file_path), escribir) : await escribir();
+      if (typeof hecho !== "string") return hecho;
+      const contenido = hecho;
+      return {
+        texto: anadir ? `Successfully appended to ${s(args.file_path)} (${contenido.split("\n").length} lines now)` : `Successfully wrote to ${s(args.file_path)}`,
+        error: false,
+      };
     }
     case "edit_file": {
       const r = (await backend.edit(s(args.file_path), s(args.old_string), s(args.new_string), args.replace_all === true)) as Resultado & {

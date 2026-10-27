@@ -291,3 +291,13 @@ describe("dónde está la ficha de cada tarea", () => {
     expect([t2!.linea, t2!.lineas]).toEqual([5, 2]);
   });
 });
+
+describe("un TASKS.md escrito por FASES (xone-plan-builder)", () => {
+  it("los `## Fase N` entre tareas no son tareas ni se meten en la ficha de la anterior", () => {
+    const texto = "# P\n\n## Fase 1 — Base\n\n### 01 — Uno\n- [ ] a\n\n## Fase 2 — Pantallas\n\n### 02 — Dos\n**Bloqueada por:** 01\n- [ ] b\n\n## Hitos\nnada\n";
+    const { tareas } = leerTareasDelPlan(texto);
+    expect(tareas.map((t) => [t.numero, t.bloqueadaPor, t.criterios.total])).toEqual([["01", [], 1], ["02", ["01"], 1]]);
+    expect(tareas[0]!.cuerpo).not.toContain("Fase 2");
+    expect(tareas[1]!.cuerpo).not.toContain("Hitos");
+  });
+});

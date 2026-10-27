@@ -59,8 +59,9 @@ function notaDelCorte(tool: string, argumentos: string, salida: number): string 
   return (
     `[Cortada por el TOPE DE SALIDA] Tu respuesta llegó al máximo de tokens de salida${salida > 0 ? ` (${salida})` : ""} ` +
     `en mitad de esta llamada a \`${tool}\`${ruta === undefined ? "" : ` sobre \`${ruta}\``}: sus argumentos llegaron incompletos ` +
-    "y NO se ha ejecutado. No la repitas igual: volvería a cortarse. Parte el trabajo en piezas más pequeñas: crea el " +
-    "fichero con una parte corta y añade el resto con `edit_file` en varias llamadas, o reparte el contenido en varios ficheros."
+    "y NO se ha ejecutado. No la repitas igual: volvería a cortarse. Parte el trabajo en piezas más pequeñas: un " +
+    "documento largo (un .md, un plan, /doc/) se escribe por partes —la primera con `write_file` y cada sección o fase " +
+    "siguiente con `write_file` y `append: true`—; el código, con varios `edit_file`, o repartido en varios ficheros."
   );
 }
 
@@ -69,7 +70,7 @@ function textoDelParoPorCortes(ruta: string | undefined): string {
   return (
     `No he podido terminar: ${CORTES_SEGUIDOS_ANTES_DE_PARAR} respuestas seguidas se cortaron al llegar al máximo de ` +
     `salida${ruta === undefined ? "" : ` intentando escribir \`${ruta}\``}, y no se aplicó ninguna. Hay que partir ese ` +
-    "trabajo en piezas más pequeñas (por ejemplo, un fichero por fase) y volver a pedirlo."
+    "trabajo en piezas más pequeñas (un documento, por partes con `append`; un plan, una fase por llamada) y volver a pedirlo."
   );
 }
 

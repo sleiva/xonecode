@@ -129,6 +129,47 @@ describe("las tools de fichero de TrueForge, sobre el backend real", () => {
     expect(await llamar("write_file", { file_path: "/planes/demo/TASKS.md", content: "### 01 — Uno\n- [ ] el display dice 14\n" })).toMatchObject({ error: false });
   });
 
+  describe("write_file con append: un documento largo por partes (Maset, 27-10-2026)", () => {
+    const TASKS = (n: number) => `### ${String(n).padStart(2, "0")} — Tarea ${n}\n- [ ] criterio ${n}\n`;
+    const leer = (raiz: string) => readFileSync(join(raiz, ".xonecode", "planes", "fase2", "TASKS.md"), "utf8");
+
+    it("la primera parte crea, cada append añade al final, y el TASKS.md se valida ENTERO", async () => {
+      const { raiz, llamar } = proyecto();
+      expect(await llamar("write_file", { file_path: "/planes/fase2/TASKS.md", content: `# Fase 2\n\n${TASKS(1)}`, append: true })).toMatchObject({ error: false });
+      const r = await llamar("write_file", { file_path: "/planes/fase2/TASKS.md", content: TASKS(2), append: true });
+      expect(r).toMatchObject({ error: false, texto: expect.stringContaining("Successfully appended") });
+      expect(leer(raiz)).toBe(`# Fase 2\n\n${TASKS(1)}${TASKS(2)}`);
+      // Una parte con una tarea sin casillas tumba el resultado entero, y el fichero se queda como estaba.
+      const malo = await llamar("write_file", { file_path: "/planes/fase2/TASKS.md", content: "### 03 — Sin casillas\n- texto\n", append: true });
+      expect(malo.error).toBe(true);
+      expect(malo.texto).toContain("03");
+      expect(leer(raiz)).toBe(`# Fase 2\n\n${TASKS(1)}${TASKS(2)}`);
+    });
+
+    it("lo que había sin salto final no se pega a la línea siguiente", async () => {
+      const { raiz, llamar } = proyecto();
+      await llamar("write_file", { file_path: "/doc/MANUAL.md", content: "# Manual" });
+      await llamar("write_file", { file_path: "/doc/MANUAL.md", content: "## Uso\n", append: true });
+      expect(readFileSync(join(raiz, "doc", "MANUAL.md"), "utf8")).toBe("# Manual\n## Uso\n");
+    });
+
+    it("solo para documentos: un .xne se cambia con edit_file", async () => {
+      const { raiz, llamar } = proyecto();
+      const r = await llamar("write_file", { file_path: "/Clientes.xne", content: "<coll/>", append: true });
+      expect(r.error).toBe(true);
+      expect(r.texto).toContain("edit_file");
+      expect(readFileSync(join(raiz, "Clientes.xne"), "utf8")).toBe('<coll name="Clientes"/>\n');
+    });
+
+    it("cuatro append en PARALELO al mismo fichero: los cuatro trozos quedan", async () => {
+      const { raiz, llamar } = proyecto();
+      await llamar("write_file", { file_path: "/planes/fase2/TASKS.md", content: TASKS(1) });
+      const r = await Promise.all([2, 3, 4, 5].map((n) => llamar("write_file", { file_path: "/planes/fase2/TASKS.md", content: TASKS(n), append: true })));
+      expect(r.every((x) => !x.error)).toBe(true);
+      for (const n of [1, 2, 3, 4, 5]) expect(leer(raiz)).toContain(`criterio ${n}`);
+    });
+  });
+
   it("un rechazo se DEVUELVE como error y no se lanza", async () => {
     const { llamar } = proyecto();
     await expect(llamar("edit_file", { file_path: "/app.xml", old_string: "no-está", new_string: "x" })).resolves.toMatchObject({ error: true });
