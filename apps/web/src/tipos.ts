@@ -1109,6 +1109,11 @@ export type MensajeAlCliente =
       origenDeDispositivos?: "granja";
       /** La copia de la granja que tiene ahora la sesión («Pixel 3 · copia 1»). Ausente = ninguna. */
       copiaDeGranja?: string;
+      /**
+       * Lo que dice el proyecto abierto del aparato de sus tareas y chats nuevos (Ejecutar → «Tareas en background»).
+       * Dentro, los dos ausentes = como el global. Ausente entero = no se pinta el control.
+       */
+      aparatoDelProyecto?: { origen?: "local" | "granja"; dispositivo?: DispositivoElegido };
       /** La sesión abierta es una relectura y el agente no la recuerda. Ausente = no. */
       historica?: boolean;
       /**
@@ -1260,8 +1265,6 @@ export interface FotoDelResumen {
   /** El modo con que nacen las sesiones nuevas de este proyecto (IXCODE-31). Presente solo con
    *  copia; `proyecto` ausente dentro = «como el global». */
   modoDeEscritura?: { proyecto?: ModoDeEscritura };
-  /** El origen de los aparatos que dice ESTE proyecto; dentro, ausente = «como el global». Ausente el campo = no se pinta. */
-  origenDeDispositivos?: { proyecto?: "local" | "granja" };
 }
 
 /**
@@ -1556,12 +1559,14 @@ export type MensajeDelCliente =
   /** Fijar —o quitar, sin `modo`— el modo de las sesiones nuevas del proyecto (IXCODE-31): 200
    *  con `{ proyecto? }`, 409 con `{ motivo }`. */
   | { clase: "copiaLocal"; accion: "modoDeEscritura"; proyecto: string; modo?: ModoDeEscritura }
-  /** El origen de los aparatos de un proyecto (panel → Resumen). Sin `origen` se quita: manda el global. */
-  | { clase: "copiaLocal"; accion: "origenDeDispositivos"; proyecto: string; origen?: "local" | "granja" }
   /** Fijar el modo de las sesiones nuevas en cualquier proyecto (Ajustes > General). */
   | { clase: "modoPorDefecto"; modo: ModoDeEscritura }
   /** Fijar —o quitar, sin `id`— el aparato de las sesiones nuevas (IXCODE-51). Solo el ID. */
   | { clase: "dispositivoPorDefecto"; id?: string }
+  /** El aparato de las tareas del proyecto abierto (Ejecutar): sin `id`, como el global; `granja`; o un aparato de este equipo. */
+  | { clase: "aparatoDeTareas"; id?: string }
+  /** En qué aparato de ESTE equipo lanza la pestaña Ejecutar. No toca la pastilla. */
+  | { clase: "aparatoDeEjecutar"; id: string }
   /** LEER una conversación sin abrirle consola (IXCODE-36): 200 con `{actos}`, o 409 con `{motivo}`. */
   | { clase: "leerSesion"; proyecto: string; sesion: string }
   /** La pestaña Soporte: chats y tareas del proyecto con su análisis previo. */

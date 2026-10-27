@@ -77,7 +77,7 @@ function etiquetas(parcial: Partial<EntradaDeVeredicto>): string[] {
  * La segunda mitad es lo que impide un miembro muerto. El `switch` de `motivoDeBloqueo` es
  * exhaustivo, así que una causa nueva no compila hasta que tenga frase — pero nada obliga a que
  * alguien la EMITA, y una causa que nadie emite es una regla escrita y muerta: una frase que
- * ninguna pantalla va a enseñar nunca. Las doce se producen con una entrada posible; el día que
+ * ninguna pantalla va a enseñar nunca. Las trece se producen con una entrada posible; el día que
  * una no se pueda, el sitio para decirlo es una nota aquí, no una entrada inventada.
  */
 const CAUSAS_CON_EJEMPLO: { causa: CausaDeBloqueo; entrada: Partial<EntradaDeVeredicto> }[] = [
@@ -85,6 +85,10 @@ const CAUSAS_CON_EJEMPLO: { causa: CausaDeBloqueo; entrada: Partial<EntradaDeVer
   {
     causa: { causa: "dispositivo-desconocido" },
     entrada: { dispositivo: undefined, framework: undefined, elegido: "emulator-5554" },
+  },
+  {
+    causa: { causa: "ninguno-a-mano" },
+    entrada: { dispositivo: undefined, framework: undefined, soloEsteEquipo: true, elegido: "granja" },
   },
   {
     causa: { causa: "granja-sin-configurar" },
@@ -410,7 +414,7 @@ describe("puedeLanzarse", () => {
 
 describe("motivoDeBloqueo: una frase por causa, y cada una dice dónde se arregla", () => {
   it("la lista de arriba cubre cada causa una vez (si añades una, añádela aquí)", () => {
-    expect(CAUSAS_CON_EJEMPLO).toHaveLength(12);
+    expect(CAUSAS_CON_EJEMPLO).toHaveLength(13);
     expect(new Set(CAUSAS_CON_EJEMPLO.map((c) => c.causa.causa)).size).toBe(CAUSAS_CON_EJEMPLO.length);
   });
 

@@ -554,6 +554,8 @@ export interface EstadoDelCliente {
     origenDeDispositivos?: "granja";
     /** La copia de la granja que tiene ahora la sesión. Ausente = ninguna cogida. */
     copiaDeGranja?: string;
+    /** Lo que dice el proyecto abierto del aparato de sus tareas. Ausente = no se pinta el control; `{}` = como el global. */
+    aparatoDelProyecto?: { origen?: "local" | "granja"; dispositivo?: DispositivoElegido };
     /** La sesión abierta es una relectura que el agente no recuerda. Ausente = no. */
     historica?: boolean;
     /** El modo de escritura de la sesión abierta. Ausente = no hay sesión, y entonces la
@@ -2494,6 +2496,7 @@ export function crearStoreDelCliente(): {
             dispositivoActivo?: unknown;
             origenDeDispositivos?: unknown;
             copiaDeGranja?: unknown;
+            aparatoDelProyecto?: unknown;
             historica?: unknown;
             modoDeEscritura?: unknown;
             trabajoAlAbrir?: unknown;
@@ -2655,6 +2658,18 @@ export function crearStoreDelCliente(): {
               ...(esDispositivoElegido(m.dispositivoActivo) ? { dispositivoActivo: m.dispositivoActivo } : {}),
               ...(m.origenDeDispositivos === "granja" ? { origenDeDispositivos: "granja" as const } : {}),
               ...(typeof m.copiaDeGranja === "string" && m.copiaDeGranja !== "" ? { copiaDeGranja: m.copiaDeGranja } : {}),
+              ...((): { aparatoDelProyecto?: { origen?: "local" | "granja"; dispositivo?: DispositivoElegido } } => {
+                // Campo a campo: un origen desconocido no se pinta, y un aparato de la granja aquí está roto.
+                const a = m.aparatoDelProyecto as { origen?: unknown; dispositivo?: unknown } | null | undefined;
+                if (typeof a !== "object" || a === null) return {};
+                const d = esDispositivoElegido(a.dispositivo) && a.dispositivo.clase !== "granja" ? a.dispositivo : undefined;
+                return {
+                  aparatoDelProyecto: {
+                    ...(a.origen === "local" || a.origen === "granja" ? { origen: a.origen } : {}),
+                    ...(d === undefined ? {} : { dispositivo: d }),
+                  },
+                };
+              })(),
               // Solo si es exactamente `true`: es una afirmación sobre lo que el agente NO
               // recuerda, y cualquier otra cosa se lee como «no».
               ...(m.historica === true ? { historica: true } : {}),

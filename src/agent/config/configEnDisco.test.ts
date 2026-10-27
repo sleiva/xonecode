@@ -39,6 +39,8 @@ import {
   guardarConectoresDeProyecto,
   guardarModoDeEscrituraDeProyecto,
   guardarOrigenDeDispositivosDeProyecto,
+  aparatoDelProyecto,
+  guardarAparatoDelProyecto,
   origenDeDispositivosDelProyecto,
   guardarGestorDeProyecto,
   guardarCloudStudioDeProyecto,
@@ -471,5 +473,22 @@ it("guardarOrigenDeDispositivosDeProyecto escribe granja o local, undefined la q
   guardarOrigenDeDispositivosDeProyecto(p, undefined);
   expect(JSON.parse(readFileSync(ruta, "utf8"))).toEqual({ tema: "xone" });
   expect(origenDeDispositivosDelProyecto(p)).toBeUndefined();
+  rmSync(p, { recursive: true, force: true });
+});
+
+it("guardarAparatoDelProyecto: un aparato pone origen local y el aparato; granja conserva el aparato; global quita los dos", () => {
+  const p = mkdtempSync(join(tmpdir(), "xc-cfg-"));
+  const ruta = rutaConfigDeProyecto(p);
+  mkdirSync(join(p, NOMBRE_CARPETA), { recursive: true });
+  writeFileSync(ruta, JSON.stringify({ tema: "xone" }));
+  const emu = { id: "emulator-5554", nombre: "pixel8", plataforma: "android" as const, clase: "emulador" as const };
+
+  expect(aparatoDelProyecto(p)).toEqual({});
+  expect(guardarAparatoDelProyecto(p, emu)).toEqual({ origen: "local", dispositivo: emu });
+  expect(JSON.parse(readFileSync(ruta, "utf8"))).toEqual({ tema: "xone", origenDeDispositivos: "local", dispositivoPorDefecto: emu });
+  expect(guardarAparatoDelProyecto(p, "granja")).toEqual({ origen: "granja", dispositivo: emu });
+  expect(origenDeDispositivosDelProyecto(p)).toBe("granja");
+  expect(guardarAparatoDelProyecto(p, "global")).toEqual({});
+  expect(JSON.parse(readFileSync(ruta, "utf8"))).toEqual({ tema: "xone" });
   rmSync(p, { recursive: true, force: true });
 });

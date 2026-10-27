@@ -733,6 +733,24 @@ describe("vestíbulo", () => {
       await v.cerrar();
     });
 
+    it("una sesión nueva nace con el aparato del PROYECTO si lo dice, si no con el global; una reabierta, con el suyo", async () => {
+      const EMU = { id: "emulator-5554", nombre: "pixel8", plataforma: "android" as const, clase: "emulador" as const };
+      const s = sesionesEnMemoria();
+      const v = crearVestibulo({
+        ...dobles(),
+        origenDeTrabajo: "global",
+        sesiones: s.puerto,
+        dispositivoPorDefecto: () => MOVIL,
+        dispositivoDelProyecto: (raiz) => (raiz === "/w/con" ? EMU : undefined),
+      });
+      expect((await v.abrirProyecto({ raiz: "/w/con" })).dispositivo).toEqual(EMU);
+      expect((await v.abrirProyecto({ raiz: "/w/sin" })).dispositivo).toEqual(MOVIL);
+      const id = s.puerto.crear("/w/con");
+      s.puerto.elegirDispositivo?.("/w/con", id, MOVIL);
+      expect((await v.abrirProyecto({ raiz: "/w/con", sesion: id })).dispositivo).toEqual(MOVIL);
+      await v.cerrar();
+    });
+
     it("una REABIERTA con un Android de este equipo pasa a la granja si su proyecto ya la usa", async () => {
       const s = sesionesEnMemoria();
       const v = crearVestibulo({ ...dobles(), origenDeTrabajo: "global", sesiones: s.puerto, origenDeDispositivos: () => "granja" });

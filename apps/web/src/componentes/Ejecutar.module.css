@@ -6,13 +6,87 @@
    y `VerificarDispositivo.module.css` — el vocabulario de esta hoja es el de esas dos.
    Ningún color literal (`Barra.test.tsx` recorre TODOS los `.module.css` de aquí). */
 
-.panel {
+/* Dos columnas (opción B de su lienzo): «Ahora», en este equipo, y «Tareas en background», con la granja. Se apilan
+   cuando no caben dos de 320 px: el panel lateral es estrecho. */
+.columnas {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  align-items: start;
+  gap: 20px;
+  padding: 16px 20px;
+  overflow-y: auto;
+}
+
+.columna {
   display: flex;
   flex-direction: column;
   gap: 14px;
-  padding: 16px 20px;
-  max-width: 72ch;
-  overflow-y: auto;
+  min-width: 0;
+  padding: 16px 18px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 12px;
+}
+
+.tituloDeColumna {
+  margin: 0;
+  color: var(--dsw-alias-label-primary);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* Una opción de «Tareas en background»: nombre y detalle a la izquierda, su estado a la derecha. El elegido, con el
+   mismo par de tokens que el aparato elegido de la izquierda. */
+.opcion {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 10px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.opcion:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.opcion:disabled {
+  cursor: default;
+}
+
+.opcion[aria-checked="true"] {
+  border-color: var(--xonecode-cian);
+  background: var(--xonecode-fila-elegida);
+  color: var(--dsw-alias-label-primary);
+}
+
+.textoDeOpcion {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.grupo {
+  padding: 6px 2px 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.negativa {
+  margin: 0;
+  color: var(--dsw-alias-state-error-primary);
+  font-size: 12px;
 }
 
 /* El «consultando…» y los estados vacíos. Mismo trazo que `CloudStudio.module.css#.aviso`:

@@ -229,6 +229,17 @@ describe("validar", () => {
     expect(avisos[0]!.texto).toMatch(/Ajustes/);
   });
 
+  it("dispositivoPorDefecto: un aparato de este equipo en el proyecto vale; la granja o en el global se descarta diciéndolo", () => {
+    const emu = { id: "emulator-5554", nombre: "pixel8", plataforma: "android", clase: "emulador" };
+    expect(validar({ dispositivoPorDefecto: emu }, RUTA, "proyecto")).toEqual({ config: { dispositivoPorDefecto: emu }, avisos: [] });
+    const granja = validar({ dispositivoPorDefecto: { id: "granja", nombre: "Granja", plataforma: "android", clase: "granja" } }, RUTA, "proyecto");
+    expect(granja.config).toEqual({});
+    expect(granja.avisos[0]!.texto).toMatch(/aparato de este equipo/);
+    const global = validar({ dispositivoPorDefecto: emu }, RUTA, "global");
+    expect(global.config).toEqual({});
+    expect(global.avisos[0]!.texto).toMatch(/Ajustes → General/);
+  });
+
   it("origenDeDispositivos: granja en el proyecto vale; desconocido o en el global se descarta diciéndolo", () => {
     expect(validar({ origenDeDispositivos: "granja" }, RUTA, "proyecto")).toEqual({ config: { origenDeDispositivos: "granja" }, avisos: [] });
     const raro = validar({ origenDeDispositivos: "nube" }, RUTA, "proyecto");

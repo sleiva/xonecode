@@ -102,14 +102,6 @@ export const MS_ENTRE_LECTURAS_DE_PLANES = 3000;
  * y en la respuesta de fijarlo. Lo que no se entiende es `undefined` —«no consta»—, nunca
  * «como el global», que es un dato.
  */
-/** Como `modoDelProyectoDe`, para el origen de los aparatos: `{}` = como el global; lo que no se entiende, nada. */
-function origenDelProyectoDe(valor: unknown): { proyecto?: "local" | "granja" } | undefined {
-  if (typeof valor !== "object" || valor === null) return undefined;
-  const proyecto = (valor as { proyecto?: unknown }).proyecto;
-  if (proyecto === undefined) return {};
-  return proyecto === "local" || proyecto === "granja" ? { proyecto } : undefined;
-}
-
 function modoDelProyectoDe(valor: unknown): { proyecto?: ModoDeEscritura } | undefined {
   if (typeof valor !== "object" || valor === null) return undefined;
   const proyecto = (valor as { proyecto?: unknown }).proyecto;
@@ -1083,9 +1075,20 @@ export function App({
     void enviar({ clase: "cancelarLanzamiento" });
   }, [enviar]);
 
+  // El aparato de la pestaña Ejecutar: uno de ESTE equipo, y elegirlo no toca la pastilla del chat (decisión suya).
   const elegirDispositivoDeEjecutar = useCallback(
     (id: string) => {
-      void enviar({ clase: "dispositivo", id });
+      void enviar({ clase: "aparatoDeEjecutar", id });
+    },
+    [enviar]
+  );
+
+  // «Tareas en background»: el aparato por defecto del proyecto abierto. La negativa la compone el servidor (409).
+  const elegirAparatoDeTareas = useCallback(
+    async (id: string | undefined): Promise<string | undefined> => {
+      const r = (await enviar({ clase: "aparatoDeTareas", ...(id === undefined ? {} : { id }) })) as Response | undefined;
+      if (r === undefined) return "no se pudo hablar con el servidor";
+      return r.ok ? undefined : ((await negativaDe(r)) ?? "el servidor no lo ha guardado");
     },
     [enviar]
   );
@@ -2192,39 +2195,19 @@ export function App({
     },
     // El global, para que el desplegable diga «Como el global (…)» con el valor de verdad.
     ...(estado.modoPorDefecto === undefined ? {} : { modoGlobal: estado.modoPorDefecto }),
-    // El origen de los aparatos del proyecto (la granja), con la MISMA costura que el modo.
-    alFijarOrigenDelProyecto: async (id: string, origen: "local" | "granja" | undefined) => {
-      const r = (await enviar({
-        clase: "copiaLocal",
-        accion: "origenDeDispositivos",
-        proyecto: id,
-        ...(origen === undefined ? {} : { origen }),
-      })) as Response | undefined;
-      if (r === undefined) return { motivo: "no se pudo hablar con el servidor" };
-      if (!r.ok) return { motivo: (await negativaDe(r)) ?? "el servidor no lo ha guardado" };
-      try {
-        return { guardado: origenDelProyectoDe(await r.json()) ?? {} };
-      } catch {
-        return { motivo: "el servidor contestó algo que no se entiende" };
-      }
-    },
-    // El global: la granja si el aparato por omisión de Ajustes → General es la granja.
-    origenGlobal: estado.dispositivoPorDefecto?.elegido?.clase === "granja" ? ("granja" as const) : ("local" as const),
     alPedirResumen: async (id) => {
       const r = (await enviar({ clase: "copiaLocal", accion: "resumen", proyecto: id })) as Response | undefined;
       if (r === undefined || !r.ok) return undefined;
       try {
-        const cuerpo = (await r.json()) as { tareas?: unknown; sync?: unknown; modoDeEscritura?: unknown; origenDeDispositivos?: unknown };
+        const cuerpo = (await r.json()) as { tareas?: unknown; sync?: unknown; modoDeEscritura?: unknown };
         if (!Array.isArray(cuerpo.tareas) || !cuerpo.tareas.every((t) => typeof t === "string")) return undefined;
         const modo = modoDelProyectoDe(cuerpo.modoDeEscritura);
-        const origen = origenDelProyectoDe(cuerpo.origenDeDispositivos);
         return {
           tareas: cuerpo.tareas as string[],
           ...(typeof cuerpo.sync === "object" && cuerpo.sync !== null
             ? { sync: cuerpo.sync as NonNullable<FotoDelResumen["sync"]> }
             : {}),
           ...(modo === undefined ? {} : { modoDeEscritura: modo }),
-          ...(origen === undefined ? {} : { origenDeDispositivos: origen }),
         };
       } catch {
         return undefined;
@@ -2984,9 +2967,6 @@ export function App({
       // Y que vuelva a medir al entrar: la foto puede ser de hace rato, y esta
       // pestaña decide con ella en qué aparato se lanza la app.
       alActualizarDispositivos={actualizarDispositivos}
-      // El dispositivo de la sesión: la MISMA fuente que la pastilla del compositor,
-      // que es donde se elige y donde este botón va a caer.
-      elegido={estado.alta?.dispositivoActivo}
       conectado={estado.conectado}
       alRevisar={revisarLanzamiento}
       alLanzar={lanzarApp}
@@ -2994,6 +2974,18 @@ export function App({
       alCopiarModificados={copiarModificados}
       alCancelar={cancelarLanzamiento}
       alElegirDispositivo={elegirDispositivoDeEjecutar}
+      {...(estado.alta?.aparatoDelProyecto === undefined
+        ? {}
+        : {
+            tareas: {
+              guardado: estado.alta.aparatoDelProyecto,
+              ...(estado.dispositivoPorDefecto?.elegido === undefined ? {} : { global: estado.dispositivoPorDefecto.elegido }),
+              ...(estado.granja === undefined
+                ? {}
+                : { granja: estado.granja.direccion !== undefined && estado.granja.hayToken ? ("configurada" as const) : ("sin-configurar" as const) }),
+              alElegir: elegirAparatoDeTareas,
+            },
+          })}
       // Qué teléfono está usando una tarea (IXCODE-58): lanzar encima le pisaría las capturas.
       {...(estado.enUsoDeDispositivos === undefined ? {} : { enUso: estado.enUsoDeDispositivos })}
       framework={{

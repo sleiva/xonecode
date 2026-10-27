@@ -983,6 +983,15 @@ export type MensajeAlCliente =
       /** La copia de la granja que tiene ahora la sesión abierta («Pixel 3 · copia 1»). Ausente = ninguna cogida. */
       copiaDeGranja?: string;
       /**
+       * Lo que dice el proyecto ABIERTO del aparato de sus tareas y chats nuevos (pestaña Ejecutar → «Tareas en
+       * background»): su origen y, con «este equipo», el aparato concreto. Dentro, los dos ausentes = como el global.
+       * Ausente entero = no hay proyecto con copia abierto, o esta ejecución no lo guarda: el control no se pinta.
+       */
+      aparatoDelProyecto?: {
+        origen?: OrigenDeDispositivos;
+        dispositivo?: { id: string; nombre: string; plataforma: "android" | "ios"; clase: "emulador" | "simulador" | "fisico" | "granja" };
+      };
+      /**
        * La sesión abierta es una RELECTURA: se reabrió y del hilo no queda memoria
        * (`ConsolaDeProyecto.historica`, que lo PREGUNTA al checkpointer del proyecto en vez
        * de darlo por hecho — una sesión con checkpoint continúa y no lleva esta marca; la
@@ -1266,11 +1275,6 @@ export interface FotoDelResumen {
    * «como el global», que no es lo mismo que no saberlo.
    */
   modoDeEscritura?: { proyecto?: "supervisado" | "autonomo" };
-  /**
-   * El origen de los aparatos que dice ESTE proyecto (`config.json#origenDeDispositivos`); dentro, ausente es
-   * «como el global». Solo con copia y con la granja montada: si no, el campo no viaja y el control no se pinta.
-   */
-  origenDeDispositivos?: { proyecto?: OrigenDeDispositivos };
 }
 
 export interface EstadoDeSync {
@@ -1595,13 +1599,21 @@ export type MensajeDelCliente =
    *  (IXCODE-31). 200 con `{ proyecto? }`, 409 con `{ motivo }` sin copia o con un id ajeno, y
    *  400 con un modo que no existe. Mismo trato que `resumen`: el ID, nunca una ruta. */
   | { clase: "copiaLocal"; accion: "modoDeEscritura"; proyecto: string; modo?: "supervisado" | "autonomo" }
-  /** El origen de los aparatos de un proyecto (panel → Resumen). Sin `origen` se QUITA: manda el global. */
-  | { clase: "copiaLocal"; accion: "origenDeDispositivos"; proyecto: string; origen?: OrigenDeDispositivos }
   /** Fijar el modo con que nacen las sesiones nuevas en cualquier proyecto (Ajustes > General). */
   | { clase: "modoPorDefecto"; modo: "supervisado" | "autonomo" }
   /** Fijar —o quitar, sin `id`— el aparato de las sesiones nuevas (IXCODE-51). Solo el ID: el resto
    *  sale de la última MEDIDA, como en la pastilla. */
   | { clase: "dispositivoPorDefecto"; id?: string }
+  /**
+   * El aparato de las tareas (y de los chats nuevos) del proyecto ABIERTO, en la pestaña Ejecutar: sin `id`, como el
+   * global; `granja`, la granja; si no, el id de un aparato de este equipo, que se resuelve contra la última MEDIDA.
+   */
+  | { clase: "aparatoDeTareas"; id?: string }
+  /**
+   * En qué aparato de ESTE equipo lanza la pestaña Ejecutar. No toca la pastilla del chat. Solo el id: el resto sale de
+   * la medida, y un id que no esté a mano se ignora.
+   */
+  | { clase: "aparatoDeEjecutar"; id: string }
   /** LEER una conversación sin abrirle consola (IXCODE-36): 200 con `{actos}`, o 409 con `{motivo}`. */
   | { clase: "leerSesion"; proyecto: string; sesion: string }
   /** La pestaña Soporte: chats y tareas del proyecto con su análisis previo (`soporte.ts`). */
@@ -2128,7 +2140,8 @@ export type MensajeDelCliente =
    */
   | { clase: "revisarLanzamiento" }
   /**
-   * Lanza la app del proyecto abierto en el dispositivo de la sesión.
+   * Lanza la app del proyecto abierto en el aparato de la pestaña Ejecutar: uno de ESTE equipo, nunca la granja
+   * (`core/dispositivoElegido.ts#aparatoDeEjecutar`).
    *
    * **Sin datos tampoco, y aquí es la regla entera**: ni el dispositivo, ni el nombre de la app,
    * ni una ruta, ni siquiera el proyecto — los tres primeros son datos sobre la máquina y sobre

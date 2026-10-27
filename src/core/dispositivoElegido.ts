@@ -65,3 +65,38 @@ export function origenEnVigor(
 ): OrigenDeDispositivos {
   return delProyecto ?? (porDefecto?.clase === "granja" ? "granja" : "local");
 }
+
+/**
+ * El aparato en que lanza la pestaña Ejecutar: SOLO uno de este equipo que esté a mano (`conectado` o `arrancado`),
+ * nunca la granja —que no está en la medida—. Decisión suya: Ejecutar es «ahora, aquí», y la granja es para las
+ * tareas. Manda la primera preferencia que esté a mano —la que se eligió en la pestaña, luego el aparato de la
+ * sesión, el del proyecto y el global—; si ninguna lo está, el primero a mano. Elegirlo NO toca la pastilla.
+ */
+export function aparatoDeEjecutar<D extends { id: string; estado: string }>(
+  dispositivos: readonly D[] | undefined,
+  preferencias: readonly (string | undefined)[],
+): D | undefined {
+  const aMano = (dispositivos ?? []).filter((d) => d.estado === "conectado" || d.estado === "arrancado");
+  for (const id of preferencias) {
+    const d = id === undefined ? undefined : aMano.find((x) => x.id === id);
+    if (d !== undefined) return d;
+  }
+  return aMano[0];
+}
+
+/** Lo que dice un proyecto del aparato de sus tareas (y de sus chats nuevos). Los dos ausentes = como el global. */
+export interface AparatoDelProyecto {
+  origen?: OrigenDeDispositivos;
+  /** Un aparato CONCRETO de este equipo (`config.json#dispositivoPorDefecto`); nunca la granja. */
+  dispositivo?: DispositivoDeLaSesion;
+}
+
+/**
+ * Lo elegido en «Tareas en background» de Ejecutar: `global` (lo que diga Ajustes → General), `granja`, o el id de un
+ * aparato de este equipo. `undefined` = el proyecto dice «este equipo» sin aparato concreto (lo eligió la pastilla).
+ */
+export function eleccionDeAparatoDelProyecto(a: AparatoDelProyecto): string | undefined {
+  if (a.origen === "granja") return ID_DE_GRANJA;
+  if (a.dispositivo !== undefined) return a.dispositivo.id;
+  return a.origen === undefined ? "global" : undefined;
+}

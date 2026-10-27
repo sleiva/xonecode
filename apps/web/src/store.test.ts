@@ -568,6 +568,17 @@ describe("el dispositivo de la sesión, en el alta", () => {
     expect(s.leer().alta?.origenDeDispositivos).toBeUndefined();
   });
 
+  it("el aparato del proyecto viaja campo a campo: un origen raro o un aparato de la granja no se pintan", () => {
+    const s = crearStoreDelCliente();
+    const emu = { id: "emulator-5554", nombre: "pixel8", plataforma: "android" as const, clase: "emulador" as const };
+    s.aplicar(alta({ aparatoDelProyecto: { origen: "local", dispositivo: emu } }));
+    expect(s.leer().alta?.aparatoDelProyecto).toEqual({ origen: "local", dispositivo: emu });
+    s.aplicar(alta({ aparatoDelProyecto: { origen: "nube", dispositivo: { id: "granja", nombre: "Granja", plataforma: "android", clase: "granja" } } }));
+    expect(s.leer().alta?.aparatoDelProyecto).toEqual({});
+    s.aplicar(alta({}));
+    expect(s.leer().alta?.aparatoDelProyecto).toBeUndefined();
+  });
+
   it("una plataforma o una clase que no existen no cuelan", () => {
     const s = crearStoreDelCliente();
     s.aplicar(alta({ dispositivoActivo: { id: "x", nombre: "X", plataforma: "windows", clase: "fisico" } }));

@@ -40,7 +40,6 @@ export function Ejecutar({
   lanzamiento,
   dispositivos,
   alActualizarDispositivos,
-  elegido,
   conectado,
   alRevisar,
   alLanzar,
@@ -50,6 +49,7 @@ export function Ejecutar({
   alElegirDispositivo,
   enUso,
   framework,
+  tareas,
 }: {
   /**
    * El veredicto de la medida. Ausente = todavía no ha llegado ninguna.
@@ -73,8 +73,6 @@ export function Ejecutar({
   /** «Vuelve a medir.» Se llama al entrar: la foto que hay puede ser de hace rato. Ausente =
    *  esta ejecución no puede, y entonces se trabaja con la que haya. */
   alActualizarDispositivos?: () => void;
-  /** El dispositivo de la sesión, que es el que el servidor va a usar si nadie elige otro. */
-  elegido?: DispositivoElegido;
   /** ¿Hay cable? Sin él no se pide ni se lanza: la petición se perdería sin decirlo. */
   conectado?: boolean;
   /** Vuelve a medir. Ausente = esta ventana no puede medir, y entonces no promete medidas. */
@@ -92,7 +90,10 @@ export function Ejecutar({
   alCopiarModificados?: () => void;
   /** Parar el lanzamiento en curso. Ausente = se deja correr, y no se finge poder pararlo. */
   alCancelar?: () => void;
-  /** El id del dispositivo elegido. Ausente = la lista se enseña, pero no se elige. */
+  /**
+   * Elegir en qué aparato de ESTE equipo lanza la pestaña (no toca la pastilla del chat). Lo elegido vuelve en el
+   * veredicto (`veredicto.dispositivo`), que es lo que resuelve el servidor. Ausente = la lista se enseña, pero no se elige.
+   */
   alElegirDispositivo?: (id: string) => void;
   /**
    * Quién usa cada aparato (`dispositivos.enUso`): aquí solo cuentan las TAREAS en marcha (IXCODE-58). Lanzar encima de
@@ -112,6 +113,8 @@ export function Ejecutar({
     progreso?: EstadoDelCliente["instalacion"];
     alCancelar: () => void;
   };
+  /** La columna «Tareas en background»: el aparato por defecto del proyecto. Ausente = no se pinta. */
+  tareas?: PropsDeAparatoDeTareas;
 }) {
   // El selector del framework abierto, y con qué versión elegida al abrir (la de la actualización).
   const [selectorDeFramework, setSelectorDeFramework] = useState<{ inicial?: string } | undefined>(undefined);
@@ -130,7 +133,7 @@ export function Ejecutar({
   useEffect(() => {
     if (conectado === false || alRevisar === undefined) return;
     alRevisar();
-  }, [conectado, alRevisar, elegido?.id]);
+  }, [conectado, alRevisar]);
 
   /**
    * **Y la foto de los dispositivos se rehace al entrar aquí y al volver a la ventana**, por lo
@@ -188,14 +191,16 @@ export function Ejecutar({
   const aMano = (dispositivos ?? []).filter(seLlegaAlDispositivo);
   const sinMirar = dispositivos === undefined;
 
-  // El nombre del destino: el del veredicto manda —es el que el servidor acaba de resolver
-  // contra la medida— y el de la sesión es el respaldo, porque sin veredicto todavía no hay
-  // nada resuelto. Con los dos ausentes el botón sigue diciendo dónde, sin nombre propio.
-  const destino = veredicto?.dispositivo?.nombre ?? elegido?.nombre;
+  // El nombre del destino: el del veredicto, que es el que el servidor acaba de resolver contra la medida (uno de este
+  // equipo, nunca la granja). Sin él el botón sigue diciendo dónde, sin nombre propio.
+  const destino = veredicto?.dispositivo?.nombre;
   const medido = veredicto === undefined ? undefined : selloDeFecha(veredicto.medido);
 
   return (
-    <div className={estilos.panel}>
+    <div className={estilos.columnas}>
+    <section className={estilos.columna} aria-label="Ahora">
+      <h2 className={estilos.tituloDeColumna}>Ahora</h2>
+      <p className={estilos.aviso}>En un emulador, simulador o teléfono de este equipo. La granja no se usa aquí.</p>
       {conectado === false ? (
         // Se dice POR QUÉ no hay botón, y no se pinta uno apagado: la medida y el lanzamiento
         // viven en el servidor, así que sin cable no hay nada que ofrecer — y un botón gris
@@ -315,13 +320,11 @@ export function Ejecutar({
               // promesa es lo que la hace comprobable — con dos dispositivos a mano, el mismo
               // botón lanzaría en uno distinto según lo que estuviera elegido en otra pestaña.
               title={
-                destino === undefined
-                  ? "Lanza la app del proyecto en el dispositivo de esta sesión"
-                  : `Lanza la app del proyecto en ${destino}`
+                destino === undefined ? "Lanza la app del proyecto en un aparato de este equipo" : `Lanza la app del proyecto en ${destino}`
               }
               onClick={alLanzar}
             >
-              {destino === undefined ? "Ejecutar en el dispositivo de la sesión" : `Ejecutar en ${destino}`}
+              {destino === undefined ? "Ejecutar en este equipo" : `Ejecutar en ${destino}`}
             </button>
           ) : null}
           {alCopiarTodo === undefined ? null : (
@@ -347,7 +350,7 @@ export function Ejecutar({
         </div>
       ) : null}
 
-      {lanzamiento === undefined || !esDeAqui(lanzamiento, veredicto?.proyecto, elegido?.id ?? veredicto?.dispositivo?.id) ? null : (
+      {lanzamiento === undefined || !esDeAqui(lanzamiento, veredicto?.proyecto, veredicto?.dispositivo?.id) ? null : (
         <Recorrido
           lanzamiento={lanzamiento}
           {...(destino === undefined ? {} : { destino })}
@@ -377,7 +380,7 @@ export function Ejecutar({
         ) : (
           <ul className={estilos.lista}>
             {aMano.map((d) => {
-              const esElegido = d.id === (elegido?.id ?? veredicto?.dispositivo?.id);
+              const esElegido = d.id === veredicto?.dispositivo?.id;
               // Sin cable la elección se perdería, así que no se ofrece: la fila se enseña
               // —es la foto de lo que hay— pero no se finge que se puede pulsar.
               const elegible = alElegirDispositivo !== undefined && conectado !== false;
@@ -401,7 +404,7 @@ export function Ejecutar({
                   {/* Cuál está elegido, dicho con palabras además del color: es el dato que
                       explica dónde va a caer el botón de arriba, y un color no lo lee un
                       lector de pantalla. */}
-                  {esElegido ? <span className={estilos.marca}>el de esta sesión</span> : null}
+                  {esElegido ? <span className={estilos.marca}>aquí se ejecuta</span> : null}
                   {((tarea) => (tarea === undefined ? null : <span className={estilos.marca}>{`lo usa la tarea «${tarea}»`}</span>))(
                     enUso?.find((u) => u.id === d.id && u.tarea !== undefined)?.tarea
                   )}
@@ -411,9 +414,145 @@ export function Ejecutar({
           </ul>
         )}
       </section>
+    </section>
+    {tareas === undefined ? null : (
+      <AparatoDeTareas {...tareas} dispositivos={dispositivos} conectado={conectado !== false} />
+    )}
     </div>
   );
 }
+
+export interface PropsDeAparatoDeTareas {
+  /** Lo guardado en el proyecto (`alta.aparatoDelProyecto`): los dos ausentes = como el global. */
+  guardado: { origen?: "local" | "granja"; dispositivo?: DispositivoElegido };
+  /** El aparato global (Ajustes → General), para nombrarlo en «Como el global». Ausente = ninguno. */
+  global?: DispositivoElegido;
+  /** La granja: `configurada`, `sin-configurar`, o ausente si esta ejecución no la monta (no hay fila). */
+  granja?: "configurada" | "sin-configurar";
+  /** Guarda lo elegido: `undefined` = como el global, `granja`, o el id de un aparato. Devuelve el MOTIVO de una negativa. */
+  alElegir: (id: string | undefined) => Promise<string | undefined>;
+}
+
+/**
+ * «Tareas en background»: dónde prueban por defecto las tareas del proyecto, y con qué aparato nacen sus chats nuevos.
+ * Aquí SÍ está la granja (decisión suya). Lo elegido es lo que dice el servidor (`guardado`), no lo que se pulsó: el clic
+ * solo pide, y el alta nueva trae lo que quedó. Los aparatos de este equipo salen TODOS de la medida, apagados incluidos
+ * —una tarea puede probar mañana en uno que hoy está apagado—, más el guardado si ya no aparece en ella.
+ */
+function AparatoDeTareas({
+  guardado,
+  global,
+  granja,
+  alElegir,
+  dispositivos,
+  conectado,
+}: PropsDeAparatoDeTareas & { dispositivos?: readonly Dispositivo[]; conectado: boolean }) {
+  const [enCurso, setEnCurso] = useState(false);
+  const [negativa, setNegativa] = useState<string | undefined>(undefined);
+  const eleccion = eleccionDeAparatoDelProyecto(guardado);
+  const elegir = (id: string | undefined): void => {
+    setNegativa(undefined);
+    setEnCurso(true);
+    void alElegir(id).then((motivo) => {
+      setEnCurso(false);
+      setNegativa(motivo);
+    });
+  };
+  const medidos = dispositivos ?? [];
+  const deEsteEquipo: { id: string; nombre: string; detalle: string; marca: string }[] = medidos.map((d) => ({
+    id: d.id,
+    nombre: d.nombre,
+    detalle: `${CLASE_DEL_APARATO[d.clase]} · ${d.plataforma === "ios" ? "iOS" : "Android"}`,
+    marca: etiquetaDeEstado(d),
+  }));
+  if (guardado.dispositivo !== undefined && !medidos.some((d) => d.id === guardado.dispositivo!.id)) {
+    const g = guardado.dispositivo;
+    deEsteEquipo.unshift({ id: g.id, nombre: g.nombre, detalle: `${CLASE_DEL_APARATO[g.clase]} · ${g.plataforma === "ios" ? "iOS" : "Android"}`, marca: "no está ahora" });
+  }
+  const fila = (id: string | undefined, nombre: string, detalle: string, marca: string) => {
+    const clave = id ?? "global";
+    const elegida = eleccion === clave;
+    return (
+      <li key={clave}>
+        <button
+          type="button"
+          role="radio"
+          aria-checked={elegida}
+          className={estilos.opcion}
+          disabled={!conectado || enCurso}
+          onClick={() => {
+            if (!elegida) elegir(id);
+          }}
+        >
+          <span className={estilos.textoDeOpcion}>
+            <span>{nombre}</span>
+            <span className={estilos.marca}>{detalle}</span>
+          </span>
+          <span className={estilos.marca}>{elegida ? "elegido" : marca}</span>
+        </button>
+      </li>
+    );
+  };
+  return (
+    <section className={estilos.columna} aria-label="Tareas en background">
+      <h2 className={estilos.tituloDeColumna}>Tareas en background</h2>
+      <p className={estilos.aviso}>Dónde prueban por defecto. También es el aparato con el que nace cada chat nuevo del proyecto.</p>
+      <ul className={estilos.lista} role="radiogroup" aria-label="Aparato de las tareas">
+        {fila(undefined, "Como el global", `el aparato por omisión de Ajustes → General${global === undefined ? ": ninguno" : ` (${global.nombre})`}`, "")}
+        {granja === undefined ? null : (
+          <>
+            <li className={estilos.grupo} aria-hidden="true">Granja XOne</li>
+            {fila(
+              ID_DE_GRANJA,
+              "Granja",
+              granja === "configurada" ? "se pide una copia libre al probar" : "sin configurar: Ajustes → Dispositivos → Granja",
+              granja === "configurada" ? "a demanda" : "falta",
+            )}
+          </>
+        )}
+        <li className={estilos.grupo} aria-hidden="true">Este equipo</li>
+        {deEsteEquipo.length === 0 ? (
+          <li className={estilos.aviso}>Todavía no se ha medido ningún aparato de este equipo: mira en Ajustes → Dispositivos.</li>
+        ) : (
+          deEsteEquipo.map((d) => fila(d.id, d.nombre, d.detalle, d.marca))
+        )}
+      </ul>
+      <p className={estilos.aviso}>{NOTA_DE_LA_ELECCION(eleccion)}</p>
+      {negativa === undefined ? null : (
+        <p className={estilos.negativa} role="alert">
+          No se ha guardado: {negativa}
+        </p>
+      )}
+    </section>
+  );
+}
+
+const CLASE_DEL_APARATO: Record<DispositivoElegido["clase"], string> = {
+  emulador: "emulador",
+  simulador: "simulador",
+  fisico: "físico",
+  granja: "granja",
+};
+
+function NOTA_DE_LA_ELECCION(eleccion: string | undefined): string {
+  if (eleccion === ID_DE_GRANJA) return "Cada tarea pide su copia de la granja al probar y la libera al acabar el turno. iOS sigue en este equipo.";
+  if (eleccion === "global") return "Lo que diga Ajustes → General: si cambia, las tareas lo siguen.";
+  if (eleccion === undefined) return "Este proyecto usa este equipo sin un aparato concreto (se eligió en la pastilla del chat): elige uno aquí.";
+  return "Las tareas prueban en este aparato: tiene que estar arrancado o conectado cuando prueben.";
+}
+
+/**
+ * Lo elegido, en el vocabulario de la lista: `global`, el id de la granja, el id de un aparato, o `undefined` (el proyecto
+ * dice «este equipo» sin aparato concreto). La regla del cliente gemela de `core/dispositivoElegido.ts#eleccionDeAparatoDelProyecto`.
+ */
+function eleccionDeAparatoDelProyecto(a: PropsDeAparatoDeTareas["guardado"]): string | undefined {
+  if (a.origen === "granja") return ID_DE_GRANJA;
+  if (a.dispositivo !== undefined) return a.dispositivo.id;
+  return a.origen === undefined ? "global" : undefined;
+}
+
+/** El id de la granja como aparato (`core/granja.ts#ID_DE_GRANJA`). */
+const ID_DE_GRANJA = "granja";
 
 /**
  * El recorrido de un lanzamiento, del primer mensaje al último.

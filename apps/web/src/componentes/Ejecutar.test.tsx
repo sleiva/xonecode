@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { EstadoDelCliente } from "../store.js";
 import type { Dispositivo } from "../tipos.js";
@@ -252,33 +252,21 @@ describe("Ejecutar: cuándo se pide la medida", () => {
     expect(alRevisar).toHaveBeenCalledTimes(1);
   });
 
-  it("si cambia el aparato elegido se vuelve a medir: el dispositivo es una entrada del veredicto", () => {
-    // Medido en el emulador el 16-sep-2026: al pulsar un aparato en la lista de la PROPIA
-    // pestaña, su fila pasaba a decir «el de esta sesión» mientras el veredicto de arriba
-    // seguía afirmando «Esta sesión no tiene ningún dispositivo elegido». El panel se
-    // contradecía a sí mismo en pantalla hasta que algo forzara otra medida.
+  it("cambiar de aparato NO pide otra medida desde aquí: la pide el servidor al elegir, y el veredicto trae el nuevo", () => {
+    // El aparato de Ejecutar ya no es el de la sesión (decisión suya): lo resuelve el servidor y vuelve en el veredicto.
     const alRevisar = vi.fn();
-    const { rerender } = render(<Ejecutar conectado alRevisar={alRevisar} />);
+    const { rerender } = render(<Ejecutar conectado alRevisar={alRevisar} alLanzar={NADA} veredicto={VEREDICTO} />);
     expect(alRevisar).toHaveBeenCalledTimes(1);
     rerender(
       <Ejecutar
         conectado
         alRevisar={alRevisar}
-        elegido={{ id: "ABC", nombre: "Pixel 8", plataforma: "android", clase: "fisico" }}
+        alLanzar={NADA}
+        veredicto={{ ...VEREDICTO, dispositivo: { id: "emulator-5554", nombre: "pixel8", plataforma: "android", clase: "emulador" } }}
       />
     );
-    expect(alRevisar).toHaveBeenCalledTimes(2);
-  });
-
-  it("pero el MISMO aparato reenviado no pide otra medida: se depende del id, no del objeto", () => {
-    // `elegido` se reconstruye en cada render del store, así que depender del objeto pediría un
-    // `adb` por render — que es justo lo que el `useCallback` de `App` existe para evitar.
-    const alRevisar = vi.fn();
-    const pixel = { id: "ABC", nombre: "Pixel 8", plataforma: "android" as const, clase: "fisico" as const };
-    const { rerender } = render(<Ejecutar conectado alRevisar={alRevisar} elegido={pixel} />);
     expect(alRevisar).toHaveBeenCalledTimes(1);
-    rerender(<Ejecutar conectado alRevisar={alRevisar} elegido={{ ...pixel }} />);
-    expect(alRevisar).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "Ejecutar en pixel8" })).toBeTruthy();
   });
 
   it("sin a quién pedírselo lo dice, en vez de prometer una medida que no va a llegar", () => {
@@ -315,17 +303,18 @@ describe("Ejecutar: los dispositivos", () => {
     expect(screen.queryByRole("button", { name: /Pixel 8/ })).toBeNull();
   });
 
-  it("con el elegido a la vista, su fila lo dice", () => {
+  it("el aparato del veredicto es el elegido, y su fila lo dice", () => {
     render(
       <Ejecutar
         conectado
         alRevisar={NADA}
         dispositivos={[PIXEL]}
-        elegido={{ id: "ABC", nombre: "Pixel 8", plataforma: "android", clase: "fisico" }}
+        veredicto={VEREDICTO}
         alElegirDispositivo={NADA}
       />
     );
-    expect(screen.getByRole("button", { name: /Pixel 8/ }).getAttribute("aria-current")).toBe("true");
+    expect(screen.getByRole("button", { name: /Pixel 8 · Android/ }).getAttribute("aria-current")).toBe("true");
+    expect(screen.getByText("aquí se ejecuta")).toBeTruthy();
   });
 
   it("sin informe de dispositivos dice cómo se empieza", () => {
@@ -514,5 +503,89 @@ describe("Ejecutar: actualizar el framework", () => {
   it("sin el dato no hay botón: «al día» no se afirma ni se deduce", () => {
     render(<Ejecutar conectado alRevisar={NADA} veredicto={VEREDICTO} framework={framework} />);
     expect(screen.queryByRole("button", { name: "Actualizar framework" })).toBeNull();
+  });
+});
+
+describe("Ejecutar: Tareas en background", () => {
+  const EMULADOR: Dispositivo = { id: "emulator-5554", nombre: "pixel8", plataforma: "android", clase: "emulador", estado: "apagado" };
+  const tareas = (extra: Partial<Parameters<typeof Ejecutar>[0]["tareas"] & object> = {}) => ({
+    guardado: {},
+    alElegir: vi.fn(() => Promise.resolve(undefined as string | undefined)),
+    ...extra,
+  });
+
+  it("sin el dato no se pinta la columna", () => {
+    render(<Ejecutar conectado alRevisar={NADA} dispositivos={[PIXEL]} />);
+    expect(screen.queryByRole("region", { name: "Tareas en background" })).toBeNull();
+  });
+
+  it("lista el global con su nombre, la granja y TODOS los aparatos medidos, apagados incluidos", () => {
+    render(
+      <Ejecutar
+        conectado
+        alRevisar={NADA}
+        dispositivos={[PIXEL, EMULADOR]}
+        tareas={tareas({ global: { id: "ABC", nombre: "Pixel 8", plataforma: "android", clase: "fisico" }, granja: "configurada" })}
+      />
+    );
+    const columna = screen.getByRole("region", { name: "Tareas en background" });
+    const opciones = within(columna).getAllByRole("radio");
+    expect(opciones.map((o) => o.textContent)).toEqual([
+      expect.stringContaining("Como el global"),
+      expect.stringContaining("Granja"),
+      expect.stringContaining("Pixel 8"),
+      expect.stringContaining("pixel8"),
+    ]);
+    expect(opciones[0]!.textContent).toContain("(Pixel 8)");
+    expect(opciones[0]!.getAttribute("aria-checked")).toBe("true");
+    // La izquierda sigue siendo SOLO lo que está a mano: el emulador apagado no está allí.
+    expect(within(screen.getByRole("region", { name: "Ahora" })).queryByText(/pixel8/)).toBeNull();
+  });
+
+  it("sin granja montada no hay fila de granja; sin configurar, la fila lo dice", () => {
+    const { unmount } = render(<Ejecutar conectado alRevisar={NADA} dispositivos={[PIXEL]} tareas={tareas()} />);
+    expect(screen.queryByRole("radio", { name: /Granja/ })).toBeNull();
+    unmount();
+    render(<Ejecutar conectado alRevisar={NADA} dispositivos={[PIXEL]} tareas={tareas({ granja: "sin-configurar" })} />);
+    expect(screen.getByRole("radio", { name: /Granja/ }).textContent).toContain("sin configurar");
+  });
+
+  it("lo elegido es lo GUARDADO; pulsar manda el id (sin id = el global) y la negativa del servidor se enseña", async () => {
+    const alElegir = vi.fn((id: string | undefined) => Promise.resolve(id === "emulator-5554" ? "no se pudo guardar" : undefined));
+    render(
+      <Ejecutar
+        conectado
+        alRevisar={NADA}
+        dispositivos={[PIXEL, EMULADOR]}
+        tareas={{ guardado: { origen: "granja" }, granja: "configurada", alElegir }}
+      />
+    );
+    expect(screen.getByRole("radio", { name: /Granja/ }).getAttribute("aria-checked")).toBe("true");
+    await act(async () => {
+      fireEvent.click(screen.getByRole("radio", { name: /Como el global/ }));
+    });
+    expect(alElegir).toHaveBeenLastCalledWith(undefined);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("radio", { name: /pixel8/ }));
+    });
+    expect(alElegir).toHaveBeenLastCalledWith("emulator-5554");
+    expect(screen.getByRole("alert").textContent).toContain("no se pudo guardar");
+    // Pulsar el ya elegido no pide nada.
+    alElegir.mockClear();
+    fireEvent.click(screen.getByRole("radio", { name: /Granja/ }));
+    expect(alElegir).not.toHaveBeenCalled();
+  });
+
+  it("un aparato guardado que ya no aparece en la medida sigue en la lista, elegido y dicho", () => {
+    render(
+      <Ejecutar
+        conectado
+        alRevisar={NADA}
+        dispositivos={[PIXEL]}
+        tareas={tareas({ guardado: { origen: "local", dispositivo: { id: "R58", nombre: "Galaxy A14", plataforma: "android", clase: "fisico" } } })}
+      />
+    );
+    const fila = screen.getByRole("radio", { name: /Galaxy A14/ });
+    expect(fila.getAttribute("aria-checked")).toBe("true");
   });
 });

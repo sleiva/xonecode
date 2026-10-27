@@ -72,16 +72,6 @@ export interface AccionesDeLaCopia {
   /** El modo GLOBAL (Ajustes > General), para nombrarlo en «Como el global». Ausente = no consta. */
   modoGlobal?: ModoDeEscritura;
   /**
-   * Fija —o quita, con `undefined`— de dónde saca los aparatos este proyecto: este equipo o la granja de
-   * dispositivos. Devuelve lo que quedó o el MOTIVO de la negativa. Ausente = esta ejecución no tiene granja.
-   */
-  alFijarOrigenDelProyecto?: (
-    proyecto: string,
-    origen: "local" | "granja" | undefined
-  ) => Promise<{ guardado: { proyecto?: "local" | "granja" } } | { motivo: string }>;
-  /** El origen GLOBAL (la granja si es el aparato por omisión de Ajustes), para «Como el global». */
-  origenGlobal?: "local" | "granja";
-  /**
    * «Subir» en la tarjeta de lo pendiente: el MISMO botón y la MISMA intención que la banda de
    * Revisión. Solo lo trae el proyecto ABIERTO —que es el que sincroniza el servidor—; ausente,
    * la tarjeta no ofrece subir.
@@ -119,8 +109,6 @@ export function ResumenDeProyecto({
   alPedirResumen,
   alFijarModoDelProyecto,
   modoGlobal,
-  alFijarOrigenDelProyecto,
-  origenGlobal,
   subida,
   marcaDeSubida,
   alVerPendientes,
@@ -257,24 +245,6 @@ export function ResumenDeProyecto({
                     // Lo que dijo el SERVIDOR que quedó, no lo que se pidió.
                     setMedida((m) =>
                       m?.proyecto !== id || m.foto === undefined ? m : { ...m, foto: { ...m.foto, modoDeEscritura: r.guardado } }
-                    );
-                  }
-                  return "motivo" in r ? r.motivo : undefined;
-                }}
-              />
-            )}
-            {vigente?.foto?.origenDeDispositivos === undefined || alFijarOrigenDelProyecto === undefined ? null : (
-              <AparatosDelProyecto
-                guardado={vigente.foto.origenDeDispositivos.proyecto}
-                {...(origenGlobal === undefined ? {} : { origenGlobal })}
-                apagado={apagado}
-                alFijar={async (origen) => {
-                  const id = proyecto.id;
-                  const r = await alFijarOrigenDelProyecto(id, origen).catch(() => ({ motivo: "no se pudo hablar con el servidor" }));
-                  if ("guardado" in r && enVista.current === id) {
-                    // Lo que dijo el SERVIDOR que quedó, no lo que se pidió.
-                    setMedida((m) =>
-                      m?.proyecto !== id || m.foto === undefined ? m : { ...m, foto: { ...m.foto, origenDeDispositivos: r.guardado } }
                     );
                   }
                   return "motivo" in r ? r.motivo : undefined;
@@ -457,66 +427,6 @@ function ModoDelProyecto({
       <p className={estilos.notaDeModo}>
         Solo decide cómo empiezan las conversaciones nuevas de este proyecto; en cada una se puede cambiar
         en la caja del chat. El global está en Ajustes &gt; General.
-      </p>
-      {negativa === undefined ? null : (
-        <p className={estilos.negativa} role="alert">
-          No se ha guardado: {negativa}
-        </p>
-      )}
-    </section>
-  );
-}
-
-const NOMBRE_DEL_ORIGEN: Record<"local" | "granja", string> = { local: "este equipo", granja: "la granja" };
-
-/**
- * De dónde saca los aparatos este proyecto: el suyo o el global (el aparato por omisión de Ajustes > General).
- * Gemelo de `ModoDelProyecto`, con las mismas tres opciones y la misma razón: «como el global» es un valor de
- * verdad. Lo mismo se cambia en la pastilla del chat, que escribe aquí.
- */
-function AparatosDelProyecto({
-  guardado,
-  origenGlobal,
-  apagado,
-  alFijar,
-}: {
-  guardado: "local" | "granja" | undefined;
-  origenGlobal?: "local" | "granja";
-  apagado: boolean;
-  alFijar: (origen: "local" | "granja" | undefined) => Promise<string | undefined>;
-}) {
-  const [enCurso, setEnCurso] = useState(false);
-  const [negativa, setNegativa] = useState<string | undefined>(undefined);
-  return (
-    <section className={estilos.bloque} aria-label="Aparatos">
-      <h2 className={estilos.tituloDeBloque}>Aparatos</h2>
-      <label className={estilos.filaDeModo}>
-        <span>Se prueba en</span>
-        <Desplegable
-          value={guardado ?? "global"}
-          disabled={apagado || enCurso}
-          cargando={enCurso}
-          onChange={(e) => {
-            const valor = e.target.value;
-            const origen = valor === "local" || valor === "granja" ? valor : undefined;
-            setNegativa(undefined);
-            setEnCurso(true);
-            void alFijar(origen).then((motivo) => {
-              setEnCurso(false);
-              setNegativa(motivo);
-            });
-          }}
-        >
-          <option value="global">
-            {origenGlobal === undefined ? "Como el global" : `Como el global (${NOMBRE_DEL_ORIGEN[origenGlobal]})`}
-          </option>
-          <option value="local">Este equipo en este proyecto</option>
-          <option value="granja">La granja en este proyecto</option>
-        </Desplegable>
-      </label>
-      <p className={estilos.notaDeModo}>
-        Con la granja no se reserva ningún teléfono: se pide una copia libre al probar. iOS sigue en este equipo. El global
-        es el aparato por omisión de Ajustes &gt; General; en el chat se cambia en la pastilla del dispositivo.
       </p>
       {negativa === undefined ? null : (
         <p className={estilos.negativa} role="alert">

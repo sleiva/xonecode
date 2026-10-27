@@ -487,6 +487,11 @@ export interface OpcionesDelVestibulo {
    */
   dispositivoPorDefecto?: () => DispositivoElegido | undefined;
   /**
+   * El aparato concreto de este equipo que dice el PROYECTO de esa raíz (`config.json#dispositivoPorDefecto`, pestaña
+   * Ejecutar → «Tareas en background»). Manda sobre el global, como el modo. Ausente = el global.
+   */
+  dispositivoDelProyecto?: (raiz: string) => DispositivoElegido | undefined;
+  /**
    * De dónde sacan los aparatos las sesiones del proyecto de esa raíz (`config.json#origenDeDispositivos`).
    * Se pregunta en CADA apertura y el aparato se ajusta a él (`dispositivoSegunOrigen`): con la granja,
    * una sesión nace con ella y una reabierta con un Android de este equipo pasa a la granja. Ausente =
@@ -1573,9 +1578,11 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
      */
     let historica = reabierta?.historica ?? false;
     if (historica && (await opciones.hayMemoriaDeHilo?.(raiz, sesion!)) === true) historica = false;
-    // Una reabierta, el suyo (o ninguno); una NUEVA, el de por defecto (IXCODE-51).
+    // Una reabierta, el suyo (o ninguno); una NUEVA, el del proyecto y si no el global (IXCODE-51).
     let dispositivo: DispositivoElegido | undefined = dispositivoSegunOrigen(
-      reabierta !== undefined ? reabierta.dispositivo : opciones.dispositivoPorDefecto?.(),
+      reabierta !== undefined
+        ? reabierta.dispositivo
+        : (opciones.dispositivoDelProyecto?.(raiz) ?? opciones.dispositivoPorDefecto?.()),
       opciones.origenDeDispositivos?.(raiz) ?? "local",
     );
     // El fichero que leen los scripts del `device-controller` (`core/dispositivoDeSesion.ts`)

@@ -26,6 +26,7 @@ import { MS_DE_PREPARACION,
   ajusteDeModoPorDefectoCableado,
   ajusteDeDispositivoPorDefectoCableado,
   ajusteDeGranjaCableado,
+  ajusteDeAparatoDelProyectoCableado,
   origenDeDispositivosCableado,
   type ServicioDeGranja,
   emuladoresCableados,
@@ -61,6 +62,7 @@ import { MS_DE_PREPARACION,
   TOPE_DE_MEMORIA,
   FICHEROS_DEL_AVISO,
 } from "./arranque.js";
+import { origenDeDispositivosDelProyecto } from "../../agent/config/configEnDisco.js";
 import { ErrorDelAumentador } from "../../agent/tareas/aumentador.js";
 import { iconoDelProyecto, leerFicheroDeProyecto, motivoDeRutaInaceptable } from "../../agent/grafo/arbolDeProyecto.js";
 import { leerArtefactoCrudo, leerArtefactoDeSesion } from "../../agent/grafo/artefactosEnDisco.js";
@@ -10724,24 +10726,16 @@ describe("el recorrido por el cable — el veredicto, la intención y las fases"
   });
 
   /**
-   * La costura que hace que `dispositivo-desconocido` tenga EMISOR. Las dos situaciones —«no
-   * has elegido ninguno» y «elegiste uno que ya no está»— llegan al veredicto con el
-   * dispositivo ausente, y lo único que las separa es el `elegido`, que lo sabe la SESIÓN.
-   * Sin este cruce, la segunda se contaría como la primera: decirle a alguien que no eligió
-   * cuando sí eligió.
+   * Ejecutar lanza SOLO en este equipo y con SU aparato (decisión suya): sin aparato en la sesión, o con uno que ya no
+   * está, va al que esté a mano; elegir en la pestaña NO toca la pastilla; y sin ninguno a mano lo dice con su frase.
    */
-  it("no es lo mismo no haber elegido que haber elegido uno que ya no está", async () => {
+  it("Ejecutar usa un aparato de este equipo a mano, elegirlo no toca la sesión, y sin ninguno lo dice", async () => {
     const ninguno = await montar({ xml: APP_XML, conBase: true, elegido: null });
     await enviarMensaje(ninguno.accion, { clase: "revisarLanzamiento" });
     await esperarA(() => dichos(ninguno.cliente, "lanzable").length > 0);
-    const sinNinguno = dichos(ninguno.cliente, "lanzable").at(-1)!;
-    expect(sinNinguno.dispositivo).toBeUndefined();
-    expect(sinNinguno.faltas).toEqual([expect.stringContaining("no tiene ningún dispositivo elegido")]);
+    expect(dichos(ninguno.cliente, "lanzable").at(-1)!.dispositivo).toEqual({ id: "ABC", nombre: "Pixel 8", plataforma: "android", clase: "fisico" });
     await ninguno.cerrar();
 
-    // El caso que la rama `dispositivo` del cable tolera en silencio —una foto vieja del
-    // cliente, porque desenchufaron el aparato entre medias— y que aquí se CUENTA, porque es
-    // justo lo que decide la frase que se le enseña a quien va a pulsar.
     const ido = await montar({
       xml: APP_XML,
       conBase: true,
@@ -10750,10 +10744,34 @@ describe("el recorrido por el cable — el veredicto, la intención y las fases"
     });
     await enviarMensaje(ido.accion, { clase: "revisarLanzamiento" });
     await esperarA(() => dichos(ido.cliente, "lanzable").length > 0);
-    expect(dichos(ido.cliente, "lanzable").at(-1)!.faltas).toEqual([
-      expect.stringContaining("ya no aparece en la última medida"),
-    ]);
+    expect(dichos(ido.cliente, "lanzable").at(-1)).toMatchObject({ listo: true, dispositivo: { id: "ABC" } });
+    // Elegirlo en la pestaña vuelve a medir y deja la sesión como estaba.
+    ido.cliente.recibidos.length = 0;
+    expect(await enviarMensaje(ido.accion, { clase: "aparatoDeEjecutar", id: "ABC" })).toBe(204);
+    await esperarA(() => dichos(ido.cliente, "lanzable").length > 0);
+    expect(ido.vestibulo.proyectoAbierto()!.dispositivo?.id).toBe("YA-NO-ESTA");
     await ido.cerrar();
+
+    const apagado = await montar({
+      xml: APP_XML,
+      conBase: true,
+      opciones: {
+        detectarDispositivos: async () => ({
+          sistema: "mac" as const,
+          herramientas: [],
+          dispositivos: [{ ...PIXEL, estado: "apagado" as const }],
+          avds: [],
+          recetas: [],
+          medido: "2026-09-16T10:00:00.000Z",
+        }),
+      },
+    });
+    await enviarMensaje(apagado.accion, { clase: "revisarLanzamiento" });
+    await esperarA(() => dichos(apagado.cliente, "lanzable").length > 0);
+    const sinAMano = dichos(apagado.cliente, "lanzable").at(-1)!;
+    expect(sinAMano.dispositivo).toBeUndefined();
+    expect(sinAMano.faltas).toEqual([expect.stringContaining("Ejecutar no usa la granja")]);
+    await apagado.cerrar();
   });
 
   it("sin proyecto abierto no se contesta NADA: no hay proyecto que nombrar", async () => {
@@ -15403,26 +15421,63 @@ describe("la granja de dispositivos", () => {
     rmSync(base, { recursive: true, force: true });
   });
 
-  it("panel → Resumen: la foto trae el origen del proyecto, se fija y se quita por id (sin origen = el global)", async () => {
-    const base = mkdtempSync(join(tmpdir(), "xc-granja-resumen-"));
-    const raiz = join(base, "webstudio", "Tienda");
+  it("Ejecutar → Tareas en background: global, granja o un aparato concreto, en el config.json y en el alta", async () => {
+    const base = mkdtempSync(join(tmpdir(), "xc-granja-tareas-"));
+    const servidor = servidorDeMentira();
+    const vestibulo = vestibuloDePrueba({ baseDeWorkspace: () => base });
+    const raiz = vestibulo.raizDeProyecto("webstudio", "Tienda");
     mkdirSync(join(raiz, ".xonecode", "cloudstudio"), { recursive: true });
-    writeFileSync(join(raiz, ".xonecode", "config.json"), "{}");
+    writeFileSync(join(raiz, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
     writeFileSync(join(raiz, ".xonecode", "cloudstudio", "sync.json"), "{}");
-    const { servicio, estado } = servicioFalso();
-    const { accion } = await montado(vestibuloDePrueba({ baseDeWorkspace: () => base }), { granja: servicio });
-    let foto = JSON.parse((await accion({ clase: "copiaLocal", accion: "resumen", proyecto: "p1" })).cuerpo);
-    expect(foto.origenDeDispositivos).toEqual({});
-    const r = await accion({ clase: "copiaLocal", accion: "origenDeDispositivos", proyecto: "p1", origen: "granja" });
-    expect(r.estado).toBe(200);
-    expect(JSON.parse(r.cuerpo)).toEqual({ proyecto: "granja" });
-    expect(estado.origenes.get(raiz)).toBe("granja");
-    foto = JSON.parse((await accion({ clase: "copiaLocal", accion: "resumen", proyecto: "p1" })).cuerpo);
-    expect(foto.origenDeDispositivos).toEqual({ proyecto: "granja" });
-    expect(JSON.parse((await accion({ clase: "copiaLocal", accion: "origenDeDispositivos", proyecto: "p1" })).cuerpo)).toEqual({});
-    expect(estado.origenes.has(raiz)).toBe(false);
-    expect((await accion({ clase: "copiaLocal", accion: "origenDeDispositivos", proyecto: "p1", origen: "nube" })).estado).toBe(400);
-    expect((await accion({ clase: "copiaLocal", accion: "origenDeDispositivos", proyecto: "otro", origen: "granja" })).estado).toBe(409);
+    const { servicio } = servicioFalso();
+    // El origen lo lee el servicio del MISMO config.json que escribe el aparato del proyecto, como en producción.
+    montarRutas(servidor, vestibulo, {
+      granja: { ...servicio, origenDelProyecto: origenDeDispositivosDelProyecto },
+      aparatoDelProyecto: ajusteDeAparatoDelProyectoCableado(),
+      detectarDispositivos: async () => ({
+        sistema: "mac" as const,
+        herramientas: [],
+        dispositivos: [{ id: "emulator-5554", nombre: "pixel8", plataforma: "android", clase: "emulador", estado: "apagado" } as Dispositivo],
+        avds: [],
+        recetas: [],
+        medido: "2026-10-27T10:00:00.000Z",
+      }),
+    });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+    const alta = () => cliente.recibidos.filter((m) => m.clase === "alta").at(-1) as Record<string, unknown>;
+    const enDisco = () => JSON.parse(readFileSync(join(raiz, ".xonecode", "config.json"), "utf8")) as Record<string, unknown>;
+    await asentar();
+    await enviarMensaje(accion, { clase: "sesion", proyecto: "p1" });
+    await enviarMensaje(accion, { clase: "dispositivos" });
+    await asentar();
+    expect(alta().aparatoDelProyecto).toEqual({});
+
+    // Un aparato APAGADO también vale: la tarea puede probar mañana en él.
+    expect(await enviarMensaje(accion, { clase: "aparatoDeTareas", id: "emulator-5554" })).toBe(204);
+    await asentar();
+    expect(enDisco()).toMatchObject({ modo: "offline", origenDeDispositivos: "local", dispositivoPorDefecto: { id: "emulator-5554", clase: "emulador" } });
+    expect(alta().aparatoDelProyecto).toEqual({ origen: "local", dispositivo: { id: "emulator-5554", nombre: "pixel8", plataforma: "android", clase: "emulador" } });
+
+    // La granja cambia el ORIGEN (y la sesión abierta pasa a ella); el aparato de este equipo se queda guardado.
+    expect(await enviarMensaje(accion, { clase: "aparatoDeTareas", id: "granja" })).toBe(204);
+    await asentar();
+    expect(enDisco()).toMatchObject({ origenDeDispositivos: "granja", dispositivoPorDefecto: { id: "emulator-5554" } });
+    expect(vestibulo.proyectoAbierto()!.dispositivo?.clase).toBe("granja");
+
+    // Como el global: fuera las dos claves, y lo demás del config.json intacto.
+    expect(await enviarMensaje(accion, { clase: "aparatoDeTareas" })).toBe(204);
+    await asentar();
+    expect(enDisco()).toEqual({ modo: "offline" });
+    expect(alta().aparatoDelProyecto).toEqual({});
+
+    // Un aparato que no está en la medida: 409 con su motivo, y nada escrito.
+    const r = await postearConCuerpo(accion, JSON.stringify({ clase: "aparatoDeTareas", id: "YA-NO-ESTA" }));
+    expect(r.estado).toBe(409);
+    expect(JSON.parse(r.cuerpo).motivo).toMatch(/última medida/);
+    expect(enDisco()).toEqual({ modo: "offline" });
+    await vestibulo.cerrar();
     rmSync(base, { recursive: true, force: true });
   });
 
@@ -15444,7 +15499,7 @@ describe("la granja de dispositivos", () => {
     expect(enDisco).toBeUndefined();
   });
 
-  it("Ejecutar con la granja: veredicto sin aparato ni framework, y el lanzamiento va a SU lanzador con la sesión", async () => {
+  it("Ejecutar con la sesión en la granja lanza en ESTE equipo: sin aparato a mano lo dice y la granja no se toca", async () => {
     const base = mkdtempSync(join(tmpdir(), "xonecode-granja-ejecutar-"));
     const servidor = servidorDeMentira();
     const vestibulo = vestibuloDePrueba({ baseDeWorkspace: () => base });
@@ -15481,13 +15536,14 @@ describe("la granja de dispositivos", () => {
     await enviarMensaje(accion, { clase: "revisarLanzamiento" } as never);
     await asentar();
     const lanzable = cliente.recibidos.filter((m) => m.clase === "lanzable").at(-1) as Record<string, unknown> | undefined;
-    expect(lanzable).toMatchObject({ listo: true, faltas: [], dispositivo: { clase: "granja" } });
+    expect(lanzable).toMatchObject({ listo: false, faltas: [expect.stringContaining("Ejecutar no usa la granja")] });
+    expect(lanzable).not.toHaveProperty("dispositivo");
     await enviarMensaje(accion, { clase: "lanzarApp" });
     await asentar();
     await asentar();
-    expect(pedidas).toEqual([{ sesion: vestibulo.proyectoAbierto()!.idDeHilo, raiz, app: "Tienda" }]);
+    expect(pedidas).toEqual([]);
     const ultimo = cliente.recibidos.filter((m) => m.clase === "lanzamiento").at(-1) as Record<string, unknown>;
-    expect(ultimo).toMatchObject({ estado: "ok", dispositivo: { clase: "granja" } });
+    expect(ultimo).toMatchObject({ estado: "fallo" });
     await vestibulo.cerrar();
     rmSync(base, { recursive: true, force: true });
   });

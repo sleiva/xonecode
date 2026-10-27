@@ -35,6 +35,7 @@ import {
 import type { Papel } from "../../core/ports.js";
 import type { ModoDeEscritura } from "../../core/modoDeEscritura.js";
 import type { OrigenDeDispositivos } from "../../core/granja.js";
+import type { AparatoDelProyecto, DispositivoDeLaSesion as DispositivoElegido } from "../../core/dispositivoElegido.js";
 import { renombrarSobreSync } from "../renombrarSobre.js";
 
 export const NOMBRE_CARPETA = ".xonecode";
@@ -473,6 +474,42 @@ export function modoDeEscrituraDelProyecto(raiz: string): ModoDeEscritura | unde
   } catch {
     return undefined;
   }
+}
+
+/**
+ * Lo que dice ESTE proyecto del aparato de sus tareas y sus chats nuevos: su origen y, con «este equipo», el aparato
+ * concreto. Un `config.json` ilegible no dice nada (= como el global).
+ */
+export function aparatoDelProyecto(raiz: string): AparatoDelProyecto {
+  try {
+    const proyecto = cargar(raiz).config.proyecto;
+    return {
+      ...(proyecto?.origenDeDispositivos === undefined ? {} : { origen: proyecto.origenDeDispositivos }),
+      ...(proyecto?.dispositivoPorDefecto === undefined ? {} : { dispositivo: proyecto.dispositivoPorDefecto }),
+    };
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Guarda lo elegido en «Tareas en background» (pestaña Ejecutar), en UNA escritura de las dos claves:
+ * - `global`: quita las dos (manda Ajustes → General);
+ * - `granja`: el origen pasa a la granja; el aparato de este equipo que hubiera se QUEDA, por si se vuelve;
+ * - un aparato de este equipo: origen `local` y ese aparato.
+ */
+export function guardarAparatoDelProyecto(raiz: string, eleccion: "global" | "granja" | DispositivoElegido): AparatoDelProyecto {
+  const ruta = rutaConfigDeProyecto(raiz);
+  const base = leerObjetoCrudoOAbortar(ruta);
+  const { origenDeDispositivos: _origen, dispositivoPorDefecto: _dispositivo, ...sinAparato } = base;
+  const fusionado =
+    eleccion === "global"
+      ? sinAparato
+      : eleccion === "granja"
+        ? { ...base, origenDeDispositivos: "granja" }
+        : { ...sinAparato, origenDeDispositivos: "local", dispositivoPorDefecto: eleccion };
+  escribirAtomico(ruta, JSON.stringify(fusionado, null, 2) + "\n");
+  return aparatoDelProyecto(raiz);
 }
 
 /** El origen que dice ESTE proyecto, o `undefined` (manda el global). Un `config.json` ilegible no dice nada. */

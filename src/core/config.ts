@@ -28,6 +28,7 @@ import { formaDeProyecto, motivoDeProyectoInaceptable, type MapeoDeEstados, type
 import type { Papel } from "./ports.js";
 import { esModoDeEscritura, type ModoDeEscritura } from "./modoDeEscritura.js";
 import { esOrigenDeDispositivos, type OrigenDeDispositivos } from "./granja.js";
+import { dispositivoDeValor, type DispositivoDeLaSesion } from "./dispositivoElegido.js";
 import { motivoDeProyectoDeStitchInaceptable, type DisenoVinculado } from "./disenoVinculado.js";
 
 /** La configuración: modelos y proveedores. Nunca claves. */
@@ -93,6 +94,12 @@ export interface ConfigDeFichero {
    * lo decide cada proyecto.
    */
   origenDeDispositivos?: OrigenDeDispositivos;
+  /**
+   * El aparato CONCRETO de este equipo con que prueban las tareas y nacen los chats nuevos del proyecto
+   * (pestaña Ejecutar → «Tareas en background»). Va con `origenDeDispositivos: "local"`; nunca la granja,
+   * que es el origen. **Solo de PROYECTO**: el global es `settings.json#dispositivoPorDefecto`.
+   */
+  dispositivoPorDefecto?: DispositivoDeLaSesion;
 }
 
 /** Las credenciales, que viven en OTRO fichero y solo global. */
@@ -401,6 +408,24 @@ export function validar(
       } else {
         avisos.push({
           texto: `«${ruta}»: «origenDeDispositivos» debe ser «local» o «granja»; se descarta.`,
+          severidad: "aviso",
+        });
+      }
+      continue;
+    }
+
+    if (clave === "dispositivoPorDefecto") {
+      const dispositivo = dispositivoDeValor(valor);
+      if (procedencia === "global") {
+        avisos.push({
+          texto: `«${ruta}»: «dispositivoPorDefecto» es de proyecto aquí; el global se elige en Ajustes → General; se descarta.`,
+          severidad: "aviso",
+        });
+      } else if (dispositivo !== undefined && dispositivo.clase !== "granja") {
+        config.dispositivoPorDefecto = dispositivo;
+      } else {
+        avisos.push({
+          texto: `«${ruta}»: «dispositivoPorDefecto» debe ser un aparato de este equipo; se descarta.`,
           severidad: "aviso",
         });
       }

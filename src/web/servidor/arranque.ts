@@ -199,7 +199,9 @@ import {
 import { megasDeLasMudanzas, mudarWorkspaceLegado, type ResultadoDeMudanza } from "../../agent/config/mudanzaEnDisco.js";
 import { elegirCarpetaEnMaquina, haySelectorDeCarpeta } from "../../agent/config/selectorEnMaquina.js";
 import {
+  aparatoDelProyecto as aparatoDelProyectoEnDisco,
   cloudstudioDelProyecto,
+  guardarAparatoDelProyecto,
   guardarModoDeEscrituraDeProyecto,
   guardarOrigenDeDispositivosDeProyecto,
   modoDeEscrituraDelProyecto,
@@ -219,7 +221,13 @@ import {
   type OrigenDeDispositivos,
   type PruebaDeGranja,
 } from "../../core/granja.js";
-import { DISPOSITIVO_DE_GRANJA, dispositivoSegunOrigen, origenEnVigor } from "../../core/dispositivoElegido.js";
+import {
+  aparatoDeEjecutar,
+  DISPOSITIVO_DE_GRANJA,
+  dispositivoSegunOrigen,
+  origenEnVigor,
+  type AparatoDelProyecto,
+} from "../../core/dispositivoElegido.js";
 import { abrirEnSistema, olvidarEntorno as olvidarCredencialesDeEntorno, rutaAuthPorDefecto } from "../../agent/cloudstudio/cloudstudioMcp.js";
 import { nombreDePersona } from "../../agent/config/persona.js";
 import { cambiosDeSesion, exportarLoTerminado, fotoDeApertura, olvidarSesion, parcheDeSesion } from "../../agent/sesiones/sesionGit.js";
@@ -960,6 +968,14 @@ export interface OpcionesDeMontaje {
    * `ajusteDeGranjaCableado`). Ausente = Ajustes no pinta la pestaña Granja y la pastilla no ofrece elegirla.
    */
   granja?: ServicioDeGranja;
+  /**
+   * El aparato de las tareas y los chats nuevos de cada proyecto (pestaña Ejecutar → «Tareas en background»,
+   * `ajusteDeAparatoDelProyectoCableado`). Ausente = el control no se pinta.
+   */
+  aparatoDelProyecto?: {
+    leer: (raiz: string) => AparatoDelProyecto;
+    guardar: (raiz: string, eleccion: "global" | "granja" | DispositivoElegido) => AparatoDelProyecto;
+  };
   /** Qué copia de la granja tiene ahora la sesión de ese hilo («Pixel 3 · copia 1»), o `undefined`. */
   copiaDeGranja?: (idDeHilo: string) => string | undefined;
   /** Se apunta a los cambios de copia (cogida o liberada): el alta se reanuncia para que la pastilla lo diga. */
@@ -1640,6 +1656,10 @@ export function montarRutas(
         const copia = abierto === undefined ? undefined : opciones.copiaDeGranja?.(abierto.idDeHilo);
         return copia === undefined ? {} : { copiaDeGranja: copia };
       })(),
+      // Lo que dice el proyecto abierto del aparato de sus tareas: solo con copia, que es donde se guarda.
+      ...(abierto === undefined || opciones.aparatoDelProyecto === undefined || !esProyectoEnDisco(abierto.raiz)
+        ? {}
+        : { aparatoDelProyecto: opciones.aparatoDelProyecto.leer(abierto.raiz) }),
       ...(abierto?.historica === true ? { historica: true } : {}),
       /**
        * **El modo de escritura de la sesión abierta**: supervisado o autónomo.
@@ -4487,6 +4507,22 @@ export function montarRutas(
     }
   };
 
+  /** Lo elegido en la lista de la pestaña Ejecutar, con el proyecto en que se eligió. No es la pastilla. */
+  let aparatoElegidoEnEjecutar: { raiz: string; id: string } | undefined;
+  /**
+   * El aparato de la pestaña Ejecutar en ese proyecto (`aparatoDeEjecutar`): lo elegido en ella, el de la sesión, el
+   * del proyecto, el global, o el primero a mano de este equipo. Nunca la granja.
+   */
+  const aparatoDeEjecutarDe = (raiz: string): Dispositivo | undefined => {
+    const abierto = vestibulo.proyectoAbierto();
+    return aparatoDeEjecutar(informeDeDispositivos?.dispositivos, [
+      aparatoElegidoEnEjecutar !== undefined && mismaRuta(aparatoElegidoEnEjecutar.raiz, raiz) ? aparatoElegidoEnEjecutar.id : undefined,
+      abierto !== undefined && mismaRuta(abierto.raiz, raiz) ? abierto.dispositivo?.id : undefined,
+      opciones.aparatoDelProyecto?.leer(raiz).dispositivo?.id,
+      opciones.dispositivoPorDefecto?.()?.id,
+    ]);
+  };
+
   /**
    * Mide el proyecto abierto y compone el veredicto. `undefined` = no hay proyecto abierto.
    *
@@ -4495,9 +4531,11 @@ export function montarRutas(
    * proyecto leídos ahora. Lo caro —adb, el disco— está detrás de opciones, así que un test del
    * cable la ejercita entera con dobles.
    */
-  const medirLanzamiento = async (): Promise<
+  const medirLanzamiento = async (paraEjecutar = true): Promise<
     | {
         abierto: ConsolaDeProyecto;
+        /** Se lanza en la granja: solo el «Probar» del editor con la sesión en ella, nunca la pestaña. */
+        enGranja: boolean;
         proyecto: string;
         dispositivo: Dispositivo | undefined;
         app?: string;
@@ -4510,9 +4548,13 @@ export function montarRutas(
     const abierto = vestibulo.proyectoAbierto();
     if (abierto === undefined) return undefined;
     const raiz = abierto.raiz;
-    const { dispositivo, elegido } = dispositivoDeLaSesion(abierto.dispositivo, informeDeDispositivos);
+    // La pestaña Ejecutar lanza SOLO en este equipo (`aparatoDeEjecutar`), sin tocar la sesión; el «Probar» del editor, en
+    // el aparato de la SESIÓN, que puede ser la granja.
+    const { dispositivo, elegido } = paraEjecutar
+      ? { dispositivo: aparatoDeEjecutarDe(raiz), elegido: undefined }
+      : dispositivoDeLaSesion(abierto.dispositivo, informeDeDispositivos);
     // Con la GRANJA y camino a ella, el aparato y su framework los pone la granja: no hay nada que medir aquí.
-    const enGranja = abierto.dispositivo?.clase === "granja" && opciones.lanzarEnGranja !== undefined;
+    const enGranja = !paraEjecutar && abierto.dispositivo?.clase === "granja" && opciones.lanzarEnGranja !== undefined;
     const framework = dispositivo === undefined || enGranja ? undefined : await medirFramework(dispositivo);
 
     const [xml, ini] = await Promise.all([leerDescriptor(raiz, "app.xml"), leerDescriptor(raiz, "app.ini")]);
@@ -4525,6 +4567,7 @@ export function montarRutas(
     const veredicto = puedeLanzarse({
       dispositivo,
       ...(elegido === undefined ? {} : { elegido }),
+      ...(paraEjecutar ? { soloEsteEquipo: true as const } : {}),
       ...(enGranja ? { granja: opciones.granja?.conexion() === undefined ? ("sin-configurar" as const) : ("lista" as const) } : {}),
       framework,
       xml: xml.texto,
@@ -4539,6 +4582,7 @@ export function montarRutas(
 
     return {
       abierto,
+      enGranja,
       // El nombre del proyecto, que es un SEGMENTO de su carpeta —el mismo que enseña la
       // barra— y no una ruta: `sinRutas` no deja cruzar una ruta de la máquina por el cable.
       proyecto: basename(raiz),
@@ -4576,8 +4620,7 @@ export function montarRutas(
   const atenderRevisarLanzamiento = async (): Promise<void> => {
     const medida = await medirLanzamiento();
     if (medida === undefined) return;
-    const foto =
-      medida.abierto.dispositivo?.clase === "granja" ? DISPOSITIVO_DE_GRANJA : medida.dispositivo === undefined ? undefined : fotoDeDispositivo(medida.dispositivo);
+    const foto = medida.dispositivo === undefined ? undefined : fotoDeDispositivo(medida.dispositivo);
     emitir({
       clase: "lanzable",
       proyecto: medida.proyecto,
@@ -4622,7 +4665,9 @@ export function montarRutas(
    */
   const atenderLanzarApp = async (
     alAcabar?: (estado: "ok" | "fallo" | "ocupado", motivo?: string) => void,
-    modo: ModoDeCopia = "todo"
+    modo: ModoDeCopia = "todo",
+    /** `true` desde la pestaña Ejecutar (solo este equipo); `false` desde el «Probar» del editor (el de la sesión). */
+    paraEjecutar = true,
   ): Promise<void> => {
     // Ya hay uno: se reenvía su estado en vez de lanzar otro, como `atenderReceta`.
     if (lanzamiento !== undefined) {
@@ -4630,13 +4675,13 @@ export function montarRutas(
       alAcabar?.("ocupado");
       return;
     }
-    const medida = await medirLanzamiento();
+    const medida = await medirLanzamiento(paraEjecutar);
     if (medida === undefined) {
       informar("no hay ningún proyecto abierto que lanzar");
       alAcabar?.("fallo", "no hay ningún proyecto abierto");
       return;
     }
-    const enGranja = medida.abierto.dispositivo?.clase === "granja" && opciones.lanzarEnGranja !== undefined;
+    const enGranja = medida.enGranja;
     const foto = enGranja ? DISPOSITIVO_DE_GRANJA : medida.dispositivo === undefined ? undefined : fotoDeDispositivo(medida.dispositivo);
     const fallar = (motivo: string): void => {
       emitir({
@@ -5539,11 +5584,15 @@ export function montarRutas(
       if (resultado.estado === "sin-app" && probar) {
         emitirRecarga(ruta, { estado: "desplegando" });
         // Y cómo acabó, en la MISMA línea: sin esto se quedaba en «desplegando» para siempre.
-        void atenderLanzarApp((estado, motivo) => {
-          if (estado === "ok") emitirRecarga(ruta, { estado: "desplegada" });
-          else if (estado === "ocupado") emitirRecarga(ruta, { estado: "ocupado" });
-          else emitirRecarga(ruta, { estado: "fallo", motivo: `el despliegue no acabó bien: ${motivo ?? "sin motivo"}` });
-        }).catch(contar);
+        void atenderLanzarApp(
+          (estado, motivo) => {
+            if (estado === "ok") emitirRecarga(ruta, { estado: "desplegada" });
+            else if (estado === "ocupado") emitirRecarga(ruta, { estado: "ocupado" });
+            else emitirRecarga(ruta, { estado: "fallo", motivo: `el despliegue no acabó bien: ${motivo ?? "sin motivo"}` });
+          },
+          "todo",
+          false,
+        ).catch(contar);
         return;
       }
       emitirRecarga(ruta, resultado);
@@ -7643,58 +7692,13 @@ export function montarRutas(
               const proyecto = opciones.modoDelProyecto(raiz);
               return proyecto === undefined ? {} : { proyecto };
             })();
-      // Y de dónde saca los aparatos (la granja): con la misma regla, solo con copia y con la granja montada.
-      const origenDeDispositivos =
-        opciones.granja === undefined || !esProyectoEnDisco(raiz)
-          ? undefined
-          : (() => {
-              const proyecto = opciones.granja.origenDelProyecto(raiz);
-              return proyecto === undefined ? {} : { proyecto };
-            })();
       const foto: FotoDelResumen = {
         tareas,
         ...(sync === undefined ? {} : { sync }),
         ...(modoDeEscritura === undefined ? {} : { modoDeEscritura }),
-        ...(origenDeDispositivos === undefined ? {} : { origenDeDispositivos }),
       };
       respuesta.writeHead(200, { "content-type": "application/json" });
       respuesta.end(JSON.stringify(foto));
-      return;
-    }
-    if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "copiaLocal" && mensaje.accion === "origenDeDispositivos") {
-      // Como el modo: del cable llega el ID y, opcional, el origen; la raíz la pone el servidor. Sin `origen` se QUITA.
-      const pedido = (mensaje as { origen?: unknown }).origen;
-      if (pedido !== undefined && !esOrigenDeDispositivos(pedido)) {
-        respuesta.writeHead(400);
-        respuesta.end();
-        return;
-      }
-      const identidad = proyectos.find((p) => p.id === mensaje.proyecto);
-      const raiz = entornoElegido === undefined || identidad === undefined
-        ? undefined
-        : vestibulo.raizDeProyecto(entornoElegido, identidad.nombre);
-      if (raiz === undefined || !esProyectoEnDisco(raiz) || opciones.granja === undefined) {
-        respuesta.writeHead(409, { "content-type": "application/json" });
-        respuesta.end(JSON.stringify({
-          motivo: raiz === undefined
-            ? "ese proyecto no está en el listado del entorno activo"
-            : opciones.granja === undefined
-              ? "esta ejecución no tiene granja de dispositivos"
-              : "el proyecto no tiene copia local: el origen se guarda en su configuración",
-        }));
-        return;
-      }
-      try {
-        opciones.granja.guardarOrigenDelProyecto(raiz, pedido);
-      } catch (error) {
-        respuesta.writeHead(409, { "content-type": "application/json" });
-        respuesta.end(JSON.stringify({ motivo: `no se pudo guardar en la configuración del proyecto (${codigoDe(error) ?? "su config.json no se puede leer"})` }));
-        return;
-      }
-      ajustarAbiertaAlOrigen(raiz);
-      const proyecto = opciones.granja.origenDelProyecto(raiz);
-      respuesta.writeHead(200, { "content-type": "application/json" });
-      respuesta.end(JSON.stringify(proyecto === undefined ? {} : { proyecto }));
       return;
     }
     if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "copiaLocal" && mensaje.accion === "modoDeEscritura") {
@@ -9077,6 +9081,59 @@ export function montarRutas(
       respuesta.end();
       return;
     }
+    if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "aparatoDeTareas") {
+      // Del cable, el id y nada más; la raíz es la del proyecto ABIERTO y el aparato sale de la última MEDIDA.
+      const pedido = (mensaje as { id?: unknown }).id;
+      const abierta = vestibulo.proyectoAbierto();
+      const servicio = opciones.aparatoDelProyecto;
+      const fila = typeof pedido === "string" ? informeDeDispositivos?.dispositivos.find((x) => x.id === pedido) : undefined;
+      const eleccion: "global" | "granja" | DispositivoElegido | undefined =
+        pedido === undefined
+          ? "global"
+          : pedido === DISPOSITIVO_DE_GRANJA.id
+            ? opciones.granja === undefined ? undefined : "granja"
+            : fila === undefined ? undefined : fotoDeDispositivo(fila);
+      if (pedido !== undefined && typeof pedido !== "string") {
+        respuesta.writeHead(400);
+        respuesta.end();
+        return;
+      }
+      if (servicio === undefined || abierta === undefined || !esProyectoEnDisco(abierta.raiz) || eleccion === undefined) {
+        respuesta.writeHead(409, { "content-type": "application/json" });
+        respuesta.end(JSON.stringify({
+          motivo: servicio === undefined || abierta === undefined || !esProyectoEnDisco(abierta.raiz)
+            ? "no hay un proyecto con copia local abierto: el aparato de las tareas se guarda en su configuración"
+            : pedido === DISPOSITIVO_DE_GRANJA.id
+              ? "esta ejecución no tiene granja de dispositivos"
+              : "ese aparato no está en la última medida de este equipo: vuelve a mirar en Ajustes → Dispositivos",
+        }));
+        return;
+      }
+      try {
+        servicio.guardar(abierta.raiz, eleccion);
+      } catch (error) {
+        respuesta.writeHead(409, { "content-type": "application/json" });
+        respuesta.end(JSON.stringify({ motivo: `no se pudo guardar en la configuración del proyecto (${codigoDe(error) ?? "su config.json no se puede leer"})` }));
+        return;
+      }
+      // Cambiar a la granja o a este equipo cambia el ORIGEN: el aparato de la sesión abierta se ajusta, como en la pastilla.
+      ajustarAbiertaAlOrigen(abierta.raiz);
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
+    if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "aparatoDeEjecutar") {
+      // Solo un aparato de ESTE equipo que esté en la medida; la pastilla no se toca. Se vuelve a medir el veredicto.
+      const pedido = (mensaje as { id?: unknown }).id;
+      const abierta = vestibulo.proyectoAbierto();
+      if (typeof pedido === "string" && abierta !== undefined && informeDeDispositivos?.dispositivos.some((d) => d.id === pedido)) {
+        aparatoElegidoEnEjecutar = { raiz: abierta.raiz, id: pedido };
+        void atenderRevisarLanzamiento().catch(contar);
+      }
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
     if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "dispositivo") {
       // **El cliente manda el ID y nada más.** El nombre, la plataforma y la clase salen de
       // la última MEDIDA: son datos sobre la máquina, y el navegador no es fuente sobre la
@@ -10016,6 +10073,14 @@ export function ajusteDeDispositivoPorDefectoCableado(opciones: { casa?: string 
 }
 
 /**
+ * El aparato de las tareas de cada proyecto (pestaña Ejecutar), cableado contra su `config.json`. Extraída por el patrón
+ * de fallo de siempre: el panel lee y guarda aquí, y el vestíbulo lee con `aparatoDelProyectoEnDisco` el mismo fichero.
+ */
+export function ajusteDeAparatoDelProyectoCableado(): NonNullable<OpcionesDeMontaje["aparatoDelProyecto"]> {
+  return { leer: aparatoDelProyectoEnDisco, guardar: guardarAparatoDelProyecto };
+}
+
+/**
  * La granja de dispositivos de este equipo y el origen de cada proyecto (`core/granja.ts`), como los
  * usan Ajustes, la pastilla y el vestíbulo. La dirección y la huella van a `settings.json`, el token a
  * `~/.xonecode/granja.json` y el origen al `config.json` del proyecto; el token se lee AQUÍ, al probar,
@@ -10788,6 +10853,7 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
     ...(({ modoPorDefecto: _paraElVestibulo, ...resto }) => resto)(ajusteDeModoPorDefectoCableado()),
     // El aparato de las sesiones nuevas (IXCODE-51), con la MISMA disciplina.
     ...ajusteDeDispositivoPorDefectoCableado(),
+    aparatoDelProyecto: ajusteDeAparatoDelProyectoCableado(),
     // La granja de dispositivos y el origen de cada proyecto, con la MISMA disciplina; y la copia de cada sesión.
     granja: granjaDelEquipo.granja,
     copiaDeGranja: (id) => {
@@ -11106,6 +11172,8 @@ function vestibuloReal(
     modoPorDefecto: ajusteDeModoPorDefectoCableado().modoPorDefecto,
     // Y con qué aparato (IXCODE-51): también una tarea, que sin él iba al emulador.
     dispositivoPorDefecto: ajusteDeDispositivoPorDefectoCableado().dispositivoPorDefecto,
+    // El del PROYECTO manda sobre el global (pestaña Ejecutar → «Tareas en background»).
+    dispositivoDelProyecto: (raiz: string) => aparatoDelProyectoEnDisco(raiz).dispositivo,
     // Y el origen de los aparatos del proyecto (el suyo, o el global): con la granja, la sesión nace —o se reabre— con ella.
     origenDeDispositivos: origenDeDispositivosCableado(),
     // Y la granja: el canal de cada sesión y la liberación de su copia al acabar cada turno.

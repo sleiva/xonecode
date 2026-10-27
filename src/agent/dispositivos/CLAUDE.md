@@ -60,7 +60,13 @@ discrepancia, **el código manda**.
 - **Se ejecuta lo que falla RÁPIDO** (`sudo` sin TTY). **Se mata el GRUPO** (`detached: true` + `kill(-pid)`).
 - **Ningún comando lleva una ruta de la máquina** (`$(brew --prefix)`); licencias con un clic que lo DICE.
 - **El silencio es el síntoma** (`TOPE_SIN_SALIDA_MS`, 5 min). Un trabajo a la vez por máquina.
-- **El dispositivo de la sesión guarda la FOTO**, no solo el id; lo leen Ejecutar y el `device-controller` por FICHERO (`core/dispositivoDeSesion.ts`, `XONECODE_DISPOSITIVO`) en CADA ejecución. Sin elección, emulador antes que físico. **Sesión NUEVA (también de TAREA) nace con `settings.json#dispositivoPorDefecto`**, sin autorizar nada; una reabierta conserva el suyo.
+- **El dispositivo de la sesión guarda la FOTO**, no solo el id; lo leen Ejecutar y el `device-controller` por FICHERO (`core/dispositivoDeSesion.ts`, `XONECODE_DISPOSITIVO`) en CADA ejecución. Sin elección, emulador antes que físico. **Sesión NUEVA (también de TAREA) nace con el aparato del PROYECTO (`config.json#dispositivoPorDefecto`) y si no con `settings.json#dispositivoPorDefecto`**, sin autorizar nada; una reabierta conserva el suyo.
+- **Ejecutar tiene DOS columnas** (decisión suya, opción B del lienzo): «Ahora» lanza SOLO en un aparato de ESTE equipo a mano,
+  nunca en la granja (`core/dispositivoElegido.ts#aparatoDeEjecutar`: lo elegido en la pestaña, el de la sesión, el del proyecto,
+  el global, el primero a mano; sin ninguno, `ninguno-a-mano`), y elegirlo NO toca la pastilla (`aparatoDeEjecutar` en el cable).
+  «Tareas en background» fija el aparato del proyecto: como el global, la granja, o uno CONCRETO de este equipo, apagados
+  incluidos (`aparatoDeTareas`, `configEnDisco.ts#guardarAparatoDelProyecto`, una escritura de las dos claves). El «Probar» del
+  editor sigue en el aparato de la SESIÓN, que puede ser la granja.
 - **El puerto del túnel es del AVD** (`core/puertosDeAvd.ts`, copia atada por test en `skills/xone-hotswap/lib/dispositivo.mjs` y `apps/web/src/reglasDeAvd.ts`): el servidor FIJA uno por AVD al medir (`atenderDispositivos`, `asignarPuertosPendientes`, `guardarPuertosAsignados`), solo AÑADE, siembra también con UNO, para que el primero conserve el de siempre. **Un FÍSICO tiene el suyo por serie** (`asignarPuertosDeFisicos`, `settings.json#dispositivos.fisicos`, `puertoDeFisico`).
 - **Antes de usar el túnel se comprueba DE QUIÉN es** (`lib/dispositivo.mjs#asegurarTunel`, `adb forward --list`): de otro, sale con 2 y lo dice; de nadie, lo repone. Ejecutar y la recarga lo reponen sin mirar (límite). `emulator-*` sin AVD cae al de siempre y lo DICE. Mismo `--serie` en todos los scripts. **`adb forward` del agente se RECHAZA** (`motivoDeComandoRechazado`); `adb reverse` no (no toca puertos locales).
 - **Crear un AVD va por el MISMO corredor y cerrojo** (`crearAvd`); «sin ventana» = `-no-window -no-audio -no-metrics`, por eso existe «Parar» (`Ajustes.tsx`, `CrearEmulador.tsx`).
@@ -68,7 +74,7 @@ discrepancia, **el código manda**.
 - **La GRANJA de dispositivos XOne** (`core/granja.ts`, `granjaEnDisco.ts`, `granjaEnRed.ts`, `arranque.ts#ajusteDeGranjaCableado`,
   `AjustesDeGranja.tsx`): dirección y huella en `settings.json#granja`, el token en `~/.xonecode/granja.json` (0600, nunca al
   cable ni a la shell). **Origen = el del PROYECTO si lo dice, si no el GLOBAL** (`origenEnVigor`: la granja como aparato
-  por omisión de Ajustes → General), como el modo de escritura: el del proyecto se fija en el panel → Resumen o en la
+  por omisión de Ajustes → General), como el modo de escritura: el del proyecto se fija en Ejecutar → «Tareas en background» o en la
   pastilla del chat (`config.json#origenDeDispositivos`, `local` también se escribe; quitarlo vuelve al global). **El certificado
   autofirmado se fija por HUELLA antes de mandar el token** (TLS abierto a mano; con `agent: false` Node IGNORA
   `createConnection`, medido). Con la granja, el aparato de la sesión es `DISPOSITIVO_DE_GRANJA` (`dispositivoSegunOrigen`; un
@@ -81,7 +87,8 @@ discrepancia, **el código manda**.
   desplegar = subir el ZIP **con `bd/`** (la copia empieza VACÍA en cada turno; `empaquetarProyecto({conBase})`) + `launchApplication`,
   sin reiniciar; captura por la API (JPEG, con diálogos); log por `getLog` (solo de esa copia; su `exception` trae un aviso falso
   cuando no hay, `excepcionDeGetLog`); reiniciar = `restart` y reintentar el lanzamiento (sin el ancla, `Permission Denial`).
-  Ejecutar usa `lanzamientoEnGranja.ts` (veredicto con `granja`, sin aparato ni framework) y la recarga al guardar va por el
+  El «Probar» del editor con la sesión en la granja usa `lanzamientoEnGranja.ts` (veredicto con `granja`, sin aparato ni
+  framework); la pestaña Ejecutar, nunca. La recarga al guardar va por el
   canal solo si la sesión YA tiene copia. Una copia abierta sin saludo ya es nuestra: se apunta y se reintenta.
   **Skill `xone-granja`** (`skills/xone-granja/`): en un proyecto con granja SUSTITUYE a `xone-hotswap`
   (`core/granja.ts#skillsSegunOrigen`, aplicada en `sesionTrueforge.ts#especialistas` con `origenEnDisco.ts`; deepagents

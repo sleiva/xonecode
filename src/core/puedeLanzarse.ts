@@ -97,7 +97,9 @@ export type CausaDeBloqueo =
   /** El proyecto usa la granja de dispositivos (`core/granja.ts`), y esta consola no tiene camino a ella. */
   | { causa: "granja-sin-camino" }
   /** El proyecto usa la granja, y la granja no está configurada (dirección o token). */
-  | { causa: "granja-sin-configurar" };
+  | { causa: "granja-sin-configurar" }
+  /** Ejecutar lanza SOLO en este equipo, y en este equipo no hay ningún aparato a mano. */
+  | { causa: "ninguno-a-mano" };
 
 /**
  * Lo que el veredicto necesita, ya resuelto por quien SÍ puede tocar el disco y la máquina.
@@ -137,6 +139,11 @@ export interface EntradaDeVeredicto {
    * `sin-configurar` = falta dirección o token. Ausente = un aparato de este equipo, como siempre.
    */
   granja?: "lista" | "sin-configurar";
+  /**
+   * Lo pide la pestaña Ejecutar, que lanza SOLO en un aparato de este equipo, nunca en la granja: sin
+   * ninguno, la causa es que no hay ninguno a mano, no que la sesión no haya elegido.
+   */
+  soloEsteEquipo?: true;
 }
 
 export interface Veredicto {
@@ -192,7 +199,9 @@ export function puedeLanzarse(entrada: EntradaDeVeredicto): Veredicto {
     if (entrada.granja === "sin-configurar") causas.push({ causa: "granja-sin-configurar" });
   } else if (dispositivo === undefined) {
     causas.push(
-      entrada.elegido === undefined
+      entrada.soloEsteEquipo === true
+        ? { causa: "ninguno-a-mano" }
+        : entrada.elegido === undefined
         ? { causa: "sin-dispositivo-elegido" }
         : entrada.elegido === ID_DE_GRANJA
           ? { causa: "granja-sin-camino" }
@@ -325,6 +334,8 @@ export function motivoDeBloqueo(causa: CausaDeBloqueo): string {
       return "Este proyecto usa la granja de dispositivos, y esta consola no tiene camino a ella. Para lanzar en un aparato de este equipo, elige «Este equipo» en la pastilla del compositor.";
     case "granja-sin-configurar":
       return "Este proyecto usa la granja de dispositivos y no está configurada: pon su dirección y tu token en Ajustes → Dispositivos → Granja.";
+    case "ninguno-a-mano":
+      return "No hay ningún emulador, simulador ni teléfono arrancado en este equipo: arranca uno en Ajustes → Dispositivos o enchufa un teléfono. Ejecutar no usa la granja; la granja es para las tareas.";
     case "sin-dispositivo-elegido":
       return "Esta sesión no tiene ningún dispositivo elegido: elígelo en la pastilla del compositor, junto al modelo —es donde se elige el de ESTA sesión—, y vuelve a intentarlo.";
     case "dispositivo-desconocido":
