@@ -69,7 +69,8 @@ Ante una discrepancia con el código, **el código manda**.
   orquestador al instante. **Nunca se espera bloqueando**. `developer-xone` espera a `designer-xone`.
 - **En Windows, `ejecutar_script` lanza `node '<ruta>' args`** (`lanzadorDeScriptsEn`, `comandoConNode`, el del hijo de
   Claude Code): por su shebang desde el Git Bash, con `MSYS_NO_PATHCONV`, node recibía `/c/Users/…` y no arrancaba
-  ninguno. Sin probar aún en Windows. **Límite**: el `execute` libre del device-controller sigue lanzándolos por su nombre.
+  ninguno. El `execute` LIBRE (device-controller) va tal cual tras definir cada script como función de bash que lo
+  lanza igual (`conScriptsPorNode`): el nombre suelto, las tuberías y `$(…)` funcionan. Sin probar aún en Windows.
 - **Un script que NO ARRANCA se le DICE a la persona** (`core/shellDeAgente.ts#scriptQueNoArranca`, aviso grave una vez por
   turno, sin rutas): es la máquina, no el trabajo. Medido: en Windows fallaron los siete y solo lo decía el cierre del agente.
 - **La receta del aparato está en el `--help` de `xone-hotswap`** (la app ya queda lanzada tras reiniciar/recargar,

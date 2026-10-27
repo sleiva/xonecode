@@ -1,4 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { execFileSync } from "node:child_process";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { motivoDeComandoExternoInaceptable } from "./comandoExterno.js";
 
 const SCRIPTS = ["xone-hotswap", "xone-log-android", "xone-captura-android", "xone-recargar-android"];
@@ -82,6 +86,43 @@ describe("comandoConNode: el mismo comando lanzado con node (Windows)", () => {
     const { comandoConNode } = await import("./comandoExterno.js");
     expect(comandoConNode("xone-hotswap screen", { "xone-log-android": "C:/x" })).toBeUndefined();
     expect(comandoConNode("xone-hotswap screen", { "xone-hotswap": "C:/O'Neil/xone-hotswap" })).toBeUndefined();
+  });
+});
+
+describe("conScriptsPorNode: la orden LIBRE con cada script como función que lo lanza con node (Windows)", () => {
+  const rutas = { "xone-hotswap": "C:\\Users\\x\\scripts\\xone-hotswap", "xone-log-android": "C:\\Users\\x\\scripts\\xone-log-android" };
+
+  it("la orden va tal cual DESPUÉS de las funciones, con la ruta y el Node en / y entre comillas simples", async () => {
+    const { conScriptsPorNode } = await import("./comandoExterno.js");
+    expect(conScriptsPorNode("xone-hotswap screen 2>&1 | tail -5", rutas, "C:\\Program Files\\nodejs\\node.exe")).toBe(
+      [
+        `xone-hotswap() { 'C:/Program Files/nodejs/node.exe' 'C:/Users/x/scripts/xone-hotswap' "$@"; }`,
+        `xone-log-android() { 'C:/Program Files/nodejs/node.exe' 'C:/Users/x/scripts/xone-log-android' "$@"; }`,
+        "xone-hotswap screen 2>&1 | tail -5",
+      ].join("\n")
+    );
+  });
+
+  it("un nombre que bash no admite o una ruta con comilla se quedan fuera; un Node con comilla deja la orden tal cual", async () => {
+    const { conScriptsPorNode } = await import("./comandoExterno.js");
+    expect(conScriptsPorNode("ls", { "mal nombre": "C:/a", "xone-x": "C:/O'Neil/xone-x" })).toBe("ls");
+    expect(conScriptsPorNode("xone-hotswap screen", rutas, "C:\\O'Neil\\node.exe")).toBe("xone-hotswap screen");
+    expect(conScriptsPorNode("ls", {})).toBe("ls");
+  });
+
+  // Que la forma CORRE en bash de verdad: nombre suelto, tubería, `$(…)` y argumentos con espacios.
+  it.skipIf(!existsSync("/bin/bash"))("bash la ejecuta: el nombre suelto, en una tubería y en una subshell llegan al script con sus argumentos", async () => {
+    const { conScriptsPorNode } = await import("./comandoExterno.js");
+    const dir = mkdtempSync(join(tmpdir(), "xc-scripts-"));
+    try {
+      const script = join(dir, "xone-eco");
+      writeFileSync(script, "console.log(JSON.stringify(process.argv.slice(2)));\n");
+      const orden = conScriptsPorNode(`xone-eco a 'b c' | cat; echo "sub:$(xone-eco z)"`, { "xone-eco": script }, process.execPath);
+      const salida = execFileSync("/bin/bash", ["-c", orden], { encoding: "utf8" });
+      expect(salida).toBe('["a","b c"]\nsub:["z"]\n');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 

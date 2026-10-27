@@ -174,13 +174,15 @@ export function lanzadorDeScriptsEn(
 /** `execute`: la shell del que la declara en su `.md`, y de nadie más. */
 export function capacidadDeEjecucion(
   conShell: { execute(c: string): unknown; write(ruta: string, contenido: string): unknown },
-  dispositivo?: () => DispositivoDeLaSesion | undefined
+  dispositivo?: () => DispositivoDeLaSesion | undefined,
+  /** En Windows, sus scripts como funciones que los lanzan con Node (`conScriptsPorNode`). */
+  enWindows?: { rutas: Readonly<Record<string, string>>; node: string }
 ): Capacidad {
   return {
     nombre: "ejecucion",
     tools: ["execute"],
     capability: {
-      systemToolSets: [new ToolSet({ source: fuenteDeEjecucion(conShell, dispositivo) as never, selectors: SIN_APROBACION, preload: true })],
+      systemToolSets: [new ToolSet({ source: fuenteDeEjecucion(conShell, dispositivo, undefined, enWindows) as never, selectors: SIN_APROBACION, preload: true })],
     },
   };
 }
@@ -467,7 +469,7 @@ export function capacidadesDelEspecialista(
           ),
         ]
       : []),
-    ...(clase === "ejecuta" ? [capacidadDeEjecucion(deps.conShell(), deps.dispositivo)] : []),
+    ...(clase === "ejecuta" ? [capacidadDeEjecucion(deps.conShell(), deps.dispositivo, deps.lanzadorDeScripts?.(agente))] : []),
     ...(clase !== "ejecuta" && agente.scripts === true && scriptsDeTrueforge(deps.scriptsDe(agente)).length > 0
       ? [capacidadDeScripts(deps.conShell(), scriptsDeTrueforge(deps.scriptsDe(agente)), deps.dispositivo, deps.lanzadorDeScripts?.(agente))]
       : []),

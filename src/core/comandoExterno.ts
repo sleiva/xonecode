@@ -90,6 +90,24 @@ export function comandoConNode(
   return [`${lanzador} '${ruta.replace(/\\/g, "/")}'`, ...argumentos].join(" ");
 }
 
+/**
+ * La orden LIBRE de una shell (`execute`) con cada script definido antes como una función de bash que lo lanza con
+ * `node` y su ruta: lo que `comandoConNode` hace para una orden estrecha, pero sin reescribir la orden, que es bash
+ * cualquiera (tuberías, `$(…)`, variables). Una función manda sobre el PATH en el nombre suelto y la heredan las
+ * subshells. Medido en el soporte de Busme (Windows, 27-10-2026): por su shebang desde el Git Bash, con
+ * `MSYS_NO_PATHCONV=1`, `xone-hotswap` daba «Cannot find module 'C:\\c\\Users\\…'» y el device-controller gastaba de
+ * 6 a 14 llamadas por encargo en descubrir que había que llamarlo por su ruta. Un script con un nombre que bash no
+ * admite o una ruta con comilla simple se queda fuera (como antes); con un Node con comilla, la orden va tal cual.
+ */
+export function conScriptsPorNode(comando: string, rutas: Readonly<Record<string, string>>, node?: string): string {
+  if (node !== undefined && node.includes("'")) return comando;
+  const lanzador = node === undefined ? "node" : `'${node.replace(/\\/g, "/")}'`;
+  const funciones = Object.entries(rutas)
+    .filter(([nombre, ruta]) => /^[A-Za-z0-9_][A-Za-z0-9_.-]*$/.test(nombre) && !ruta.includes("'"))
+    .map(([nombre, ruta]) => `${nombre}() { ${lanzador} '${ruta.replace(/\\/g, "/")}' "$@"; }`);
+  return funciones.length === 0 ? comando : `${funciones.join("\n")}\n${comando}`;
+}
+
 /** El script de `xone-development` que pasa un `.xne` de 8 bits a UTF-8 (`skills/xone-development/lib/aUtf8.mjs`). */
 export const SCRIPT_A_UTF8 = "xone-a-utf8";
 

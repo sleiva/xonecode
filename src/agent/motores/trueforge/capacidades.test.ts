@@ -77,6 +77,28 @@ describe("qué piezas lleva cada especialista, por lo que declara su `.md`", () 
     expect(await corrida(undefined)).toEqual(["xone-hotswap shot"]);
   });
 
+  // Windows (soporte de Busme, 27-10-2026): el `execute` libre del device-controller llamaba `xone-hotswap` por su nombre
+  // y daba «Cannot find module 'C:\\c\\Users\\…'». Atado por el ENSAMBLADO: la tool `execute` montada antepone las funciones.
+  it("en Windows el execute LIBRE define antes cada script como función que lo lanza con node; fuera, la orden tal cual", async () => {
+    const corrida = async (lanzador: DependenciasDelEspecialista["lanzadorDeScripts"]) => {
+      const corridos: string[] = [];
+      const d = { ...deps(), conShell: () => ({ execute: (c: string) => (corridos.push(c), { output: "", exitCode: 0 }), write: () => undefined }), ...(lanzador === undefined ? {} : { lanzadorDeScripts: lanzador }) };
+      const piezas = capacidadesDelEspecialista(agente({ ejecucion: true }), "x", d);
+      const shell = piezas.find((p) => p.tools.includes("execute"))!;
+      const toolSet = (shell.capability as { systemToolSets: { callTool(p: { name: string; arguments: Record<string, unknown> }): Promise<unknown> }[] }).systemToolSets[0]!;
+      await toolSet.callTool({ name: "execute", arguments: { command: "xone-hotswap screen 2>&1 | tail -5" } });
+      return corridos;
+    };
+    const ruta = "C:\\Users\\x\\skills\\scripts\\xone-hotswap";
+    expect(await corrida(() => lanzadorDeScriptsEn("win32", [{ nombre: "xone-hotswap", ruta }], "C:\\node\\node.exe"))).toEqual([
+      `xone-hotswap() { 'C:/node/node.exe' 'C:/Users/x/skills/scripts/xone-hotswap' "$@"; }\nxone-hotswap screen 2>&1 | tail -5`,
+    ]);
+    expect(await corrida(() => lanzadorDeScriptsEn("darwin", [{ nombre: "xone-hotswap", ruta: "/s/xone-hotswap" }], "/usr/bin/node"))).toEqual([
+      "xone-hotswap screen 2>&1 | tail -5",
+    ]);
+    expect(await corrida(undefined)).toEqual(["xone-hotswap screen 2>&1 | tail -5"]);
+  });
+
   it("xone-a-utf8 no es de TrueForge: escribe cada .xne en su codificación; es del hijo de Claude Code", () => {
     expect(scriptsDeTrueforge(["xone-hotswap", "xone-a-utf8", "xone-log-android"])).toEqual(["xone-hotswap", "xone-log-android"]);
     // Con solo ése, ni siquiera se monta la tool.

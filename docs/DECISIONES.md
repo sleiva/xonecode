@@ -4122,6 +4122,16 @@ nada más. Cinco cosas:
   seguidas cortadas con una tool call no se vuelve a llamar al modelo: el hilo cierra con texto,
   como al detener, y lo lee quien lo llamó. Dos y no tres: la nota da UNA ocasión de cambiar, y
   cada vuelta de más es un tope de salida entero tirado.
+- **En Windows, el `execute` libre define cada script como FUNCIÓN de bash (0.48.8).** Medido en
+  tres soportes de Busme (27-10-2026): `xone-hotswap screen` daba «Cannot find module
+  'C:\c\Users\…'» —por su shebang, con `MSYS_NO_PATHCONV=1` (IXCODE-72), node recibe `/c/Users/…`
+  sin traducir— y el device-controller gastaba de 6 a 14 de sus 60 llamadas por encargo en
+  descubrir que había que llamarlo por su ruta; cada encargo sin memoria lo volvía a descubrir.
+  `ejecutar_script` ya lo resolvía reescribiendo la orden (`comandoConNode`), pero la orden libre
+  es bash cualquiera y no se puede reescribir: se le anteponen `xone-x() { '<node>' '<ruta>' "$@"; }`
+  por cada script de sus skills. Una función manda sobre el PATH en el nombre suelto y la heredan
+  tuberías y subshells (probado con bash de verdad en el test). Las variables de MSYS se quedan:
+  protegen `/sdcard`.
 - **Omitir `thinking` significa tres cosas distintas, así que es una TABLA y no un campo
   fijo.** La dependencia manda `thinking: undefined` si no se le fija, o sea que omite el
   parámetro. Y omitirlo: en **Opus 5 y Sonnet 5** ya corre adaptativo (no hace falta pedir
