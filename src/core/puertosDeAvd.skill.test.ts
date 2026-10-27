@@ -188,6 +188,10 @@ describe("el script xone-hotswap real, con --dry-run", () => {
     // Los atajos del 22-10-2026 (medido contra pixel8): `js` sin Base64 a mano y `abrir` directo a una ventana.
     [["--dry-run", "js", "return", "1+1;"], `{"command":"runScript","scriptLanguage":"javascript","scriptText":"${Buffer.from("return 1+1;").toString("base64")}"}`],
     [["--dry-run", "abrir", "MenuAlbaranes"], `{"command":"runScript","scriptLanguage":"javascript","scriptText":"${Buffer.from('ui.openMenu("MenuAlbaranes"); return "abierta MenuAlbaranes";').toString("base64")}"}`],
+    // Los del 27-10-2026 (medido en Busme): atrás por el canal y los textos pintados sin uiautomator dump.
+    [["--dry-run", "atras"], '{"command":"pressKey","keyCode":4}'],
+    [["--dry-run", "textos"], '{"command":"getAllElements","format":"uiautomator"}'],
+    [["--dry-run", "esperar", "Elige", "antes", "timeout=800"], '{"command":"getAllElements","format":"uiautomator"}'],
   ])("%j", (args, esperado) => {
     expect(correr(...args)).toBe(esperado);
   });
@@ -199,23 +203,61 @@ describe("el script xone-hotswap real, con --dry-run", () => {
  */
 describe("el script xone-hotswap real, contra un servidor de mentira", () => {
   const script = resolve(__dirname, "../../skills/xone-hotswap/scripts/xone-hotswap");
-  async function correrContra(respuesta: Record<string, unknown>, ...args: string[]): Promise<{ codigo: number | null; err: string }> {
+  /** `respuesta` puede ser una lista: la n-ésima petición recibe la n-ésima (y la última se repite). */
+  async function correrContra(
+    respuesta: Record<string, unknown> | Record<string, unknown>[],
+    ...args: string[]
+  ): Promise<{ codigo: number | null; err: string; out: string; peticiones: number }> {
     const { WebSocketServer } = await import("ws");
     const servidor = new WebSocketServer({ port: 0, host: "127.0.0.1" });
     await new Promise<void>((r) => servidor.once("listening", () => r()));
+    const respuestas = Array.isArray(respuesta) ? respuesta : [respuesta];
+    let peticiones = 0;
     servidor.on("connection", (ws) => {
       ws.send(JSON.stringify({ command: "server_hello" }));
-      ws.on("message", () => ws.send(JSON.stringify(respuesta)));
+      ws.on("message", () => ws.send(JSON.stringify(respuestas[Math.min(peticiones++, respuestas.length - 1)])));
     });
     const puerto = (servidor.address() as { port: number }).port;
     const { spawn } = await import("node:child_process");
     const hijo = spawn(process.execPath, [script, ...args], { env: { ...process.env, HOTSWAP_URL: `ws://127.0.0.1:${puerto}/hotswap`, XONECODE_DISPOSITIVO: "" } });
     let err = "";
+    let out = "";
     hijo.stderr.on("data", (d) => (err += String(d)));
+    hijo.stdout.on("data", (d) => (out += String(d)));
     const codigo = await new Promise<number | null>((r) => hijo.on("close", r));
     servidor.close();
-    return { codigo, err };
+    return { codigo, err, out, peticiones };
   }
+
+  const volcado = (...textos: string[]) => ({
+    result: true,
+    status: `<hierarchy>${textos.map((t) => `<node index="0" text="${t}" bounds="[0,0][1,1]"/>`).join("")}<node text="" /></hierarchy>`,
+  });
+
+  it("textos: los pintados en una línea, sin vacíos ni repetidos y con las entidades deshechas", async () => {
+    const r = await correrContra(volcado("¿Cuándo?", "Más tarde &amp; ahora", "¿Cuándo?"), "textos");
+    expect(r.codigo).toBe(0);
+    expect(JSON.parse(r.out)).toEqual({ comando: "textos", textos: ["¿Cuándo?", "Más tarde & ahora"] });
+  }, 20_000);
+
+  it("esperar: vuelve a mirar por la misma conexión hasta que se pinta, sin tildes ni mayúsculas", async () => {
+    const r = await correrContra([volcado("Inicio"), volcado("Inicio"), volcado("ELIGE ANTES UNA PARADA")], "esperar", "elige", "antes", "timeout=10000");
+    expect(r.codigo).toBe(0);
+    expect(r.peticiones).toBe(3);
+    expect(JSON.parse(r.out)).toMatchObject({ comando: "esperar", visto: "ELIGE ANTES UNA PARADA" });
+  }, 20_000);
+
+  it("esperar sin verlo: sale con 1 y dice lo que SÍ había", async () => {
+    const r = await correrContra(volcado("Inicio", "Ayuda"), "esperar", "Cuándo", "timeout=700");
+    expect(r.codigo).toBe(1);
+    expect(JSON.parse(r.out)).toMatchObject({ comando: "esperar", visto: false, enPantalla: ["Inicio", "Ayuda"] });
+    expect(r.err).toContain("no apareció «Cuándo» en 700 ms");
+  }, 20_000);
+
+  it("js sin return avisa antes del viaje; con return, no", async () => {
+    expect((await correrContra({ result: true, status: "" }, "js", "var a=1; a")).err).toContain("sin «return» no devuelve nada");
+    expect((await correrContra({ result: true, status: "1" }, "js", "return 1;")).err).not.toContain("return");
+  }, 20_000);
 
   it("rechazado (result:false) sale con 1 y lo dice; aceptado, con 0", async () => {
     const malo = await correrContra({ result: false, status: "Unknown command: launchapplication" }, "launchapplication", "app=maset");

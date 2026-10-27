@@ -9919,3 +9919,26 @@ de ancho (el que Stitch DECLARA para sus pantallas de móvil) se amplía por un 
 (`core/ampliarImagen.ts`, `agent/dispositivos/maquetaParaElModelo.ts`) y va como PNG. Solo la maqueta: la captura ya
 viene a tamaño real. Cuesta más tokens de imagen en cada crítica con maqueta pequeña. Sin medir todavía si con ella el
 modelo ve la píldora.
+
+## El device-controller por el canal, no por adb (27-10-2026)
+
+Medido en dos soportes de Busme (device-controller en DeepSeek, Windows, encargos cortados en el tope de 60 llamadas):
+la mayor parte de sus `execute` no eran pruebas sino rodeos para lo que el canal ya contesta o no contestaba.
+
+- **`atras`** (`pressKey 4`): 21 `adb shell input keyevent 4` en una sesión. El plan decía «hotswap no tiene orden
+  back»; el comando existía y la skill no lo nombraba. Con la granja, además, adb no llega a la copia.
+- **`textos`** y **`esperar <texto> timeout=`**: unos 22 `uiautomator dump` + `grep text=`, varios en bucles de 10–12
+  vueltas para ver si salía un aviso tras un toque. Son el volcado `uiautomator` del propio canal (equivalente al de
+  `uiautomator dump`, comprobado en la referencia), leído en el cliente: `esperar` vuelve a pedirlo por la MISMA
+  conexión cada 300 ms y, si no sale, termina con 1 y la lista de lo que sí había, para no volver a esperar un texto
+  mal escrito. Compara sin tildes ni mayúsculas. Probado contra el framework real (pixel8, appdemo).
+- **`js` sin `return` avisa antes del viaje**: cinco viajes seguidos probando `f();`, `s;` y `a+1` para leer tres
+  variables. Medido contra el framework: sin `return` el script no devuelve nada o Rhino lo rechaza. La ayuda enseña
+  a sacar varios valores en UN `js` con `JSON.stringify`.
+- **`xone-arrancar-android` dice si el emulador no tiene red**: 25 `ping`/`settings`/`curl` en una sesión hasta ver que
+  la interfaz del emulador había arrancado caída y sin ruta (`UnknownHostException` al entrar). Se mira `ip route get
+  8.8.8.8`, no un `ping` (un ICMP filtrado no es un emulador sin red); con pixel8, 0 con red y 2 en modo avión, y adb
+  devuelve ese código. El aviso dice el arreglo que funcionó: arrancar en frío sin borrar datos (`--en-frio`,
+  `-no-snapshot-load`).
+- **Lo que NO se ha hecho:** una memoria de reentrada más corta para el device-controller (23–42 K por encargo). Falta
+  medir cuánto de esa memoria usa de verdad antes de recortarla.

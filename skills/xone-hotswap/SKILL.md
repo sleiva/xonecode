@@ -28,7 +28,11 @@ No cuestan lo mismo, ni de lejos. Por orden de lo que vas a necesitar:
 | **subir lo que cambiaste** | `xone-recargar-android A.xne default.css icons/x.svg icons/y.svg` | TODO en UNA llamada: sube cada uno y aplica una vez. Sin argumentos compara con el aparato y sube solo lo que difiere. Uno a uno son N viajes, y con iconos N relanzamientos |
 | **desplegar entero** | `xone-desplegar-android` | solo la PRIMERA vez o con fuentes nuevas: **sustituye la base de datos del aparato** y borra tus datos de prueba. Para todo lo demás, `xone-recargar-android` |
 | **ir a una ventana** | `abrir NombreColeccion` | DIRECTO (`ui.openMenu`), sin repetir login y menús en cada prueba; se pinta un instante después |
-| **ejecutar JavaScript de la app** | `js 'return …;'` | `runScript` sin componer el Base64 a mano |
+| **ejecutar JavaScript de la app** | `js 'return …;'` | `runScript` sin componer el Base64 a mano. Devuelve lo del `return`: sin él, nada |
+| **varias variables de la app** | `js 'return JSON.stringify({A: self.MAP_A, B: self.MAP_B});'` | UN viaje para todas, no uno por variable |
+| **volver atrás** | `atras` | el «atrás» del sistema por el canal (`pressKey 4`), sin `adb` |
+| **qué textos se ven** | `textos` | los PINTADOS, diálogos incluidos, en una línea; no hace falta `uiautomator dump` |
+| **esperar a que salga un texto** | `click name=X -- esperar Elige antes timeout=5000` | mira por la misma conexión hasta que se pinta (sin tildes ni mayúsculas); si no sale, sale con 1 y dice qué había |
 | **qué está fallando** | `xone-log-android` | un error de JavaScript o una excepción salen ahí con su mensaje y su línea |
 | **qué ha pasado tras una acción** | `xone-log-android --limpiar`, la acción, `xone-log-android --app` | trae SOLO los `console.log` de la app, sus errores y qué manejador corrió (`Executing script: [MenuPrincipal][btnD8][onclick]`): casi siempre basta sin captura |
 | **el valor de un campo** | `getText name=X` | un viaje, una respuesta corta |
@@ -179,7 +183,8 @@ Y `xone-desplegar-android` **no necesita un `zip` del sistema**: construye el ZI
 
 **No uses las herramientas nativas para lo que contesta el canal**: `uiautomator dump` da la
 jerarquía de vistas de ANDROID y `adb exec-out screencap` una foto cruda; ninguna de las dos
-conoce los controles XOne, que es por lo que suelen preguntarte.
+conoce los controles XOne, que es por lo que suelen preguntarte. Para los textos que se ven están
+`textos` y `esperar`; para volver atrás, `atras` (no `adb shell input keyevent 4`).
 
 **Pero si el canal no contesta y aun así hace falta una captura, es `xone-captura-android`, no
 un `adb` compuesto a mano.** Medido: redirigir `adb exec-out screencap -p > captura.png` deja el

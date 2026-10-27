@@ -139,7 +139,13 @@ LA RECETA (lo eficiente, en este orden):
   xone-hotswap sql MiApp "SELECT * FROM CLIENTES LIMIT 20"
   xone-hotswap abrir MenuAlbaranes           ir DIRECTO a una ventana (ui.openMenu), sin login ni menús;
                                              se pinta un instante después: mira «screen» tras un segundo
-  xone-hotswap js 'return self.getName();'   JavaScript de la app, sin Base64 a mano (runScript)
+  xone-hotswap js 'return self.getName();'   JavaScript de la app, sin Base64 a mano (runScript); devuelve lo del return.
+                                             Varios valores en UN viaje: js 'return JSON.stringify({A: self.MAP_A, B: self.MAP_B});'
+  xone-hotswap atras                         volver atrás (pressKey 4); no uses adb keyevent
+  xone-hotswap textos                        los textos PINTADOS en pantalla (diálogos incluidos), en una línea
+  xone-hotswap click name=BTN -- esperar Elige antes timeout=5000
+                                             espera a que se PINTE un texto (sin tildes ni mayúsculas); sale con 1
+                                             si no aparece y dice qué había. Sustituye a uiautomator dump en bucle
 
 Cada comando es "<nombre> clave=valor ..."; con -- se encadenan varios por la MISMA
 conexion, que es lo que hay que hacer (el servidor admite una sola y cierra la anterior).
@@ -199,7 +205,26 @@ const ATAJOS = {
   sql: (resto) => ({ command: "runSql", appName: resto[0], sql: resto.slice(1).join(" ") }),
   // JavaScript de la app SIN el Base64 a mano (`runScript` lo exige): medido en Maset, el desarrollador lo componía a
   // mano o navegaba a base de clics —38 `runScript` y 79 `click` en una noche—.
-  js: (resto) => ({ command: "runScript", scriptLanguage: "javascript", scriptText: Buffer.from(resto.join(" "), "utf8").toString("base64") }),
+  js: (resto) => {
+    const texto = resto.join(" ");
+    // Lo que devuelve `runScript` es lo del `return`: medido en Busme (26-10-2026), cinco viajes seguidos probando
+    // `f();`, `s;` y `a+1` para leer tres variables. Se avisa ANTES de gastar el viaje.
+    if (!/\breturn\b/.test(texto)) {
+      process.stderr.write(`js: sin «return» no devuelve nada. Para varios valores, uno solo: js 'return JSON.stringify({A: self.MAP_A, B: self.MAP_B});'\n`);
+    }
+    return { command: "runScript", scriptLanguage: "javascript", scriptText: Buffer.from(texto, "utf8").toString("base64") };
+  },
+  // Volver atrás por el canal (`pressKey 4`). Medido en Busme: 21 `adb shell input keyevent 4` porque el agente creía
+  // que el canal no tenía «atrás»; con la granja, además, adb no llega.
+  atras: () => ({ command: "pressKey", keyCode: 4 }),
+  // Los TEXTOS pintados, en una línea. Medido en Busme: ~22 `uiautomator dump` + `grep text=` a mano para lo mismo.
+  textos: () => ({ command: "getAllElements", format: "uiautomator", [ATAJO]: { tipo: "textos" } }),
+  // Esperar a que un texto se PINTE, por la misma conexión: sustituye los bucles `for i in 1..10; uiautomator dump`.
+  esperar: (resto) => {
+    const { opciones, texto } = textoYTimeout(resto);
+    if (texto === "") salir(`esperar necesita el texto: xone-hotswap esperar "Elige antes" timeout=5000`);
+    return { command: "getAllElements", format: "uiautomator", [ATAJO]: { tipo: "esperar", texto, timeout: opciones } };
+  },
   // Ir DIRECTO a una ventana por su colección, sin repetir login y menús en cada prueba (`ui.openMenu`).
   abrir: (resto) => ({
     command: "runScript",
@@ -207,6 +232,57 @@ const ATAJOS = {
     scriptText: Buffer.from(`ui.openMenu(${JSON.stringify(resto[0] ?? "")}); return "abierta ${String(resto[0] ?? "").replace(/"/g, "")}";`, "utf8").toString("base64"),
   }),
 };
+
+/**
+ * La marca de un atajo que se resuelve AQUÍ y no en el aparato (`textos`, `esperar`). Es un Symbol para que
+ * `JSON.stringify` no la mande: el servidor solo ve el `getAllElements`.
+ */
+const ATAJO = Symbol("atajo");
+const ESPERA_POR_OMISION_MS = 5_000;
+/** Cada cuánto se vuelve a mirar mientras se espera: el `waitForElement` del framework sondea cada 250 ms. */
+const CADENCIA_MS = 300;
+
+/** `esperar Elige antes timeout=8000` → el texto (todo lo que no sea `timeout=`) y la espera en ms. */
+function textoYTimeout(resto) {
+  let opciones = ESPERA_POR_OMISION_MS;
+  const palabras = [];
+  for (const p of resto) {
+    const m = /^timeout=(\d+)$/.exec(p);
+    if (m) opciones = Number(m[1]);
+    else palabras.push(p);
+  }
+  return { opciones, texto: palabras.join(" ").trim() };
+}
+
+/**
+ * Los textos que se VEN, sacados del volcado `uiautomator` (Android) o `uikit` (iOS, que acepta `uiautomator` como
+ * alias): los atributos `text` y, en iOS, `label`. Sin repetir y sin vacíos, en el orden del árbol.
+ */
+function textosDe(volcado) {
+  if (typeof volcado !== "string") return [];
+  const vistos = new Set();
+  for (const m of volcado.matchAll(/\s(?:text|label)="([^"]*)"/g)) {
+    const t = desescaparXml(m[1]).trim();
+    if (t !== "") vistos.add(t);
+  }
+  return [...vistos];
+}
+
+function desescaparXml(t) {
+  return t
+    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)))
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&");
+}
+
+/** Sin mayúsculas ni tildes: «Elige antes» encuentra «ELIGE ANTES» y «Cuándo» a «Cuando». */
+function normal(t) {
+  return t.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+}
 
 function aplicarPares(json, pares) {
   for (const par of pares) {
@@ -364,6 +440,10 @@ function sinBinarios(respuesta) {
 
 /** Los comandos que el servidor contestó con `result: false`: si hay alguno, se sale con 1. */
 const rechazados = [];
+/** Los `esperar` que se quedaron sin ver su texto: también salen con 1, pero no los rechazó el servidor. */
+const noVistos = [];
+/** Lo más que se imprime de `textos`: una pantalla con una lista larga son cientos. */
+const TOPE_DE_TEXTOS = 80;
 const ws = new WebSocket(process.env.HOTSWAP_URL ?? urlPorOmision(puertoPedido, seriePedida));
 let saludado = false;
 let pendiente;
@@ -380,9 +460,11 @@ function siguiente() {
     clearTimeout(reloj);
     ws.close();
     if (rechazados.length > 0) console.error(`hotswap: el servidor rechazó ${rechazados.join(", ")} (result:false)`);
-    process.exit(rechazados.length > 0 ? 1 : 0);
+    for (const n of noVistos) console.error(`hotswap: ${n}`);
+    process.exit(rechazados.length > 0 || noVistos.length > 0 ? 1 : 0);
   }
   pendiente = comando;
+  if (comando[ATAJO] !== undefined) comando[ATAJO].desde = Date.now();
   rearmar();
   ws.send(JSON.stringify(comando));
 }
@@ -434,8 +516,46 @@ ws.onmessage = (ev) => {
   }
   // Un rechazo del servidor (`result: false`) cuenta: al final se sale con 1. Antes salía con 0 siempre, y el agente
   // probaba otra sintaxis a ciegas (medido: cuatro formas de `launchApplication` seguidas, todas «bien»).
+  const atajo = pendiente?.[ATAJO];
+  if (atajo !== undefined && mensaje.result !== false) {
+    if (resolverAtajo(atajo, textosDe(mensaje.status))) return;
+    pendiente = undefined;
+    siguiente();
+    return;
+  }
   if (mensaje.result === false) rechazados.push(pendiente?.command ?? "?");
   console.log(JSON.stringify({ comando: pendiente?.command, ...sinBinarios(mensaje) }));
   pendiente = undefined;
   siguiente();
 };
+
+/**
+ * `textos` y `esperar`, con el volcado ya leído. Devuelve `true` si hay que VOLVER a mirar (esperar sin verlo aún y
+ * con tiempo): se reenvía el mismo `getAllElements` por la misma conexión.
+ */
+function resolverAtajo(atajo, textos) {
+  if (atajo.tipo === "textos") {
+    const recortados = textos.slice(0, TOPE_DE_TEXTOS).map((t) => (t.length > 120 ? `${t.slice(0, 120)}…` : t));
+    console.log(JSON.stringify({ comando: "textos", textos: recortados, ...(textos.length > TOPE_DE_TEXTOS ? { total: textos.length } : {}) }));
+    return false;
+  }
+  const buscado = normal(atajo.texto);
+  const visto = textos.find((t) => normal(t).includes(buscado));
+  const ms = Date.now() - atajo.desde;
+  if (visto === undefined && ms < atajo.timeout) {
+    const otra = pendiente;
+    setTimeout(() => {
+      rearmar();
+      ws.send(JSON.stringify(otra));
+    }, CADENCIA_MS);
+    return true;
+  }
+  if (visto !== undefined) {
+    console.log(JSON.stringify({ comando: "esperar", visto, ms }));
+  } else {
+    // Lo que SÍ había: sin eso, quien espera un texto mal escrito vuelve a esperarlo, o abre el árbol entero.
+    console.log(JSON.stringify({ comando: "esperar", visto: false, ms, enPantalla: textos.slice(0, 25) }));
+    noVistos.push(`no apareció «${atajo.texto}» en ${atajo.timeout} ms`);
+  }
+  return false;
+}

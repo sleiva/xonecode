@@ -33,6 +33,7 @@
  *   xone-arrancar-android --avd pixel8     con varios
  *   xone-arrancar-android --lista          qué AVDs hay, sin arrancar nada
  *   xone-arrancar-android --sin-ventana    sin ventana (también si el AVD lo tiene marcado en Ajustes)
+ *   xone-arrancar-android --en-frio        arranque en frío (sin la instantánea), sin borrar datos
  */
 import { execFileSync, spawn } from "node:child_process";
 import { dormir, ajusteDelAvd, BANDERAS_SIN_VENTANA, puedeArrancarEmulador } from "../lib/dispositivo.mjs";
@@ -55,10 +56,13 @@ if (args.includes("--help") || args.includes("-h")) {
   xone-arrancar-android --avd pixel8     con varios
   xone-arrancar-android --lista          qué AVDs hay, sin arrancar nada
   xone-arrancar-android --sin-ventana    sin ventana ni audio (también si el AVD lo tiene marcado en Ajustes)
+  xone-arrancar-android --en-frio        arranque en frío (sin la instantánea), sin borrar datos: lo que
+                                         devuelve la red a un emulador que arrancó sin ella
 
 Si ya hay un emulador vivo con ese AVD, lo dice y no lanza nada. Espera a que el sistema
 diga \`sys.boot_completed=1\`, no solo a que el aparato aparezca en \`adb devices\`: sobre un
 Android a medio arrancar, \`xone-desplegar-android\` falla de formas que no se leen.
+Y comprueba que el emulador tiene RED: si no la tiene, lo dice y cómo devolvérsela.
 Después: xone-desplegar-android`);
   process.exit(0);
 }
@@ -107,6 +111,25 @@ function arrancadoDelTodo(serie) {
   } catch {
     return false;
   }
+}
+
+/**
+ * El emulador SIN RED, dicho al arrancar. Medido en Busme (26-10-2026): la interfaz del emulador arrancó caída y sin
+ * ruta por defecto, la app moría en `UnknownHostException` al entrar, y el device-controller gastó 25 llamadas en
+ * `ping`, `settings` y `curl` hasta verlo. Se mira la RUTA (`ip route get`), no un `ping`: un ICMP filtrado en la red
+ * de la oficina no es un emulador sin red. Comprobado contra pixel8: con red sale 0; en modo avión, «Network is
+ * unreachable» y 2, y adb devuelve ese código.
+ */
+function avisarSiNoHayRed(serie) {
+  try {
+    adb("-s", serie, "shell", "ip", "route", "get", "8.8.8.8");
+    return;
+  } catch {
+    // Sin ruta: se dice abajo.
+  }
+  console.log(`AVISO: ${serie} NO TIENE RED (sin ruta a internet). La app no llegará a su servidor: fallará al entrar con UnknownHostException.`);
+  console.log(`No lo diagnostiques desde la shell. Mira el modo avión (adb -s ${serie} shell cmd connectivity airplane-mode) y si no es eso,`);
+  console.log(`relánzalo en frío sin borrar datos: adb -s ${serie} emu kill  y  xone-arrancar-android --avd ${avd} --en-frio. Si sigue sin red, díselo a la persona.`);
 }
 
 function avdsDisponibles() {
@@ -169,6 +192,7 @@ const yaEstaba = emuladoresVivos().find((e) => e.avd === avd);
 if (yaEstaba !== undefined) {
   if (arrancadoDelTodo(yaEstaba.serie)) {
     console.log(`${avd} ya está arrancado (${yaEstaba.serie}). No he lanzado nada.`);
+    avisarSiNoHayRed(yaEstaba.serie);
     console.log("Siguiente: xone-desplegar-android");
     process.exit(0);
   }
@@ -185,7 +209,8 @@ if (yaEstaba === undefined) {
   // «Sin ventana» viene de Ajustes → Dispositivos (por AVD) o de `--sin-ventana`. Es la misma
   // receta que el botón de la web (`argsDeArranque`), la constante es copia de la de core porque la skill no importa TS (un test las compara).
   const sinVentana = args.includes("--sin-ventana") || ajusteDelAvd(avd).sinVentana === true;
-  const banderas = sinVentana ? BANDERAS_SIN_VENTANA : [];
+  // En frío: sin cargar la instantánea, que es de donde volvía la red caída. No borra datos (eso es `-wipe-data`).
+  const banderas = [...(sinVentana ? BANDERAS_SIN_VENTANA : []), ...(args.includes("--en-frio") ? ["-no-snapshot-load"] : [])];
   if (sinVentana) console.log(`${avd} arranca SIN ventana: para verlo, captura; para pararlo, adb -s <serie> emu kill`);
   const hijo = spawn(EMULATOR, ["-avd", avd, ...banderas], { detached: true, stdio: "ignore" });
   let fallo;
@@ -206,6 +231,7 @@ while (Date.now() - t0 < TOPE_MS) {
   const mio = emuladoresVivos().find((e) => e.avd === avd);
   if (mio !== undefined && arrancadoDelTodo(mio.serie)) {
     console.log(`${avd} arrancado y listo (${mio.serie}), ${Math.round((Date.now() - t0) / 1000)} s`);
+    avisarSiNoHayRed(mio.serie);
     console.log("Siguiente: xone-desplegar-android");
     process.exit(0);
   }

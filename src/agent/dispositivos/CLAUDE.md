@@ -88,4 +88,7 @@ discrepancia, **el código manda**.
   no). Sus scripts llevan los MISMOS nombres y REENVÍAN a los de `xone-hotswap` (`lib/reenvio.mjs`): una sola lógica.
   Con la granja la shell RECHAZA `adb`/`emulator` (`motivoDeOtroAparato`; medido: `adb devices` en Maset) y la captura de una
   copia SIN app se niega (`App is not running`; medido: el agente capturó antes de desplegar y salió en blanco).
+- **Atrás, textos y esperas van por el canal, no por adb** (`xone-hotswap atras`, `textos`, `esperar`): se resuelven en
+  el cliente sobre `getAllElements` con formato `uiautomator`, y valen igual en local y en la granja. `xone-arrancar-android`
+  avisa si el emulador arrancó sin red (`ip route get`, no `ping`). El porqué medido, en `docs/DECISIONES.md`.
 - **Con una tarea trabajando, Ejecutar sube LO TERMINADO** (`sesionGit.ts#exportarLoTerminado`, IXCODE-58): el árbol del commit anterior al primero que selló la tarea desde que empezó (o `HEAD`), exportado a una carpeta temporal con un índice privado; nunca el disco a medias. El veredicto lo dice antes (`lanzable.origen`); si no se puede separar, falla diciéndolo.

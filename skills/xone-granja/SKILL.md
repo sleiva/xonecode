@@ -28,6 +28,7 @@ Los scripts se llaman por su nombre, sin `--serie` ni `--puerto`: ya van a la co
 | **dónde estoy** | `xone-hotswap screen` | una línea: colección, diálogos, ventana |
 | **ir a una ventana** | `xone-hotswap abrir NombreColeccion` | directo, sin repetir login y menús |
 | **pulsar, rellenar, leer valores** | `xone-hotswap click/fill/getText/getFields/getRows …` | los mismos comandos del canal (`xone-hotswap --help`) |
+| **volver atrás, ver los textos, esperar uno** | `xone-hotswap atras`, `textos`, `esperar <texto> timeout=5000` | por el canal: aquí no hay `adb shell input keyevent` ni `uiautomator dump` |
 | **qué está fallando** | `xone-log-android` (`--app` para los `console.log`) | el log de ESTA copia y nada más; trae la excepción de XOne si la hubo |
 | **si algo se VE mal** | `xone-captura-android --nombre x` | la pantalla de la copia en **JPEG**, con los diálogos encima |
 | **reiniciar la app** | `xone-reiniciar-android --app MiApp` | recrea la pantalla vacía y vuelve a lanzar la app; lo desplegado sigue |
