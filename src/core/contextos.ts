@@ -131,21 +131,44 @@ export function umbralDeCompactacion(tope: number | undefined): number {
  * `claude-opus-4-8` y `claude-fable-5-1` salen con 16384. En un harness que escribe
  * ficheros, un tope de 4096 no da error: corta la respuesta a media escritura.
  *
- * **16.384 y no más, y el motivo es de qué camino lo usa.** El modelo construido se
- * comparte entre el turno (que STREAMEA: su `_streamResponseChunks` mete `stream: true` en
- * el payload sea cual sea la bandera del constructor) y las llamadas sueltas con `.invoke()`
- * —el juez, el aumentador—, que no streamean y donde un tope grande se lleva por delante el
- * plazo HTTP del SDK. 16.384 es además el valor que la propia dependencia da a la familia
- * actual, así que para los modelos que SÍ conoce esto no cambia nada: solo tapa el 4096.
+ * **El turno pide `TOPE_DE_SALIDA_DEL_TURNO` (32.768), nunca más que el techo del modelo.**
+ * Con 16.384 un analista de Sonnet 5.5 se cortó 30 veces seguidas escribiendo el mismo
+ * `TASKS.md` (soporte de Maset, 27-10-2026). Cada modelo tiene su techo de salida en la API
+ * —128K la familia actual, 64K Haiku/Sonnet/Opus 4.5, 4K-8K la 3.x— y pedir por encima es
+ * un 400, por eso la tabla va por prefijo de modelo (el primero que casa gana).
+ *
+ * **Las llamadas SIN streaming se quedan en `TOPE_DE_SALIDA_SIN_STREAMING` (16.384).** El
+ * modelo construido se comparte entre el turno (que STREAMEA: su `_streamResponseChunks`
+ * mete `stream: true` sea cual sea la bandera del constructor) y las llamadas sueltas con
+ * `.invoke()` —el juez, el aumentador, el juez visual—, que no streamean: el SDK de Anthropic
+ * LANZA «Streaming is required…» si una petición sin streaming pide más de ~21.333
+ * (`calculateNonstreamingTimeout`). El recorte lo hace `ChatAnthropicConRazonamiento` en
+ * `agent/config/modelos.ts`.
  *
  * Solo `anthropic` tiene fila, como `ollama` no tiene fila en la tabla de contexto: los
  * demás clientes no tienen este fallo, y fijarles un tope a ciegas sería recortarles la
  * salida por una razón que no existe.
  */
-const TOPES_DE_SALIDA: Partial<Record<Proveedor, Array<[prefijo: string, tope: number]>>> = {
-  anthropic: [["claude", 16_384]],
+export const TOPE_DE_SALIDA_DEL_TURNO = 32_768;
+export const TOPE_DE_SALIDA_SIN_STREAMING = 16_384;
+
+/** El techo de salida de cada modelo en la API, por prefijo; el primero que casa gana. */
+const TECHOS_DE_SALIDA: Partial<Record<Proveedor, Array<[prefijo: string, techo: number]>>> = {
+  anthropic: [
+    ["claude-haiku-4-5", 64_000],
+    ["claude-sonnet-4-5", 64_000],
+    ["claude-opus-4-5", 64_000],
+    ["claude-opus-4-1", 32_000],
+    ["claude-opus-4-2", 32_000], // claude-opus-4-20250514
+    ["claude-sonnet-4-2", 64_000], // claude-sonnet-4-20250514
+    ["claude-3-7", 64_000],
+    ["claude-3-5", 8_192],
+    ["claude-3-", 4_096],
+    ["claude", 128_000],
+  ],
 };
 
 export function topeDeSalida(proveedor: Proveedor, modelo: string): number | undefined {
-  return TOPES_DE_SALIDA[proveedor]?.find(([prefijo]) => modelo.startsWith(prefijo))?.[1];
+  const techo = TECHOS_DE_SALIDA[proveedor]?.find(([prefijo]) => modelo.startsWith(prefijo))?.[1];
+  return techo === undefined ? undefined : Math.min(TOPE_DE_SALIDA_DEL_TURNO, techo);
 }

@@ -39,8 +39,25 @@ describe("el cliente de Anthropic, contra su propio invocationParams", () => {
     // `claude-sonnet-5` es el caso medido: su tabla por prefijo no lo tiene
     // (`claude-sonnet-4` no es prefijo de `claude-sonnet-5`), así que sin esto heredaba su
     // `FALLBACK_MAX_OUTPUT_TOKENS` de 4096 y cortaba las escrituras a media respuesta.
-    expect(parametrosDe("claude-sonnet-5").max_tokens).toBe(16_384);
-    expect(parametrosDe("claude-opus-5").max_tokens).toBe(16_384);
+    expect(parametrosDe("claude-sonnet-5").max_tokens).toBe(32_768);
+    expect(parametrosDe("claude-opus-5").max_tokens).toBe(32_768);
+  });
+
+  it("una llamada SIN streaming sale con 16.384: por encima de ~21.333 el SDK lanza antes de mandar", async () => {
+    // El juez y el aumentador usan `.invoke()` sin streaming sobre el MISMO cliente del turno.
+    const cliente = new Modelos({ bandera: "anthropic/claude-sonnet-5-5" }).paraPapel("trabajo") as {
+      invoke: (p: string) => Promise<unknown>;
+      completionWithRetry: (peticion: { max_tokens?: number; stream?: boolean }) => Promise<unknown>;
+    };
+    const pedidas: { max_tokens?: number; stream?: boolean }[] = [];
+    cliente.completionWithRetry = async (peticion) => {
+      pedidas.push(peticion);
+      return { id: "m", type: "message", role: "assistant", model: "claude-sonnet-5-5", content: [{ type: "text", text: "ok" }], stop_reason: "end_turn", usage: { input_tokens: 1, output_tokens: 1 } };
+    };
+    await cliente.invoke("hola");
+    expect(pedidas).toHaveLength(1);
+    expect(pedidas[0]?.stream).toBe(false);
+    expect(pedidas[0]?.max_tokens).toBe(16_384);
   });
 
   it("a la generación 4.6-4.8 se le PIDE el razonamiento adaptativo", () => {

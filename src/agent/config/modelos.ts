@@ -9,7 +9,7 @@ import {
   pideThinkingAdaptativo, aceptaThinkingAdaptativo,
   type Eleccion, type FuentesDeEleccion, type Proveedor, type ProveedorDeclarado,
 } from "../../core/modelos.js";
-import { topeDeSalida } from "../../core/contextos.js";
+import { TOPE_DE_SALIDA_SIN_STREAMING, topeDeSalida } from "../../core/contextos.js";
 import { esfuerzoAplicable, pensamientoAplicable, type CapacidadesVivas, type ClaseDeTrabajo, type DuracionDeCache, type Esfuerzo, type Pensamiento } from "../../core/esfuerzo.js";
 import { baseUrlDeOllama, baseUrlDeOllamaCloud } from "./catalogoModelos.js";
 import { crearMemoriaDeEco, fetchConEcoDeRazonamiento } from "./ecoDeRazonamiento.js";
@@ -269,6 +269,16 @@ class ChatAnthropicConRazonamiento extends ChatAnthropic {
         };
       },
     });
+  }
+
+  /**
+   * Una llamada SIN streaming (`.invoke()` del juez, el aumentador, el juez visual) no pasa de
+   * `TOPE_DE_SALIDA_SIN_STREAMING`: el turno pide más, y por encima de ~21.333 el SDK lanza
+   * «Streaming is required…» antes de mandar nada (`core/contextos.ts`).
+   */
+  override async _generateNonStreaming(...[mensajes, params, opciones]: Parameters<ChatAnthropic["_generateNonStreaming"]>) {
+    const max_tokens = Math.min(params.max_tokens, TOPE_DE_SALIDA_SIN_STREAMING);
+    return super._generateNonStreaming(mensajes, { ...params, max_tokens }, opciones);
   }
 
   override async *_streamResponseChunks(...args: Parameters<ChatAnthropic["_streamResponseChunks"]>) {

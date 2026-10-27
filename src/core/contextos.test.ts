@@ -92,10 +92,17 @@ describe("topeDeSalida", () => {
    * suyo. En un harness que escribe ficheros eso no da error — corta a media escritura.
    */
   it("Claude lleva tope explícito, para no heredar el 4096 silencioso de la dependencia", () => {
-    expect(topeDeSalida("anthropic", "claude-sonnet-5")).toBe(16_384);
-    expect(topeDeSalida("anthropic", "claude-opus-5")).toBe(16_384);
+    // El turno pide 32.768 (con 16.384 un analista de Sonnet 5.5 se cortó 30 veces seguidas).
+    expect(topeDeSalida("anthropic", "claude-sonnet-5-5")).toBe(32_768);
+    expect(topeDeSalida("anthropic", "claude-opus-5")).toBe(32_768);
     // Y uno que su tabla tampoco conoce todavía: el nuestro no depende de esa lista.
-    expect(topeDeSalida("anthropic", "claude-loquesea-9")).toBe(16_384);
+    expect(topeDeSalida("anthropic", "claude-loquesea-9")).toBe(32_768);
+  });
+
+  it("nunca por encima del techo de salida de ESE modelo: pedir más es un 400", () => {
+    expect(topeDeSalida("anthropic", "claude-3-5-haiku-20241022")).toBe(8_192);
+    expect(topeDeSalida("anthropic", "claude-3-haiku-20240307")).toBe(4_096);
+    expect(topeDeSalida("anthropic", "claude-haiku-4-5")).toBe(32_768);
   });
 
   it("los demás proveedores NO llevan tope: no tienen ese fallo", () => {
