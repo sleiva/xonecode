@@ -26,7 +26,7 @@ import { execFileSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
 import { join, basename } from "node:path";
 import { canalDeGranja, serieAndroid, rutaDeAdb, NODE } from "../lib/dispositivo.mjs";
-import { capturaDeGranja } from "../lib/granja.mjs";
+import { capturaDeGranja, comandoEnGranja } from "../lib/granja.mjs";
 import { guardarGeometria } from "../lib/geometria.mjs";
 
 const args = process.argv.slice(2);
@@ -80,13 +80,31 @@ const pedido = opcion("nombre");
  * Se AÑADE en vez de rechazar: lo que el modelo quería está claro y un «no» aquí cuesta otro
  * viaje para lo mismo.
  */
-// La de la granja es JPEG: la extensión dice lo que hay dentro, o el chat no la pinta bien.
+// La de la granja es JPEG: la extensión dice lo que hay dentro. Medido en Maset: pedida `login.png`, salió un JPEG con
+// ese nombre y el agente gastó tres comandos (`file`, un `python3` leyendo la cabecera PNG) en averiguar qué era.
 const extension = granja === undefined ? "png" : "jpg";
-const conExtension = (n) => (/\.[A-Za-z0-9]{2,4}$/.test(n) ? n : `${n}.${extension}`);
+const conExtension = (n) => {
+  if (granja !== undefined && /\.png$/i.test(n)) return n.replace(/\.png$/i, ".jpg");
+  return /\.[A-Za-z0-9]{2,4}$/.test(n) ? n : `${n}.${extension}`;
+};
 const nombre = pedido === undefined ? `captura-${Date.now()}.${extension}` : conExtension(basename(pedido));
 if (nombre === "" || nombre === "." || nombre === "..") {
   console.error("ese nombre no vale para un fichero.");
   process.exit(1);
+}
+
+/**
+ * **Una copia de la granja SIN app no se fotografía.** Medido en Maset: el agente capturó antes de desplegar, la copia
+ * (pedida limpia en ese momento) enseñaba su pantalla en blanco, y la foto costó un `describe_image` para saber que no
+ * había nada. Se pregunta al canal, que lo dice en texto. Con `--igualmente`, se captura igual.
+ */
+if (granja !== undefined && !args.includes("--igualmente")) {
+  const donde = await comandoEnGranja(granja, { command: "getCurrentScreen" }).catch(() => undefined);
+  if (donde?.result === false && /App is not running/i.test(String(donde.status ?? ""))) {
+    console.log("NO capturo: la copia de la granja está VACÍA. En este turno aún no se ha desplegado la app (la copia se");
+    console.log("pide limpia y se borra al acabar cada turno). Primero xone-desplegar-android; después, la captura.");
+    process.exit(1);
+  }
 }
 
 let bytes;
@@ -193,7 +211,11 @@ try {
   process.exit(1);
 }
 
-console.log(`captura guardada como ${nombre} (${bytes.length} bytes). Es de la vía nativa: enseña lo que el SISTEMA pinta, no lo que la app host dice.`);
+console.log(
+  granja !== undefined
+    ? `captura guardada como ${nombre} (${bytes.length} bytes, JPEG de la pantalla de la copia de la granja, con los diálogos encima).`
+    : `captura guardada como ${nombre} (${bytes.length} bytes). Es de la vía nativa: enseña lo que el SISTEMA pinta, no lo que la app host dice.`,
+);
 
 // Y su GEOMETRÍA, en el mismo momento: el árbol de controles y las barras del sistema, para que el
 // crítico visual compare tecla a tecla con la pantalla que ESTA captura enseña (`../lib/geometria.mjs`).

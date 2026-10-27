@@ -334,6 +334,15 @@ export function motivoDeOtroAparato(comando: string, d: DispositivoDeLaSesion | 
     while (palabras.length > 0 && /^[A-Za-z_][A-Za-z0-9_]*=/.test(palabras[0]!)) palabras.shift();
     const primera = palabras[0];
     if (primera === undefined) continue;
+    // Con la GRANJA, ni `adb` ni `emulator` llegan a ella —hablan con ESTE equipo— y cualquier cosa que contesten
+    // (`adb devices` incluido, medido en Maset) engaña sobre la copia de la sesión. Los scripts sí van a ella.
+    if (d.clase === "granja" && (esAdb(primera) || esEmulator(primera))) {
+      return (
+        "No se lanza: la sesión usa la GRANJA de dispositivos, y `adb`/`emulator` hablan con ESTE equipo, no con la copia " +
+        "de la granja. Usa los scripts (`xone-desplegar-android`, `xone-hotswap`, `xone-captura-android`, `xone-log-android`): " +
+        "ya van a ella. " + otro
+      );
+    }
     if (esEmulator(primera) && palabras.includes("-avd") && !(d.plataforma === "android" && d.clase === "emulador")) {
       return `No se lanza: la sesión usa ${nombre} y no se levanta un emulador por su cuenta. ${otro}`;
     }

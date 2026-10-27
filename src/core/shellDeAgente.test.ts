@@ -337,6 +337,15 @@ describe("el aparato de la sesión manda también en la shell (IXCODE-32)", () =
     expect(motivoDeOtroAparato("adb -e install app.apk", fisico)).toMatch(/-s R58N/);
   });
 
+  it("con la GRANJA, ni adb (tampoco `adb devices`) ni emulator: hablan con este equipo; los scripts sí pasan", () => {
+    const granja = { id: "granja", nombre: "Granja", plataforma: "android", clase: "granja" } as const;
+    expect(motivoDeOtroAparato("adb devices 2>&1 | head -20", granja)).toMatch(/GRANJA.*xone-desplegar-android/s);
+    expect(motivoDeOtroAparato("adb -s R58N shell getprop", granja)).toMatch(/GRANJA/);
+    expect(motivoDeOtroAparato("emulator -list-avds", granja)).toMatch(/GRANJA/);
+    expect(motivoDeOtroAparato("xone-captura-android --nombre login", granja)).toBeUndefined();
+    expect(motivoDeOtroAparato("ls /artefactos", granja)).toBeUndefined();
+  });
+
   it("lo que no actúa sobre un aparato pasa: listar, la versión, el servidor", () => {
     expect(motivoDeOtroAparato("adb devices -l", fisico)).toBeUndefined();
     expect(motivoDeOtroAparato("adb version && adb devices", fisico)).toBeUndefined();

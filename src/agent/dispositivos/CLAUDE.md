@@ -86,4 +86,6 @@ discrepancia, **el código manda**.
   **Skill `xone-granja`** (`skills/xone-granja/`): en un proyecto con granja SUSTITUYE a `xone-hotswap`
   (`core/granja.ts#skillsSegunOrigen`, aplicada en `sesionTrueforge.ts#especialistas` con `origenEnDisco.ts`; deepagents
   no). Sus scripts llevan los MISMOS nombres y REENVÍAN a los de `xone-hotswap` (`lib/reenvio.mjs`): una sola lógica.
+  Con la granja la shell RECHAZA `adb`/`emulator` (`motivoDeOtroAparato`; medido: `adb devices` en Maset) y la captura de una
+  copia SIN app se niega (`App is not running`; medido: el agente capturó antes de desplegar y salió en blanco).
 - **Con una tarea trabajando, Ejecutar sube LO TERMINADO** (`sesionGit.ts#exportarLoTerminado`, IXCODE-58): el árbol del commit anterior al primero que selló la tarea desde que empezó (o `HEAD`), exportado a una carpeta temporal con un índice privado; nunca el disco a medias. El veredicto lo dice antes (`lanzable.origen`); si no se puede separar, falla diciéndolo.
