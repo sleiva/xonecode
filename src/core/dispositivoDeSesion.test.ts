@@ -53,6 +53,7 @@ describe("los scripts de xone-hotswap eligen aparato", () => {
     preferirEmulador: (s: string) => string | undefined;
     udidIos: (e: string | undefined, entorno: Record<string, string | undefined>, negar?: (texto: string) => never) => string | undefined;
     puedeArrancarEmulador: (entorno: Record<string, string | undefined>) => string | undefined;
+    canalDeGranja: (entorno: Record<string, string | undefined>) => string | undefined;
   }> => import(pathToFileURL(resolve(__dirname, "../../skills/xone-hotswap/lib/dispositivo.mjs")).href);
 
   const conFichero = (d: unknown): Record<string, string> => {
@@ -97,6 +98,16 @@ describe("los scripts de xone-hotswap eligen aparato", () => {
     expect(() => serieAndroid(undefined, { entorno, adb: "/no/existe", negar })).toThrow(/GRANJA.*pastilla/s);
     expect(() => serieAndroid("emulator-5554", { entorno, adb: "/no/existe", negar })).toThrow(/GRANJA/);
     expect(puedeArrancarEmulador(entorno)).toMatch(/Granja/);
+  });
+
+  it("el canal de la granja sale del fichero solo con su forma de loopback, y solo con la granja", async () => {
+    const { canalDeGranja } = await lib();
+    const granja = { id: "granja", nombre: "Granja", plataforma: "android", clase: "granja" };
+    const bueno = "ws://127.0.0.1:53063/granja/AbC_d-9/hotswap";
+    expect(canalDeGranja(conFichero({ ...granja, canal: bueno }))).toBe(bueno);
+    expect(canalDeGranja(conFichero({ ...granja, canal: "ws://10.0.0.2:8443/hotswap" }))).toBeUndefined();
+    expect(canalDeGranja(conFichero(granja))).toBeUndefined();
+    expect(canalDeGranja(conFichero({ id: "R58N", nombre: "Galaxy", plataforma: "android", clase: "fisico", canal: bueno }))).toBeUndefined();
   });
 
   it("arrancar un emulador solo se puede sin aparato o con un EMULADOR en la sesión", async () => {

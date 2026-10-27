@@ -72,6 +72,12 @@ discrepancia, **el código manda**.
   pastilla del chat (`config.json#origenDeDispositivos`, `local` también se escribe; quitarlo vuelve al global). **El certificado
   autofirmado se fija por HUELLA antes de mandar el token** (TLS abierto a mano; con `agent: false` Node IGNORA
   `createConnection`, medido). Con la granja, el aparato de la sesión es `DISPOSITIVO_DE_GRANJA` (`dispositivoSegunOrigen`; un
-  iPhone se queda). **Fase 1: nada llega aún a ella** —los scripts de Android se niegan (`TEXTO_DE_GRANJA`), Ejecutar da
-  `granja-sin-camino` y la recarga no aplica—; pedir copia, liberarla al acabar el turno y la skill `xone-granja` son lo siguiente.
+  iPhone se queda). **La COPIA se pide al primer uso y se libera al acabar el turno** (`releDeGranja.ts`, `core/canalDeGranja.ts`):
+  un relé en loopback por sesión (`ws://127.0.0.1:<p>/granja/<clave>/hotswap`, en el fichero del aparato como `canal`) coge una
+  copia libre en la primera conexión (medido: conectarse a la puerta COGE la copia) y mantiene UNA conexión hacia la granja
+  (una segunda ECHA a la primera; sin conexión, a los diez minutos la granja la libera y la BORRA), repartiendo las
+  respuestas en orden FIFO. `reset` en el `finally` del turno (`vestibulo.alAcabarTurno`) y al cerrar la consola.
+  `file_upload`/`file_download` van por el mismo relé. Llegan `xone-hotswap` y `xone-recargar-android`; los scripts de `adb`
+  se niegan (`TEXTO_DE_GRANJA`), Ejecutar da `granja-sin-camino` y la recarga al guardar no aplica (fase 3, con la skill
+  `xone-granja`).
 - **Con una tarea trabajando, Ejecutar sube LO TERMINADO** (`sesionGit.ts#exportarLoTerminado`, IXCODE-58): el árbol del commit anterior al primero que selló la tarea desde que empezó (o `HEAD`), exportado a una carpeta temporal con un índice privado; nunca el disco a medias. El veredicto lo dice antes (`lanzable.origen`); si no se puede separar, falla diciéndolo.

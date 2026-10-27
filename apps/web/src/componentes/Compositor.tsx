@@ -95,6 +95,7 @@ export function Compositor({
   dispositivosEnUso,
   origenDeDispositivos,
   granja,
+  copiaDeGranja,
   alCambiarOrigenDeDispositivos,
   proyectoActual,
   alMedirDispositivos,
@@ -192,6 +193,8 @@ export function Compositor({
    */
   origenDeDispositivos?: "local" | "granja";
   granja?: EstadoDeGranja;
+  /** La copia de la granja que tiene ahora la sesión. */
+  copiaDeGranja?: string;
   alCambiarOrigenDeDispositivos?: (origen: "local" | "granja") => void;
   /** El proyecto de esta consola, para no avisarse a sí misma. */
   proyectoActual?: string;
@@ -460,6 +463,7 @@ export function Compositor({
                   ? {}
                   : { origen: origenDeDispositivos, alCambiarOrigen: alCambiarOrigenDeDispositivos })}
                 {...(granja === undefined ? {} : { granja })}
+                {...(copiaDeGranja === undefined ? {} : { copiaDeGranja })}
               />
             </div>
           )}

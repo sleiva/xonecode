@@ -552,6 +552,8 @@ export interface EstadoDelCliente {
     dispositivoActivo?: DispositivoElegido;
     /** El proyecto abierto usa la granja. Ausente = este equipo. */
     origenDeDispositivos?: "granja";
+    /** La copia de la granja que tiene ahora la sesión. Ausente = ninguna cogida. */
+    copiaDeGranja?: string;
     /** La sesión abierta es una relectura que el agente no recuerda. Ausente = no. */
     historica?: boolean;
     /** El modo de escritura de la sesión abierta. Ausente = no hay sesión, y entonces la
@@ -2491,6 +2493,7 @@ export function crearStoreDelCliente(): {
             sesionActiva?: unknown;
             dispositivoActivo?: unknown;
             origenDeDispositivos?: unknown;
+            copiaDeGranja?: unknown;
             historica?: unknown;
             modoDeEscritura?: unknown;
             trabajoAlAbrir?: unknown;
@@ -2651,6 +2654,7 @@ export function crearStoreDelCliente(): {
               // justo lo que guardar la foto viene a evitar.
               ...(esDispositivoElegido(m.dispositivoActivo) ? { dispositivoActivo: m.dispositivoActivo } : {}),
               ...(m.origenDeDispositivos === "granja" ? { origenDeDispositivos: "granja" as const } : {}),
+              ...(typeof m.copiaDeGranja === "string" && m.copiaDeGranja !== "" ? { copiaDeGranja: m.copiaDeGranja } : {}),
               // Solo si es exactamente `true`: es una afirmación sobre lo que el agente NO
               // recuerda, y cualquier otra cosa se lee como «no».
               ...(m.historica === true ? { historica: true } : {}),

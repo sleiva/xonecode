@@ -56,7 +56,7 @@ process.on("warning", (aviso) => {
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { guardarGeometria } from "../lib/geometria.mjs";
-import { asegurarTunel, dispositivoDeLaSesion, puertoConMotivo, retirarOpciones, serieAndroid, PUERTO_DEL_HOTSWAP } from "../lib/dispositivo.mjs";
+import { asegurarTunel, canalDeGranja, dispositivoDeLaSesion, puertoConMotivo, retirarOpciones, serieAndroid, PUERTO_DEL_HOTSWAP } from "../lib/dispositivo.mjs";
 
 /**
  * La URL cuando nadie dice `HOTSWAP_URL`: el puerto LOCAL del túnel es del aparato, no un 8443
@@ -64,6 +64,9 @@ import { asegurarTunel, dispositivoDeLaSesion, puertoConMotivo, retirarOpciones,
  * primero sin error). Solo se resuelve si hace falta: con `HOTSWAP_URL` no se llama a adb.
  */
 function urlPorOmision(puertoPedido, seriePedida) {
+  // La GRANJA: el canal local de la sesión, que XOneCode reenvía a la copia que pide al primer uso. Sin adb ni túnel.
+  const granja = canalDeGranja();
+  if (granja !== undefined) return granja;
   // iOS no tiene túnel: el simulador comparte el localhost del Mac.
   if (dispositivoDeLaSesion()?.plataforma === "ios") return `wss://127.0.0.1:${PUERTO_DEL_HOTSWAP}/hotswap`;
   const { serie, porque } = serieAndroid(seriePedida);

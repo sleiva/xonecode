@@ -743,6 +743,24 @@ describe("vestíbulo", () => {
       await v.cerrar();
     });
 
+    it("con la granja, el fichero del aparato lleva el CANAL de la sesión; al acabar cada turno se libera su copia", async () => {
+      const base = mkdtempSync(join(tmpdir(), "xc-granja-canal-"));
+      const liberadas: string[] = [];
+      const v = crearVestibulo({
+        ...dobles(),
+        origenDeTrabajo: "global",
+        origenDeDispositivos: () => "granja",
+        canalDeGranja: (id) => `ws://127.0.0.1:1/granja/${id}/hotswap`,
+        alAcabarTurno: (_raiz, id) => void liberadas.push(id),
+      });
+      const abierta = await v.abrirProyecto({ raiz: base });
+      const fichero = JSON.parse(readFileSync(ficheroDeDispositivoDeSesion(base, abierta.idDeHilo), "utf8"));
+      expect(fichero).toMatchObject({ clase: "granja", canal: `ws://127.0.0.1:1/granja/${abierta.idDeHilo}/hotswap` });
+      await v.cerrar();
+      rmSync(base, { recursive: true, force: true });
+      expect(liberadas.every((id) => id === abierta.idDeHilo)).toBe(true);
+    });
+
     it("una sesión sin esfuerzo guardado abre SIN esfuerzo, no con uno inventado", async () => {
       const s = sesionesEnMemoria();
       const v = crearVestibulo({ ...dobles(), origenDeTrabajo: "global", sesiones: s.puerto });
@@ -2018,6 +2036,35 @@ describe("abrirParaTarea — la segunda puerta", () => {
       // algo que corría solo.
       { raiz: raizB, mensaje: "xonecode: sesión [tarea 669c9b79]" },
     ]);
+    rmSync(base, { recursive: true, force: true });
+  });
+
+  it("la copia de la granja se libera al acabar CADA turno, también de una tarea, y otra vez al cerrar la sesión", async () => {
+    const base = baseTemporal();
+    const s = sesionesEnMemoria();
+    const turnos: string[] = [];
+    const cierres: string[] = [];
+    const v = crearVestibulo({
+      ...dobles(),
+      origenDeTrabajo: "global",
+      sesiones: s.puerto,
+      baseDeWorkspace: () => base,
+      crearEjecutor: () => async () => {
+        throw new Error("el turno revienta");
+      },
+      alAcabarTurno: (_raiz, id) => void turnos.push(id),
+      alCerrarSesion: (_raiz, id) => void cierres.push(id),
+    });
+    const humana = await v.abrirProyecto({ raiz: proyectoEnDisco(base, "A") });
+    humana.recibir({ clase: "prosa", texto: "prueba en el aparato" });
+    const deTarea = await v.abrirParaTarea(proyectoEnDisco(base, "B"), undefined, undefined, "669c9b79");
+    deTarea.recibir({ clase: "prosa", texto: "documenta" });
+    await new Promise((r) => setTimeout(r, 0));
+    await humana.cerrar();
+    await deTarea.cerrar();
+    // Aunque el turno reviente: va en el `finally`.
+    expect(turnos).toEqual([humana.idDeHilo, deTarea.idDeHilo]);
+    expect(cierres).toEqual([humana.idDeHilo, deTarea.idDeHilo]);
     rmSync(base, { recursive: true, force: true });
   });
 

@@ -3541,6 +3541,7 @@ export function App({
                 ? {}
                 : {
                     granja: estado.granja,
+                    ...(estado.alta?.copiaDeGranja === undefined ? {} : { copiaDeGranja: estado.alta.copiaDeGranja }),
                     origenDeDispositivos: estado.alta?.origenDeDispositivos ?? ("local" as const),
                     alCambiarOrigenDeDispositivos: (origen: "local" | "granja") => void enviar({ clase: "origenDeDispositivos", origen }),
                   })}

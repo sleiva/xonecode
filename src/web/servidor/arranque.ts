@@ -206,7 +206,9 @@ import {
   origenDeDispositivosDelProyecto,
 } from "../../agent/config/configEnDisco.js";
 import { guardarTokenDeGranja, quitarTokenDeGranja, tokenDeGranja } from "../../agent/dispositivos/granjaEnDisco.js";
-import { probarGranja, type Hablar } from "../../agent/dispositivos/granjaEnRed.js";
+import { probarGranja, type ConexionDeGranja, type Hablar } from "../../agent/dispositivos/granjaEnRed.js";
+import { crearGestorDeCopias, servirReleDeGranja } from "../../agent/dispositivos/releDeGranja.js";
+import { nombreDeCopia } from "../../core/canalDeGranja.js";
 import {
   direccionDeGranja,
   esFormaDeTokenDeGranja,
@@ -956,6 +958,10 @@ export interface OpcionesDeMontaje {
    * `ajusteDeGranjaCableado`). Ausente = Ajustes no pinta la pestaña Granja y la pastilla no ofrece elegirla.
    */
   granja?: ServicioDeGranja;
+  /** Qué copia de la granja tiene ahora la sesión de ese hilo («Pixel 3 · copia 1»), o `undefined`. */
+  copiaDeGranja?: (idDeHilo: string) => string | undefined;
+  /** Se apunta a los cambios de copia (cogida o liberada): el alta se reanuncia para que la pastilla lo diga. */
+  suscribirCopiasDeGranja?: (oyente: () => void) => void;
   /**
    * Augmenta una petición en un encargo revisado (`agent/tareas/aumentador.ts`, Task 9). Ausente =
    * el botón «Preparar el encargo» no está disponible.
@@ -1624,6 +1630,10 @@ export function montarRutas(
       ...(abierto?.sesion === undefined ? {} : { sesionActiva: abierto.sesion }),
       ...(abierto?.dispositivo === undefined ? {} : { dispositivoActivo: abierto.dispositivo }),
       ...(abierto !== undefined && origenDe(abierto.raiz) === "granja" ? { origenDeDispositivos: "granja" as const } : {}),
+      ...((): { copiaDeGranja?: string } => {
+        const copia = abierto === undefined ? undefined : opciones.copiaDeGranja?.(abierto.idDeHilo);
+        return copia === undefined ? {} : { copiaDeGranja: copia };
+      })(),
       ...(abierto?.historica === true ? { historica: true } : {}),
       /**
        * **El modo de escritura de la sesión abierta**: supervisado o autónomo.
@@ -2457,6 +2467,8 @@ export function montarRutas(
     void anunciarAlta().catch(contar);
     if (informeDeDispositivos !== undefined) emitir(mensajeDeDispositivos(informeDeDispositivos));
   };
+  // Cuando una sesión coge o suelta su copia de la granja, el alta lo dice (la pastilla pinta cuál).
+  opciones.suscribirCopiasDeGranja?.(() => void anunciarAlta().catch(contar));
 
   /**
    * El servicio de conectores, construido UNA VEZ al montar — no en cada mensaje, porque es
@@ -9984,6 +9996,8 @@ export function ajusteDeDispositivoPorDefectoCableado(opciones: { casa?: string 
  */
 export interface ServicioDeGranja {
   configuracion: () => { direccion?: string; huella?: string; hayToken: boolean };
+  /** Dirección, token y huella para HABLAR con la granja, solo dentro de este proceso (el relé). Nunca al cable. */
+  conexion: () => ConexionDeGranja | undefined;
   /** Fija la dirección ya normalizada, o la QUITA con `undefined`. Otra dirección borra la huella: es otra máquina. */
   guardarDireccion: (direccion: string | undefined) => void;
   /** Acepta la huella del certificado (la primera, o una nueva que la persona confirmó). */
@@ -10034,6 +10048,11 @@ export function ajusteDeGranjaCableado(opciones: { casa?: string; hablar?: Habla
       aceptarHuella: (huella) => {
         const actual = ajustes();
         if (actual !== undefined) guardarGranja(casa, { ...actual, huella });
+      },
+      conexion: () => {
+        const a = ajustes();
+        const t = token();
+        return a === undefined || t === undefined ? undefined : { direccion: a.direccion, token: t, ...(a.huella === undefined ? {} : { huella: a.huella }) };
       },
       guardarToken: (t) => guardarTokenDeGranja(t, casa === undefined ? {} : { casa }),
       quitarToken: () => quitarTokenDeGranja(casa === undefined ? {} : { casa }),
@@ -10565,9 +10584,27 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
   const conectoresYGestor = ajusteDeGestorCableado(ajusteDeConectoresCableado({ casa: homedir() }));
   // El instalador del framework para la tool del agente, enlazado TARDE por la misma razón.
   const instaladorTardio = instaladorDeFrameworkTardio();
+  // La granja de dispositivos: su servicio (Ajustes), y las COPIAS de cada sesión con su relé local. Va ANTES del
+  // vestíbulo, que escribe el canal en el fichero del aparato y libera la copia al acabar cada turno.
+  const granjaDelEquipo = ajusteDeGranjaCableado();
+  let avisarCopiaDeGranja: (() => void) | undefined;
+  const copiasDeGranja = crearGestorDeCopias({
+    conexion: granjaDelEquipo.granja.conexion,
+    informar,
+    alCambiarCopia: () => avisarCopiaDeGranja?.(),
+  });
+  const releDeGranja = await servirReleDeGranja(copiasDeGranja, granjaDelEquipo.granja.conexion).catch((error: unknown) => {
+    const codigo = (error as { code?: unknown } | null)?.code;
+    informar(`granja: no se pudo abrir el canal local (${typeof codigo === "string" ? codigo : "error"}); la granja no llegará a los scripts`);
+    return undefined;
+  });
   vestibulo =
     opciones.vestibulo ??
-    vestibuloReal(opciones, servidor, escribir, informar, conectoresYGestor.conectoresDeSesion, instaladorTardio.puerto);
+    vestibuloReal(opciones, servidor, escribir, informar, conectoresYGestor.conectoresDeSesion, instaladorTardio.puerto, {
+      ...(releDeGranja === undefined ? {} : { canalDeGranja: (id: string) => releDeGranja.urlDe(id) }),
+      alAcabarTurno: (_raiz, id) => void copiasDeGranja.liberar(id),
+      alCerrarSesion: (_raiz, id) => void copiasDeGranja.olvidar(id),
+    });
   const conVestibulo = vestibulo;
 
   /**
@@ -10724,8 +10761,13 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
     ...(({ modoPorDefecto: _paraElVestibulo, ...resto }) => resto)(ajusteDeModoPorDefectoCableado()),
     // El aparato de las sesiones nuevas (IXCODE-51), con la MISMA disciplina.
     ...ajusteDeDispositivoPorDefectoCableado(),
-    // La granja de dispositivos y el origen de cada proyecto, con la MISMA disciplina.
-    ...ajusteDeGranjaCableado(),
+    // La granja de dispositivos y el origen de cada proyecto, con la MISMA disciplina; y la copia de cada sesión.
+    granja: granjaDelEquipo.granja,
+    copiaDeGranja: (id) => {
+      const copia = copiasDeGranja.copiaDe(id);
+      return copia === undefined ? undefined : nombreDeCopia(copia);
+    },
+    suscribirCopiasDeGranja: (oyente) => void (avisarCopiaDeGranja = oyente),
     // Los conectores MCP, con la MISMA disciplina: la composición extraída y probada
     // (`ajusteDeConectoresCableado`), nunca un literal aquí dentro.
     // Y el gestor de tareas (IXCODE-11) llama por ESE mismo servicio: los dos salen de
@@ -10953,6 +10995,7 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
   // Se ESPERA: con la vía ngrok, cerrar mata ngrok y el puente local, y sin esperar el proceso
   // saldría antes y dejaría a ngrok huérfano del `SIGKILL` de rescate.
   await cable.cerrarRemoto().catch(() => {});
+  await releDeGranja?.cerrar().catch(() => {});
   // El vigía de adb, antes de nada que mida: un aviso a mitad del cierre lanzaría otro adb.
   cable.pararVigia();
   /**
@@ -11006,7 +11049,8 @@ function vestibuloReal(
   escribir: (texto: string) => void,
   informar: (texto: string) => void,
   conectores?: ConectoresPort,
-  framework?: InstaladorDeFrameworkPort
+  framework?: InstaladorDeFrameworkPort,
+  granja: Pick<OpcionesDelVestibulo, "canalDeGranja" | "alAcabarTurno" | "alCerrarSesion"> = {}
 ): Vestibulo {
   // Lo PRIMERO, antes de leer nada de disco: si esto va a fallar, que falle sin haber
   // aplicado credenciales al proceso ni construido medio vestíbulo.
@@ -11029,6 +11073,8 @@ function vestibuloReal(
     dispositivoPorDefecto: ajusteDeDispositivoPorDefectoCableado().dispositivoPorDefecto,
     // Y el origen de los aparatos del proyecto (el suyo, o el global): con la granja, la sesión nace —o se reabre— con ella.
     origenDeDispositivos: origenDeDispositivosCableado(),
+    // Y la granja: el canal de cada sesión y la liberación de su copia al acabar cada turno.
+    ...granja,
     // Se resuelve UNA vez, aquí, y no en cada `anunciarAlta`: `git config`/`os.userInfo`
     // no cambian a media conexión, y repetir el subproceso en cada anuncio del alta sería
     // gastar sin motivo. Nunca viaja hacia CloudStudio ni hacia ningún acto —

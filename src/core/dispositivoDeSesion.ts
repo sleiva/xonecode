@@ -67,12 +67,14 @@ export function lineaDelDispositivo(d: DispositivoDeLaSesion | undefined): strin
     );
   }
   if (d.clase === "granja") {
-    // Fase 1: el proyecto ya elige la granja, pero nada llega todavía a ella. Se DICE para que el
-    // agente no busque un aparato de este equipo por su cuenta; la garantía la ponen los scripts.
+    // Fase 2: el canal llega (xone-hotswap, recarga); lo que va por adb todavía no. Se DICE para que el agente
+    // no busque un aparato de este equipo por su cuenta; la garantía la ponen los scripts.
     return (
       "[Dispositivo de esta sesión: la GRANJA de dispositivos XOne, que este proyecto usa en vez de los " +
-      "aparatos de este equipo. Los scripts de xone-hotswap todavía no llegan a ella: no pruebes en ningún " +
-      "aparato y dilo en tu respuesta. Lo cambia la persona en la pastilla del chat.]"
+      "aparatos de este equipo. La primera vez que un script hable con el aparato, XOneCode pide una copia libre y " +
+      "la LIBERA (borrándola) al acabar este turno: lo desplegado no sigue en el siguiente. Llegan xone-hotswap y " +
+      "xone-recargar-android; desplegar, capturar, leer el log o reiniciar todavía no —esos scripts lo dicen—. " +
+      "Lo cambia la persona en la pastilla del chat.]"
     );
   }
   const plataforma = d.plataforma === "android" ? "Android" : "iOS";

@@ -980,6 +980,8 @@ export type MensajeAlCliente =
        * este equipo, que es la omisión: la pastilla pinta «Este equipo | Granja» con esto.
        */
       origenDeDispositivos?: "granja";
+      /** La copia de la granja que tiene ahora la sesión abierta («Pixel 3 · copia 1»). Ausente = ninguna cogida. */
+      copiaDeGranja?: string;
       /**
        * La sesión abierta es una RELECTURA: se reabrió y del hilo no queda memoria
        * (`ConsolaDeProyecto.historica`, que lo PREGUNTA al checkpointer del proyecto en vez

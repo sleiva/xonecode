@@ -494,6 +494,18 @@ export interface OpcionesDelVestibulo {
    */
   origenDeDispositivos?: (raiz: string) => OrigenDeDispositivos;
   /**
+   * El canal LOCAL de la granja de una sesión (`agent/dispositivos/releDeGranja.ts`), para escribirlo en su fichero de
+   * aparato: los scripts hablan a la copia por él. Abrirlo no coge nada; la copia se pide al primer uso.
+   */
+  canalDeGranja?: (idDeHilo: string) => string | undefined;
+  /**
+   * Al acabar CADA turno, en su `finally` —también si revienta o se cancela—: libera la copia de la granja si se cogió
+   * (decisión suya: determinista, al acabar el turno en que se usó). No se espera: el turno ya entrega lo suyo.
+   */
+  alAcabarTurno?: (raiz: string, idDeHilo: string) => void;
+  /** Al cerrar la consola de una sesión: lo mismo, por si una copia de Ejecutar quedó cogida fuera de un turno. */
+  alCerrarSesion?: (raiz: string, idDeHilo: string) => void;
+  /**
    * Lo que la consola de PROYECTO necesita y `consolaWeb` no puede saber: `/sync`, los
    * escritores de config del proyecto, el tema. Depende de la RAÍZ, que no existe hasta
    * que se abre el proyecto, así que entra como función y no como objeto.
@@ -1568,7 +1580,7 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
     );
     // El fichero que leen los scripts del `device-controller` (`core/dispositivoDeSesion.ts`)
     // queda como la pastilla DESDE QUE SE ABRE: también sin elección, que borra uno viejo.
-    escribirDispositivoDeSesion(raiz, idSesion, dispositivo);
+    escribirDispositivoDeSesion(raiz, idSesion, dispositivo, opciones.canalDeGranja?.(idSesion));
     /** El ticket al que quedó ligada, restaurado al reabrir. Misma razón que `dispositivo`:
      *  es un dato de la sesión, no de sus actos, y vive en memoria hasta que hay entrada. */
     let ticket: TicketDeSesion | undefined = reabierta?.ticket;
@@ -1782,6 +1794,12 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
         consolaWeb.turno(false);
         alFlancoDeTurno?.(false);
         volcar();
+        // La copia de la granja, si se cogió en este turno: se libera SIEMPRE al acabarlo. Envuelto: esto es el `finally`.
+        try {
+          opciones.alAcabarTurno?.(raiz, idSesion);
+        } catch (error) {
+          informar(`no se pudo liberar la copia de la granja: ${(error as Error).message}`);
+        }
         // Y el commit, DESPUÉS de volcar: así la entrada del índice ya existe y su título
         // —que es lo que da nombre al commit— es el de verdad.
         //
@@ -2003,7 +2021,7 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
         dispositivo = elegido;
         // El fichero, SIEMPRE y en el acto: lo leen los scripts en cada ejecución, así que
         // cambiar de aparato con la sesión abierta alcanza al siguiente comando.
-        escribirDispositivoDeSesion(raiz, idSesion, elegido);
+        escribirDispositivoDeSesion(raiz, idSesion, elegido, opciones.canalDeGranja?.(idSesion));
         // Si todavía no está en el índice, se queda en memoria: `volcar()` lo anotará en
         // cuanto cree la entrada. Escribir aquí una entrada nueva la enseñaría en la barra
         // como una sesión vacía que nadie ha empezado.
@@ -2086,6 +2104,11 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
         consolaWeb.cerrar();
         await terminada.catch(() => 0);
         volcar();
+        try {
+          opciones.alCerrarSesion?.(raiz, idSesion);
+        } catch (error) {
+          informar(`no se pudo liberar la copia de la granja: ${(error as Error).message}`);
+        }
       },
       /**
        * Espera a que la ref de la sesión esté ESCRITA, para quien vaya a mirarla.
@@ -2838,7 +2861,7 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
  * deja escribir aquí no puede tumbar abrir una sesión, y lo peor que pasa es que el script use su
  * regla de omisión.
  */
-function escribirDispositivoDeSesion(raiz: string, id: string, d: DispositivoElegido | undefined): void {
+function escribirDispositivoDeSesion(raiz: string, id: string, d: DispositivoElegido | undefined, canal?: string): void {
   try {
     const fichero = ficheroDeDispositivoDeSesion(raiz, id);
     if (d === undefined) {
@@ -2846,7 +2869,9 @@ function escribirDispositivoDeSesion(raiz: string, id: string, d: DispositivoEle
       return;
     }
     mkdirSync(dirname(fichero), { recursive: true });
-    writeFileSync(fichero, `${JSON.stringify({ id: d.id, nombre: d.nombre, plataforma: d.plataforma, clase: d.clase })}\n`);
+    // Con la granja, también su CANAL local: los scripts hablan a la copia por él (`lib/dispositivo.mjs#urlDelCanal`).
+    const conCanal = d.clase === "granja" && canal !== undefined ? { canal } : {};
+    writeFileSync(fichero, `${JSON.stringify({ id: d.id, nombre: d.nombre, plataforma: d.plataforma, clase: d.clase, ...conCanal })}\n`);
   } catch {
     // Ver arriba: se cae a la regla de omisión del script.
   }

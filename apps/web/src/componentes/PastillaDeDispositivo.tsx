@@ -50,6 +50,7 @@ export function PastillaDeDispositivo({
   granja,
   alCambiarOrigen,
   ofrecerGranja = false,
+  copiaDeGranja,
 }: {
   /** El de la sesión, tal como lo cuenta el servidor. Ausente = ninguno elegido. */
   elegido?: DispositivoElegido;
@@ -98,6 +99,8 @@ export function PastillaDeDispositivo({
    * elegirla es elegir el origen global. Solo con la granja configurada.
    */
   ofrecerGranja?: boolean;
+  /** La copia que tiene ahora la sesión («Pixel 3 · copia 1»). Ausente = ninguna cogida. */
+  copiaDeGranja?: string;
 }) {
   const [abierta, setAbierta] = useState(false);
   const envoltura = useRef<HTMLDivElement>(null);
@@ -125,7 +128,9 @@ export function PastillaDeDispositivo({
   const presente = elegido?.clase === "granja" || informe === undefined || todos.some((d) => d.id === elegido?.id);
   const granjaConfigurada = granja?.direccion !== undefined && granja.hayToken;
   /** Lo que se dice bajo la fila de la granja: si está configurada y qué contestó la última prueba. */
-  const detalleDeGranja = !granjaConfigurada
+  const detalleDeGranja = copiaDeGranja !== undefined
+    ? `ahora: ${copiaDeGranja}, hasta que acabe el turno`
+    : !granjaConfigurada
     ? "sin configurar"
     : granja?.prueba?.estado === "conectada"
       ? `${granja.prueba.resumen.copias.libres} copias libres en ${granja.prueba.resumen.telefonos} teléfonos`
@@ -213,7 +218,7 @@ export function PastillaDeDispositivo({
       >
         <IconoDeDispositivo />
         <span>
-          {elegido === undefined ? "Sin dispositivo" : elegido.nombre}
+          {elegido === undefined ? "Sin dispositivo" : elegido.clase === "granja" && copiaDeGranja !== undefined ? `Granja · ${copiaDeGranja}` : elegido.nombre}
           {elegido !== undefined && !presente ? " ·" : null}
           {usoDelElegido === undefined ? null : (
             <span role="img" aria-label={`también lo usa ${usoDelElegido}`}>

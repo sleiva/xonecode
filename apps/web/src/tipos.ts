@@ -1107,6 +1107,8 @@ export type MensajeAlCliente =
       dispositivoActivo?: DispositivoElegido;
       /** El proyecto abierto usa la GRANJA de dispositivos. Ausente = este equipo. */
       origenDeDispositivos?: "granja";
+      /** La copia de la granja que tiene ahora la sesión («Pixel 3 · copia 1»). Ausente = ninguna. */
+      copiaDeGranja?: string;
       /** La sesión abierta es una relectura y el agente no la recuerda. Ausente = no. */
       historica?: boolean;
       /**

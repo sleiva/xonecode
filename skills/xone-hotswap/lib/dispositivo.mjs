@@ -103,9 +103,20 @@ export function puedeArrancarEmulador(entorno = process.env) {
  * todavía no llegan a ella, y caer a un aparato de este equipo sería probar donde nadie lo eligió.
  */
 export const TEXTO_DE_GRANJA =
-  "Este proyecto usa la GRANJA de dispositivos XOne, y los scripts de xone-hotswap todavía no llegan a ella: " +
-  "no se prueba en ningún aparato de este equipo. Dilo en tu respuesta; si hace falta este equipo, que la " +
-  "persona lo cambie en la pastilla del chat.";
+  "Este proyecto usa la GRANJA de dispositivos XOne: a la copia de la granja solo llegan xone-hotswap y " +
+  "xone-recargar-android (por el canal); este script todavía no, y no se prueba en ningún aparato de este equipo. " +
+  "Dilo en tu respuesta; si hace falta este equipo, que la persona lo cambie en la pastilla del chat.";
+
+/**
+ * El canal LOCAL de la granja de la sesión (`agent/dispositivos/releDeGranja.ts`), o `undefined`. Lo escribe XOneCode
+ * en el fichero del aparato; por él se habla con la copia de la granja que el harness pide al primer uso y libera al
+ * acabar el turno. Solo una forma: loopback, ruta de la granja; otra cosa en el fichero no se usa.
+ */
+export function canalDeGranja(entorno = process.env) {
+  const d = dispositivoDeLaSesion(entorno);
+  if (d?.clase !== "granja" || typeof d.canal !== "string") return undefined;
+  return /^ws:\/\/127\.0\.0\.1:\d+\/granja\/[A-Za-z0-9_-]+\/hotswap$/.test(d.canal) ? d.canal : undefined;
+}
 
 /** El serial de Android: el de la sesión (siempre), si no `--serie`, si no un emulador. Y dice de dónde salió. */
 export function serieAndroid(explicita, { entorno = process.env, adb = rutaDeAdb(entorno), ejecutar = ejecutarAdb, negar = negarYSalir } = {}) {

@@ -15254,6 +15254,8 @@ describe("la granja de dispositivos", () => {
         else estado.direccion = d;
       },
       aceptarHuella: (h) => void (estado.huella = h),
+      conexion: () =>
+        estado.direccion === undefined || estado.token === undefined ? undefined : { direccion: estado.direccion, token: estado.token },
       guardarToken: (t) => ((estado.token = t), { ok: true }),
       quitarToken: () => void delete estado.token,
       probar: async () => pruebas.shift() ?? { estado: "no-responde" },
@@ -15481,6 +15483,8 @@ describe("la granja de dispositivos", () => {
       expect(granja.guardarToken("xfarm_AbCdEf123456")).toEqual({ ok: true });
       expect((await granja.probar()).estado).toBe("conectada");
       expect(granja.configuracion()).toEqual({ direccion: "https://192.168.1.40:8090", huella: HUELLA, hayToken: true });
+      // La conexión (con el token) es para el relé, dentro del proceso: dirección, token y la huella ya fijada.
+      expect(granja.conexion()).toEqual({ direccion: "https://192.168.1.40:8090", token: "xfarm_AbCdEf123456", huella: HUELLA });
       // La segunda vez ya se EXIGE la aceptada.
       await granja.probar();
       expect(pedidas.at(-1)).toBe(HUELLA);
@@ -15491,6 +15495,7 @@ describe("la granja de dispositivos", () => {
       expect(granja.configuracion().huella).toBeUndefined();
       granja.quitarToken();
       expect(granja.configuracion().hayToken).toBe(false);
+      expect(granja.conexion()).toBeUndefined();
       // El token no está en settings.json.
       expect(readFileSync(join(casa, ".xonecode", "settings.json"), "utf8")).not.toContain("xfarm_");
     } finally {
