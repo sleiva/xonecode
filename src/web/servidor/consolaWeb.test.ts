@@ -143,6 +143,19 @@ describe("consolaWeb: la entrada", () => {
     expect(c.actos()).toEqual([{ tipo: "usuario", texto: "hola", cuando: "2026-09-30T10:15:00.000Z" }]);
   });
 
+  it("un secreto PEGADO deja, detrás del mensaje, un aviso que nombra la clave y nunca el valor (Maset, 27-10-2026)", () => {
+    const c = crearConsolaWeb();
+    c.recibir({ clase: "prosa", texto: 'las credenciales: <param name="client_secret" value="Xy9~otroSecreto.42"/>' });
+    const [usuario, aviso] = c.actos();
+    expect(usuario).toMatchObject({ tipo: "usuario" });
+    expect(aviso).toMatchObject({ tipo: "sistema", texto: expect.stringContaining("parece un secreto (client_secret)") });
+    expect(JSON.stringify(aviso)).not.toContain("Xy9~otroSecreto.42");
+    // Sin secreto, nada detrás.
+    const otra = crearConsolaWeb();
+    otra.recibir({ clase: "prosa", texto: "cambia la contraseña del login por un campo con ojo" });
+    expect(otra.actos()).toHaveLength(1);
+  });
+
   it("la prosa deja su acto de USUARIO: el transcript se lo debe a quien la tecleó", () => {
     const c = crearConsolaWeb();
     c.recibir({ clase: "prosa", texto: "añade una colección de clientes" });

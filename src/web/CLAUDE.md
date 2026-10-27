@@ -79,7 +79,10 @@ Ante una discrepancia con el código, **el código manda**.
 - **Soporte** (`soporte.ts`, `core/paqueteDeSoporte.ts`, `core/analisisDeSesion.ts`): solo con copia;
   chats (`SESIONES_EN_SOPORTE`) y tareas; **las filas NO abren el chat**. Tres paquetes por `GET /soporte`, raíz del SERVIDOR
   (`motivoParaNoExportar`). **Nunca viajan** `.git`, `.env` ni
-  credenciales (`viajaEnSoporte`). **El zip se ESCRIBE en flujo** (`ZipDeflate` de fflate, `drain`;
+  credenciales (`viajaEnSoporte`), y **un secreto PEGADO viaja con su VALOR tapado** (`core/secretosEnTexto.ts`,
+  `taparFicheroDeSoporte`, en `ZipEnStreaming.bytes`): por FORMA (clave con nombre de secreto, `Bearer`, clave privada),
+  solo en texto UTF-8 válido (un Latin-1 viaja intacto) y hasta `TOPE_PARA_TAPAR`; el manifiesto dice cuántos y dónde.
+  Al recibirlo, el chat AVISA con el nombre y nunca el valor (`consolaWeb.ts`, `avisoDeSecretosEnElMensaje`). **El zip se ESCRIBE en flujo** (`ZipDeflate` de fflate, `drain`;
   nunca `zipSync`). **Checkpoint copiado EN CALIENTE** (backup SQLite, solo lectura), el de un chat
   recortado a su hilo con todas sus `checkpoint_ns`. Con turno en vuelo se exporta igual y el
   manifiesto lo dice. **Trazas de un chat = líneas con su `chat`** (id de la SESIÓN, no del hilo),

@@ -63,11 +63,15 @@ export { NOMBRE_INCORPORAR_ADJUNTO };
  */
 
 /**
- * Quién la recibe: escribe el PROYECTO y no está confinado por `escribeEn`. Regla de DATO, no una
- * lista de nombres: de los de serie da `designer-xone` y `developer-xone`, que es lo que se
- * decidió. Quien ejecuta no: la shell ya se le quitó el `write_file` para que tocar el proyecto
- * siga siendo el camino del diff. Y quien va acotado por `escribeEn` (el documentador) tiene
- * `copiar_artefacto` para lo suyo.
+ * Quién la recibe: quien escribe el PROYECTO. Regla de DATO, no una lista de nombres: de los de serie
+ * da `developer-xone`, `designer-xone` y `document-writer`. Quien ejecuta no: la shell ya se le quitó
+ * el `write_file` para que tocar el proyecto siga siendo el camino del diff.
+ *
+ * **Quien va acotado por `escribeEn` también la recibe, y queda acotado igual**: el destino pasa por
+ * `puedeEscribirRuta` con SU perfil (`motivoDeDestino`), así que el documentador solo incorpora en
+ * `/doc/` y el diseñador en `icons/` y `fonts/`. Antes se les quitaba, y medido en Maset (27-10-2026)
+ * el documentador probó cinco veces `copiar_artefacto` con un adjunto y acabó reescribiendo dos `.md`
+ * adjuntos enteros con `write_file`: pagados como salida y retecleados.
  *
  * **Solo llega a `motor: "modelo"`**, sin que esta función lo mire: los de motor externo se montan
  * aparte y no reciben tools propias (corren en otro proceso), y tampoco ven `/adjuntos/`: es una
@@ -75,7 +79,7 @@ export { NOMBRE_INCORPORAR_ADJUNTO };
  * (`core/adjuntos.ts#conAdjuntos`).
  */
 export function recibeIncorporarAdjunto(a: Pick<Agente, "soloLectura" | "ejecucion" | "escribeEn">): boolean {
-  return !a.soloLectura && a.ejecucion !== true && (a.escribeEn ?? []).length === 0;
+  return !a.soloLectura && a.ejecucion !== true;
 }
 
 const Entrada = z.object({

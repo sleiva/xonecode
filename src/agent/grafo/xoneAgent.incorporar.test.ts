@@ -50,9 +50,9 @@ const conTool = (m: Record<string, Montado>) =>
     .sort();
 
 describe("el montaje de incorporar_adjunto", () => {
-  it("con carpeta de adjuntos: solo developer-xone (el diseñador está confinado a icons/), y con su fila de aprobación", async () => {
+  it("con carpeta de adjuntos: quien escribe el proyecto (diseñador y documentador acotados por su `escribeEn`), y con su fila de aprobación", async () => {
     const m = await montados({ adjuntos: mkdtempSync(join(tmpdir(), "incorporar-adjs-")) });
-    expect(conTool(m)).toEqual(["developer-xone"]);
+    expect(conTool(m)).toEqual(["designer-xone", "developer-xone", "document-writer"]);
     // La tool y su aprobación van JUNTAS: quien la tiene, la tiene en su `interruptOn`.
     for (const n of conTool(m)) expect(Object.keys(m[n]!.interruptOn ?? {}), n).toContain(NOMBRE_INCORPORAR_ADJUNTO);
   });
@@ -65,6 +65,6 @@ describe("el montaje de incorporar_adjunto", () => {
     const m = await montados({ adjuntos: mkdtempSync(join(tmpdir(), "incorporar-adjs-")), externo: true });
     expect(m["developer-xone"]?.runnable).toBeDefined();
     expect(m["developer-xone"]?.tools).toBeUndefined();
-    expect(conTool(m)).toEqual([]);
+    expect(conTool(m)).not.toContain("developer-xone");
   });
 });

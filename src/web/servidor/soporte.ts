@@ -42,7 +42,9 @@ import {
   lineasDelChat,
   lineasSinChat,
   repartirPorTope,
+  taparFicheroDeSoporte,
   TOPE_DEL_PAQUETE_DE_SOPORTE,
+  TOPE_PARA_TAPAR,
   viajaEnSoporte,
   type ManifiestoDeSoporte,
   type Omitido,
@@ -265,6 +267,10 @@ class ZipEnStreaming {
   private readonly zip: Zip;
   private error: Error | undefined;
   readonly incluidos: string[] = [];
+  /** Cuántos secretos se taparon en cada entrada (`taparFicheroDeSoporte`): el manifiesto lo dice. */
+  readonly tapados = new Map<string, number>();
+  /** Los ficheros que pasaban de `TOPE_PARA_TAPAR` y viajaron sin mirar. */
+  readonly sinTapar: string[] = [];
   private terminado: Promise<void>;
 
   constructor(private readonly destino: Writable) {
@@ -329,6 +335,13 @@ class ZipEnStreaming {
   }
 
   async bytes(ruta: string, datos: Uint8Array | string, mtime: number = Date.now()): Promise<void> {
+    // Lo que se compone en memoria (la traza del chat, un parche, el análisis) se tapa igual que un fichero del disco.
+    // Un binario (la base de un checkpoint) no: `taparFicheroDeSoporte` lo devuelve sin tocar.
+    const tapado = taparFicheroDeSoporte(ruta, typeof datos === "string" ? Buffer.from(datos, "utf8") : datos);
+    if (tapado !== undefined) {
+      this.tapados.set(ruta, tapado.tapados);
+      datos = tapado.texto;
+    }
     const entrada = new ZipDeflate(ruta, { level: NIVEL_DE_COMPRESION });
     // Sin fecha, fflate estampa la de ahora (ver `fechaDelZip` en `paqueteDelProyecto.ts`).
     entrada.mtime = Math.max(mtime, FECHA_MINIMA_DEL_ZIP);
@@ -342,8 +355,16 @@ class ZipEnStreaming {
     await this.bytes(ruta, `${JSON.stringify(valor, null, 2)}\n`);
   }
 
-  /** Un fichero del disco, leído a trozos. */
+  /**
+   * Un fichero del disco. Hasta `TOPE_PARA_TAPAR` se lee entero para taparle los secretos y, si no había ninguno, viajan
+   * sus bytes tal cual; por encima, a trozos y sin mirar, y se apunta.
+   */
   async fichero(ruta: string, absoluta: string, mtime: number): Promise<void> {
+    if (lstatSync(absoluta).size <= TOPE_PARA_TAPAR) {
+      await this.bytes(ruta, readFileSync(absoluta), mtime);
+      return;
+    }
+    this.sinTapar.push(ruta);
     const entrada = new ZipDeflate(ruta, { level: NIVEL_DE_COMPRESION });
     // Sin fecha, fflate estampa la de ahora (ver `fechaDelZip` en `paqueteDelProyecto.ts`).
     entrada.mtime = Math.max(mtime, FECHA_MINIMA_DEL_ZIP);
@@ -652,6 +673,14 @@ export async function escribirPaquete(
       await zip.json("analisis.json", await listarSoporte(fuente));
     }
     if (enVuelo) acumulado.avisos.push(AVISO_EN_VUELO);
+    if (zip.tapados.size > 0) {
+      const total = [...zip.tapados.values()].reduce((a, b) => a + b, 0);
+      const donde = [...zip.tapados].map(([ruta, n]) => `${ruta} (${n})`).join(", ");
+      acumulado.avisos.push(`Se taparon ${total} valor(es) con forma de secreto (contraseñas, client_secret, tokens): ${donde}.`);
+    }
+    if (zip.sinTapar.length > 0) {
+      acumulado.avisos.push(`Viajan SIN mirar si llevan secretos, por tamaño: ${zip.sinTapar.join(", ")}.`);
+    }
 
     const manifiesto: ManifiestoDeSoporte = {
       v: 1,

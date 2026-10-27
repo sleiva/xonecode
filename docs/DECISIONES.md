@@ -9959,3 +9959,19 @@ y dos el `PLAN.md` (41 K). Todo eso se queda en la ventana el resto del turno: c
 - Topes contados, no callados: 4 planes (los más recientes) y 15 tareas abiertas por plan.
 - **Sin medir todavía en un turno real**: cuántos caracteres de plan se leen por sesión y la ventana máxima, antes y
   después, con `XONECODE_TRACE_TOOLS=1` y `xonecode traza`. Solo TrueForge.
+
+## Los menores del gasto: adjuntos del documentador y secretos pegados (27-10-2026)
+
+- **El documentador recibe `incorporar_adjunto`, acotado a `/doc/`.** Medido en Maset: probó cinco veces
+  `copiar_artefacto` con un adjunto (solo admite `/artefactos/`) y acabó reescribiendo dos `.md` adjuntos enteros con
+  `write_file`, pagados como salida. `recibeIncorporarAdjunto` excluía a quien lleva `escribeEn` con un porqué que ya no
+  era cierto («esta tool copia a cualquier ruta»): el destino pasa por `puedeEscribirRuta` con el perfil de quien la
+  llama, y ese aplica `escribeEn`. Ahora la reciben el desarrollador, el diseñador (`icons/`, `fonts/`) y el
+  documentador (`/doc/`), y sigue pasando por la aprobación. No se amplió `copiar_artefacto`, que escribe SIN
+  aprobación: un adjunto lo trae la persona, no la sesión. Si se le pasa un adjunto, remite a `incorporar_adjunto`.
+- **Un secreto pegado en el chat se avisa y se tapa en Soporte.** En Maset la persona pegó la configuración OAuth del
+  entorno de pruebas (con `client_secret`) para que el agente la configurara —uso legítimo— y el valor viajó en la exportación
+  en el chat y en la memoria de TrueForge (medido buscando el valor exacto: tapado en los dos). El chat avisa con el NOMBRE de la clave, sin bloquear. La exportación tapa el VALOR por
+  FORMA, no por entropía (un GUID o un hash son datos de soporte). Límites: el checkpoint de SQLite, un fichero de más de
+  `TOPE_PARA_TAPAR`, un texto que no es UTF-8 y un secreto sin nombre al lado viajan sin tapar; el aviso solo en la web.
+- **Lo que no es código:** cuánto pesa Opus como developer externo en Busme hay que mirarlo en la facturación.

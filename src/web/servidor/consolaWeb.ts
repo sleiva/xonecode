@@ -26,6 +26,7 @@
  * dentro de `APPROVALS_NO_TTY`. El fail-closed no se mueve un milímetro por esto: vive en
  * el prellenado del mapa, no en quién compara la cadena.
  */
+import { avisoDeSecretosEnElMensaje, secretosQueLleva } from "../../core/secretosEnTexto.js";
 import { crearPielWeb } from "./pielWeb.js";
 import { nombreDeAdjuntoAceptable } from "../../core/adjuntos.js";
 import { anotarPaso } from "../../core/trazaDeErrores.js";
@@ -559,6 +560,10 @@ export function crearConsolaWeb(opciones: OpcionesDeConsolaWeb = {}): ConsolaWeb
           // acto va al disco con ella y una sesión reabierta tiene que enseñar esta, no la de reabrir.
           cuando: new Date(ahora()).toISOString(),
         });
+      // Un secreto PEGADO (Maset: la configuración OAuth del entorno de pruebas) se avisa, no se bloquea: puede ser
+      // justo lo que el agente necesita. Solo NOMBRES, nunca el valor (`core/secretosEnTexto.ts`).
+      const secretos = secretosQueLleva(mensaje.texto);
+      if (secretos.length > 0) anotar({ tipo: "sistema", texto: avisoDeSecretosEnElMensaje(secretos) });
       if (mensaje.detener === true && opciones.detenerMientrasTrabaja?.(texto) === true) return;
       // Un DETENER sin texto NI adjunto real que ya no encontró turno no tiene nada que
       // mandar (ronda de arreglo 1/5: antes miraba solo `mensaje.texto`, y un adjunto real

@@ -1,3 +1,4 @@
+import { NOMBRE_INCORPORAR_ADJUNTO, RUTA_ADJUNTOS } from "../../core/adjuntos.js";
 import { copyFileSync, existsSync, mkdirSync, realpathSync, statSync } from "node:fs";
 import { dirname, join, resolve, sep } from "node:path";
 import { tool } from "@langchain/core/tools";
@@ -86,6 +87,11 @@ function dentroDe(real: string, base: string): boolean {
 export function crearCopiarArtefacto(donde: DondeCopiar) {
   return tool(
     async ({ artefacto, destino }: z.infer<typeof ESQUEMA>) => {
+      // Un ADJUNTO no es un artefacto: tiene su tool, con aprobación. Sin decirlo, el documentador de Maset lo intentó
+      // cinco veces y acabó reescribiendo los adjuntos a mano.
+      if (artefacto.trim().startsWith(RUTA_ADJUNTOS)) {
+        return `«${artefacto.trim()}» es un adjunto, no un artefacto: para llevarlo al proyecto usa ${NOMBRE_INCORPORAR_ADJUNTO}.`;
+      }
       const origenVirtual = comoRutaDeArtefacto(artefacto);
       if (!esRutaDeArtefacto(origenVirtual)) {
         return `«${artefacto}» no es un artefacto de esta sesión. Solo se copia lo que está en ${RUTA_ARTEFACTOS}.`;

@@ -23,6 +23,13 @@
  * y `traza-errores.jsonl`, cuyo sumidero es de todo el proceso— va solo en el paquete del
  * PROYECTO, y el manifiesto dice por qué.
  *
+ * ## Secretos pegados en el chat
+ *
+ * Un secreto que la persona PEGÓ (una cadena de conexión, un `client_secret`) no es un fichero de credenciales y se
+ * copia a más de un sitio: el chat, la memoria del motor y lo que el agente escriba con él. Se le tapa el VALOR en cada fichero de texto
+ * del paquete (`taparFicheroDeSoporte`) y el manifiesto dice cuántos y dónde. **Límites**: el checkpoint de SQLite
+ * (deepagents) y lo que pase de `TOPE_PARA_TAPAR` viajan sin tapar, y un secreto sin nombre al lado pasa.
+ *
  * ## Rutas de la máquina
  *
  * Los mensajes del hilo y el `detalle` de un comando de shell pueden llevar rutas absolutas.
@@ -30,7 +37,57 @@
  * persona descarga y entrega a mano. El manifiesto lo avisa.
  */
 
+import { taparSecretos, taparSecretosEnJson } from "./secretosEnTexto.js";
+
 export type TipoDePaquete = "proyecto" | "chat" | "tarea";
+
+/**
+ * Hasta qué tamaño se lee entero un fichero para taparle los secretos (`core/secretosEnTexto.ts`). Por encima viaja
+ * tal cual, en flujo, y el manifiesto lo dice: leer entero un fichero enorme es lo que el zip en flujo evita.
+ */
+export const TOPE_PARA_TAPAR = 16 * 1024 * 1024;
+
+/**
+ * Un fichero del paquete con sus secretos tapados, o `undefined` si no hay nada que tapar o no se puede tocar sin
+ * estropearlo: entonces viajan sus BYTES originales. Solo texto UTF-8 válido —un `.xne` en Latin-1 releído como UTF-8 y
+ * reescrito saldría corrupto— y por FORMA de fichero: en un `.jsonl` y un `.json` el texto pegado va con las comillas
+ * escapadas, así que se tapa cadena a cadena; en lo demás, el texto tal cual.
+ */
+export function taparFicheroDeSoporte(ruta: string, bytes: Uint8Array): { texto: string; tapados: number } | undefined {
+  let texto: string;
+  try {
+    texto = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    return undefined;
+  }
+  if (texto.includes("\0")) return undefined;
+  let r: { texto: string; tapados: number };
+  if (ruta.endsWith(".jsonl")) {
+    let tapados = 0;
+    const lineas = texto.split("\n").map((l) => {
+      try {
+        const j = taparSecretosEnJson(JSON.parse(l));
+        tapados += j.tapados;
+        return j.tapados > 0 ? JSON.stringify(j.valor) : l;
+      } catch {
+        const t = taparSecretos(l);
+        tapados += t.tapados;
+        return t.texto;
+      }
+    });
+    r = { texto: lineas.join("\n"), tapados };
+  } else if (ruta.endsWith(".json")) {
+    try {
+      const j = taparSecretosEnJson(JSON.parse(texto));
+      r = { texto: j.tapados > 0 ? `${JSON.stringify(j.valor, null, 2)}\n` : texto, tapados: j.tapados };
+    } catch {
+      r = taparSecretos(texto);
+    }
+  } else {
+    r = taparSecretos(texto);
+  }
+  return r.tapados > 0 ? r : undefined;
+}
 
 /** Lo que admite un paquete, sumado en disco. Lo que no cabe se OMITE y se dice. */
 export const TOPE_DEL_PAQUETE_DE_SOPORTE = 512 * 1024 * 1024;

@@ -81,6 +81,11 @@ describe("copiar_artefacto", () => {
       expect(await copiar("../../.env", "/doc/x")).toMatch(/no es un artefacto/i);
     });
 
+    it("un ADJUNTO se remite a incorporar_adjunto (medido en Maset: cinco intentos y los adjuntos reescritos a mano)", async () => {
+      const { copiar } = escenario();
+      expect(await copiar("/adjuntos/PLAN.md", "/doc/PLAN.md")).toBe("«/adjuntos/PLAN.md» es un adjunto, no un artefacto: para llevarlo al proyecto usa incorporar_adjunto.");
+    });
+
     it("un artefacto que no existe se dice, y se dice dónde mirar", async () => {
       const { copiar } = escenario();
       const dicho = await copiar("no-esta.png", "/doc/x.png");

@@ -140,6 +140,34 @@ describe("soporte: el paquete de un chat", () => {
   });
 });
 
+describe("soporte: un secreto pegado en el chat (Maset, 27-10-2026)", () => {
+  it("se tapa su VALOR en los actos, en la carpeta de la sesión y en el proyecto; un Latin-1 viaja intacto; el manifiesto lo dice", async () => {
+    const { fuente, raiz } = await proyecto();
+    const pegado = '<param name="client_secret" value="Xy9~otroSecreto.42"/> y Pwd=hunter22;';
+    anotarActo(raiz, "s1", { tipo: "usuario", texto: `te paso las credenciales: ${pegado}` });
+    mkdirSync(join(raiz, ".xonecode", "sesiones", "s1", "large_tool_results"), { recursive: true });
+    writeFileSync(join(raiz, ".xonecode", "sesiones", "s1", "large_tool_results", "r.txt"), pegado);
+    // Un .xne en Latin-1 (la «ñ» es 0xF1): releído como UTF-8 saldría corrupto, así que no se toca aunque lleve un secreto.
+    const latin1 = Buffer.from('<coll name="Señal"><param name="client_secret" value="ZZZ12345"/></coll>', "latin1");
+    writeFileSync(join(raiz, "colecciones", "Senal.xne"), latin1);
+
+    const chat = await paquete(fuente, { tipo: "chat", id: "s1" });
+    for (const ruta of ["sesion/actos.jsonl", "sesion/carpeta/large_tool_results/r.txt"]) {
+      const texto = strFromU8(chat[ruta]!);
+      expect(texto).not.toContain("Xy9~otroSecreto.42");
+      expect(texto).not.toContain("hunter22");
+      expect(texto).toContain("client_secret");
+    }
+    // El resto del chat sigue igual: los actos se leen, línea a línea.
+    expect(strFromU8(chat["sesion/actos.jsonl"]!)).toContain("arregla el login");
+    const avisos = json(chat, "manifiesto.json").avisos as string[];
+    expect(avisos.some((a) => /Se taparon 4 valor/.test(a) && a.includes("sesion/actos.jsonl (2)"))).toBe(true);
+
+    const proyectoEntero = await paquete(fuente, { tipo: "proyecto" });
+    expect(Buffer.from(proyectoEntero["proyecto/colecciones/Senal.xne"]!).equals(latin1)).toBe(true);
+  });
+});
+
 describe("soporte: una sesión de TrueForge", () => {
   it("sin filas en el checkpoint no mete base ni mensajes vacíos, y dice DÓNDE está su memoria", async () => {
     const { fuente, raiz } = await proyecto();

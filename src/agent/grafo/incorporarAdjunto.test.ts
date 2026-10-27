@@ -10,7 +10,7 @@ import { AGENTES_DE_SERIE } from "../subagentes/agentesEnDisco.js";
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0, 0, 1]);
 const DEV = AGENTES_DE_SERIE.find((a) => a.nombre === "developer-xone")!;
 
-function escenario() {
+function escenario(perfil: typeof DEV = DEV) {
   const base = mkdtempSync(join(tmpdir(), "incorporar-adj-"));
   const raiz = join(base, "proyecto");
   const carpetaDeAdjuntos = join(base, "adjuntos");
@@ -18,7 +18,7 @@ function escenario() {
   mkdirSync(carpetaDeAdjuntos, { recursive: true });
   writeFileSync(join(raiz, "app.xml"), "<app/>");
   writeFileSync(join(carpetaDeAdjuntos, "ic.png"), PNG);
-  const tool = crearIncorporarAdjunto({ raiz, carpetaDeAdjuntos, perfil: DEV });
+  const tool = crearIncorporarAdjunto({ raiz, carpetaDeAdjuntos, perfil });
   const incorporar = (adjunto: string, file_path: string): Promise<string> =>
     (tool as unknown as { invoke: (x: unknown) => Promise<string> }).invoke({ adjunto, file_path });
   /** Lo que hay en la base entera: para comprobar que un rechazo no dejó NADA en ningún sitio. */
@@ -237,16 +237,26 @@ describe("donde no se pregunta, la tool rechaza", () => {
 });
 
 describe("quién la recibe", () => {
-  it("de los de serie, solo developer-xone: el diseñador escribe SOLO en icons/ y esta tool copia a cualquier ruta del proyecto", () => {
+  it("de los de serie, quien escribe el proyecto: también el documentador y el diseñador, acotados por su `escribeEn`", () => {
     const reciben = AGENTES_DE_SERIE.filter(recibeIncorporarAdjunto).map((a) => a.nombre).sort();
-    expect(reciben).toEqual(["developer-xone"]);
+    expect(reciben).toEqual(["designer-xone", "developer-xone", "document-writer"]);
   });
 
-  it("es regla de DATO: solo lectura, ejecución o `escribeEn` la quitan", () => {
+  it("el documentador incorpora en /doc/ y en ningún otro sitio: lo acota su `escribeEn`, no la regla de quién la recibe", async () => {
+    const DOC = AGENTES_DE_SERIE.find((a) => a.nombre === "document-writer")!;
+    const { incorporar, raiz, arbol } = escenario(DOC);
+    expect(await incorporar("ic.png", "/doc/img/ic.png")).toMatch(/^Incorporado/);
+    expect(readFileSync(join(raiz, "doc", "img", "ic.png")).equals(PNG)).toBe(true);
+    const antes = arbol();
+    expect(await incorporar("ic.png", "/icons/ic.png")).not.toMatch(/^Incorporado/);
+    expect(arbol()).toEqual(antes);
+  });
+
+  it("es regla de DATO: solo lectura o ejecución la quitan; `escribeEn` no, acota", () => {
     const base = { soloLectura: false, escribeEn: [] as string[] };
     expect(recibeIncorporarAdjunto(base)).toBe(true);
     expect(recibeIncorporarAdjunto({ ...base, soloLectura: true })).toBe(false);
     expect(recibeIncorporarAdjunto({ ...base, ejecucion: true })).toBe(false);
-    expect(recibeIncorporarAdjunto({ ...base, escribeEn: ["/doc/"] })).toBe(false);
+    expect(recibeIncorporarAdjunto({ ...base, escribeEn: ["/doc/"] })).toBe(true);
   });
 });
