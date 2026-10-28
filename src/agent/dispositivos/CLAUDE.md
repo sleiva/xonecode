@@ -64,8 +64,8 @@ discrepancia, **el código manda**.
 - **Ejecutar tiene DOS columnas** (decisión suya, opción B del lienzo): «Ahora» lanza SOLO en un aparato de ESTE equipo a mano,
   nunca en la granja (`core/dispositivoElegido.ts#aparatoDeEjecutar`: lo elegido en la pestaña, el de la sesión, el del proyecto,
   el global, el primero a mano; sin ninguno, `ninguno-a-mano`), y elegirlo NO toca la pastilla (`aparatoDeEjecutar` en el cable).
-  «Tareas en background» fija el aparato del proyecto: como el global, la granja, o uno CONCRETO de este equipo, apagados
-  incluidos (`aparatoDeTareas`, `configEnDisco.ts#guardarAparatoDelProyecto`, una escritura de las dos claves). El «Probar» del
+  «Tareas en background» fija el aparato del proyecto: como el global, la granja, o uno CONCRETO de este equipo A MANO
+  (arrancado o conectado; el guardado que no lo está sigue, «no está ahora») (`aparatoDeTareas`, `configEnDisco.ts#guardarAparatoDelProyecto`, una escritura de las dos claves). El «Probar» del
   editor sigue en el aparato de la SESIÓN, que puede ser la granja.
 - **El puerto del túnel es del AVD** (`core/puertosDeAvd.ts`, copia atada por test en `skills/xone-hotswap/lib/dispositivo.mjs` y `apps/web/src/reglasDeAvd.ts`): el servidor FIJA uno por AVD al medir (`atenderDispositivos`, `asignarPuertosPendientes`, `guardarPuertosAsignados`), solo AÑADE, siembra también con UNO, para que el primero conserve el de siempre. **Un FÍSICO tiene el suyo por serie** (`asignarPuertosDeFisicos`, `settings.json#dispositivos.fisicos`, `puertoDeFisico`).
 - **Antes de usar el túnel se comprueba DE QUIÉN es** (`lib/dispositivo.mjs#asegurarTunel`, `adb forward --list`): de otro, sale con 2 y lo dice; de nadie, lo repone. Ejecutar y la recarga lo reponen sin mirar (límite). `emulator-*` sin AVD cae al de siempre y lo DICE. Mismo `--serie` en todos los scripts. **`adb forward` del agente se RECHAZA** (`motivoDeComandoRechazado`); `adb reverse` no (no toca puertos locales).

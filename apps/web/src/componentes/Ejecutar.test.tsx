@@ -519,7 +519,7 @@ describe("Ejecutar: Tareas en background", () => {
     expect(screen.queryByRole("region", { name: "Tareas en background" })).toBeNull();
   });
 
-  it("lista el global con su nombre, la granja y TODOS los aparatos medidos, apagados incluidos", () => {
+  it("lista el global con su nombre, la granja y SOLO los aparatos a mano, en verde; un apagado no sale", () => {
     render(
       <Ejecutar
         conectado
@@ -534,12 +534,18 @@ describe("Ejecutar: Tareas en background", () => {
       expect.stringContaining("Como el global"),
       expect.stringContaining("Granja"),
       expect.stringContaining("Pixel 8"),
-      expect.stringContaining("pixel8"),
     ]);
     expect(opciones[0]!.textContent).toContain("(Pixel 8)");
     expect(opciones[0]!.getAttribute("aria-checked")).toBe("true");
-    // La izquierda sigue siendo SOLO lo que está a mano: el emulador apagado no está allí.
+    expect(opciones[2]!.querySelector("[class*='aMano']")).not.toBeNull();
     expect(within(screen.getByRole("region", { name: "Ahora" })).queryByText(/pixel8/)).toBeNull();
+  });
+
+  it("sin ninguno a mano lo dice y manda a Ajustes → Dispositivos", () => {
+    render(<Ejecutar conectado alRevisar={NADA} dispositivos={[EMULADOR]} tareas={tareas()} />);
+    const columna = screen.getByRole("region", { name: "Tareas en background" });
+    expect(within(columna).queryByRole("radio", { name: /pixel8/ })).toBeNull();
+    expect(within(columna).getByText(/Ningún emulador, simulador ni teléfono arrancado o conectado/)).toBeTruthy();
   });
 
   it("sin granja montada no hay fila de granja; sin configurar, la fila lo dice", () => {
@@ -556,7 +562,7 @@ describe("Ejecutar: Tareas en background", () => {
       <Ejecutar
         conectado
         alRevisar={NADA}
-        dispositivos={[PIXEL, EMULADOR]}
+        dispositivos={[PIXEL, { ...EMULADOR, estado: "arrancado" }]}
         tareas={{ guardado: { origen: "granja" }, granja: "configurada", alElegir }}
       />
     );

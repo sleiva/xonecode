@@ -458,18 +458,21 @@ function AparatoDeTareas({
       setNegativa(motivo);
     });
   };
-  const medidos = dispositivos ?? [];
-  const deEsteEquipo: { id: string; nombre: string; detalle: string; marca: string }[] = medidos.map((d) => ({
+  // Solo lo que está a mano (arrancado o conectado), como en «Ahora»: pedido por él tras ver la lista con todos
+  // los simuladores de iOS y Android apagados. Lo guardado que no está a mano sigue, dicho, para no esconder la elección.
+  const medidos = (dispositivos ?? []).filter(seLlegaAlDispositivo);
+  const deEsteEquipo: { id: string; nombre: string; detalle: string; marca: string; aMano?: true }[] = medidos.map((d) => ({
     id: d.id,
     nombre: d.nombre,
     detalle: `${CLASE_DEL_APARATO[d.clase]} · ${d.plataforma === "ios" ? "iOS" : "Android"}`,
     marca: etiquetaDeEstado(d),
+    aMano: true,
   }));
   if (guardado.dispositivo !== undefined && !medidos.some((d) => d.id === guardado.dispositivo!.id)) {
     const g = guardado.dispositivo;
     deEsteEquipo.unshift({ id: g.id, nombre: g.nombre, detalle: `${CLASE_DEL_APARATO[g.clase]} · ${g.plataforma === "ios" ? "iOS" : "Android"}`, marca: "no está ahora" });
   }
-  const fila = (id: string | undefined, nombre: string, detalle: string, marca: string) => {
+  const fila = (id: string | undefined, nombre: string, detalle: string, marca: string, aMano?: true) => {
     const clave = id ?? "global";
     const elegida = eleccion === clave;
     return (
@@ -488,7 +491,7 @@ function AparatoDeTareas({
             <span>{nombre}</span>
             <span className={estilos.marca}>{detalle}</span>
           </span>
-          <span className={estilos.marca}>{elegida ? "elegido" : marca}</span>
+          <span className={aMano === true && !elegida ? estilos.aMano : estilos.marca}>{elegida ? "elegido" : marca}</span>
         </button>
       </li>
     );
@@ -512,9 +515,11 @@ function AparatoDeTareas({
         )}
         <li className={estilos.grupo} aria-hidden="true">Este equipo</li>
         {deEsteEquipo.length === 0 ? (
-          <li className={estilos.aviso}>Todavía no se ha medido ningún aparato de este equipo: mira en Ajustes → Dispositivos.</li>
+          <li className={estilos.aviso}>
+            Ningún emulador, simulador ni teléfono arrancado o conectado: arranca uno en Ajustes → Dispositivos o enchufa un teléfono.
+          </li>
         ) : (
-          deEsteEquipo.map((d) => fila(d.id, d.nombre, d.detalle, d.marca))
+          deEsteEquipo.map((d) => fila(d.id, d.nombre, d.detalle, d.marca, d.aMano))
         )}
       </ul>
       <p className={estilos.aviso}>{NOTA_DE_LA_ELECCION(eleccion)}</p>
