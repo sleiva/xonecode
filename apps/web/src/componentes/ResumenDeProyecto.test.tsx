@@ -357,6 +357,8 @@ describe("«Subir» en la tarjeta de lo pendiente", () => {
     const boton = within(screen.getByRole("status")).getByRole("button", { name: /subir/i }) as HTMLButtonElement;
     expect(boton.disabled).toBe(true);
     expect(boton.title).toMatch(/turno en marcha/);
+    // Y a la VISTA, no solo en el title (IXCODE-74).
+    expect(within(screen.getByRole("status")).getByRole("note").textContent).toMatch(/turno en marcha/);
   });
 
   it("sin `subida` (un proyecto que no es el abierto) no se ofrece", async () => {

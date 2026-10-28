@@ -2647,6 +2647,53 @@ describe("App: el panel del proyecto (IXCODE-11)", () => {
     expect(enPanel()).toBe(true);
   });
 
+  /**
+   * IXCODE-74: con una tarea trabajando en el proyecto, «Subir» fallaba sin decir nada (el servidor se niega en
+   * `vestibulo.ts#enObra` y el motivo iba al chat). Por la composición REAL de `App`: el flag de la tarea y el fallo
+   * del clic se componen aquí, no en el botón.
+   */
+  it("«Subir» se apaga DICIENDO por qué con una tarea trabajando, y la negativa del servidor al clic se lee", () => {
+    const { store, enviar } = conProyectoAbierto();
+    fireEvent.click(enBarra("AppDemo"));
+    fireEvent.click(screen.getByRole("tab", { name: "Sincronización" }));
+    act(() => store.aplicar({ clase: "sync", proyecto: "AppDemo", rama: "main", pendientes: 2 }));
+    const tarea = {
+      id: "t1",
+      proyecto: "p1",
+      proyectoNombre: "AppDemo",
+      titulo: "Arregla el login",
+      peticion: "Arregla el login",
+      encargo: "Arregla el login",
+      adjuntos: [],
+      creada: "2026-09-08T10:00:00.000Z",
+    };
+    act(() => store.aplicar({ clase: "tareas", concurrencia: 2, corriendoAqui: true, lista: [{ ...tarea, estado: "en-proceso" as const }] }));
+    const subir = (): HTMLButtonElement => screen.getByRole("button", { name: /^Subir$/ }) as HTMLButtonElement;
+    expect(subir().disabled).toBe(true);
+    expect(screen.getByRole("note").textContent).toMatch(/Una tarea está trabajando en este proyecto/);
+
+    // La tarea termina: se puede pulsar. Si el servidor se niega igual (otra arrancó justo entonces), se lee aquí.
+    act(() => store.aplicar({ clase: "tareas", concurrencia: 2, corriendoAqui: true, lista: [{ ...tarea, estado: "terminada" as const }] }));
+    expect(subir().disabled).toBe(false);
+    expect(screen.queryByRole("note")).toBeNull();
+    fireEvent.click(subir());
+    expect(enviar).toHaveBeenCalledWith({ clase: "sync", accion: "subir" });
+    act(() =>
+      store.aplicar({
+        clase: "acto",
+        acto: {
+          tipo: "sincronizacion",
+          accion: "subir",
+          cuando: "2026-10-28T10:30:00.000Z",
+          lineas: [],
+          error: "no se ha sincronizado: una tarea está trabajando en este proyecto",
+        },
+      })
+    );
+    expect(subir().disabled).toBe(false);
+    expect(screen.getByRole("note").textContent).toMatch(/no se ha sincronizado: una tarea está trabajando/);
+  });
+
   it("«El agente está trabajando» con «Volver al chat» solo con un turno en vuelo", () => {
     const { store } = conProyectoAbierto();
     fireEvent.click(enBarra("AppDemo"));
@@ -3748,7 +3795,8 @@ describe("App: «Subir» y la subida con selección", () => {
       })
     );
     expect(screen.getByText("No se ha podido actualizar el repo local")).toBeTruthy();
-    expect(screen.getByText("CloudStudio no responde")).toBeTruthy();
+    // En el modal; y también en el registro de la sincronización, que desde IXCODE-74 pinta el error de la operación.
+    expect(within(screen.getByRole("dialog")).getByText("CloudStudio no responde")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /aceptar/i }));
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(screen.getByRole("tab", { name: "Sincronización" })).toBeTruthy();

@@ -12,6 +12,18 @@
   opacity: 0.7;
 }
 
+/* Por qué no se puede, o por qué no subió (IXCODE-74): al lado del botón, en el tono de aviso; un fallo del servidor,
+   en el de error. Ocupa su propia línea si no cabe: el texto es una frase, no una etiqueta. */
+.porque {
+  flex-basis: 100%;
+  color: var(--dsw-alias-state-warn-label);
+  font-size: 12px;
+}
+
+.porque[data-fallo] {
+  color: var(--xonecode-rojo);
+}
+
 /* El mismo giro que el de las recetas (`Receta.module.css#girando`), con sus mismos alias: el
    aro en `border-l2` y el tramo que gira en el cian de la marca. */
 .girando {

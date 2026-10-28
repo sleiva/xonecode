@@ -468,3 +468,57 @@ describe("CloudStudio: cuándo se mide", () => {
     expect(recargar).toHaveBeenCalledTimes(1);
   });
 });
+
+/**
+ * IXCODE-74: con una tarea trabajando en el proyecto, «Subir» fallaba sin decir nada. El servidor se negaba
+ * (`vestibulo.ts#enObra`) y lo anotaba como `error` del acto, pero ni el registro ni el botón lo pintaban, y el motivo
+ * iba al chat, que no se ve desde el panel.
+ */
+describe("CloudStudio: «Subir» dice por qué no (IXCODE-74)", () => {
+  afterEach(cleanup);
+  const SYNC = { proyecto: "Maset", pendientes: 3, rama: "master" } as const;
+
+  it("apagado por una tarea, el MOTIVO se lee junto al botón, no solo en el title", () => {
+    render(
+      <CloudStudio
+        sync={SYNC}
+        alPedir={vi.fn()} alRecargar={vi.fn()}
+        subida={{ esperando: false, motivoParaNo: "Una tarea está trabajando en este proyecto: se podrá subir cuando termine", alSubir: vi.fn() }}
+        conectado
+      />
+    );
+    expect((screen.getByRole("button", { name: /^Subir$/ }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText(/Una tarea está trabajando en este proyecto/)).toBeTruthy();
+  });
+
+  it("la NEGATIVA del servidor al último clic se lee junto al botón, que sigue pulsable", () => {
+    render(
+      <CloudStudio
+        sync={SYNC}
+        alPedir={vi.fn()} alRecargar={vi.fn()}
+        subida={{ esperando: false, fallo: "no se ha sincronizado: una tarea está trabajando en este proyecto", alSubir: vi.fn() }}
+        conectado
+      />
+    );
+    expect((screen.getByRole("button", { name: /^Subir$/ }) as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.getByText(/no se ha sincronizado: una tarea está trabajando/).getAttribute("data-fallo")).toBe("");
+  });
+
+  it("mientras espera no dice nada: el giro ya lo cuenta", () => {
+    render(<CloudStudio sync={SYNC} alPedir={vi.fn()} alRecargar={vi.fn()} subida={{ esperando: true, fallo: "viejo", alSubir: vi.fn() }} conectado />);
+    expect(screen.queryByText("viejo")).toBeNull();
+  });
+
+  it("el registro pinta el ERROR de una operación que lanzó, sin una caja de líneas vacía", () => {
+    const op: ActoDeSincronizacion = {
+      tipo: "sincronizacion",
+      accion: "subir",
+      cuando: "2026-10-28T10:30:00.000Z",
+      lineas: [],
+      error: "no se ha sincronizado: una tarea está trabajando en este proyecto",
+    };
+    const { container } = render(<Registro operaciones={[op]} />);
+    expect(screen.getByText(/no se ha sincronizado: una tarea está trabajando/)).toBeTruthy();
+    expect(container.querySelector("pre")).toBeNull();
+  });
+});

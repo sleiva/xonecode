@@ -199,7 +199,9 @@ Ante una discrepancia con el código, **el código manda**.
 - **La banda de CloudStudio**: `estado` MEDIDO contra la ref de la bajada (`gitSync.ts#cambiosPendientes`)
   sin MCP; `subir`/`bajar` se ENCOLAN como `/sync <accion>` (mismo plan, guarda y aprobación que el
   terminal). `proyecto`/`rama` ausentes ≠ cero. Al día «Subir» no se pinta, solo con la subida MEDIDA.
-  `BotonSubir` también en el Resumen (proyecto ABIERTO); con turno en vuelo se apaga diciendo por qué. **El recorrido va a la BANDA**
+  `BotonSubir` también en el Resumen (proyecto ABIERTO); con turno en vuelo **o una TAREA trabajando en el proyecto**
+  se apaga diciendo por qué A LA VISTA, y la negativa del servidor al último clic (`error` del acto) se lee junto a él
+  y en el registro (IXCODE-74: fallaba mudo; el motivo solo iba al chat). **El recorrido va a la BANDA**
   (acto `sincronizacion`, `anotarSincronizacion?` opcional), EXACTAMENTE lo del terminal, sin subidas
   CANCELADAS.
 

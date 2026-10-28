@@ -11,8 +11,13 @@ export interface EstadoDeSubida {
    * mide git antes de preguntar, y eso tarda. Sin esto, un clic que no hace nada visible.
    */
   esperando: boolean;
-  /** Por qué no se puede pulsar ahora (un turno en marcha). Ausente = se puede. */
+  /** Por qué no se puede pulsar ahora (un turno en marcha, una tarea trabajando en el proyecto). Ausente = se puede. */
   motivoParaNo?: string;
+  /**
+   * Por qué NO subió lo último que se pulsó en esta ventana: la negativa del SERVIDOR (`error` del acto de la
+   * operación), p. ej. una tarea que arrancó justo después del clic (IXCODE-74). Ausente = no hubo fallo que contar.
+   */
+  fallo?: string;
   alSubir: () => void;
 }
 
@@ -33,7 +38,14 @@ export function BotonSubir({
   apagado?: boolean;
 }) {
   const bloqueado = apagado || subida.esperando || subida.motivoParaNo !== undefined;
+  /**
+   * El porqué, A LA VISTA y no solo en el `title` (IXCODE-74): con una tarea trabajando, «Subir» fallaba sin decir nada
+   * —el motivo iba al chat, que no se ve desde el panel— y un botón apagado y mudo deja adivinando. Mientras espera no
+   * se dice nada: el giro ya lo cuenta.
+   */
+  const porque = subida.esperando ? undefined : (subida.fallo ?? subida.motivoParaNo);
   return (
+    <>
     <button
       type="button"
       className={className === undefined ? estilos.boton : `${className} ${estilos.boton}`}
@@ -49,5 +61,11 @@ export function BotonSubir({
       {subida.esperando ? <span className={estilos.girando} aria-hidden="true" /> : null}
       Subir
     </button>
+    {porque === undefined ? null : (
+      <span className={estilos.porque} role="note" data-fallo={subida.fallo === undefined ? undefined : ""}>
+        {porque}
+      </span>
+    )}
+    </>
   );
 }

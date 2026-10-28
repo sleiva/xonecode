@@ -10045,3 +10045,17 @@ texto y con un aviso en cada página escaneada.
   JPEG dentro (`DCTDecode`): la página sale como escaneada y la imagen, entera, en 110 ms.
 - **Límites**: una página escaneada no se encuentra con `grep` hasta que alguien la transcribe; una página con texto y
   una foto se lee como texto, sin la foto; si el modelo de `trabajo` no ve imágenes, lo dirá la respuesta de la tool.
+
+## «Subir» con una tarea trabajando fallaba mudo (IXCODE-74, 28-10-2026)
+
+Rafa: «cuando hay una tarea en curso, Subir proyecto falla pero no muestra nada». El servidor SÍ se negaba
+(`vestibulo.ts#enObra`: «no se ha sincronizado: una tarea está trabajando en este proyecto…», la regla de IXCODE-61) y
+anotaba la operación con su `error`. Se perdía en el cliente, por tres sitios:
+- el registro de la sincronización pintaba solo las `lineas` de la operación, nunca su `error`: salía «Subir · 10:30»
+  vacío;
+- la tarjeta del Resumen no tiene registro, y el motivo relanzado iba al CHAT, que no se ve desde el panel;
+- el botón no se apagaba: la caja del chat sí lo hacía (IXCODE-36), «Subir» no.
+
+Ahora «Subir» se apaga con una tarea `en-proceso` en el proyecto y DICE por qué a la vista (no solo en el `title`); si
+el servidor se niega igual —una tarea reservada justo después del clic—, su motivo sale junto al botón (`fallo`, el
+acto de la operación que llegó tras el clic) y en el registro. Test de `App` por la composición real: falla sin el cambio.

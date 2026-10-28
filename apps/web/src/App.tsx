@@ -793,6 +793,11 @@ export function App({
    * encontraría con qué pintarla y la ventana se quedaría sin montar.
    */
   const proyectoActivoId = estado.alta?.proyectoActivo;
+  /**
+   * Una TAREA trabaja en el proyecto abierto: su caja se apaga (IXCODE-36) y «Subir» también (IXCODE-74), porque el
+   * servidor niega las dos cosas.
+   */
+  const proyectoAbiertoConTarea = proyectoActivoId !== undefined && (tareasEnCursoPorProyecto.get(proyectoActivoId) ?? 0) > 0;
 
   const pedirArtefacto = useCallback(
     (nombre: string) => {
@@ -868,12 +873,20 @@ export function App({
     void enviar({ clase: "sync", accion: "estado" });
   }, [enviar]);
 
+  /**
+   * La última subida que se conocía al PULSAR «Subir» en esta ventana, o `null` si no se ha pulsado. La operación que
+   * llegue DESPUÉS es la de ese clic: si trae `error`, el botón lo dice (IXCODE-74). Un fallo de antes no se arrastra.
+   */
+  const [subidaPulsadaTras, setSubidaPulsadaTras] = useState<string | undefined | null>(null);
   const sincronizar = useCallback(
     (accion: "subir" | "bajar") => {
-      if (accion === "subir") setSubidaEsperando(true);
+      if (accion === "subir") {
+        setSubidaEsperando(true);
+        setSubidaPulsadaTras(registroDeSync.find((operacion) => operacion.accion === "subir")?.cuando);
+      }
       void enviar({ clase: "sync", accion });
     },
-    [enviar]
+    [enviar, registroDeSync]
   );
 
   /**
@@ -1030,13 +1043,21 @@ export function App({
       />
     );
 
+  /** La operación del último clic en «Subir», si ya llegó (ver `subidaPulsadaTras`). */
+  const subidaDelClic = subidaPulsadaTras === null ? undefined : registroDeSync.find((operacion) => operacion.accion === "subir");
+  const falloDelClic = subidaDelClic !== undefined && subidaDelClic.cuando !== subidaPulsadaTras ? subidaDelClic.error : undefined;
   const estadoDeSubida: EstadoDeSubida = {
     esperando: subidaEsperando,
     // Con un turno en marcha la orden se encola DETRÁS de él y el diálogo tardaría lo que
     // tarde el turno: se dice en vez de dejar el botón girando minutos.
     ...(estado.turnoEnVuelo === true && !subidaEsperando
       ? { motivoParaNo: "Hay un turno en marcha: se podrá subir cuando termine" }
-      : {}),
+      : // Una TAREA trabaja en el proyecto (IXCODE-74): el servidor se niega (`vestibulo.ts#enObra`), y el botón lo
+        // dice ANTES, como la caja del chat (IXCODE-36). Si la negativa llega igual, la dice `fallo`.
+        proyectoAbiertoConTarea && !subidaEsperando
+        ? { motivoParaNo: "Una tarea está trabajando en este proyecto: se podrá subir cuando termine o la pares (pestaña Tareas)" }
+        : {}),
+    ...(falloDelClic === undefined ? {} : { fallo: falloDelClic }),
     alSubir: () => sincronizar("subir"),
   };
 
@@ -1954,8 +1975,6 @@ export function App({
       : estado.alta?.proyectos?.find((p) => p.id === panelSinCopia && p.local !== true);
   /** Se pidió ver un panel de proyecto —el del abierto o el de uno sin copia— en vez del chat. */
   const panelPedido = enPanel || proyectoSinCopia !== undefined;
-  /** Una TAREA trabaja en el proyecto de la conversación abierta (IXCODE-36): su caja se apaga. */
-  const proyectoAbiertoConTarea = proyectoActivoId !== undefined && (tareasEnCursoPorProyecto.get(proyectoActivoId) ?? 0) > 0;
   /** Se está leyendo una conversación: va por delante de todo, salvo de alguien esperando una respuesta en el chat. */
   const enLectura = lectura !== undefined && !hayEsperaDeHumano;
   /** Por qué esa conversación se LEE ahora, decidido con lo de AHORA: si ya nada lo impide, se ofrece abrirla. */

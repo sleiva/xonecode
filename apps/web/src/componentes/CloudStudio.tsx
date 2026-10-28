@@ -156,7 +156,10 @@ export function Registro({ operaciones }: { operaciones?: readonly ActoDeSincron
                 <span className={estilos.sello}>{` · ${sello}`}</span>
               )}
             </summary>
-            <pre className={estilos.lineas}>{operacion.lineas.join("\n")}</pre>
+            {operacion.lineas.length === 0 ? null : <pre className={estilos.lineas}>{operacion.lineas.join("\n")}</pre>}
+            {/* El error de una operación que LANZÓ (p. ej. una tarea trabajando en el proyecto, IXCODE-74): se anotaba
+                y no se pintaba, y la operación salía como una cabecera vacía. */}
+            {operacion.error === undefined ? null : <p className={estilos.aviso}>{operacion.error}</p>}
           </details>
         );
       })}
