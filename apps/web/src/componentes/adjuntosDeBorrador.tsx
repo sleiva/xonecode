@@ -184,7 +184,7 @@ export function RejillaDeAdjuntos({
   return (
     <section
       className={rejilla.imagenes}
-      aria-label="Imágenes"
+      aria-label="Adjuntos"
       onDragOver={(e) => {
         if (e.dataTransfer.types.includes("Files")) e.preventDefault();
       }}
@@ -195,17 +195,17 @@ export function RejillaDeAdjuntos({
       }}
     >
       <div className={rejilla.cabeceraDeImagenes}>
-        <span className={rejilla.etiqueta}>{`Imágenes · ${cuantos}`}</span>
-        <span className={rejilla.notaDeImagenes}>{nota ?? "Las verá el agente en /adjuntos/, de solo lectura"}</span>
+        <span className={rejilla.etiqueta}>{`Adjuntos · ${cuantos}`}</span>
+        <span className={rejilla.notaDeImagenes}>{nota ?? "Los verá el agente en /adjuntos/, de solo lectura"}</span>
       </div>
       <ul className={rejilla.rejillaDeImagenes}>
         {previos.map((a) => (
           <li key={`antes-${a.nombre}`} className={rejilla.imagen} data-quitado={a.quitado ? "" : undefined}>
             <span className={rejilla.sinVista} aria-hidden="true">
-              <IconoDeImagen />
+              <IconoDeAdjunto nombre={a.nombre} />
             </span>
             <span className={rejilla.nombreDeImagen}>{a.nombre}</span>
-            <span className={rejilla.estadoDeImagen}>{a.quitado ? "se quitará al guardar" : "ya la tenía"}</span>
+            <span className={rejilla.estadoDeImagen}>{a.quitado ? "se quitará al guardar" : "ya lo tenía"}</span>
             <button
               type="button"
               className={rejilla.quitarImagen}
@@ -221,7 +221,7 @@ export function RejillaDeAdjuntos({
           <li key={`nueva-${a.id}`} className={rejilla.imagen} data-nueva="" data-estado={a.estado}>
             {a.vista === undefined ? (
               <span className={rejilla.sinVista} aria-hidden="true">
-                <IconoDeImagen />
+                <IconoDeAdjunto nombre={a.nombre} />
               </span>
             ) : (
               <img className={rejilla.vista} src={a.vista} alt="" />
@@ -246,7 +246,7 @@ export function RejillaDeAdjuntos({
         <li>
           <button type="button" className={rejilla.anadirImagen} disabled={deshabilitado} onClick={() => entrada.current?.click()}>
             <span aria-hidden="true">+</span>
-            Añadir imagen o arrástrala aquí
+            Añadir fichero o arrástralo aquí
           </button>
         </li>
       </ul>
@@ -263,6 +263,27 @@ export function RejillaDeAdjuntos({
       />
       <p className={rejilla.notaDeImagenes}>También puedes pegar una captura en el texto.</p>
     </section>
+  );
+}
+
+/**
+ * IXCODE-76: se adjunta cualquier fichero, no solo imágenes. Una imagen sin vista lleva el icono de imagen; lo demás
+ * (un PDF, un Excel, un `.md`), el de documento. Por la EXTENSIÓN, como el mime en el servidor.
+ */
+const EXTENSIONES_DE_IMAGEN = /\.(png|jpe?g|gif|webp|svg|heic|bmp)$/i;
+
+function IconoDeAdjunto({ nombre }: { nombre: string }) {
+  return EXTENSIONES_DE_IMAGEN.test(nombre) ? <IconoDeImagen /> : <IconoDeDocumento />;
+}
+
+/** Un documento: hoja con la esquina doblada. Trazo, en el color del texto. */
+function IconoDeDocumento() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+      <path d="M14 3v5h5" />
+      <path d="M9 13h6M9 17h6" />
+    </svg>
   );
 }
 

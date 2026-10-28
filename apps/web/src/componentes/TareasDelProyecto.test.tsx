@@ -567,7 +567,7 @@ describe("TareasDelProyecto: ver lo que hace una tarea en proceso", () => {
       fireEvent.click(screen.getByRole("tab", { name: /Finalizadas/ }));
       fireEvent.click(filaDe("Menú"));
       fireEvent.click(screen.getByRole("button", { name: "Reencolar lo pendiente" }));
-      expect(screen.getByRole("button", { name: /Añadir imagen o arrástrala aquí/ })).toBeTruthy();
+      expect(screen.getByRole("button", { name: /Añadir fichero o arrástralo aquí/ })).toBeTruthy();
       const captura = new File([new Uint8Array([1])], "image.png", { type: "image/png" });
       fireEvent.paste(screen.getByRole("textbox"), { clipboardData: { files: [captura], types: ["Files"] } });
       // «pegado-1.png» ya es de la original: la nueva se llama de otra forma.

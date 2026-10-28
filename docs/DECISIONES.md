@@ -9992,3 +9992,24 @@ en el tope de salida. Los pasos 1–3 de esta tanda paran el bucle; esto quita l
 - La nota del corte propone `append` para un documento y `edit_file` para el código.
 - **Límite**: el `write_file` de deepagents ignora `append` y sobrescribe con el trozo (medido con su tool real). No se
   protege: solo se usa TrueForge.
+
+## Adjuntos de cualquier tipo y «Editar la tarea» que no cabía (28-10-2026)
+
+Dos tickets de Rafa.
+
+- **IXCODE-75: los botones de «Editar la tarea» quedaban fuera de la pantalla.** La ventana no tenía alto máximo: con
+  el encargo (280 px como poco), lo pedido, regenerar y la rejilla de adjuntos medía más que la pantalla. Medido en una
+  réplica con las mismas reglas en Chromium a 1071×905 (el tamaño de su captura): «Guardar» acababa en `y: 1127`; con el
+  arreglo, en `y: 864`. La ventana lleva `max-height: 90vh` con scroll propio (en `vh` y no en `%`, porque la fila del
+  velo es `auto` y un porcentaje no resuelve, la trampa de `Aprobacion.test.tsx`), y el pie es `sticky` para que los
+  botones se vean siempre. Es la misma regla que ya tenía «Nueva tarea». No se ha visto en la consola real.
+- **IXCODE-76: se adjunta cualquier fichero.** La subida ya aceptaba cualquier tipo: ningún `<input>` lleva `accept` y
+  el servidor solo mira el nombre y el tamaño. Lo que hacía creer otra cosa era la rejilla, que decía «Imágenes» y
+  «Añadir imagen». Ahora dice «Adjuntos» y «Añadir fichero», y un fichero que no es imagen lleva icono de documento.
+- **Y el inventario ya no miente con un PDF.** `conAdjuntos` decía que los adjuntos «se leen con las tools de fichero»,
+  pero `read_file` contesta «fichero binario» a un PDF o a un Office. Si hay alguno (`esDocumentoBinario`, por
+  extensión, también dentro de un `.zip` descomprimido), el inventario lo dice y le prohíbe al agente describir lo que
+  no ha leído. Un `.docx` no se descomprime aunque sea un zip: `esZip` mira la extensión. No se tocó la tabla de mimes,
+  que es la de los artefactos y cambiaría lo que sirve el visor.
+- **Pendiente, a decidir:** que el agente LEA esos documentos. Habría que extraer el texto al guardar, como ya se hace
+  con el `.zip`. Para `.docx` y `.xlsx` basta el lector de zip que ya hay; para el PDF hace falta una dependencia nueva.

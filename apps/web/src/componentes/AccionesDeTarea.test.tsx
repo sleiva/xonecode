@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { DisenoDeTareasContexto } from "../disenoContexto.js";
@@ -323,7 +326,7 @@ describe("editar el encargo (IXCODE-52)", () => {
       />
     );
     fireEvent.click(screen.getByRole("button", { name: "Editar la tarea" }));
-    expect(screen.getByRole("button", { name: /Añadir imagen o arrástrala aquí/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Añadir fichero o arrástralo aquí/ })).toBeTruthy();
     expect(screen.getByText("Sin cambios todavía")).toBeTruthy();
     const entrada = container.ownerDocument.querySelector('input[type="file"]') as HTMLInputElement;
     await act(async () => {
@@ -333,7 +336,7 @@ describe("editar el encargo (IXCODE-52)", () => {
     const borrador = (subir.mock.calls[0] as unknown as [string])[0];
     fireEvent.click(screen.getByRole("button", { name: "Quitar vieja.png" }));
     expect(screen.getByText("se quitará al guardar")).toBeTruthy();
-    expect(screen.getByText("Al guardar: 1 imagen nueva · 1 se quita")).toBeTruthy();
+    expect(screen.getByText("Al guardar: 1 adjunto nuevo · 1 se quita")).toBeTruthy();
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
     });
@@ -512,5 +515,27 @@ describe("«Editar la tarea» cambia también la PANTALLA de Stitch (con proyect
     );
     fireEvent.click(screen.getByRole("button", { name: "Editar la tarea" }));
     expect(screen.queryByRole("tab")).toBeNull();
+  });
+});
+
+/**
+ * IXCODE-75: «Editar la tarea» pasaba del alto de la pantalla y «Guardar» quedaba fuera. jsdom no hace layout, así que
+ * se vigila la HOJA (el mismo trato que `Aprobacion.test.tsx`).
+ */
+describe("«Editar la tarea» cabe en la pantalla", () => {
+  const hoja = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "AccionesDeTarea.module.css"), "utf8");
+  const regla = (selector: string): string => {
+    const desde = hoja.slice(hoja.indexOf(`${selector} {`));
+    return desde.slice(0, desde.indexOf("}"));
+  };
+
+  it("la ventana tiene alto máximo en vh y scroll propio", () => {
+    expect(regla(".ventanaAncha")).toMatch(/max-height:\s*90vh/);
+    expect(regla(".ventanaAncha")).toMatch(/overflow-y:\s*auto/);
+  });
+
+  it("el pie con los botones se queda pegado abajo", () => {
+    expect(regla(".pieDeEditar.pieDeEditar")).toMatch(/position:\s*sticky/);
+    expect(regla(".pieDeEditar.pieDeEditar")).toMatch(/bottom:\s*0/);
   });
 });

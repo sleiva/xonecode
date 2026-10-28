@@ -119,6 +119,11 @@
    porque un encargo son párrafos y en 420 px no se lee. */
 .ventanaAncha {
   width: min(720px, 100%);
+  /* IXCODE-75: con el encargo (280 px como poco), lo pedido y las imágenes, la ventana pasaba del alto de la pantalla
+     y «Guardar» quedaba fuera, sin forma de llegar. El alto en `vh` y no en `%`: la fila del velo es `auto` y un
+     porcentaje contra ella no resuelve (la trampa medida en `Aprobacion.test.tsx`). El pie se queda pegado abajo. */
+  max-height: 90vh;
+  overflow-y: auto;
 }
 
 .campoEncargo {
@@ -159,6 +164,17 @@
 /* El pie: lo que pasará al guardar a la izquierda, los botones a la derecha. */
 .pieDeEditar {
   align-items: center;
+}
+
+/* Pegado al fondo de la ventana mientras se baja por ella: los botones se ven siempre. Se come el relleno de la ventana
+   (20 px) con margen negativo y lo devuelve como relleno propio, con fondo, para que lo de detrás no se transparente. */
+.pieDeEditar.pieDeEditar {
+  position: sticky;
+  bottom: 0;
+  margin: 14px -20px -20px;
+  padding: 10px 20px 20px;
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-layer-1);
 }
 
 .resumenDeCambios {

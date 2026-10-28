@@ -434,7 +434,7 @@ function EditarEncargo({
     const partes = [
       ...(limpioCambiado(texto, t.encargo) || limpioCambiado(peticion, t.peticion) ? ["el texto"] : []),
       ...(pantallaCambiada ? ["el diseño"] : []),
-      ...(nuevasListas > 0 ? [nuevasListas === 1 ? "1 imagen nueva" : `${nuevasListas} imágenes nuevas`] : []),
+      ...(nuevasListas > 0 ? [nuevasListas === 1 ? "1 adjunto nuevo" : `${nuevasListas} adjuntos nuevos`] : []),
       ...(quitadas.length > 0 ? [quitadas.length === 1 ? "1 se quita" : `${quitadas.length} se quitan`] : []),
     ];
     return partes.length === 0 ? "Sin cambios todavía" : `Al guardar: ${partes.join(" · ")}`;
@@ -580,7 +580,7 @@ function EditarEncargo({
           )}
           {pedido === "" ? <p className={modal.fallo}>Lo que pediste no puede quedar vacío.</p> : null}
           {limpio === "" ? <p className={modal.fallo}>El encargo no puede quedar vacío.</p> : null}
-          {algunoFalló ? <p className={modal.fallo}>Una imagen no se pudo subir: quítala o vuelve a elegirla.</p> : null}
+          {algunoFalló ? <p className={modal.fallo}>Un adjunto no se pudo subir: quítalo o vuelve a elegirlo.</p> : null}
           {negativa === undefined ? null : (
             <p className={modal.fallo} role="alert">{`No se pudo: ${negativa}`}</p>
           )}

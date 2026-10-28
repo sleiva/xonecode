@@ -91,6 +91,18 @@ export function nombreDeAdjuntoAceptable(nombre: string): boolean {
   return SEGMENTO.test(nombre) && nombre !== "." && nombre !== "..";
 }
 
+/**
+ * ¿Es un documento de oficina o un PDF? (IXCODE-76: se adjunta cualquier fichero). Son BINARIOS y `read_file` no los
+ * abre, así que el inventario se lo dice al agente: prometerle que «se leen con las tools de fichero» es la misma
+ * mentira que la de las imágenes. Por EXTENSIÓN, como el resto de adjuntos; un `.docx` no se descomprime aunque sea un
+ * zip (`zipDeAdjunto.ts#esZip` mira la extensión).
+ */
+const DOCUMENTOS_BINARIOS = /\.(pdf|docx?|xlsx?|pptx?|odt|ods|odp|pages|numbers|key)$/i;
+
+export function esDocumentoBinario(nombre: string): boolean {
+  return DOCUMENTOS_BINARIOS.test(nombre);
+}
+
 /** Lo que se sabe de un adjunto para poder nombrarlo. La forma de `AdjuntoDeTarea`
  *  (`core/tareas.ts`) reducida a lo que este texto usa. */
 export interface AdjuntoNombrable {
@@ -145,6 +157,7 @@ export function conAdjuntos(peticion: string, adjuntos: readonly AdjuntoNombrabl
   if (adjuntos.length === 0) return peticion;
   const todos = adjuntos.flatMap((a) => [a, ...(a.contenido ?? [])]);
   const hayImagen = todos.some((a) => a.mime?.startsWith("image/") === true);
+  const hayDocumento = todos.some((a) => esDocumentoBinario(a.nombre));
   const linea = (a: AdjuntoNombrable, sangria = ""): string =>
     `${sangria}- ${RUTA_ADJUNTOS}${a.nombre} (${peso(a.bytes)}${a.mime === undefined ? "" : `, ${a.mime}`})`;
   const cabecera =
@@ -180,6 +193,12 @@ export function conAdjuntos(peticion: string, adjuntos: readonly AdjuntoNombrabl
       ? [
           "IMÁGENES: para saber qué hay en una, pásala por `describe_image` con su ruta (`read_file` no",
           "las abre). No describas una imagen que no hayas pasado por ella.",
+        ]
+      : []),
+    ...(hayDocumento
+      ? [
+          "DOCUMENTOS (PDF, Word, Excel, PowerPoint): `read_file` no los abre, contesta «fichero binario». No",
+          "describas ni resumas lo que dicen: di a la persona que no puedes leerlos y pídele en texto lo que necesites.",
         ]
       : []),
   ].join("\n");

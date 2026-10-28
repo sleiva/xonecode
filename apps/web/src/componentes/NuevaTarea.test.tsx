@@ -209,7 +209,7 @@ describe("NuevaTarea", () => {
     expect(entrada.hasAttribute("hidden")).toBe(true);
     let abierto = 0;
     entrada.click = () => void abierto++;
-    fireEvent.click(screen.getByRole("button", { name: /añadir imagen/i }));
+    fireEvent.click(screen.getByRole("button", { name: /añadir fichero/i }));
     expect(abierto).toBe(1);
   });
 
