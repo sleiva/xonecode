@@ -10079,3 +10079,21 @@ adjuntos: solo puede seguir aquí, el feedback de una tarea es texto».
 - **La negativa del feedback vuelve a quien lo mandó** (409 con motivo). Antes era 204 y solo se `informar`aba: el
   formulario se vaciaba aunque no se hubiera guardado.
 - **Límite**: el Kanban del escritorio sigue ofreciendo solo texto (no le llega a dónde subir).
+
+## Memoria corta para quien maneja el aparato (28-10-2026)
+
+Medido en tres soportes de Maset (20-10 y 27-10), por la traza de tools: el device-controller arrancaba sus encargos
+segundo y siguientes con 23 y 43 mil tokens de memoria (`arranca-con`), reenviados en cada una de sus 23-26 llamadas.
+Casi todo era lo que devolvían sus órdenes —árboles de elementos, logs, `getFields`—: el ESTADO de un aparato que ya
+había cambiado, no un fichero que sigue igual como el de los demás especialistas.
+
+Lo que la memoria sí le ahorra es el DESCUBRIMIENTO (cómo se llama a `xone-hotswap`, dónde está `adb`, qué receta
+funcionó): el que arrancó sin memoria (`olvidada-por-fallo`) repitió cuatro órdenes de entorno; los dos que arrancaron
+con ella, ninguna, y uno de ellos arrancó con la REDUCIDA (la orden larga se pierde, lo que dijo se queda).
+
+Así que **quien lleva `ejecucion` se guarda siempre reducido** (`memoriaDeEspecialistas.ts`, `{ corta: true }` en
+`abrir`), con lo devuelto a `MAX_CARACTERES_DE_RESULTADO_CORTA` y tope `TOPE_CORTA_TOKENS`; por encima, la ventana de lo
+más reciente. Estimado sobre esas trazas: el encargo de 23 llamadas que arrancaba con 43 mil pasaría a unos 5-6 mil.
+**Sin medir en un turno real**: hay que ver con `XONECODE_TRACE_TOOLS=1` que los `arranca-con` bajan y que no vuelven
+las órdenes de descubrimiento.
+

@@ -55,7 +55,8 @@ Ante una discrepancia con el código, **el código manda**.
   que leyeron otros). Entero (`TOPE_COMPLETA_TOKENS`), REDUCIDO (`TOPE_REDUCIDA_TOKENS`) o la VENTANA reciente
   (`ventanaDeHistorial`). En la reducida, sus encargos a otro van enteros y un `write_file`/`edit_file` largo se CUENTA en
   texto, sin respuesta: el modelo copia la FORMA de sus llamadas. Una encarnación viva por especialista; un hijo que falló o se detuvo no deja memoria; uno cortado por su presupuesto
-  sí, sin la orden de parar (`sinOrdenDePresupuesto`). Solo en
+  sí, sin la orden de parar (`sinOrdenDePresupuesto`). **Quien lleva `ejecucion` la tiene CORTA** (`TOPE_CORTA_TOKENS`, siempre
+  reducida): lo que devuelven sus órdenes es estado de un aparato que caduca. Solo en
   memoria; `XONECODE_SIN_MEMORIA_DE_ESPECIALISTAS=1` la apaga.
 - **Los planes abiertos van detrás de la petición del raíz** (`core/planesAbiertos.ts`, `planesEnDisco.ts#planesParaElTurno`),
   con los hechos del proyecto y rehechos en cada turno: tareas abiertas, progreso y `offset`/`limit` de su ficha (el

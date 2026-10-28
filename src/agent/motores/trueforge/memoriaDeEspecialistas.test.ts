@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MAX_CARACTERES_DE_ARGUMENTO, MAX_CARACTERES_DE_RESULTADO, TOPE_COMPLETA_TOKENS, TOPE_REDUCIDA_TOKENS, crearMemoriaDeEspecialistas, reducirHistorial, ventanaDeHistorial, NOTA_DE_ENCARGO_CORTADO, sinOrdenDePresupuesto } from "./memoriaDeEspecialistas.js";
+import { MAX_CARACTERES_DE_ARGUMENTO, MAX_CARACTERES_DE_RESULTADO, MAX_CARACTERES_DE_RESULTADO_CORTA, TOPE_COMPLETA_TOKENS, TOPE_CORTA_TOKENS, TOPE_REDUCIDA_TOKENS, crearMemoriaDeEspecialistas, reducirHistorial, ventanaDeHistorial, NOTA_DE_ENCARGO_CORTADO, sinOrdenDePresupuesto } from "./memoriaDeEspecialistas.js";
 import { textoDePresupuestoAgotado } from "./presupuesto.js";
 
 const MSGS = [{ role: "user", content: "haz" }, { role: "assistant", content: "hecho" }];
@@ -192,5 +192,42 @@ describe("la memoria de un hijo cortado por presupuesto", () => {
     expect((limpios[3]!.content as { text: string }[])[0]!.text).toBe(NOTA_DE_ENCARGO_CORTADO);
     expect(limpios[0]).toEqual(mensajes[0]);
     expect(limpios[4]).toEqual(mensajes[4]);
+  });
+});
+
+describe("la memoria CORTA de quien maneja el aparato (Maset: 23 y 43 mil tokens de estado caducado en cada llamada)", () => {
+  const ORDEN = [
+    { role: "user", content: "prueba el login" },
+    { role: "assistant", content: "", tool_calls: [{ id: "e1", function: { name: "execute", arguments: "{\"command\":\"xone-hotswap screen\"}" } }] },
+    { role: "tool", tool_call_id: "e1", content: "p".repeat(MAX_CARACTERES_DE_RESULTADO * 2) },
+    { role: "assistant", content: "funciona con xone-hotswap screen" },
+  ];
+
+  it("aunque quepa entera se guarda REDUCIDA, con lo devuelto más recortado y la orden que funcionó intacta", () => {
+    const m = crearMemoriaDeEspecialistas();
+    m.abrir("device-controller", "h1", { corta: true });
+    expect(m.cerrar("h1", { bien: true, mensajes: ORDEN, tokens: 1_000 })).toBe("guardada-reducida");
+    const r = m.abrir("device-controller", "h2", { corta: true });
+    const ms = ("previa" in r ? r.previa.mensajes : []) as { content?: string }[];
+    expect(ms[2]!.content!.startsWith("p".repeat(MAX_CARACTERES_DE_RESULTADO_CORTA) + "\n[recortado")).toBe(true);
+    expect(JSON.stringify(ms[1])).toContain("xone-hotswap screen");
+    expect(ms[3]!.content).toBe("funciona con xone-hotswap screen");
+  });
+
+  it("si reducida no cabe en su tope, se queda con la ventana de lo más reciente", () => {
+    const m = crearMemoriaDeEspecialistas();
+    const vieja = [{ role: "user", content: "encargo viejo " + "v".repeat(TOPE_CORTA_TOKENS * 4) }, { role: "assistant", content: "hecho viejo" }];
+    m.abrir("device-controller", "h1", { corta: true });
+    expect(m.cerrar("h1", { bien: true, mensajes: [...vieja, ...ORDEN], tokens: 1_000 })).toBe("guardada-ventana");
+    const r = m.abrir("device-controller", "h2");
+    const texto = JSON.stringify("previa" in r ? r.previa.mensajes : []);
+    expect(texto).not.toContain("encargo viejo");
+    expect(texto).toContain("prueba el login");
+  });
+
+  it("sin la marca, el mismo historial se guarda entero como siempre", () => {
+    const m = crearMemoriaDeEspecialistas();
+    m.abrir("consultant-xone", "h1");
+    expect(m.cerrar("h1", { bien: true, mensajes: ORDEN, tokens: 1_000 })).toBe("guardada");
   });
 });

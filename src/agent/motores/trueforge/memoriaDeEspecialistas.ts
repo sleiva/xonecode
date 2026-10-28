@@ -31,6 +31,11 @@
  * - **Solo si acabó BIEN**: un hijo que falló, o al que se cortó con «Detener» (su historial lleva la
  *   orden de parar y la heredaría la siguiente encarnación), no deja memoria y borra la que hubiera. Uno cortado
  *   por su PRESUPUESTO sí la deja, sin la orden de parar (`sinOrdenDePresupuesto`).
+ * - **CORTA para quien maneja el aparato** (`ejecucion`: el conductor; `TOPE_CORTA_TOKENS`). Lo que devuelven sus órdenes es
+ *   el ESTADO de un aparato que ya cambió, y no un fichero que sigue igual: se guarda siempre reducido, con lo devuelto
+ *   más recortado (`MAX_CARACTERES_DE_RESULTADO_CORTA`), y si no cabe, la ventana. Medido en tres soportes de Maset: su
+ *   memoria de reentrada era de 23 y 43 mil tokens, reenviados en cada una de sus 23-26 llamadas, y las encarnaciones que
+ *   arrancaron con la reducida no repitieron ni una orden de descubrimiento (la que arrancó sin memoria, cuatro).
  * - **En memoria y por sesión**: no va a la foto en disco (habría que subir `VERSION_DE_MEMORIA`) y
  *   se olvida al abrir otra conversación. **Límite declarado**: reabrir una sesión no la recupera.
  */
@@ -42,6 +47,10 @@ export const TOPE_COMPLETA_TOKENS = 48_000;
 export const TOPE_REDUCIDA_TOKENS = 40_000;
 /** Lo que se conserva de lo que devolvió cada tool en la versión reducida. */
 export const MAX_CARACTERES_DE_RESULTADO = 500;
+/** Hasta aquí se guarda la memoria CORTA (quien maneja el aparato), siempre reducida; por encima, la ventana. Provisional. */
+export const TOPE_CORTA_TOKENS = 16_000;
+/** Lo que se conserva de lo que devolvió cada orden en la memoria corta: el estado de un aparato caduca. */
+export const MAX_CARACTERES_DE_RESULTADO_CORTA = 200;
 
 /** Tokens por carácter: la misma aproximación que usa el resto del harness donde no hay medida. */
 const CARACTERES_POR_TOKEN = 4;
@@ -205,7 +214,7 @@ export type SinMemoria = "primera" | "hilo-vivo" | "olvidada-por-tope" | "olvida
 
 export interface MemoriaDeEspecialistas {
   /** Abre una encarnación de `nombre`: su memoria si la hay y se puede usar, o el motivo de no. */
-  abrir(nombre: string, hilo: string): { previa: EncarnacionPrevia } | { sin: SinMemoria };
+  abrir(nombre: string, hilo: string, opciones?: { corta?: boolean }): { previa: EncarnacionPrevia } | { sin: SinMemoria };
   /** La encarnación `hilo` terminó: guarda su historial completo (o lo olvida si falló o pasó el tope). */
   cerrar(hilo: string, resultado: { bien: boolean; mensajes: readonly unknown[]; tokens: number }): SinMemoria | "guardada" | "guardada-reducida" | "guardada-ventana";
   /** Los hilos vivos se dieron por muertos (turno cortado, orquestador rehecho). La memoria se queda. */
@@ -219,12 +228,14 @@ export function crearMemoriaDeEspecialistas(topes: { completa?: number; reducida
   const reducida = topes.reducida ?? TOPE_REDUCIDA_TOKENS;
   const guardada = new Map<string, EncarnacionPrevia>();
   const vivos = new Map<string, string>(); // hilo → nombre
+  const cortos = new Set<string>(); // hilos cuya memoria se guarda CORTA
   const perdidas = new Map<string, SinMemoria>(); // por qué no hay memoria de `nombre`
   const hayVivo = (nombre: string): boolean => [...vivos.values()].includes(nombre);
   return {
-    abrir(nombre, hilo) {
+    abrir(nombre, hilo, opciones = {}) {
       const vivo = hayVivo(nombre);
       vivos.set(hilo, nombre);
+      if (opciones.corta === true) cortos.add(hilo);
       if (vivo) return { sin: "hilo-vivo" };
       const previa = guardada.get(nombre);
       if (previa !== undefined) return { previa };
@@ -234,12 +245,21 @@ export function crearMemoriaDeEspecialistas(topes: { completa?: number; reducida
       const nombre = vivos.get(hilo);
       if (nombre === undefined) return "primera";
       vivos.delete(hilo);
+      const corta = cortos.delete(hilo);
       if (!bien) {
         guardada.delete(nombre);
         perdidas.set(nombre, "olvidada-por-fallo");
         return "olvidada-por-fallo";
       }
       const saneados = saldarColgadas(mensajes);
+      if (corta) {
+        const recortados = reducirHistorial(saneados, MAX_CARACTERES_DE_RESULTADO_CORTA);
+        const cabe = tokensDe(recortados) <= TOPE_CORTA_TOKENS;
+        const guardar = cabe ? recortados : saldarColgadas(ventanaDeHistorial(recortados, TOPE_CORTA_TOKENS));
+        guardada.set(nombre, { mensajes: guardar, tokens: tokensDe(guardar) });
+        perdidas.delete(nombre);
+        return cabe ? "guardada-reducida" : "guardada-ventana";
+      }
       if (tokens <= completa) {
         guardada.set(nombre, { mensajes: saneados, tokens });
         perdidas.delete(nombre);
@@ -260,10 +280,12 @@ export function crearMemoriaDeEspecialistas(topes: { completa?: number; reducida
     },
     darPorMuertos() {
       vivos.clear();
+      cortos.clear();
     },
     olvidar() {
       guardada.clear();
       vivos.clear();
+      cortos.clear();
       perdidas.clear();
     },
   };

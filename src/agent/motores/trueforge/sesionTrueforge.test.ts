@@ -1905,6 +1905,27 @@ describe("el tope de llamadas es POR TURNO, no de toda la conversación", () => 
     expect(memorias[0]).toMatch(/^consultant-xone:guardada/);
   }, 120_000);
 
+  it("quien maneja el aparato (`ejecucion`) deja memoria CORTA y un especialista cualquiera, entera", async () => {
+    const memorias: string[] = [];
+    const { m } = modelosConGuion([
+      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "device-controller", input: "prueba" }) }] })],
+      [new AIMessageChunk({ content: "Probado." })],
+      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d2", name: "create_sub_agent", args: JSON.stringify({ name: "consultant-xone", input: "mira" }) }] })],
+      [new AIMessageChunk({ content: "Mirado." })],
+      [new AIMessageChunk({ content: "Hecho." })],
+    ]);
+    const s = await abrirSesionTrueforge({
+      raiz: proyecto(), modelos: m, entorno: ENTORNO, skills: CATALOGO,
+      diagnostico: {
+        modelo: () => {},
+        herramienta: () => {},
+        memoria: (nombre, que, destino) => void (que === "cierra" && memorias.push(`${nombre}:${String(destino)}`)),
+      },
+    });
+    await s.turno("prueba y mira", piel().p);
+    expect(memorias).toEqual(["device-controller:guardada-reducida", "consultant-xone:guardada"]);
+  }, 60_000);
+
   it("`traducirEvento`: el raíz es el orquestador, y un hijo que la sesión no conoce sale sin nombre, nunca con el id del hilo", () => {
     const append = (thread_id?: string) => ({
       type: "internal.agent.context.append",

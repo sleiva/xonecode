@@ -1787,7 +1787,7 @@ export async function abrirSesionTrueforge(
     modeloDeHilo.set(params.threadId, agente?.modelo ?? idDelPapel(papel));
     const claseDeEsfuerzo = agente === undefined ? undefined : claseDeTrabajo(agente);
     // La memoria del especialista: su conversación anterior de ESTA sesión, si la hay y se puede usar.
-    const apertura = conMemoriaDeEspecialistas && agente !== undefined ? memoriaDeEspecialistas.abrir(agente.nombre, params.threadId) : undefined;
+    const apertura = conMemoriaDeEspecialistas && agente !== undefined ? memoriaDeEspecialistas.abrir(agente.nombre, params.threadId, { corta: agente.ejecucion === true }) : undefined;
     const previa = apertura !== undefined && "previa" in apertura ? apertura.previa : undefined;
     if (agente !== undefined && apertura !== undefined) {
       if (previa !== undefined) diagnostico?.memoria?.(agente.nombre, "arranca-con", "historial de la sesión", previa.tokens);
