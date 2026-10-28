@@ -33,6 +33,7 @@
  */
 import { join } from "node:path";
 import { segmentoSeguro } from "./settings.js";
+import { esDocumentoIlegible, esDocumentoLegible } from "./textoDeOffice.js";
 
 /**
  * El mime de un adjunto, por su EXTENSIÓN.
@@ -92,15 +93,13 @@ export function nombreDeAdjuntoAceptable(nombre: string): boolean {
 }
 
 /**
- * ¿Es un documento de oficina o un PDF? (IXCODE-76: se adjunta cualquier fichero). Son BINARIOS y `read_file` no los
- * abre, así que el inventario se lo dice al agente: prometerle que «se leen con las tools de fichero» es la misma
- * mentira que la de las imágenes. Por EXTENSIÓN, como el resto de adjuntos; un `.docx` no se descomprime aunque sea un
- * zip (`zipDeAdjunto.ts#esZip` mira la extensión).
+ * ¿Es un PDF o un documento de oficina? (IXCODE-76: se adjunta cualquier fichero). Son BINARIOS: de los que se puede, el
+ * `read_file` de TrueForge devuelve el TEXTO (`core/textoDeOffice.ts`); de los viejos de Office y los de iWork, no hay
+ * con qué. El inventario dice cuál es cuál. Por EXTENSIÓN; un `.docx` no se descomprime como adjunto aunque sea un zip
+ * (`zipDeAdjunto.ts#esZip` mira la extensión).
  */
-const DOCUMENTOS_BINARIOS = /\.(pdf|docx?|xlsx?|pptx?|odt|ods|odp|pages|numbers|key)$/i;
-
 export function esDocumentoBinario(nombre: string): boolean {
-  return DOCUMENTOS_BINARIOS.test(nombre);
+  return esDocumentoLegible(nombre) || esDocumentoIlegible(nombre);
 }
 
 /** Lo que se sabe de un adjunto para poder nombrarlo. La forma de `AdjuntoDeTarea`
@@ -157,7 +156,8 @@ export function conAdjuntos(peticion: string, adjuntos: readonly AdjuntoNombrabl
   if (adjuntos.length === 0) return peticion;
   const todos = adjuntos.flatMap((a) => [a, ...(a.contenido ?? [])]);
   const hayImagen = todos.some((a) => a.mime?.startsWith("image/") === true);
-  const hayDocumento = todos.some((a) => esDocumentoBinario(a.nombre));
+  const hayLegible = todos.some((a) => esDocumentoLegible(a.nombre));
+  const hayIlegible = todos.some((a) => esDocumentoIlegible(a.nombre));
   const linea = (a: AdjuntoNombrable, sangria = ""): string =>
     `${sangria}- ${RUTA_ADJUNTOS}${a.nombre} (${peso(a.bytes)}${a.mime === undefined ? "" : `, ${a.mime}`})`;
   const cabecera =
@@ -195,10 +195,17 @@ export function conAdjuntos(peticion: string, adjuntos: readonly AdjuntoNombrabl
           "las abre). No describas una imagen que no hayas pasado por ella.",
         ]
       : []),
-    ...(hayDocumento
+    ...(hayLegible
       ? [
-          "DOCUMENTOS (PDF, Word, Excel, PowerPoint): `read_file` no los abre, contesta «fichero binario». No",
-          "describas ni resumas lo que dicen: di a la persona que no puedes leerlos y pídele en texto lo que necesites.",
+          "DOCUMENTOS (PDF, Word, Excel, PowerPoint, OpenDocument): `read_file` devuelve su TEXTO, sin formato ni imágenes",
+          "(un PDF por páginas, un Excel por hojas y filas, una presentación por diapositivas), y se pagina con offset/limit.",
+          "Un PDF escaneado no tiene texto: si te lo dice, no inventes lo que pone.",
+        ]
+      : []),
+    ...(hayIlegible
+      ? [
+          "Los .doc, .xls y .ppt antiguos y los de iWork (.pages, .numbers, .key) NO se pueden leer: no describas lo que",
+          "dicen; pide a la persona que los pase a PDF o al formato nuevo (.docx, .xlsx, .pptx), o el texto que necesites.",
         ]
       : []),
   ].join("\n");

@@ -20,6 +20,8 @@
  * que es la regla de las guardas del backend.
  */
 import { carpetaDeExtraccion, esZip } from "../../../core/zipDeAdjunto.js";
+import { esDocumentoIlegible, esDocumentoLegible } from "../../../core/textoDeOffice.js";
+import { textoDeDocumento } from "./textoDeDocumento.js";
 import { NOMBRE_DESCRIBIR_IMAGEN } from "../../grafo/describirImagen.js";
 import { posix } from "node:path";
 import micromatch from "micromatch";
@@ -40,6 +42,22 @@ export interface BackendDeFicheros {
   edit(ruta: string, viejo: string, nuevo: string, todas?: boolean): unknown;
   glob(patron: string, ruta?: string): unknown;
   grep(patron: string, ruta?: string | null, glob?: string | null): unknown;
+  /** Los BYTES de un fichero, para sacar el texto de un documento (`textoDeDocumento.ts`). */
+  downloadFiles?(rutas: string[]): unknown;
+}
+
+/**
+ * Los bytes de un documento que `read` ya dejó leer. `read` decide «binario» por la tabla de mimes de deepagents, que no
+ * tiene `.docx` ni `.xlsx`: a esos los decodifica como UTF-8 y los bytes se pierden. `downloadFiles` da los bytes, pero
+ * NO pasa por los proxies de guardas de `backendDeAgente` (que envuelven `read`/`write`…) y sigue enlaces; por eso se
+ * llama solo DESPUÉS de un `read` sin error sobre la misma ruta, que sí las pasó y abrió con `O_NOFOLLOW`.
+ */
+async function bytesTrasLeer(backend: BackendDeFicheros, ruta: string, leido: unknown): Promise<Uint8Array | undefined> {
+  if (leido instanceof Uint8Array) return leido;
+  if (backend.downloadFiles === undefined) return undefined;
+  const r = (await backend.downloadFiles([ruta])) as { content?: unknown; error?: unknown }[] | undefined;
+  const c = r?.[0]?.content;
+  return r?.[0]?.error == null && c instanceof Uint8Array ? c : undefined;
 }
 
 /** Una regla de `permisosDe`, tal cual la escribe. */
@@ -71,7 +89,7 @@ const ESQUEMAS: Record<ToolDeFichero, { descripcion: string; propiedades: Record
   ls: { descripcion: "Lists files and directories in a directory (non-recursive).", propiedades: { path: cadena }, obligatorias: ["path"] },
   read_file: {
     descripcion:
-      "Reads a file. Returns its lines numbered. Use offset/limit to page through long files: offset is 0-based (offset=0 starts at line 1, offset=380 at line 381).",
+      "Reads a file. Returns its lines numbered. A PDF, Word, Excel, PowerPoint or OpenDocument file returns its extracted TEXT (no formatting, no images). Use offset/limit to page through long files: offset is 0-based (offset=0 starts at line 1, offset=380 at line 381).",
     propiedades: { file_path: cadena, offset: { type: "number" }, limit: { type: "number" } },
     obligatorias: ["file_path"],
   },
@@ -210,6 +228,19 @@ export function lecturaAcotada(contenido: string, desde: number, tope = CARACTER
   return `${cabe}\n... [lectura cortada a ${tope} caracteres: sigue con offset=${desde - 1 + lineas}]`;
 }
 
+/**
+ * Una página de un texto SACADO de un documento: las líneas de `offset` a `offset+limit`, numeradas y acotadas como
+ * cualquier lectura, y dicho por dónde seguir si quedan más (el backend no pagina un binario).
+ */
+export function paginaDeTexto(texto: string, offset: number, limit: number): string {
+  const lineas = texto.split("\n");
+  const pagina = lecturaAcotada(lineas.slice(offset, offset + limit).join("\n"), offset + 1);
+  const siguiente = offset + limit;
+  return siguiente < lineas.length && !pagina.includes("[lectura cortada")
+    ? `${pagina}\n... [${lineas.length} líneas en total: sigue con offset=${siguiente}]`
+    : pagina;
+}
+
 /** Lo que el backend contestó, en el texto que ve el modelo. */
 async function ejecutar(
   backend: BackendDeFicheros,
@@ -245,6 +276,21 @@ async function ejecutar(
       const limit = typeof args.limit === "number" && args.limit > 0 ? Math.floor(args.limit) : LINEAS_POR_LECTURA;
       const r = (await backend.read(s(args.file_path), offset, limit)) as Resultado & { content?: unknown };
       if (r.error !== undefined) return { texto: r.error, error: true };
+      // Un PDF o un Office: su TEXTO, paginado por líneas como cualquier fichero (IXCODE-76). El backend no pagina un
+      // binario, así que la página se corta aquí.
+      if (esDocumentoLegible(s(args.file_path))) {
+        const bytes = await bytesTrasLeer(backend, s(args.file_path), r.content);
+        if (bytes === undefined) return { texto: `${s(args.file_path)}: no se pudieron leer sus bytes para sacar el texto.`, error: true };
+        const t = await textoDeDocumento(s(args.file_path), bytes);
+        if ("motivo" in t) return { texto: `${s(args.file_path)}: ${t.motivo}.`, error: true };
+        return { texto: paginaDeTexto(t.texto, offset, limit), error: false };
+      }
+      if (esDocumentoIlegible(s(args.file_path))) {
+        return {
+          texto: `${s(args.file_path)} es un formato antiguo o de iWork del que no se puede sacar el texto: no describas lo que dice; pide que lo pasen a PDF, .docx, .xlsx o .pptx.`,
+          error: true,
+        };
+      }
       if (typeof r.content !== "string") {
         // Una IMAGEN no se lee como texto, pero se puede VER (IXCODE-23): la llamada va ya escrita, como la navegación
         // le devuelve la suya a `regex_search`. Sin esto el agente concluía que «no tiene visión».

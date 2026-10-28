@@ -10011,5 +10011,17 @@ Dos tickets de Rafa.
   extensión, también dentro de un `.zip` descomprimido), el inventario lo dice y le prohíbe al agente describir lo que
   no ha leído. Un `.docx` no se descomprime aunque sea un zip: `esZip` mira la extensión. No se tocó la tabla de mimes,
   que es la de los artefactos y cambiaría lo que sirve el visor.
-- **Pendiente, a decidir:** que el agente LEA esos documentos. Habría que extraer el texto al guardar, como ya se hace
-  con el `.zip`. Para `.docx` y `.xlsx` basta el lector de zip que ya hay; para el PDF hace falta una dependencia nueva.
+- **Y el agente LEE esos documentos** (pedido el mismo día). El `read_file` de TrueForge devuelve su TEXTO: un PDF
+  página a página (`unpdf` 1.8.1, sin dependencias), un Word por párrafos con sus tablas, un Excel por hojas y filas con
+  su número, una presentación por diapositivas, y los OpenDocument (`core/textoDeOffice.ts`, `textoDeDocumento.ts`). Se
+  saca al LEER y no al guardar: vale igual para un adjunto de tarea, uno del chat y un fichero del proyecto, y no deja
+  ficheros derivados que copiar y borrar a la par. Un PDF escaneado lo DICE en vez de devolver vacío; los `.doc`, `.xls`
+  y `.ppt` viejos y los de iWork no se pueden leer y el agente lo sabe.
+- **La trampa medida: `read` no da los bytes de un `.docx`.** deepagents decide «binario» por su tabla de mimes, que no
+  tiene ni `.docx` ni `.xlsx`: los decodifica como UTF-8 y devuelve `PK…` en una cadena. Los bytes salen de
+  `downloadFiles`, que NO pasa por los proxies de guardas de `backendDeAgente` y sigue enlaces. Por eso se llama solo
+  después de un `read` sin error sobre la misma ruta, que pasó las guardas y abrió con `O_NOFOLLOW`. Hay un test con un
+  `.docx` que es un enlace a fuera del proyecto.
+- Los ficheros de texto (`.md`, `.txt`, `.xml`…) ya se leían tal cual; ahora lo dice un test.
+- **Límite**: el `read_file` de deepagents no saca el texto (solo se usa TrueForge), y un documento se vuelve a extraer
+  en cada página que se lee.

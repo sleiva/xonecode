@@ -140,8 +140,9 @@ corre solo y escribe sin aprobación. Cuatro estados; `requiere-atencion` = **es
   (`OrigenDeArtefactosContexto`). **Límite**: va por id de SESIÓN; tras `/nuevo` no coincide.
 - **Adjuntos de tarea**: `~/.xonecode/tareas/<id>/adjuntos/`, fuera del proyecto, `POST /adjunto`,
   dichos al mandar el turno (`core/adjuntos.ts#conAdjuntos`); sin poda.
-- **Cualquier tipo de fichero** (IXCODE-76): ni el `<input>` ni el servidor filtran por tipo. Un PDF o un Office no lo
-  abre `read_file`, y el inventario lo DICE (`esDocumentoBinario`): no se le promete al agente una lectura que no hay.
+- **Cualquier tipo de fichero** (IXCODE-76): ni el `<input>` ni el servidor filtran por tipo. De un PDF o un Office,
+  `read_file` devuelve el TEXTO (ver `agent/motores/trueforge/CLAUDE.md`); de los viejos de Office y de iWork, no, y el
+  inventario dice cuál es cuál: no se le promete al agente una lectura que no hay.
 - **De SESIÓN** (`?para=sesion`): `.xonecode/sesiones/<id>/adjuntos/`, montados como `/adjuntos/`
   de solo lectura derivada del `hilo` (`cli/main.ts#carpetaDeAdjuntosDelEjecutor`), solo web.
   **Nombre lo decide el SERVIDOR**, sufija `-2`… sin sobrescribir. **Solo se afirman los EN DISCO**

@@ -37,6 +37,10 @@ Ante una discrepancia con el código, **el código manda**.
 
 ## Ver, memoria y compactación
 
+- **`read_file` devuelve el TEXTO de un PDF o un Office** (`textoDeDocumento.ts`, reglas en `core/textoDeOffice.ts`):
+  por páginas, hojas o diapositivas, paginado por líneas aquí porque el backend no pagina un binario. Los bytes de un
+  `.docx`/`.xlsx` salen de `downloadFiles`, que no pasa por las guardas: **solo tras un `read` sin error de la misma
+  ruta**. Un PDF escaneado lo dice; los `.doc`/`.xls`/`.ppt` viejos y los de iWork, no se leen y se dice.
 - **`describe_image`** (`agent/grafo/describirImagen.ts`): llamada APARTE al modelo de `trabajo`, devuelve texto. A todos.
   Guarda de `imagenReferida` + `lectorDeReferencias`; ruta completa dentro de lo montado → virtual. `read_file` sobre una
   imagen devuelve la llamada ya escrita. El aviso de adjuntos dice el CAMINO, no promete visión.
