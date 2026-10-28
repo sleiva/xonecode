@@ -39,7 +39,7 @@ const SEGMENTO = /^[A-Za-z0-9._-]+$/;
 const EXTENSIONES = new Set(["png", "jpg", "jpeg"]);
 
 /** La imagen a la que apunta la ruta, o el MOTIVO en palabras. Comprueba el texto y no abre nada. */
-export function imagenReferida(ruta: string): ImagenReferida | string {
+export function imagenReferida(ruta: string, opciones: { pdf?: boolean } = {}): ImagenReferida | string {
   if (!ruta.startsWith("/")) return `«${ruta}» no es una ruta virtual: empieza por / (/diseno/screen.png, /artefactos/x.png)`;
   const segmentos = ruta.slice(1).split("/");
   if (segmentos.some((s) => s === "" || s === "." || s === ".." || !SEGMENTO.test(s))) {
@@ -48,7 +48,8 @@ export function imagenReferida(ruta: string): ImagenReferida | string {
   const nombre = segmentos[segmentos.length - 1]!;
   const punto = nombre.lastIndexOf(".");
   const extension = punto > 0 ? nombre.slice(punto + 1).toLowerCase() : "";
-  if (!EXTENSIONES.has(extension)) return `«${nombre}» no es un PNG ni un JPEG, así que no hay nada que medir.`;
+  // `describe_image` lee también la página escaneada de un PDF (`pdf: true`); el crítico y la medida, no.
+  if (!EXTENSIONES.has(extension) && !(opciones.pdf === true && extension === "pdf")) return `«${nombre}» no es un PNG ni un JPEG, así que no hay nada que medir.`;
   const primero = segmentos[0]!;
   if (primero === "artefactos" || primero === "adjuntos") {
     if (segmentos.length < 2) return `«${ruta}» no apunta a ninguna imagen`;

@@ -5,6 +5,8 @@ import { join } from "node:path";
 import { crearDescribirImagen, PAPEL_DE_DESCRIBIR, rutaVirtualDe } from "./describirImagen.js";
 import { crearLectorDeReferencias } from "./lectorDeReferencias.js";
 import { ErrorDelJuezVisual, type InvocarVisual } from "../dispositivos/juezVisual.js";
+import { pdf } from "../../core/__pruebas__/pdf.js";
+import { PNG } from "pngjs";
 
 /** Un proyecto de verdad en disco con una imagen en cada origen: la guarda es la del lector REAL. */
 function montaje() {
@@ -90,5 +92,28 @@ describe("rutaVirtualDe", () => {
     expect(rutaVirtualDe("/p/.xonecode/sesiones/s/artefactos/c.png", carpetas)).toBe("/artefactos/c.png");
     expect(rutaVirtualDe("/p/icons/x.png", carpetas)).toBe("/icons/x.png");
     expect(rutaVirtualDe("/otra/x.png", carpetas)).toBeUndefined();
+  });
+});
+
+describe("describe_image sobre una página ESCANEADA de un PDF (IXCODE-76)", () => {
+  it("manda la imagen de ESA página en PNG, con la instrucción de TRANSCRIBIR, y lo dice", async () => {
+    const { t, vistas, adjuntos } = herramienta(async () => "Factura n.º 12 — Total 300 €");
+    writeFileSync(join(adjuntos, "factura.pdf"), pdf(["portada", { escaneada: [30, 40] }]));
+    const salida = await t.invoke({ ruta: "/adjuntos/factura.pdf", pagina: 2 });
+    expect(salida).toContain("Lo que pone la página 2 de /adjuntos/factura.pdf");
+    expect(salida).toContain("Total 300 €");
+    expect(vistas).toHaveLength(1);
+    expect(vistas[0]!.mime).toBe("image/png");
+    expect(vistas[0]!.prompt).toMatch(/Transcribe su texto TAL CUAL/);
+    const png = PNG.sync.read(Buffer.from(vistas[0]!.base64, "base64"));
+    expect([png.width, png.height]).toEqual([30, 40]);
+  });
+
+  it("un PDF sin `pagina`, o con una página sin imagen, no llama al modelo y dice qué hacer", async () => {
+    const { t, vistas, adjuntos } = herramienta(async () => "no debería");
+    writeFileSync(join(adjuntos, "doc.pdf"), pdf(["solo texto"]));
+    expect(await t.invoke({ ruta: "/adjuntos/doc.pdf" })).toMatch(/es un PDF: dime qué página/);
+    expect(await t.invoke({ ruta: "/adjuntos/doc.pdf", pagina: 1 })).toMatch(/la página 1 no tiene ninguna imagen/);
+    expect(vistas).toHaveLength(0);
   });
 });

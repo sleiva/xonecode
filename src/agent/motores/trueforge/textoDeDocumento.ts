@@ -10,7 +10,7 @@
  * como motivo, nunca se lanza: una excepción en una tool se lleva el turno.
  */
 import { unzipSync } from "fflate";
-import { extractText, getDocumentProxy } from "unpdf";
+import { paginasDePdf, textoDePaginas } from "../../grafo/paginasDePdf.js";
 import { TOPE_DESCOMPRIMIDO } from "../../../core/zipDeSkill.js";
 import { entradaNecesaria, formatoDeOffice, textoDeDocx, textoDeOdf, textoDePptx, textoDeXlsx } from "../../../core/textoDeOffice.js";
 
@@ -18,7 +18,7 @@ import { entradaNecesaria, formatoDeOffice, textoDeDocx, textoDeOdf, textoDePptx
 export type TextoDeDocumento = { texto: string } | { motivo: string };
 
 export async function textoDeDocumento(nombre: string, bytes: Uint8Array): Promise<TextoDeDocumento> {
-  if (/\.pdf$/i.test(nombre)) return textoDePdf(bytes);
+  if (/\.pdf$/i.test(nombre)) return textoDePdf(nombre, bytes);
   const formato = formatoDeOffice(nombre);
   if (formato === undefined) return { motivo: "no es un formato del que se pueda sacar el texto" };
   let ficheros: Record<string, string>;
@@ -49,20 +49,16 @@ export async function textoDeDocumento(nombre: string, bytes: Uint8Array): Promi
 }
 
 /**
- * Un PDF, página a página con su número: «## Página N». Un PDF ESCANEADO es imágenes y no tiene texto; se dice, para
- * que el agente no conteste como si estuviera vacío.
+ * Un PDF, página a página con su número: «## Página N». Una página ESCANEADA no tiene texto: va el aviso con la llamada
+ * a `describe_image` que la lee (`paginasDePdf.ts`). `ruta` es la que pidió el agente, la que va en esa llamada.
  */
-async function textoDePdf(bytes: Uint8Array): Promise<TextoDeDocumento> {
+async function textoDePdf(ruta: string, bytes: Uint8Array): Promise<TextoDeDocumento> {
+  let paginas;
   try {
-    // Una COPIA: PDF.js se queda el búfer (lo transfiere) y el del backend no es nuestro.
-    const pdf = await getDocumentProxy(new Uint8Array(bytes));
-    const { text } = await extractText(pdf, { mergePages: false });
-    const paginas = text.map((t, i) => `## Página ${i + 1}\n${t.trim()}`);
-    if (text.every((t) => t.trim() === "")) {
-      return { motivo: `el PDF (${text.length} página${text.length === 1 ? "" : "s"}) no tiene texto: probablemente es escaneado, son imágenes` };
-    }
-    return { texto: paginas.join("\n\n") };
+    paginas = await paginasDePdf(bytes);
   } catch {
     return { motivo: "no se pudo abrir el PDF: ¿está dañado o protegido con contraseña?" };
   }
+  if (paginas.every((p) => "enBlanco" in p)) return { motivo: `el PDF (${paginas.length} página${paginas.length === 1 ? "" : "s"}) no tiene ni texto ni imágenes` };
+  return { texto: textoDePaginas(ruta, paginas) };
 }

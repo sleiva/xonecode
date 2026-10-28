@@ -6,36 +6,8 @@ import { strToU8, zipSync } from "fflate";
 import { backendDeAgente } from "../../grafo/proyecto.js";
 import { permisosDe } from "../../grafo/perfiles.js";
 import { textoDeDocumento } from "./textoDeDocumento.js";
+import { pdf } from "../../../core/__pruebas__/pdf.js";
 import { fuenteDeFicheros, type BackendDeFicheros } from "./toolsDeFichero.js";
-
-/**
- * Un PDF de VERDAD, escrito a mano: una página por elemento, con su texto en Helvetica (`""` = página sin texto, como
- * una escaneada). Con la tabla `xref` bien contada, que es lo que PDF.js comprueba.
- */
-function pdf(paginas: readonly string[]): Uint8Array {
-  const n = paginas.length;
-  const objetos: string[] = [];
-  const kids = paginas.map((_, i) => `${4 + i * 2} 0 R`).join(" ");
-  objetos.push("<< /Type /Catalog /Pages 2 0 R >>");
-  objetos.push(`<< /Type /Pages /Kids [${kids}] /Count ${n} >>`);
-  objetos.push("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
-  paginas.forEach((texto, i) => {
-    const flujo = texto === "" ? "" : `BT /F1 12 Tf 72 720 Td (${texto}) Tj ET`;
-    objetos.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents ${5 + i * 2} 0 R >>`);
-    objetos.push(`<< /Length ${flujo.length} >>\nstream\n${flujo}\nendstream`);
-  });
-  let salida = "%PDF-1.4\n";
-  const desplazamientos: number[] = [];
-  objetos.forEach((o, i) => {
-    desplazamientos.push(salida.length);
-    salida += `${i + 1} 0 obj\n${o}\nendobj\n`;
-  });
-  const xref = salida.length;
-  salida += `xref\n0 ${objetos.length + 1}\n0000000000 65535 f \n`;
-  for (const d of desplazamientos) salida += `${String(d).padStart(10, "0")} 00000 n \n`;
-  salida += `trailer\n<< /Size ${objetos.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
-  return strToU8(salida);
-}
 
 const docx = (cuerpo: string): Uint8Array =>
   zipSync({
@@ -51,9 +23,19 @@ describe("textoDeDocumento (IXCODE-76)", () => {
     expect("texto" in r && r.texto).toContain("## Página 2\nPrecio total 1200");
   });
 
-  it("un PDF sin texto (escaneado) lo DICE, no devuelve vacío", async () => {
-    const r = await textoDeDocumento("escaneo.pdf", pdf(["", ""]));
-    expect(r).toEqual({ motivo: expect.stringMatching(/2 páginas\) no tiene texto: probablemente es escaneado/) });
+  it("un PDF sin texto ni imágenes lo DICE, no devuelve vacío", async () => {
+    const r = await textoDeDocumento("vacio.pdf", pdf(["", ""]));
+    expect(r).toEqual({ motivo: "el PDF (2 páginas) no tiene ni texto ni imágenes" });
+  });
+
+  it("un PDF MIXTO: el texto de las páginas que lo tienen, y en la escaneada el aviso con la llamada para leerla", async () => {
+    const r = await textoDeDocumento("/adjuntos/pliego.pdf", pdf(["Condiciones", { escaneada: [40, 60] }, ""]));
+    expect(r).toEqual({
+      texto:
+        "## Página 1\nCondiciones\n\n" +
+        '## Página 2\n[Página 2: es una imagen escaneada, sin texto. Para leerla: describe_image({"ruta": "/adjuntos/pliego.pdf", "pagina": 2})]\n\n' +
+        "## Página 3\n(en blanco)",
+    });
   });
 
   it("un PDF roto da un motivo, no lanza", async () => {

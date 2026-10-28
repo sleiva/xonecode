@@ -10025,3 +10025,23 @@ Dos tickets de Rafa.
 - Los ficheros de texto (`.md`, `.txt`, `.xml`…) ya se leían tal cual; ahora lo dice un test.
 - **Límite**: el `read_file` de deepagents no saca el texto (solo se usa TrueForge), y un documento se vuelve a extraer
   en cada página que se lee.
+
+## Las páginas escaneadas de un PDF, al modelo con visión (28-10-2026)
+
+Un PDF escaneado no tiene texto: cada página es una imagen. Ahora **se reconoce página a página** (sin texto y con al
+menos una imagen, `agent/grafo/paginasDePdf.ts`), así que un PDF mixto, como un pliego con anexos escaneados, sale con su
+texto y con un aviso en cada página escaneada.
+
+- **No se transcribe al leer.** Cada página es una llamada al modelo con visión (unos 1.500 tokens de imagen), y un
+  escaneado de ochenta páginas transcrito en cada `read_file` sería caro y lento cuando casi siempre hacen falta dos o
+  tres. El aviso trae la llamada ya escrita, `describe_image({"ruta": …, "pagina": N})`, como `read_file` hace con un PNG.
+- **`describe_image` con `pagina` TRANSCRIBE, no describe** (`PROMPT_DE_TRANSCRIPCION`): describir resume, y de un
+  pliego o una factura hace falta lo que pone, con sus cifras. La respuesta avisa de que un modelo puede equivocarse en
+  una cifra.
+- **Sin dependencias nativas**: la imagen sale de PDF.js (`extractImages`) como píxeles y se codifica con `pngjs`. Se
+  manda la MAYOR imagen de la página, reducida por promedio a `LADO_MAXIMO_DE_PAGINA` (los proveedores la reducen igual;
+  saltar píxeles se comía los trazos finos) y en gris si lo es. Medido: PDF.js entrega en RGB una imagen `DeviceGray`,
+  así que el gris se detecta por los canales y no por el tipo. Medido también con un PDF real hecho por `sips` con un
+  JPEG dentro (`DCTDecode`): la página sale como escaneada y la imagen, entera, en 110 ms.
+- **Límites**: una página escaneada no se encuentra con `grep` hasta que alguien la transcribe; una página con texto y
+  una foto se lee como texto, sin la foto; si el modelo de `trabajo` no ve imágenes, lo dirá la respuesta de la tool.

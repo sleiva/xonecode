@@ -4,6 +4,7 @@ import { imagenReferida, type ImagenReferida } from "../../core/referenciasDeIma
 import type { Papel } from "../../core/ports.js";
 import { ErrorDelJuezVisual, type InvocarVisual } from "../dispositivos/juezVisual.js";
 import { NOMBRE_TRAER } from "./traerDeLaMaquina.js";
+import { imagenDePagina } from "./paginasDePdf.js";
 
 /**
  * `describe_image`: que el agente VEA una imagen (IXCODE-23).
@@ -59,16 +60,34 @@ export const PROMPT_DE_DESCRIPCION = [
   "inventes: lo que no se distinga, dilo. Sin preámbulos.",
 ].join("\n");
 
+/**
+ * La instrucción para una página ESCANEADA de un PDF: TRANSCRIBIR, no describir. Describir resume, y de un pliego o una
+ * factura lo que hace falta es lo que pone, con sus cifras.
+ */
+export const PROMPT_DE_TRANSCRIPCION = [
+  "Esta imagen es una página escaneada de un documento. Transcribe su texto TAL CUAL, en su orden de lectura: no",
+  "resumas, no traduzcas y no corrijas. Las tablas, como tablas en markdown; los sellos, firmas y dibujos, entre",
+  "corchetes ([firma], [sello: …]). Lo que no se lea, [ilegible]. Sin preámbulos.",
+].join("\n");
+
+/** Tope de bytes de un PDF: el de un adjunto. La imagen de una página se reduce antes de mandarla. */
+export const TOPE_DE_BYTES_DE_PDF = 20_000_000;
+
 const Entrada = z.object({
   ruta: z
     .string()
     .describe(
-      "La ruta de la imagen PNG o JPEG: la VIRTUAL (/adjuntos/x.png, /artefactos/x.png, /icons/x.png) o la completa de la máquina si está dentro del proyecto, los adjuntos o los artefactos."
+      "La ruta de la imagen PNG o JPEG, o de un PDF con `pagina`: la VIRTUAL (/adjuntos/x.png, /artefactos/x.png, /icons/x.png) o la completa de la máquina si está dentro del proyecto, los adjuntos o los artefactos."
     ),
   pregunta: z
     .string()
     .optional()
     .describe("OPCIONAL. Qué quieres saber de ella (\"¿qué texto lleva el botón?\"). Sin ella, se describe entera."),
+  pagina: z
+    .number()
+    .int()
+    .optional()
+    .describe("Solo para un PDF: el número de la página ESCANEADA que transcribir (lo da read_file en su aviso)."),
 });
 
 export interface DependenciasDeDescribir {
@@ -110,7 +129,7 @@ function mimeDe(nombre: string): string {
 
 export function crearDescribirImagen(deps: DependenciasDeDescribir) {
   return tool(
-    async ({ ruta, pregunta }: z.infer<typeof Entrada>) => {
+    async ({ ruta, pregunta, pagina }: z.infer<typeof Entrada>) => {
       let virtual = ruta.trim();
       if (esRutaDeLaMaquina(virtual, deps.carpetas)) {
         const traducida = deps.carpetas === undefined ? undefined : rutaVirtualDe(virtual, deps.carpetas);
@@ -119,8 +138,12 @@ export function crearDescribirImagen(deps: DependenciasDeDescribir) {
         }
         virtual = traducida;
       }
-      const imagen = imagenReferida(virtual);
+      const imagen = imagenReferida(virtual, { pdf: true });
       if (typeof imagen === "string") return imagen;
+      const esPdf = /\.pdf$/i.test(imagen.nombre);
+      if (esPdf && pagina === undefined) {
+        return `${virtual} es un PDF: dime qué página con \`pagina\` (las escaneadas las señala read_file). Las que tienen texto, léelas con read_file.`;
+      }
       let bytes: Buffer;
       try {
         bytes = await deps.leer(imagen);
@@ -128,26 +151,34 @@ export function crearDescribirImagen(deps: DependenciasDeDescribir) {
         const code = (error as { code?: unknown }).code;
         return `No se pudo leer ${virtual}${typeof code === "string" ? ` (${code})` : ""}: comprueba la ruta con ls.`;
       }
-      if (bytes.length > TOPE_DE_BYTES_DE_IMAGEN) return `${virtual} es demasiado grande para describirla.`;
-      const prompt =
-        pregunta === undefined || pregunta.trim() === ""
-          ? PROMPT_DE_DESCRIPCION
-          : `${PROMPT_DE_DESCRIPCION}\n\nContesta sobre todo a esto: ${pregunta.trim()}`;
+      if (bytes.length > (esPdf ? TOPE_DE_BYTES_DE_PDF : TOPE_DE_BYTES_DE_IMAGEN)) return `${virtual} es demasiado grande para describirla.`;
+      // Un PDF: la imagen de SU página, en PNG y reducida (`paginasDePdf.ts`), y la instrucción de transcribir.
+      let mandar: { base64: string; mime: string } = { base64: bytes.toString("base64"), mime: mimeDe(imagen.nombre) };
+      if (esPdf) {
+        const r = await imagenDePagina(bytes, pagina!);
+        if ("motivo" in r) return `No se pudo leer la página ${pagina} de ${virtual}: ${r.motivo}.`;
+        mandar = { base64: r.png.toString("base64"), mime: "image/png" };
+      }
+      const base = esPdf ? PROMPT_DE_TRANSCRIPCION : PROMPT_DE_DESCRIPCION;
+      const prompt = pregunta === undefined || pregunta.trim() === "" ? base : `${base}\n\nContesta sobre todo a esto: ${pregunta.trim()}`;
+      const que = esPdf ? `la página ${pagina} de ${virtual}` : virtual;
       let texto: string;
       try {
-        texto = (await deps.invocar(PAPEL_DE_DESCRIBIR, prompt, { base64: bytes.toString("base64"), mime: mimeDe(imagen.nombre) })).trim();
+        texto = (await deps.invocar(PAPEL_DE_DESCRIBIR, prompt, mandar)).trim();
       } catch (error) {
-        return `No se pudo describir ${virtual}: ${error instanceof ErrorDelJuezVisual ? error.message : "falló la llamada al modelo"}.`;
+        return `No se pudo describir ${que}: ${error instanceof ErrorDelJuezVisual ? error.message : "falló la llamada al modelo"}.`;
       }
-      if (texto === "") return `El modelo no devolvió ninguna descripción de ${virtual}.`;
-      return `Lo que se ve en ${virtual} (lo describe un modelo con la imagen delante):\n${texto}`;
+      if (texto === "") return `El modelo no devolvió ninguna descripción de ${que}.`;
+      return esPdf
+        ? `Lo que pone ${que} (lo transcribe un modelo con la imagen delante; puede equivocarse en una cifra):\n${texto}`
+        : `Lo que se ve en ${virtual} (lo describe un modelo con la imagen delante):\n${texto}`;
     },
     {
       name: NOMBRE_DESCRIBIR_IMAGEN,
       description:
         "Mira una imagen PNG o JPEG y te dice lo que se ve: un adjunto de la persona, una captura, una maqueta, un icono. " +
         "ÚSALA siempre que necesites saber qué hay en una imagen: read_file no puede abrirlas. No describas una imagen " +
-        "que no hayas pasado por aquí.",
+        "que no hayas pasado por aquí. También TRANSCRIBE una página ESCANEADA de un PDF: pasa la ruta del PDF y `pagina`.",
       schema: Entrada,
     }
   );

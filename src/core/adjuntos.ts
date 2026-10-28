@@ -199,7 +199,8 @@ export function conAdjuntos(peticion: string, adjuntos: readonly AdjuntoNombrabl
       ? [
           "DOCUMENTOS (PDF, Word, Excel, PowerPoint, OpenDocument): `read_file` devuelve su TEXTO, sin formato ni imágenes",
           "(un PDF por páginas, un Excel por hojas y filas, una presentación por diapositivas), y se pagina con offset/limit.",
-          "Un PDF escaneado no tiene texto: si te lo dice, no inventes lo que pone.",
+          "Una página ESCANEADA de un PDF no tiene texto: read_file pone en su sitio un aviso con la llamada a",
+          "`describe_image` que la transcribe. Llámala solo para las páginas que necesites, y no inventes lo que pone.",
         ]
       : []),
     ...(hayIlegible
