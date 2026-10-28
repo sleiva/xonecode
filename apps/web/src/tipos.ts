@@ -1844,7 +1844,9 @@ export type MensajeDelCliente =
   | { clase: "tarea"; accion: "crearEncadenadas"; proyecto: string; propuesta: string; encargos: string[] }
   /** «Se edita la tarea y se agrega el feedback del usuario»: la respuesta a una tarea
    *  «esperando feedback», que la devuelve al lazo en su MISMO hilo. */
-  | { clase: "tarea"; accion: "feedback"; id: string; texto: string }
+  /** Con la respuesta pueden ir adjuntos (IXCODE-55): `adjuntos`, los del CHAT de la tarea por nombre, o `borrador`, el
+   *  del formulario «Tu feedback» (se adopta, como al reencolar). */
+  | { clase: "tarea"; accion: "feedback"; id: string; texto: string; adjuntos?: string[]; borrador?: string }
   /** Reencolar una FINALIZADA sin ticket para acabar lo que no hizo. 200 con `{id}`, o 409 con `{motivo}`. */
   | { clase: "tarea"; accion: "reencolar"; id: string; texto: string; borrador?: string }
   /** REVERTIR lo que hizo una finalizada, solo la última que cambió el proyecto: `revertible` dice qué ficheros (200

@@ -3092,14 +3092,49 @@ export function montarRutas(
    * regla de qué feedback vale y qué transición es legal está en una sola función, probada
    * sola y sin necesitar un servidor de mentira alrededor.
    */
-  const atenderFeedbackDeTarea = (id: string, texto: string): void => {
-    if (opciones.colaDeTareas === undefined) return;
-    const resultado = aplicarFeedback(opciones.colaDeTareas, id, texto);
-    if (!resultado.hecho) {
-      // Nunca se propaga al cliente, igual que una transición imposible: se DICE, y no se
-      // escribe nada a medias.
-      informar(`no se pudo añadir el feedback: ${resultado.motivo ?? "motivo desconocido"}`);
+  const atenderFeedbackDeTarea = (id: string, texto: string, con: { adjuntos?: readonly string[]; borrador?: string } = {}): string | undefined => {
+    const cola = opciones.colaDeTareas;
+    if (cola === undefined) return "esta ejecución no tiene cola de tareas";
+    const adjuntos = con.adjuntos ?? [];
+    const { borrador } = con;
+    let nuevos: { nombres: readonly string[]; adjuntos: Tarea["adjuntos"] } | undefined;
+    if (adjuntos.length > 0 || borrador !== undefined) {
+      /**
+       * Los adjuntos de la respuesta (IXCODE-55) se COPIAN a los de la tarea —lo que monta `/adjuntos/` en su turno— y
+       * solo después se guarda el feedback. Vienen de uno de dos sitios: el `borrador` del formulario «Tu feedback» (como
+       * al reencolar: se adopta y se borra), o los del CHAT de la tarea por nombre (la caja del chat ya los subió a la
+       * carpeta de su sesión). Si alguno no está, no se guarda nada y se dice cuál. Lo nuevo manda sobre uno de la tarea
+       * con el mismo nombre, como al reencolar.
+       */
+      const lista = cola.listar();
+      const tarea = lista.find((t) => t.id === id);
+      if (tarea === undefined) return "la tarea ya no está en la cola";
+      if (tarea.estado !== "requiere-atencion") return "esa tarea ya no está esperando feedback";
+      if (borrador !== undefined && !esBorradorLibre(borrador, lista)) return "ese borrador de adjuntos no vale (o ya es una tarea)";
+      const carpetaDe = cola.carpetaDeAdjuntos;
+      const carpeta = carpetaDe?.(id);
+      if (carpetaDe === undefined || carpeta === undefined) return "esta ejecución no guarda adjuntos de tareas";
+      let nombres: string[] = [];
+      if (adjuntos.length > 0) {
+        if (tarea.sesion === undefined) return "no consta la conversación de la tarea: sus adjuntos no se encuentran";
+        const { faltan } = copiarAdjuntosDeSesion(tarea.proyecto.raiz, tarea.sesion, adjuntos, carpeta);
+        if (faltan.length > 0) return `no se encuentra${faltan.length === 1 ? "" : "n"} ${faltan.map((n) => `«${n}»`).join(", ")} entre los adjuntos del chat`;
+        nombres = [...adjuntos];
+      }
+      if (borrador !== undefined) {
+        nombres = [...nombres, ...cola.listarAdjuntos(borrador).map((a) => a.nombre)];
+        adjuntosEditados({ ...cola, carpetaDeAdjuntos: carpetaDe }, id, borrador, []);
+      }
+      if (nombres.length > 0) nuevos = { nombres, adjuntos: cola.listarAdjuntos(id) };
     }
+    const resultado = aplicarFeedback(cola, id, texto, nuevos);
+    if (!resultado.hecho) {
+      // No se escribe nada a medias: se DICE, a quien lo mandó (409) y al registro.
+      const motivo = resultado.motivo ?? "motivo desconocido";
+      informar(`no se pudo añadir el feedback: ${motivo}`);
+      return motivo;
+    }
+    return undefined;
   };
 
   /**
@@ -3108,10 +3143,11 @@ export function montarRutas(
    */
   const tareaEsperandoFeedback = (id: string): boolean =>
     opciones.colaDeTareas?.listar().find((t) => t.id === id)?.estado === "requiere-atencion";
-  const darFeedbackATarea = (id: string, texto: string): void => {
-    atenderFeedbackDeTarea(id, texto);
+  const darFeedbackATarea = (id: string, texto: string, con?: { adjuntos?: readonly string[]; borrador?: string }): string | undefined => {
+    const motivo = atenderFeedbackDeTarea(id, texto, con);
     opciones.revisarTareas?.();
     emitirTareas();
+    return motivo;
   };
   /**
    * Reencolar una FINALIZADA para acabar lo que no hizo: una tarea NUEVA en el hilo de la original, con el texto
@@ -8587,7 +8623,21 @@ export function montarRutas(
       } else if (mensaje.accion === "augmentar" && opciones.augmentar !== undefined) {
         void atenderAugmentar(opciones.augmentar, mensaje.proyecto, mensaje.peticion, mensaje.borrador, mensaje.pantallasDeStitch);
       } else if (mensaje.accion === "feedback" && opciones.colaDeTareas !== undefined) {
-        darFeedbackATarea(mensaje.id, mensaje.texto);
+        const { adjuntos, borrador } = mensaje;
+        const motivo =
+          adjuntos !== undefined && (!Array.isArray(adjuntos) || adjuntos.some((n) => typeof n !== "string"))
+            ? "los adjuntos van por nombre"
+            : borrador !== undefined && typeof borrador !== "string"
+              ? "ese borrador de adjuntos no vale (o ya es una tarea)"
+              : darFeedbackATarea(mensaje.id, mensaje.texto, {
+                  ...(adjuntos === undefined ? {} : { adjuntos }),
+                  ...(borrador === undefined ? {} : { borrador }),
+                });
+        if (motivo !== undefined) {
+          respuesta.writeHead(409, { "content-type": "application/json" });
+          respuesta.end(JSON.stringify({ motivo }));
+          return;
+        }
       } else if (
         mensaje.accion !== "crear" &&
         mensaje.accion !== "augmentar" &&

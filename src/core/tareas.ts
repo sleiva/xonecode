@@ -68,6 +68,12 @@ export interface FeedbackDeTarea {
    * cada entrada en vez de en el campo entero.
    */
   consumido: boolean;
+  /**
+   * Los adjuntos que la persona mandó CON este feedback (IXCODE-55: contestar con una imagen y un texto), por nombre:
+   * ya copiados a la carpeta de la tarea, así que están en `Tarea.adjuntos` como los demás. Se guardan aparte para que
+   * el mensaje al agente diga cuáles son los NUEVOS. Ausente = ninguno.
+   */
+  adjuntos?: string[];
 }
 
 export interface Tarea {
@@ -503,12 +509,18 @@ export function conAutorizadas(tarea: Tarea, autorizadas: readonly string[] | un
  * turno (`corredorDeTareas.ts#correr`), no aquí — hasta entonces «no consta que se haya
  * mandado» es la verdad.
  */
-export function conFeedback(tarea: Tarea, texto: string, ahora?: string): Tarea {
+export function conFeedback(tarea: Tarea, texto: string, ahora?: string, adjuntos: readonly string[] = []): Tarea {
   const limpio = texto.trim();
-  if (limpio === "") {
+  // Una imagen SOLA es una respuesta (IXCODE-55): lo vacío es no mandar nada.
+  if (limpio === "" && adjuntos.length === 0) {
     throw new Error("un feedback vacío devolvería la tarea al lazo sin nada nuevo que decirle");
   }
-  const nuevo: FeedbackDeTarea = { texto: limpio, creado: ahora ?? new Date().toISOString(), consumido: false };
+  const nuevo: FeedbackDeTarea = {
+    texto: limpio,
+    creado: ahora ?? new Date().toISOString(),
+    consumido: false,
+    ...(adjuntos.length === 0 ? {} : { adjuntos: [...adjuntos] }),
+  };
   const feedback = [...(tarea.feedback ?? []), nuevo];
   return conEstado({ ...tarea, feedback }, "nuevo");
 }

@@ -117,6 +117,9 @@ Ante una discrepancia con el código, **el código manda**.
   sin vínculo lo DICE. **Filtro por ESTADO del CLIENTE** (pastillas con cuenta, `aria-pressed`,
   `ESPERANDO_PRUEBA` desmarcado); «Asignadas a mí» del SERVIDOR (`mias`), solo con
   `estado.admiteMias === true`, pintado según la RESPUESTA (`pendientes.mias`).
+- **Contestar a una tarea aparcada lleva imágenes** (IXCODE-55): «Tu feedback» sube a su borrador y la caja del chat
+  manda las suyas por nombre; el SERVIDOR las copia a los adjuntos de la TAREA antes de guardar el feedback, que dice
+  cuáles son suyas (`FeedbackDeTarea.adjuntos`). Una negativa vuelve con 409.
 - **Lo que DICE el panel sale del gestor VINCULADO** (`nombreDelConector`), nunca «Jira» a fuego; la
   clave se enseña con `etiquetaDeClave` y viaja ENTERA; el `collection://` de Notion no se pinta.
   **Notion en tres pasos** (`VinculoDeNotion`): buscar, DESCRIBIR el esquema, vincular con

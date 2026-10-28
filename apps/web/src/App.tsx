@@ -551,8 +551,21 @@ export function App({
   const alDescartarTarea = useCallback((id: string) => void enviar({ clase: "tarea", accion: "descartar", id }), [enviar]);
   const alTerminarTarea = useCallback((id: string) => void enviar({ clase: "tarea", accion: "terminar", id }), [enviar]);
   const alEnviarFeedbackTarea = useCallback(
-    (id: string, texto: string) => void enviar({ clase: "tarea", accion: "feedback", id, texto }),
+    (id: string, texto: string, borrador?: string) =>
+      void enviar({ clase: "tarea", accion: "feedback", id, texto, ...(borrador === undefined ? {} : { borrador }) }),
     [enviar]
+  );
+  /**
+   * Las imágenes de un formulario de tarea —editar, reencolar, «Tu feedback» (IXCODE-55)—: los MISMOS caminos que «Nueva
+   * tarea» (subir al borrador, quitar, y descartar su carpeta si se cierra sin guardar).
+   */
+  const adjuntosDeBorradorDeTarea = useMemo(
+    () => ({
+      subir: (borrador: string, nombre: string, fichero: File) => subirAdjunto(borrador, nombre, fichero),
+      ...(quitarAdjunto === undefined ? {} : { quitar: (borrador: string, nombre: string) => quitarAdjunto(borrador, nombre) }),
+      descartar: (borrador: string) => void enviar({ clase: "tarea", accion: "descartar", id: borrador }),
+    }),
+    [subirAdjunto, quitarAdjunto, enviar]
   );
 
   /**
@@ -2915,11 +2928,7 @@ export function App({
       }}
       // Las capturas que se le añaden al reencolar: los MISMOS caminos que «Nueva tarea» (subir al borrador, quitar, y
       // descartar su carpeta si se cierra sin encolar).
-      adjuntosDelBorrador={{
-        subir: (borrador: string, nombre: string, fichero: File) => subirAdjunto(borrador, nombre, fichero),
-        ...(quitarAdjunto === undefined ? {} : { quitar: (borrador: string, nombre: string) => quitarAdjunto(borrador, nombre) }),
-        descartar: (borrador: string) => void enviar({ clase: "tarea", accion: "descartar", id: borrador }),
-      }}
+      adjuntosDelBorrador={adjuntosDeBorradorDeTarea}
       alPedirUltimaRespuesta={async (t: TareaDelCable) => {
         if (t.sesion === undefined) return {};
         const r = (await enviar({ clase: "leerSesion", proyecto: t.proyecto, sesion: t.sesion })) as Response | undefined;
@@ -3495,9 +3504,11 @@ export function App({
                 }}
                 alTerminar={alTerminarTarea}
                 alDescartar={alDescartarTarea}
-                alEnviarFeedback={(id, texto) => {
+                adjuntosDelBorrador={adjuntosDeBorradorDeTarea}
+                alEnviarFeedback={(id, texto, borrador) => {
                   void (async () => {
-                    if ((await negativaOFalloDe(await enviar({ clase: "tarea", accion: "feedback", id, texto }))) === undefined) {
+                    const conBorrador = borrador === undefined ? {} : { borrador };
+                    if ((await negativaOFalloDe(await enviar({ clase: "tarea", accion: "feedback", id, texto, ...conBorrador }))) === undefined) {
                       await cederParaLaTarea(id);
                     }
                   })();
@@ -3616,7 +3627,6 @@ export function App({
             {mensajeEnEspera !== undefined && tareaEnEsperaDeLaSesion !== undefined ? (
               <ElegirDestinoDelMensaje
                 titulo={tareaEnEsperaDeLaSesion.titulo}
-                conAdjuntos={mensajeEnEspera.adjuntos.length > 0}
                 alCancelar={() => {
                   // Lo escrito vuelve al compositor: al enviar se vació, y cancelar no puede perderlo. Los adjuntos ya
                   // subidos siguen en la carpeta de la sesión; solo se quita su mención de este mensaje.
@@ -3639,7 +3649,10 @@ export function App({
                   // El feedback la devuelve a la cola; «Arrancar ahora» cede el proyecto (cierra esta conversación) para
                   // que arranque ya. Si lo segundo se niega, el feedback ya está puesto y arrancará al cerrar.
                   const id = tareaEnEsperaDeLaSesion.id;
-                  const sinFeedback = await negativaOFalloDe(await enviar({ clase: "tarea", accion: "feedback", id, texto: mensajeEnEspera.texto }));
+                  const { texto, adjuntos } = mensajeEnEspera;
+                  const sinFeedback = await negativaOFalloDe(
+                    await enviar({ clase: "tarea", accion: "feedback", id, texto, ...(adjuntos.length === 0 ? {} : { adjuntos }) })
+                  );
                   if (sinFeedback !== undefined) return sinFeedback;
                   const sinArrancar = await negativaOFalloDe(await enviar({ clase: "tarea", accion: "arrancarAhora", id }));
                   if (sinArrancar !== undefined) return `tu mensaje ya está en la tarea, pero ${sinArrancar}`;

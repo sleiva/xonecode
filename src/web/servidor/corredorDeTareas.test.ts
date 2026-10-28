@@ -17,6 +17,7 @@ import { lineaDelPlanCitado,
   consolaParaTarea,
   crearCorredorDeTareas,
   peticionDeFeedback,
+  lineaDeAdjuntosDelFeedback,
   revisionConGit,
   type ConsolaParaTarea,
   type RevisionDeSesion,
@@ -3698,5 +3699,16 @@ describe("al cerrar, el plan de la tarea se actualiza con lo que dice el juez", 
     expect(lineaDelPlanCitado("sigue /planes/liq/ tareas T4-T5")).toContain("PLAN DE ESTA TAREA: /planes/liq/");
     expect(lineaDelPlanCitado("sin plan")).toBeUndefined();
     expect(lineaDelPlanCitado("/planes/a/ y /planes/b/")).toBeUndefined();
+  });
+});
+
+describe("el feedback con adjuntos (IXCODE-55)", () => {
+  it("al reanudar, el texto y la línea que dice cuáles son los nuevos; sin texto, solo la línea", () => {
+    const linea = lineaDeAdjuntosDelFeedback(["boceto.png"]);
+    expect(linea).toContain("/adjuntos/boceto.png");
+    expect(peticionDeFeedback("e", "así", true, ["boceto.png"])).toBe(`así\n\n${linea}`);
+    expect(peticionDeFeedback("e", "", true, ["boceto.png"])).toBe(linea);
+    expect(peticionDeFeedback("e", "así", true)).toBe("así");
+    expect(peticionDeFeedback("encargo", "así", false, ["boceto.png"])).toContain(`Feedback:\nasí\n\n${linea}`);
   });
 });

@@ -345,6 +345,39 @@ describe("editar el encargo (IXCODE-52)", () => {
     expect(descartar).not.toHaveBeenCalled();
   });
 
+  /** IXCODE-55: contestar a una tarea que pregunta con una imagen y un texto. */
+  it("«Tu feedback» con imágenes: suben a su borrador, una imagen SOLA ya se puede mandar, y el borrador va con el feedback", async () => {
+    const alEnviarFeedback = vi.fn();
+    const subir = vi.fn(async () => ({ ok: true }));
+    const descartar = vi.fn();
+    const { container } = render(
+      <AccionesDeTarea tarea={TAREA({ estado: "requiere-atencion" })} alEnviarFeedback={alEnviarFeedback} adjuntosDelBorrador={{ subir, descartar }} />
+    );
+    const enviarFeedback = () => screen.getByRole("button", { name: "Enviar y continuar" }) as HTMLButtonElement;
+    expect(enviarFeedback().disabled).toBe(true);
+    const entrada = container.ownerDocument.querySelector('input[type="file"]') as HTMLInputElement;
+    await act(async () => {
+      fireEvent.change(entrada, { target: { files: [new File(["x"], "boceto.png", { type: "image/png" })] } });
+    });
+    const borrador = (subir.mock.calls[0] as unknown as [string])[0];
+    await waitFor(() => expect(enviarFeedback().disabled).toBe(false));
+    fireEvent.change(screen.getByLabelText("Tu feedback"), { target: { value: "la cabecera como en la imagen" } });
+    fireEvent.click(enviarFeedback());
+    expect(alEnviarFeedback).toHaveBeenCalledWith("t1", "la cabecera como en la imagen", borrador);
+    // El borrador ya es de la tarea: el formulario nuevo no lo descarta, y empieza vacío.
+    expect(descartar).not.toHaveBeenCalled();
+    expect(screen.queryByText("boceto.png")).toBeNull();
+  });
+
+  it("«Tu feedback» sin adjuntar sigue siendo texto: sin borrador, y sin imágenes que ofrecer si no hay a dónde subirlas", () => {
+    const alEnviarFeedback = vi.fn();
+    render(<AccionesDeTarea tarea={TAREA({ estado: "requiere-atencion" })} alEnviarFeedback={alEnviarFeedback} />);
+    expect(screen.queryByRole("button", { name: /Añadir fichero/ })).toBeNull();
+    fireEvent.change(screen.getByLabelText("Tu feedback"), { target: { value: "sí" } });
+    fireEvent.click(screen.getByRole("button", { name: "Enviar y continuar" }));
+    expect(alEnviarFeedback).toHaveBeenCalledWith("t1", "sí");
+  });
+
   it("la lista del proyecto lo hace llegar hasta la fila: una prop opcional olvidada por el camino no da error", () => {
     const alEditarEncargo = vi.fn(async () => undefined);
     render(

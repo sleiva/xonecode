@@ -568,7 +568,12 @@ export interface ResultadoDeFeedback {
 export function aplicarFeedback(
   disco: Pick<TareasEnDisco, "listar" | "guardar">,
   id: string,
-  texto: string
+  texto: string,
+  /**
+   * Los adjuntos que van CON este feedback (IXCODE-55), ya copiados a la carpeta de la tarea: sus `nombres` y la lista
+   * de la tarea leída del DISCO después de copiarlos, que se guarda en la MISMA escritura que el feedback.
+   */
+  nuevos?: { nombres: readonly string[]; adjuntos: Tarea["adjuntos"] }
 ): ResultadoDeFeedback {
   const tareas = disco.listar();
   const actual = tareas.find((t) => t.id === id);
@@ -577,7 +582,7 @@ export function aplicarFeedback(
   }
   let siguiente: Tarea;
   try {
-    siguiente = conFeedback(actual, texto);
+    siguiente = conFeedback(nuevos === undefined ? actual : { ...actual, adjuntos: nuevos.adjuntos }, texto, undefined, nuevos?.nombres);
   } catch (error) {
     return { hecho: false, motivo: error instanceof Error ? error.message : String(error) };
   }

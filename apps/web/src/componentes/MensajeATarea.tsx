@@ -4,6 +4,7 @@ import modal from "./NuevaSesion.module.css";
 import estilos from "./MensajeATarea.module.css";
 import { AccionesDeTarea } from "./AccionesDeTarea.js";
 import type { TareaDelCable } from "../tipos.js";
+import type { AdjuntosDelBorrador } from "./adjuntosDeBorrador.js";
 
 /**
  * La conversación abierta es la de una TAREA que espera feedback: el aviso que va encima del compositor.
@@ -38,6 +39,7 @@ export function TareaEnEsperaEnElChat({
   alTerminar,
   alDescartar,
   alEnviarFeedback,
+  adjuntosDelBorrador,
 }: {
   tarea: TareaDelCable;
   conectado: boolean;
@@ -45,7 +47,9 @@ export function TareaEnEsperaEnElChat({
   alReintentar: (id: string) => void;
   alTerminar: (id: string) => void;
   alDescartar: (id: string) => void;
-  alEnviarFeedback: (id: string, texto: string) => void;
+  alEnviarFeedback: (id: string, texto: string, borrador?: string) => void;
+  /** Las imágenes que van con la respuesta (IXCODE-55). Ausente = solo texto. */
+  adjuntosDelBorrador?: AdjuntosDelBorrador;
 }) {
   return (
     <section className={estilos.enEspera} aria-label="La tarea espera tu respuesta">
@@ -59,6 +63,7 @@ export function TareaEnEsperaEnElChat({
         alTerminar={alTerminar}
         alDescartar={alDescartar}
         alEnviarFeedback={alEnviarFeedback}
+        {...(adjuntosDelBorrador === undefined ? {} : { adjuntosDelBorrador })}
       />
     </section>
   );
@@ -82,17 +87,16 @@ export function AvisoDeProyectoConTarea() {
  * - «Enviar y continuar la tarea»: el texto va a la tarea como feedback y la tarea arranca (cede el proyecto: se cierra
  *   esta conversación, que queda guardada). Devuelve el motivo si no se pudo.
  * - «Seguir aquí en el chat»: lo de siempre, un turno con la persona delante.
- * Un mensaje con adjuntos solo puede seguir aquí: el feedback de una tarea es texto.
+ * Los adjuntos van a los dos sitios (IXCODE-55: contestar a la tarea con una imagen y un texto): a la tarea, el servidor los
+ * copia a los suyos y le dice al agente cuáles son los nuevos.
  */
 export function ElegirDestinoDelMensaje({
   titulo,
-  conAdjuntos,
   alContinuarLaTarea,
   alSeguirAqui,
   alCancelar,
 }: {
   titulo: string;
-  conAdjuntos: boolean;
   alContinuarLaTarea: () => Promise<string | undefined>;
   alSeguirAqui: () => void;
   alCancelar: () => void;
@@ -112,7 +116,6 @@ export function ElegirDestinoDelMensaje({
           <p className={modal.nota}>
             {`Esta conversación es de la tarea «${titulo}». Puedes mandárselo para que siga sola en segundo plano —se cierra esta conversación, que queda guardada, y la ves en vivo desde Tareas— o seguir aquí tú, con cada escritura aprobada.`}
           </p>
-          {conAdjuntos ? <p className={modal.nota}>Lleva adjuntos: solo puede seguir aquí, el feedback de una tarea es texto.</p> : null}
           {negativa !== undefined ? (
             <p className={estilos.negativa} role="alert">{`No se pudo: ${negativa}`}</p>
           ) : null}
@@ -126,7 +129,7 @@ export function ElegirDestinoDelMensaje({
             <Button
               variant="primary"
               className={`${modal.accion} ${modal.principal}`}
-              disabled={enviando || conAdjuntos}
+              disabled={enviando}
               onClick={() => {
                 setEnviando(true);
                 setNegativa(undefined);

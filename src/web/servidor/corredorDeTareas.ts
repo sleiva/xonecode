@@ -48,7 +48,7 @@ import { conEstadoDeTarea, leerTareasDelPlan } from "../../core/tareasDelPlan.js
 import { planDeLaTarea, type PlanDeLaTarea } from "../../agent/tareas/planesDelProyecto.js";
 import type { Entrega } from "../../core/entrega.js";
 import { crearConsolaDeTarea } from "./consolaDeTarea.js";
-import { conAdjuntos } from "../../core/adjuntos.js";
+import { conAdjuntos, RUTA_ADJUNTOS } from "../../core/adjuntos.js";
 import { textoDePantallasElegidas } from "../../core/stitch.js";
 import type { PantallaElegida } from "../../core/tareas.js";
 import { ErrorDelJuezDeTarea } from "../../agent/tareas/juezDeTarea.js";
@@ -240,8 +240,20 @@ export const AVISO_SIN_HILO_REANUDABLE =
  * **Sin hilo que reanudar, el encargo entero, con el aviso delante.** Ver
  * `AVISO_SIN_HILO_REANUDABLE`.
  */
-export const peticionDeFeedback = (encargo: string, texto: string, reanudando: boolean): string =>
-  reanudando ? texto : `${AVISO_SIN_HILO_REANUDABLE}\n\nEncargo original:\n${encargo}\n\nFeedback:\n${texto}`;
+export const peticionDeFeedback = (encargo: string, texto: string, reanudando: boolean, adjuntos: readonly string[] = []): string => {
+  const conLosSuyos = adjuntos.length === 0 ? texto : [texto, lineaDeAdjuntosDelFeedback(adjuntos)].filter((t) => t !== "").join("\n\n");
+  return reanudando ? conLosSuyos : `${AVISO_SIN_HILO_REANUDABLE}\n\nEncargo original:\n${encargo}\n\nFeedback:\n${conLosSuyos}`;
+};
+
+/**
+ * Cuáles de los adjuntos de la tarea vienen con ESTE feedback (IXCODE-55). El inventario de `conAdjuntos` va detrás y los
+ * lista TODOS, los del encargo también: sin esta línea el agente no sabe que la imagen nueva es la respuesta a lo que
+ * preguntó.
+ */
+export const lineaDeAdjuntosDelFeedback = (adjuntos: readonly string[]): string =>
+  `Con este mensaje la persona ha adjuntado ${adjuntos.length === 1 ? "un fichero" : `${adjuntos.length} ficheros`}: ${adjuntos
+    .map((n) => `${RUTA_ADJUNTOS}${n}`)
+    .join(", ")}. Míralo${adjuntos.length === 1 ? "" : "s"} antes de seguir: es parte de su respuesta.`;
 
 /**
  * Lo que se espera como mucho a que un turno cortado devuelva, al parar el proceso.
@@ -1195,7 +1207,7 @@ export function crearCorredorDeTareas(opciones: {
             : { ...actual, feedback: actual.feedback!.map((f) => (f === pendiente ? { ...f, consumido: true } : f)) };
         // Y sin feedback, el encargo RELEÍDO: se puede editar mientras espera (IXCODE-52), y una
         // edición entre elegirla y marcarla se perdería con el de la lectura que la eligió.
-        peticion = pendiente === undefined ? actual.encargo : peticionDeFeedback(actual.encargo, pendiente.texto, reanudando);
+        peticion = pendiente === undefined ? actual.encargo : peticionDeFeedback(actual.encargo, pendiente.texto, reanudando, pendiente.adjuntos);
         // El inventario de los adjuntos va DETRÁS de lo que se manda esta pasada, sea el
         // encargo o el feedback: montar `/adjuntos/` no basta, porque es una raíz virtual
         // que ninguna instrucción del agente nombra. Ver `core/adjuntos.ts#conAdjuntos`.

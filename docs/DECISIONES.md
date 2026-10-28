@@ -10059,3 +10059,23 @@ anotaba la operación con su `error`. Se perdía en el cliente, por tres sitios:
 Ahora «Subir» se apaga con una tarea `en-proceso` en el proyecto y DICE por qué a la vista (no solo en el `title`); si
 el servidor se niega igual —una tarea reservada justo después del clic—, su motivo sale junto al botón (`fallo`, el
 acto de la operación que llegó tras el clic) y en el registro. Test de `App` por la composición real: falla sin el cambio.
+
+## Contestar a una tarea con una imagen y un texto (IXCODE-55, 28-10-2026)
+
+Rafa: «permitir responder a una pregunta que te hace insertando una imagen y un texto, para describir lo que quieres en
+base a una imagen». Una tarea que pregunta se aparca (`requiere-atencion`) y se contesta con «Tu feedback», que era solo
+texto. Y el otro camino, la caja del chat de la tarea con «¿A dónde va este mensaje?», lo PROHIBÍA a propósito: «Lleva
+adjuntos: solo puede seguir aquí, el feedback de una tarea es texto».
+
+- **El feedback lleva adjuntos, y se COPIAN a los de la tarea** (`arranque.ts#atenderFeedbackDeTarea`): lo que monta
+  `/adjuntos/` en su turno es la carpeta de la TAREA, no la del chat. Vienen de uno de dos sitios: el `borrador` del
+  formulario «Tu feedback» (pegadas o elegidas, el mismo camino que «Reencolar»: se adopta y se borra) o los del chat
+  de la tarea por nombre. Si alguno no está, no se guarda nada y se dice cuál. Lo nuevo manda sobre uno de la tarea con
+  el mismo nombre, como al reencolar.
+- **El feedback guarda cuáles son SUYOS** (`FeedbackDeTarea.adjuntos`) y la petición al reanudar lo dice
+  (`corredorDeTareas.ts#lineaDeAdjuntosDelFeedback`): el inventario de `conAdjuntos` lista TODOS, los del encargo
+  también, y sin esa línea el agente no sabe que la imagen nueva es la respuesta a lo que preguntó.
+- **Una imagen SOLA es una respuesta** (`conFeedback`): lo vacío es no mandar nada.
+- **La negativa del feedback vuelve a quien lo mandó** (409 con motivo). Antes era 204 y solo se `informar`aba: el
+  formulario se vaciaba aunque no se hubiera guardado.
+- **Límite**: el Kanban del escritorio sigue ofreciendo solo texto (no le llega a dónde subir).

@@ -276,6 +276,14 @@ describe("conFeedback", () => {
     expect(() => conFeedback(aparcada, "")).toThrow();
   });
 
+  it("con adjuntos (IXCODE-55) guarda sus nombres, y una imagen SIN texto también es una respuesta", () => {
+    const aparcada = tarea({ estado: "requiere-atencion", motivo: "?" });
+    expect(conFeedback(aparcada, "así", "2026-09-08T11:00:00.000Z", ["boceto.png"]).feedback).toEqual([
+      { texto: "así", creado: "2026-09-08T11:00:00.000Z", consumido: false, adjuntos: ["boceto.png"] },
+    ]);
+    expect(conFeedback(aparcada, "  ", undefined, ["boceto.png"]).estado).toBe("nuevo");
+  });
+
   it("solo vale desde «requiere-atencion»: en cualquier otro estado, `conEstado` lo rechaza", () => {
     expect(() => conFeedback(tarea({ estado: "nuevo" }), "algo")).toThrow();
     expect(() => conFeedback(tarea({ estado: "en-proceso" }), "algo")).toThrow();

@@ -7244,11 +7244,72 @@ describe("las tareas en background, por el cable", () => {
     await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
     const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
     await asentar();
-    expect(await enviarMensaje(accion, { clase: "tarea", accion: "feedback", id: "t1", texto: "   " })).toBe(204);
+    // Y la negativa vuelve a quien lo mandó (409), no solo al registro: antes era 204 y el diálogo se cerraba igual.
+    expect(await enviarMensaje(accion, { clase: "tarea", accion: "feedback", id: "t1", texto: "   " })).toBe(409);
     await asentar();
     expect(cola.verTareas()[0]!.estado).toBe("requiere-atencion");
     expect(cola.verTareas()[0]!.feedback).toBeUndefined();
     expect(avisos.some((a) => a.includes("feedback"))).toBe(true);
+  });
+
+  /**
+   * IXCODE-55: contestar a la tarea con una imagen y un texto. Los adjuntos son los del CHAT de la tarea (la carpeta de su
+   * sesión) y se COPIAN a los suyos, con disco real: un doble no probaría que la carpeta es la que monta su turno.
+   */
+  describe("un feedback con adjuntos (IXCODE-55)", () => {
+    async function conTareaEsperando() {
+      const base = mkdtempSync(join(tmpdir(), "xonecode-feedback-adjuntos-"));
+      const raiz = join(base, "AppDemo");
+      const chat = carpetaDeAdjuntosDeSesion(raiz, "s1");
+      mkdirSync(chat, { recursive: true });
+      writeFileSync(join(chat, "boceto.png"), "PNG");
+      const cola = crearTareasEnDisco({ base: join(base, "cola") });
+      cola.guardar([
+        {
+          id: "t1",
+          proyecto: { id: "p1", raiz, nombre: "AppDemo" },
+          titulo: "T",
+          peticion: "p",
+          encargo: "e",
+          adjuntos: [],
+          estado: "requiere-atencion",
+          motivo: "¿cómo quieres la cabecera?",
+          sesion: "s1",
+          creada: "2026-09-08T10:00:00.000Z",
+        },
+      ]);
+      const servidor = servidorDeMentira();
+      montarRutas(servidor, vestibuloDePrueba(), { colaDeTareas: cola, informar: () => {} });
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      await asentar();
+      return { base, cola, accion: servidor.rutas.get(`POST ${RUTA_ACCION}`)! };
+    }
+
+    it("los copia a la tarea y el feedback dice cuáles van con él; una imagen sola también es respuesta", async () => {
+      const { base, cola, accion } = await conTareaEsperando();
+      const r = await postearConCuerpo(accion, JSON.stringify({ clase: "tarea", accion: "feedback", id: "t1", texto: "", adjuntos: ["boceto.png"] }));
+      expect(r.estado).toBe(204);
+      const tarea = cola.listar()[0]!;
+      expect(tarea.estado).toBe("nuevo");
+      expect(tarea.adjuntos.map((a) => a.nombre)).toEqual(["boceto.png"]);
+      expect(readFileSync(join(cola.carpetaDeAdjuntos("t1")!, "boceto.png"), "utf8")).toBe("PNG");
+      expect(tarea.feedback).toEqual([{ texto: "", creado: expect.any(String), consumido: false, adjuntos: ["boceto.png"] }]);
+      rmSync(base, { recursive: true, force: true });
+    });
+
+    it("si uno no está entre los del chat, 409 con su nombre y la tarea sigue esperando", async () => {
+      const { base, cola, accion } = await conTareaEsperando();
+      const r = await postearConCuerpo(
+        accion,
+        JSON.stringify({ clase: "tarea", accion: "feedback", id: "t1", texto: "así", adjuntos: ["boceto.png", "otro.png"] })
+      );
+      expect(r.estado).toBe(409);
+      expect(JSON.parse(r.cuerpo).motivo).toContain("«otro.png»");
+      expect(cola.listar()[0]!.estado).toBe("requiere-atencion");
+      expect(cola.listar()[0]!.feedback).toBeUndefined();
+      rmSync(base, { recursive: true, force: true });
+    });
   });
 
   it("sin puerto de tareas, un feedback tampoco hace nada", async () => {

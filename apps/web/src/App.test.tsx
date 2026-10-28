@@ -2965,6 +2965,37 @@ describe("App: el panel del proyecto (IXCODE-11)", () => {
       ]);
     });
 
+    it("IXCODE-55: en el chat de una tarea que espera, «Tu feedback» deja adjuntar una imagen y el borrador viaja con él", async () => {
+      const { store, enviar } = conProyectoAbierto();
+      act(() =>
+        store.aplicar({
+          clase: "tareas",
+          concurrencia: 2,
+          corriendoAqui: true,
+          lista: [TAREA({ estado: "requiere-atencion", motivo: "¿cómo la quieres?", sesion: "s1" })],
+        })
+      );
+      const tarjeta = screen.getByRole("region", { name: "La tarea espera tu respuesta" });
+      const entrada = tarjeta.querySelector('input[type="file"]') as HTMLInputElement | null;
+      expect(entrada).not.toBeNull();
+      await act(async () => {
+        fireEvent.change(entrada!, { target: { files: [new File(["x"], "boceto.png", { type: "image/png" })] } });
+      });
+      enviar.mockClear();
+      fireEvent.change(within(tarjeta).getByLabelText("Tu feedback"), { target: { value: "como en la imagen" } });
+      await waitFor(() => expect((within(tarjeta).getByRole("button", { name: "Enviar y continuar" }) as HTMLButtonElement).disabled).toBe(false));
+      await act(async () => {
+        fireEvent.click(within(tarjeta).getByRole("button", { name: "Enviar y continuar" }));
+      });
+      expect(enviar.mock.calls[0]![0]).toEqual({
+        clase: "tarea",
+        accion: "feedback",
+        id: "t1",
+        texto: "como en la imagen",
+        borrador: expect.any(String),
+      });
+    });
+
     it("contestar la TARJETA de una pregunta en el chat de esa tarea también deja elegir; cancelar la vuelve a dejar contestar", async () => {
       const { store, enviar } = conProyectoAbierto();
       act(() =>

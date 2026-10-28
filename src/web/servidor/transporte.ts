@@ -1343,7 +1343,7 @@ export interface TareaDelCable {
    * (`core/tareas.ts#Tarea.feedback`). Ausente = nunca se le pidió nada. `consumido` dice
    * si ya se le mandó al agente en un turno.
    */
-  feedback?: { texto: string; creado: string; consumido: boolean }[];
+  feedback?: { texto: string; creado: string; consumido: boolean; adjuntos?: string[] }[];
   /**
    * El veredicto del juez de QA (`core/entrega.ts#VeredictoDeTarea`), y con él la
    * SALVEDAD: con qué condición de menos se entregó.
@@ -2057,7 +2057,9 @@ export type MensajeDelCliente =
    * tres no llevan nada — un campo que solo tiene sentido en una de cuatro acciones es la
    * misma mentira por omisión que una lista vacía rellenada.
    */
-  | { clase: "tarea"; accion: "feedback"; id: string; texto: string }
+  /** Con la respuesta pueden ir adjuntos (IXCODE-55): `adjuntos`, los del CHAT de la tarea por nombre, o `borrador`, el
+   *  del formulario «Tu feedback» (se adopta, como al reencolar). 409 con `{motivo}` si no se pudo. */
+  | { clase: "tarea"; accion: "feedback"; id: string; texto: string; adjuntos?: string[]; borrador?: string }
   /** Reencolar una FINALIZADA sin ticket para acabar lo que no hizo: una tarea nueva en su hilo, con `texto` como
    *  feedback (`core/tareas.ts#tareaReencolada`). 200 con `{id}`, o 409 con `{motivo}`. */
   | { clase: "tarea"; accion: "reencolar"; id: string; texto: string; borrador?: string }

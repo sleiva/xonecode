@@ -97,8 +97,9 @@ export function AccionesDeTarea({
    *  Ausente = no se ofrece. */
   alTerminar?: (id: string) => void;
   /** «Se edita la tarea y se agrega el feedback del usuario»: la devuelve al lazo, en su
-   *  mismo hilo. Ausente = no se ofrece — la aparcada cae a la pista de siempre. */
-  alEnviarFeedback?: (id: string, texto: string) => void;
+   *  mismo hilo. Ausente = no se ofrece — la aparcada cae a la pista de siempre. `borrador`: el de las imágenes que van
+   *  con la respuesta (IXCODE-55), si hay alguna lista. */
+  alEnviarFeedback?: (id: string, texto: string, borrador?: string) => void;
   /** Seguir una aparcada SIN escribir nada: entra en su hilo un «continúa». Devuelve el motivo si el servidor se negó. */
   alContinuar?: (id: string) => Promise<string | undefined>;
   /** «Arrancar ahora» una `nuevo`: la persona cede el proyecto (se cierra su consola de ahí) y la tarea arranca. */
@@ -111,7 +112,8 @@ export function AccionesDeTarea({
     pantallas?: { name: string; titulo: string }[] | null,
     adjuntos?: CambiosDeAdjuntos
   ) => Promise<string | undefined>;
-  /** Subir, quitar y descartar las imágenes nuevas al editar (como «Nueva tarea»). Ausente = el diálogo no ofrece adjuntar. */
+  /** Subir, quitar y descartar las imágenes nuevas al editar (como «Nueva tarea») y las que van con el feedback
+   *  (IXCODE-55). Ausente = ni el diálogo ni el feedback ofrecen adjuntar. */
   adjuntosDelBorrador?: AdjuntosDelBorrador;
   /** Volver a preparar el encargo desde la petición, SIN guardarlo (IXCODE-53). Ausente = no se ofrece. */
   alRegenerarEncargo?: (id: string, peticion: string) => Promise<{ encargo: string } | { motivo: string }>;
@@ -131,6 +133,7 @@ export function AccionesDeTarea({
 }) {
   const [confirmando, setConfirmando] = useState(false);
   const [editando, setEditando] = useState(false);
+  const [vueltaDelFeedback, setVueltaDelFeedback] = useState(0);
   const [negativa, setNegativa] = useState<string | undefined>(undefined);
   const [enviando, setEnviando] = useState(false);
   const pedir = (accion: (id: string) => Promise<string | undefined>): void => {
@@ -264,7 +267,21 @@ export function AccionesDeTarea({
         </>
       )}
       {ofrecerFeedback ? (
-        <FormularioDeFeedback id={t.id} apagado={apagado} alEnviar={alEnviarFeedback!} />
+        <FormularioDeFeedback
+          key={vueltaDelFeedback}
+          id={t.id}
+          apagado={apagado}
+          alEnviar={(id, texto, borrador) => {
+            if (borrador === undefined) {
+              alEnviarFeedback!(id, texto);
+              return;
+            }
+            alEnviarFeedback!(id, texto, borrador);
+            // Un formulario NUEVO, con su borrador nuevo: el de este ya es de la tarea.
+            setVueltaDelFeedback((v) => v + 1);
+          }}
+          {...(adjuntosDelBorrador === undefined ? {} : { adjuntosDelBorrador })}
+        />
       ) : pistaDeFeedback ? (
         <p className={estilos.pista}>Se resuelve editando la tarea para añadir tu feedback: sigue desde ahí.</p>
       ) : null}
@@ -617,20 +634,49 @@ function FormularioDeFeedback({
   id,
   apagado,
   alEnviar,
+  adjuntosDelBorrador,
 }: {
   id: string;
   apagado: boolean;
-  alEnviar: (id: string, texto: string) => void;
+  alEnviar: (id: string, texto: string, borrador?: string) => void;
+  /**
+   * Contestar con una IMAGEN y un texto (IXCODE-55: «para describir lo que quieres en base a una imagen»): se suben a un
+   * borrador de este formulario —pegadas o elegidas—, como al reencolar, y el servidor las copia a la tarea con el
+   * feedback. Ausente = solo texto.
+   */
+  adjuntosDelBorrador?: AdjuntosDelBorrador;
 }) {
   const [texto, setTexto] = useState("");
   const limpio = texto.trim();
+  const [borrador] = useState(() => crypto.randomUUID());
+  const { adjuntos, añadir, quitar, alPegar, enVuelo, algunoFalló, algunoListo, puedeQuitar } = useAdjuntosDeBorrador({
+    alSubir: (fichero, nombre) =>
+      adjuntosDelBorrador === undefined ? Promise.resolve({ ok: false, motivo: "aquí no se pueden adjuntar ficheros" }) : adjuntosDelBorrador.subir(borrador, nombre, fichero),
+    ...(adjuntosDelBorrador?.quitar === undefined ? {} : { alQuitar: (nombre: string) => adjuntosDelBorrador.quitar!(borrador, nombre) }),
+  });
+  // Desmontar sin enviar con imágenes ya subidas BORRA su carpeta, como «Reencolar» al cancelar.
+  const pendienteDeBorrar = useRef(false);
+  pendienteDeBorrar.current = algunoListo;
+  const descartar = adjuntosDelBorrador?.descartar;
+  useEffect(
+    () => () => {
+      if (pendienteDeBorrar.current) descartar?.(borrador);
+    },
+    [borrador, descartar]
+  );
+  // Una imagen SOLA también es una respuesta; lo que se está subiendo o falló, no se manda a medias.
+  const sePuedeEnviar = (limpio !== "" || algunoListo) && !apagado && !enVuelo && !algunoFalló;
   return (
     <form
       className={estilos.feedback}
       onSubmit={(evento) => {
         evento.preventDefault();
-        if (limpio === "" || apagado) return;
-        alEnviar(id, limpio);
+        if (!sePuedeEnviar) return;
+        if (algunoListo) {
+          // Ya es de la tarea: el servidor lo adopta, y al desmontar no se borra.
+          pendienteDeBorrar.current = false;
+          alEnviar(id, limpio, borrador);
+        } else alEnviar(id, limpio);
         setTexto("");
       }}
     >
@@ -644,9 +690,14 @@ function FormularioDeFeedback({
         value={texto}
         disabled={apagado}
         onChange={(evento) => setTexto(evento.target.value)}
-        placeholder="Se manda al agente en el mismo hilo…"
+        placeholder={adjuntosDelBorrador === undefined ? "Se manda al agente en el mismo hilo…" : "Se manda al agente en el mismo hilo… (puedes pegar o adjuntar imágenes)"}
+        {...(adjuntosDelBorrador === undefined ? {} : { onPaste: alPegar })}
       />
-      <button type="submit" className={estilos.botonFeedback} disabled={limpio === "" || apagado}>
+      {adjuntosDelBorrador === undefined ? null : (
+        <RejillaDeAdjuntos nuevos={adjuntos} quitar={quitar} puedeQuitar={puedeQuitar} añadir={añadir} deshabilitado={apagado} />
+      )}
+      {algunoFalló ? <p className={estilos.pista}>Un adjunto no se pudo subir: quítalo o vuelve a elegirlo.</p> : null}
+      <button type="submit" className={estilos.botonFeedback} disabled={!sePuedeEnviar}>
         Enviar y continuar
       </button>
     </form>
