@@ -159,7 +159,7 @@ import { geometriaDeCaptura, geometriaDeCapturaYa } from "../../dispositivos/geo
 import { decodificarImagen } from "../../dispositivos/decodificarImagen.js";
 import { crearDescribirImagen } from "../../grafo/describirImagen.js";
 import { crearTraerDeLaMaquina } from "../../grafo/traerDeLaMaquina.js";
-import { describirPantalla, invocarVisualConModelos } from "../../dispositivos/juezVisual.js";
+import { describirPantalla, ESFUERZO_DEL_CRITICO_VISUAL, invocarVisualConModelos, PAPEL_DEL_JUEZ_VISUAL, type ConsumoVisual, type InvocarVisual } from "../../dispositivos/juezVisual.js";
 import { estilosDeDisco, indiceEnDisco, type CargarIndice } from "../../navegacion/indiceEnDisco.js";
 
 /** El hilo raíz de TrueForge. Se llama así en la librería y no se elige. */
@@ -198,6 +198,9 @@ const BUCLE_DE_CALIDAD = [
  * agotó su presupuesto de llamadas dos veces seguidas («paro aquí», «cierre parcial»). Lo mismo en el plan del analista
  * (`agentesEnDisco.ts#PLAN_DE_DESARROLLO`) y al repartir en tareas de fondo (`proponerTareas.ts#REPARTIR_EN_TAREAS`).
  */
+/** El ORIGEN con que el gasto del crítico visual va a la traza (`xonecode traza` lo agrega por origen). */
+export const ORIGEN_DEL_CRITICO = "xone_critica_visual";
+
 export const UNA_VENTANA_POR_ENCARGO = [
   "UNA VENTANA POR ENCARGO: cada encargo a developer-xone es, como MUCHO, UNA ventana de la app y DOS pantallas de su diseño",
   "(una pestaña o un paso con su propia pantalla cuenta aparte). Con más, un encargo por cada una o dos, en orden, aunque el plan",
@@ -1189,6 +1192,36 @@ export async function abrirSesionTrueforge(
   const apuntarModelo = (id: string, cuenta: "modelo" | "externo", c: { entrada: number; salida: number; cache: number }): void => {
     porModelo = sumarPorModelo(porModelo, { [id]: { cuenta, ...c } });
   };
+  /**
+   * **Lo que gasta el CRÍTICO visual, en la cuenta del turno.** Llama al modelo por su lado (`invocarVisualConModelos`, con
+   * `callbacks: []`), así que ni el motor ni el bucle de eventos lo ven: medido sobre la calculadora, 17-38 mil tokens de
+   * salida por crítica que no constaban. Se suma al `tracker` y a su modelo, y va a la traza con su ORIGEN; y se guarda
+   * aparte (`fueraDelMotor`) para quitarlo del contraste con las métricas de TrueForge, que no lo cuentan.
+   */
+  const fueraDelMotor = { input: 0, output: 0, cache: 0, calls: 0 };
+  const contarCritico = (uso: ConsumoVisual): void => {
+    tracker.input += uso.entrada;
+    tracker.output += uso.salida;
+    tracker.cache += uso.cache;
+    tracker.calls += 1;
+    fueraDelMotor.input += uso.entrada;
+    fueraDelMotor.output += uso.salida;
+    fueraDelMotor.cache += uso.cache;
+    fueraDelMotor.calls += 1;
+    apuntarModelo(idDelPapel(PAPEL_DEL_JUEZ_VISUAL), "modelo", { entrada: uso.entrada, salida: uso.salida, cache: uso.cache });
+    diagnostico?.modelo(ORIGEN_DEL_CRITICO, {
+      input: uso.entrada,
+      output: uso.salida,
+      cache: uso.cache,
+      llamadas: tracker.calls,
+      contexto: uso.entrada,
+      ...(uso.razonamiento === undefined ? {} : { razonamiento: uso.razonamiento }),
+    });
+    avisar();
+  };
+  /** Los modelos del crítico: su esfuerzo (`ESFUERZO_DEL_CRITICO_VISUAL`) y su gasto contado. */
+  const invocarCritico = (): InvocarVisual =>
+    invocarVisualConModelos({ paraPapel: (p, e) => modelos.paraPapel(p, e) }, { esfuerzo: ESFUERZO_DEL_CRITICO_VISUAL, alConsumir: contarCritico });
   let apuntarAplicadasSinPreguntar: ((rutas: readonly string[]) => void) | undefined;
   const externo = (opciones.subagenteExterno ?? crearSubagenteExterno)(
     opcionesDeSubagenteExterno({
@@ -1273,9 +1306,9 @@ export async function abrirSesionTrueforge(
       : ([
           crearCriticaVisual({
             leerArtefacto: async (nombre) => readFileSync(join(carpeta, nombre)),
-            invocar: invocarVisualConModelos({ paraPapel: (p, e) => modelos.paraPapel(p, e) }),
+            invocar: invocarCritico(),
             // La maqueta y la captura, cada una descrita SOLA con el mismo esquema: geometría y luego estilo.
-            describirPantalla: (imagen, existen) => describirPantalla(imagen, invocarVisualConModelos({ paraPapel: (p, e) => modelos.paraPapel(p, e) }), existen),
+            describirPantalla: (imagen, existen) => describirPantalla(imagen, invocarCritico(), existen),
             // El estilo de cada control se MIDE en sus píxeles: hace falta sacarlos de la imagen.
             decodificar: decodificarImagen,
             // El informe se queda junto a la captura, para poder auditar qué se le dijo al agente.
@@ -2276,6 +2309,7 @@ export async function abrirSesionTrueforge(
       apuntarAplicadasSinPreguntar = (rutas) => void aplicadasSinPreguntar.push(...rutas);
       // Lo que llevaba el tracker al empezar: el contraste con el motor es del TURNO.
       const trackerAlEmpezar = { input: tracker.input, output: tracker.output, cache: tracker.cache, calls: tracker.calls };
+      const fueraAlEmpezar = { ...fueraDelMotor };
       externosDelTurno = 0;
       capturasDelTurno = [];
       comprobacionesDelTurno = [];
@@ -2767,11 +2801,12 @@ export async function abrirSesionTrueforge(
         if (diagnostico?.contraste !== undefined) {
           try {
             const motor = metricasDeTrueforge(orquestador.getMetrics() as unknown as Record<string, unknown>);
+            // Sin el crítico (`fueraDelMotor`): TrueForge no ve esas llamadas, y no son una cuenta que se pierda.
             const nuestras = {
-              entrada: tracker.input - trackerAlEmpezar.input,
-              salida: tracker.output - trackerAlEmpezar.output,
-              cache: tracker.cache - trackerAlEmpezar.cache,
-              llamadas: tracker.calls - trackerAlEmpezar.calls,
+              entrada: tracker.input - trackerAlEmpezar.input - (fueraDelMotor.input - fueraAlEmpezar.input),
+              salida: tracker.output - trackerAlEmpezar.output - (fueraDelMotor.output - fueraAlEmpezar.output),
+              cache: tracker.cache - trackerAlEmpezar.cache - (fueraDelMotor.cache - fueraAlEmpezar.cache),
+              llamadas: tracker.calls - trackerAlEmpezar.calls - (fueraDelMotor.calls - fueraAlEmpezar.calls),
             };
             diagnostico.contraste({
               nuestras,

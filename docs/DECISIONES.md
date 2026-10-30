@@ -10139,3 +10139,27 @@ una de las 61 llamadas del segundo encargo del desarrollador (≈2,9 M de 32,3 M
 Quitar el razonamiento de las vueltas viejas DENTRO de un encargo (mandar `""` salvo en el último asistente) ahorraría un
 22 % de entrada en ese mismo turno, casi toda en caché (≈16 % efectivo, porque rompe la caché un mensaje antes en cada
 llamada). Queda como experimento: el riesgo es que el modelo vuelva a razonar lo ya pensado y suba la SALIDA, que es lo lento.
+
+## El crítico visual, a esfuerzo bajo y contado (30-10-2026)
+
+Medido en el ejemplo de la calculadora (intento 4): `xone_critica_visual` tardaba ~100 s por llamada (cinco: 38-135 s).
+Reproducida la misma crítica fuera del turno, con el montaje de TrueForge: Chrome midiendo el `code.html` 1,6 s; el resto, las
+DOS miradas del modelo en paralelo, que devolvían ~1 k caracteres después de razonar 8-22 mil tokens cada una con el
+esfuerzo fijo `high` (`ESFUERZO_DEL_JUEZ_VISUAL`, puesto el 22-10 sin medir). La misma crítica cuatro veces con cada
+esfuerzo:
+
+| esfuerzo | razonamiento por mirada | la crítica | rojos de diseño |
+|---|---|---|---|
+| high | 8-22 mil | 61-138 s | el fondo de AC (todas); la forma de las teclas (una) |
+| low | 4-6 mil | 36-48 s | el fondo de AC (todas); la forma de las teclas (una) |
+
+Y una pasada con `medium` tardó 143 s y una de sus miradas volvió VACÍA. La varianza entre pasadas es la misma con los dos;
+lo que pone el rojo de verdad (un control tapado, un texto recortado) se MIDE y no depende de esta mirada. Así que el crítico
+pide `low` (`ESFUERZO_DEL_CRITICO_VISUAL`, petición suya); el juez de tareas y quien llame a `invocarVisualConModelos` sin
+decir otro siguen con `high`.
+
+**Y su gasto no constaba**: llama al modelo con `callbacks: []` (para que su JSON no salga en el chat), así que el tracker no
+lo veía — 17-38 mil tokens de salida por crítica con `high`. Ahora `invocarVisualConModelos` avisa del `usage` de cada
+llamada (`alConsumir`) y TrueForge lo suma al turno y al modelo del papel `afilado`, a la traza con origen
+`xone_critica_visual`, y lo QUITA del contraste con las métricas del motor, que no ven esas llamadas. Muestra pequeña: una
+pantalla. `describe_image` sigue sin contar.

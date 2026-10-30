@@ -4,6 +4,8 @@ import {
   ErrorDelJuezVisual,
   juzgarPantalla,
   invocarVisualConModelos,
+  ESFUERZO_DEL_CRITICO_VISUAL,
+  consumoVisualDe,
   ESFUERZO_DEL_JUEZ_VISUAL,
   PROMPT_VISUAL,
   PROMPT_VISUAL_CON_REFERENCIA,
@@ -325,6 +327,30 @@ describe("el crítico con una maqueta delante", () => {
     await invocarVisualConModelos(modelos as never)("afilado", "el prompt", PANTALLA);
     expect(pedidos).toEqual([["afilado", ESFUERZO_DEL_JUEZ_VISUAL]]);
     expect(ESFUERZO_DEL_JUEZ_VISUAL).toBe("high");
+  });
+
+  it("el crítico pide el SUYO (low) y cuenta lo que gastó cada llamada; un contador que revienta no tumba el veredicto", async () => {
+    const pedidos: unknown[] = [];
+    const usos: unknown[] = [];
+    const modelos = {
+      paraPapel: (papel: string, esfuerzo?: string) => {
+        pedidos.push([papel, esfuerzo]);
+        return {
+          invoke: async () => ({
+            content: '{"veredicto":"verde","hallazgos":[]}',
+            usage_metadata: { input_tokens: 3700, output_tokens: 5322, total_tokens: 9022, input_token_details: { cache_read: 3456 }, output_token_details: { reasoning: 4920 } },
+          }),
+        };
+      },
+    };
+    const texto = await invocarVisualConModelos(modelos as never, { esfuerzo: ESFUERZO_DEL_CRITICO_VISUAL, alConsumir: (u) => usos.push(u) })("afilado", "p", PANTALLA);
+    expect(texto).toContain("verde");
+    expect(pedidos).toEqual([["afilado", "low"]]);
+    expect(usos).toEqual([{ entrada: 3700, salida: 5322, cache: 3456, razonamiento: 4920 }]);
+    const igual = await invocarVisualConModelos(modelos as never, { alConsumir: () => { throw new Error("contador roto"); } })("afilado", "p", PANTALLA);
+    expect(igual).toContain("verde");
+    // Sin consumo declarado no se inventa un cero.
+    expect(consumoVisualDe({ content: "x" })).toBeUndefined();
   });
 
   it("la MAQUETA pequeña llega al modelo ampliada; la captura, tal cual", async () => {

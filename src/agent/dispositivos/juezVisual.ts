@@ -48,6 +48,37 @@ export const PAPEL_DEL_JUEZ_VISUAL: Papel = "afilado";
 export const ESFUERZO_DEL_JUEZ_VISUAL: Esfuerzo = "high";
 
 /**
+ * El esfuerzo del CRÍTICO visual (`xone_critica_visual`), más bajo que el del juez (petición suya, 30-10-2026). Medido sobre
+ * la calculadora, la misma crítica cuatro veces con cada uno: con `high` cada mirada razonaba 8-22 mil tokens y la crítica
+ * tardaba 61-138 s; con `low`, 4-6 mil y 36-48 s, con los mismos rojos de diseño (y la misma varianza entre pasadas). Lo que
+ * pone el rojo de verdad —un control tapado, un texto recortado— se MIDE, no lo decide esta mirada.
+ */
+export const ESFUERZO_DEL_CRITICO_VISUAL: Esfuerzo = "low";
+
+/** Lo que gastó UNA llamada del juez visual, para la cuenta del turno: va con `callbacks: []` y el tracker no la ve. */
+export interface ConsumoVisual {
+  entrada: number;
+  salida: number;
+  cache: number;
+  /** Ausente si el proveedor no lo desglosa: ausente no es cero. */
+  razonamiento?: number;
+}
+
+/** El consumo que declara la respuesta (`usage_metadata` de LangChain), o `undefined` si no declara ninguno. */
+export function consumoVisualDe(respuesta: unknown): ConsumoVisual | undefined {
+  const u = (respuesta as { usage_metadata?: unknown } | null)?.usage_metadata as Record<string, unknown> | undefined;
+  if (u === undefined || u === null) return undefined;
+  const n = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+  const razonamiento = (u.output_token_details as Record<string, unknown> | undefined)?.reasoning;
+  return {
+    entrada: n(u.input_tokens),
+    salida: n(u.output_tokens),
+    cache: n((u.input_token_details as Record<string, unknown> | undefined)?.cache_read),
+    ...(typeof razonamiento === "number" && Number.isFinite(razonamiento) ? { razonamiento } : {}),
+  };
+}
+
+/**
  * Cuántas observaciones se conservan y cuánto ocupa cada una.
  *
  * Del mismo orden que las del juez de tareas, y por lo mismo: esto acaba en una tarjeta o en
@@ -377,13 +408,24 @@ export async function describirPantalla(
  * CONSERVA; de la llamada solo se conserva el NOMBRE del error, porque ahí los SDK devuelven
  * el cuerpo remoto y con él cabeceras y claves redactadas.
  */
-export function invocarVisualConModelos(modelos: {
-  paraPapel(papel: Papel, esfuerzo?: Esfuerzo): unknown;
-}): InvocarVisual {
+export function invocarVisualConModelos(
+  modelos: {
+    paraPapel(papel: Papel, esfuerzo?: Esfuerzo): unknown;
+  },
+  opciones: {
+    /** Omitido, el del juez (`ESFUERZO_DEL_JUEZ_VISUAL`); el crítico pasa el suyo (`ESFUERZO_DEL_CRITICO_VISUAL`). */
+    esfuerzo?: Esfuerzo;
+    /**
+     * Lo que gastó cada llamada. Con `callbacks: []` (abajo) el tracker del turno no la ve, y medido sobre la calculadora el
+     * crítico gastaba 17-38 mil tokens de salida por crítica sin que constaran. Que falle no tumba la respuesta.
+     */
+    alConsumir?: (uso: ConsumoVisual) => void;
+  } = {}
+): InvocarVisual {
   return async (papel, prompt, imagen, referencia) => {
     let modelo: unknown;
     try {
-      modelo = modelos.paraPapel(papel, ESFUERZO_DEL_JUEZ_VISUAL);
+      modelo = modelos.paraPapel(papel, opciones.esfuerzo ?? ESFUERZO_DEL_JUEZ_VISUAL);
     } catch (error) {
       throw new ErrorDelJuezVisual(error instanceof Error ? error.message : String(error));
     }
@@ -436,6 +478,14 @@ export function invocarVisualConModelos(modelos: {
           ],
         }),
       ], { callbacks: [] });
+      const uso = consumoVisualDe(respuesta);
+      if (uso !== undefined && opciones.alConsumir !== undefined) {
+        try {
+          opciones.alConsumir(uso);
+        } catch {
+          // Contar es contabilidad: no puede costar el veredicto.
+        }
+      }
       // El MISMO extractor que el puente del stream y que el juez de tareas: dos reglas para
       // sacar el texto de un mensaje son dos reglas que divergen.
       return textoDe(respuesta);

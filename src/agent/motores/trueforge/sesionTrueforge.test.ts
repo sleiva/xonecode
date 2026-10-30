@@ -2210,6 +2210,42 @@ describe("el juez del turno y el crítico de pantalla, enganchados en TrueForge"
     expect(criticas).toBe(0);
   }, 30_000);
 
+  /**
+   * El crítico llama al modelo por su lado (`callbacks: []`): medido sobre la calculadora, 17-38 mil tokens de salida por
+   * crítica que no constaban en el turno. Y con su esfuerzo (low), no el del juez.
+   */
+  it("`xone_critica_visual` pide su esfuerzo y su gasto entra en la cuenta del turno", async () => {
+    const carpeta = mkdtempSync(join(tmpdir(), "xc-tf-art-"));
+    const { PNG } = await import("pngjs");
+    const png = new PNG({ width: 40, height: 80 });
+    png.data.fill(200);
+    writeFileSync(join(carpeta, "pantalla.png"), PNG.sync.write(png));
+    const llamar = new AIMessageChunk({
+      content: "",
+      tool_call_chunks: [{ index: 0, id: "cv1", name: "xone_critica_visual", args: JSON.stringify({ captura: "/artefactos/pantalla.png", pantalla: "menú" }) }],
+    });
+    const { m } = modelosConGuion([[llamar], [new AIMessageChunk({ content: "Mirada." })]]);
+    const esfuerzos: unknown[] = [];
+    const base = m.paraPapel.bind(m);
+    (m as { paraPapel: unknown }).paraPapel = (papel: string, esfuerzo?: string, ...resto: unknown[]) => {
+      if (papel !== "afilado") return (base as (...a: unknown[]) => unknown)(papel, esfuerzo, ...resto);
+      esfuerzos.push(esfuerzo);
+      return {
+        invoke: async () => ({
+          content: '{"veredicto":"verde","hallazgos":[]}',
+          usage_metadata: { input_tokens: 3700, output_tokens: 777, total_tokens: 4477, input_token_details: { cache_read: 3456 } },
+        }),
+      };
+    };
+    const s = await abrirSesionTrueforge({ raiz: proyecto(), modelos: m, entorno: ENTORNO, skills: CATALOGO, sinAprobacion: () => true, artefactos: carpeta, verifier: verde });
+    await s.turno("mira la pantalla", piel().p);
+    expect(esfuerzos.length).toBeGreaterThan(0);
+    expect(new Set(esfuerzos)).toEqual(new Set(["low"]));
+    // El guion no declara consumo: todo lo que hay es del crítico, llamada a llamada.
+    expect(s.tracker.output).toBe(777 * esfuerzos.length);
+    expect(s.tracker.cache).toBe(3456 * esfuerzos.length);
+  }, 30_000);
+
   it("el crítico mira la CAPTURA del turno: con el simulador en VERDE solo AVISA y no repara", async () => {
     const carpeta = mkdtempSync(join(tmpdir(), "xc-tf-art-"));
     const { m } = modelosConGuion([[delegar("d1")], [escribir("w1", "hola\n", true)], [new AIMessageChunk({ content: "Escrita." })], [new AIMessageChunk({ content: "Listo." })]]);

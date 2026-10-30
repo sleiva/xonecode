@@ -54,8 +54,9 @@ Trozo del mapa de la raíz; el porqué medido, en `docs/DECISIONES.md`. **El có
     suma el delta (`reabrirSesion`). `sembrarConsumosPendientes`: presentación, monotónica, fallo
     tragado.
   - POR MODELO (`ConsumoPorModelo`, `porModelo`; `ModelosPort.idDePapel?`), cada entrada con su
-    `cuenta`; sin desglose → `SIN_DESGLOSE` (`desgloseDe`). **Límite**: `describe_image`, crítico y
-    juez no cuentan. Falta la vista agregada: el COSTE no se suma entre cuentas.
+    `cuenta`; sin desglose → `SIN_DESGLOSE` (`desgloseDe`). El CRÍTICO visual de TrueForge sí cuenta
+    (`sesionTrueforge.ts#contarCritico`, origen `xone_critica_visual`, fuera del contraste con el motor). **Límite**:
+    `describe_image` y el juez no cuentan. Falta la vista agregada: el COSTE no se suma entre cuentas.
 - **El modelo en vigor lo dice el SERVIDOR**; `porDefecto` (sesiones nuevas) ≠ `actual`.
 - **Claude: tope de salida y thinking son datos de `core/`** (`topeDeSalida`,
   `pideThinkingAdaptativo`), costura en `agent/modelos.test.ts`. Un id desconocido cae en
