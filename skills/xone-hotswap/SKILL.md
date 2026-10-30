@@ -153,6 +153,18 @@ una fuente. Ni la captura ni `getAllElements` lo cuentan.
 paga son los VIAJES. Por eso `xone-hotswap` acepta varios comandos de golpe y los scripts
 hacen la cadena entera en una orden.
 
+**Probar el comportamiento: TODOS los casos en UNA orden, cada uno con su lectura detrás.** Medido
+en una calculadora: el desarrollador pulsaba las teclas de un caso en una orden y leía el resultado
+en OTRA, caso a caso —unos 15 casos, 30 viajes—. Pulsar y leer van juntos, y los casos seguidos:
+
+```bash
+xone-hotswap click name=MAP_K_AC -- click name=MAP_K_7 -- click name=MAP_K_MUL -- click name=MAP_K_8 -- click name=MAP_K_EQ -- js 'return "7*8 -> "+self.MAP_RESULT;' -- click name=MAP_K_AC -- click name=MAP_K_9 -- click name=MAP_K_DIV -- click name=MAP_K_0 -- click name=MAP_K_EQ -- js 'return "9/0 -> "+self.MAP_RESULT;' -- textos
+```
+
+En UNA línea (con `ejecutar_script` no valen `\` ni saltos). Cada `js` lleva su ETIQUETA dentro
+(`"7*8 -> "`) para saber de qué caso es cada línea. Separa en otra orden solo lo que dependa de lo
+que acabas de leer.
+
 **Pero una CAPTURA no entra en esa cuenta, y el número de antes engañaba.** Aquí decía «108
 bytes la captura», que es lo que devuelve el comando —el fichero se guarda aparte— y no lo
 que cuesta MIRARLA: medido contra el proveedor, una de 1080×2400 son **3.375 fichas** en el

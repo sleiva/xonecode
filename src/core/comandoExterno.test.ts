@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { motivoDeComandoExternoInaceptable } from "./comandoExterno.js";
@@ -154,5 +154,19 @@ describe("lo que se le DICE al hijo de su shell", () => {
     const { SCRIPT_A_UTF8 } = await import("./comandoExterno.js");
     const e = statSync(resolve(__dirname, "../../skills/xone-development/scripts", SCRIPT_A_UTF8));
     expect(e.mode & 0o111).not.toBe(0);
+  });
+});
+
+/**
+ * La receta de la skill para probar varios casos en UNA orden la corre el desarrollador con `ejecutar_script`, que usa
+ * esta gramática: si la skill enseñara algo que aquí se rechaza (una `\` de fin de línea, comillas dobles fuera de las
+ * simples), el agente aprendería un camino que no anda.
+ */
+describe("los ejemplos de xone-hotswap que corre ejecutar_script", () => {
+  it("la receta de «todos los casos en UNA orden» pasa la forma estrecha", () => {
+    const skill = readFileSync(join(__dirname, "../../skills/xone-hotswap/SKILL.md"), "utf8");
+    const ejemplo = /```bash\n(xone-hotswap click name=MAP_K_AC[^\n]*)\n```/.exec(skill)?.[1];
+    expect(ejemplo).toBeDefined();
+    expect(motivoDeComandoExternoInaceptable(ejemplo!, ["xone-hotswap"])).toBeUndefined();
   });
 });
