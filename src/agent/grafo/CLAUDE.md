@@ -114,6 +114,10 @@ Todas **reaplican `puedeLeerRuta` a mano** (una tool de xonecode no pasa por el 
   dimensiones ANTES de descomprimir**. De un error solo cruza el `code`. **Una LISTA no exige lo vertical**
   (`Comparacion.lista`, `filasDeLista`: controles repetidos en la geometría de la captura): ni distancia vertical
   ni borde de abajo, y lo horizontal por su FORMA. La misma regla en la medida automática (`cumpleElCriterio`).
+- **`medir_maqueta`** (`medirMaqueta.ts`, `core/informeDeMaqueta.ts`), solo TrueForge, junto al crítico: la geometría EXACTA
+  de una maqueta con `code.html` (bloques y filas de controles en px del PNG y en %), con las MISMAS cajas que el crítico.
+  Sin `code.html` lo dice y manda a `describe_image`, nunca a medir píxeles con scripts.
+- **`read_file` de una FUENTE** (`.ttf`/`.otf`, `core/datosDeFuente.ts`) devuelve familia, estilo y peso, no el binario.
 - **`diferencia_de_capturas`** (`diferenciaDeCapturas.ts`, `#medirCambio`), solo TrueForge, a quien EJECUTA:
   ¿cambió una ZONA? Un «igual» da las DOS explicaciones sin decidir.
 - **El crítico visual MIDE antes de opinar** (`core/geometriaDePantalla.ts`, `cajasDeMaqueta.ts`, dentro de

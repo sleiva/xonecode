@@ -22,6 +22,7 @@
 import { carpetaDeExtraccion, esZip } from "../../../core/zipDeAdjunto.js";
 import { esDocumentoIlegible, esDocumentoLegible } from "../../../core/textoDeOffice.js";
 import { textoDeDocumento } from "./textoDeDocumento.js";
+import { datosDeFuente, esFuenteLegible, textoDeFuente } from "../../../core/datosDeFuente.js";
 import { NOMBRE_DESCRIBIR_IMAGEN } from "../../grafo/describirImagen.js";
 import { posix } from "node:path";
 import micromatch from "micromatch";
@@ -284,6 +285,14 @@ async function ejecutar(
         const t = await textoDeDocumento(s(args.file_path), bytes);
         if ("motivo" in t) return { texto: `${s(args.file_path)}: ${t.motivo}.`, error: true };
         return { texto: paginaDeTexto(t.texto, offset, limit), error: false };
+      }
+      // Una FUENTE: su familia, estilo y peso, no el binario decodificado como texto (`core/datosDeFuente.ts`).
+      if (esFuenteLegible(s(args.file_path))) {
+        const bytes = await bytesTrasLeer(backend, s(args.file_path), r.content);
+        if (bytes === undefined) return { texto: `${s(args.file_path)}: no se pudieron leer sus bytes.`, error: true };
+        const d = datosDeFuente(Buffer.from(bytes));
+        if ("motivo" in d) return { texto: `${s(args.file_path)}: ${d.motivo}.`, error: true };
+        return { texto: textoDeFuente(s(args.file_path), d), error: false };
       }
       if (esDocumentoIlegible(s(args.file_path))) {
         return {

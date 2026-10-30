@@ -151,6 +151,7 @@ import { crearMarcarCriteriosDelPlan } from "../../grafo/marcarCriteriosDelPlan.
 import { crearUnirSecciones } from "../../grafo/unirSecciones.js";
 import { crearIncorporarAdjunto, recibeIncorporarAdjunto } from "../../grafo/incorporarAdjunto.js";
 import { crearCriticaVisual } from "../../grafo/criticaVisual.js";
+import { crearMedirMaqueta } from "../../grafo/medirMaqueta.js";
 import { crearCompararCapturas, NOMBRE_COMPARAR_CAPTURAS } from "../../grafo/compararCapturas.js";
 import { crearAtributosXone, NOMBRE_ATRIBUTOS_XONE } from "../../grafo/atributosXone.js";
 import { crearDiferenciaDeCapturas } from "../../grafo/diferenciaDeCapturas.js";
@@ -1306,6 +1307,14 @@ export async function abrirSesionTrueforge(
     ...(carpeta === undefined ? {} : { artefactos: carpeta }),
     ...(opciones.adjuntos === undefined ? {} : { adjuntos: opciones.adjuntos }),
   });
+  /** Las cajas de una maqueta con `code.html` (Chrome sin ventana): las MISMAS para el crítico y para `medir_maqueta`. */
+  const cajasDeLaMaqueta = async (imagen: Parameters<typeof localizadorDeHtml>[0], bytes: Buffer) => {
+    const html = localizadorDeHtml(imagen);
+    const medidas = medidasDeImagen(bytes);
+    if (html === undefined || medidas === undefined) return undefined;
+    const { ancho, alto } = viewportDeMaqueta(medidas.ancho, medidas.alto);
+    return cajasDeMaqueta(html, ancho, alto);
+  };
   /** El crítico y la medida, con las MISMAS piezas para quien las tenga: el raíz, y con el bucle encendido el desarrollador. */
   const herramientasDeJuicio = (): ToolDeLangchain[] =>
     carpeta === undefined
@@ -1338,14 +1347,10 @@ export async function abrirSesionTrueforge(
                 return maquetas[0]!.virtual;
               }
             },
-            cajasDeMaqueta: async (imagen, bytes) => {
-              const html = localizadorDeHtml(imagen);
-              const medidas = medidasDeImagen(bytes);
-              if (html === undefined || medidas === undefined) return undefined;
-              const { ancho, alto } = viewportDeMaqueta(medidas.ancho, medidas.alto);
-              return cajasDeMaqueta(html, ancho, alto);
-            },
+            cajasDeMaqueta: cajasDeLaMaqueta,
           }),
+          // La geometría EXACTA de la maqueta, para planificar sin medir a ojo ni con scripts (`medirMaqueta.ts`).
+          crearMedirMaqueta({ leer: lectorDeReferencias, cajas: cajasDeLaMaqueta, medidas: medidasDeImagen }),
           // Medir la estructura contra la maqueta: la otra mitad del crítico, con el raíz como él.
           crearCompararCapturas({
             leerArtefacto: async (nombre) => readFileSync(join(carpeta, nombre)),

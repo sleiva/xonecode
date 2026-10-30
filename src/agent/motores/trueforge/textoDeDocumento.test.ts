@@ -7,6 +7,7 @@ import { backendDeAgente } from "../../grafo/proyecto.js";
 import { permisosDe } from "../../grafo/perfiles.js";
 import { textoDeDocumento } from "./textoDeDocumento.js";
 import { pdf } from "../../../core/__pruebas__/pdf.js";
+import { fuente } from "../../../core/__pruebas__/fuente.js";
 import { fuenteDeFicheros, type BackendDeFicheros } from "./toolsDeFichero.js";
 
 const docx = (cuerpo: string): Uint8Array =>
@@ -71,6 +72,17 @@ function proyecto() {
 }
 
 describe("read_file sobre documentos y textos (IXCODE-76)", () => {
+  /** Medido en la prueba de la calculadora: el diseñador leía once `.ttf` y recibía el binario decodificado como texto. */
+  it("una FUENTE devuelve su familia, estilo y peso, no el binario", async () => {
+    const { raiz, leer } = proyecto();
+    mkdirSync(join(raiz, "fonts"));
+    writeFileSync(join(raiz, "fonts", "JetBrainsMono-SemiBold.ttf"), fuente("JetBrains Mono", "SemiBold", 600));
+    const r = await leer({ file_path: "/fonts/JetBrainsMono-SemiBold.ttf" });
+    expect(r.error).toBe(false);
+    expect(r.texto).toContain("familia: JetBrains Mono");
+    expect(r.texto).toContain("peso: 600 (SemiBold)");
+  });
+
   it("un PDF devuelve su TEXTO numerado, no «fichero binario»", async () => {
     const { raiz, leer } = proyecto();
     writeFileSync(join(raiz, "doc", "pliego.pdf"), pdf(["Pliego de condiciones"]));

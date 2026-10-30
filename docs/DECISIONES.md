@@ -10216,3 +10216,18 @@ El port: versión EXACTA (npm la pone con `^` y `frontera.test.ts` lo caza), `ap
 `AgentDefinition`**. La trampa: las definiciones de los hijos van con `as never`, así que sin `modelName` el compilador
 calla, y medido en un worktree ningún hijo trabajaba (114 tests en rojo). Probado con la suite entera y con una sesión
 real con DeepSeek: el orquestador delega, el analista razona en sus 8 llamadas y la respuesta vuelve.
+
+## Medir la maqueta y leer una fuente (30-10-2026)
+
+Petición suya: ir arreglando lo que se vea en la prueba de la calculadora, parar y volver a empezar. En sus seis primeros
+minutos salieron dos desperdicios:
+
+- El orquestador encargó al device-controller medir las bandas de la maqueta «recortando con PIL»: 19 llamadas con
+  scripts de píxeles sobre `screen.png`, y medidas aproximadas. Las cajas EXACTAS ya las medía el crítico desde el
+  `code.html` (5 s en Chrome sin ventana), pero nadie más podía pedirlas. Ahora `medir_maqueta` las da al orquestador y al
+  desarrollador con bucle: bloques y filas, en px del PNG y en %, con el hueco entre controles y el alto del texto.
+- El diseñador leyó con `read_file` once `.ttf` para saber familia y peso, y recibía el binario decodificado como texto.
+  `read_file` de una fuente devuelve ahora lo que dicen sus tablas `name` y `OS/2` (probado con las 23 fuentes de
+  MyAllXOne: cursivas, Roboto Thin con peso 250, una de iconos).
+
+La ruta virtual en la shell (`ls /diseno/`) que también se vio ya estaba cubierta: se rechazó y el agente la repitió bien.
