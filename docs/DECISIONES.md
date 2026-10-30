@@ -10248,3 +10248,13 @@ Decisión suya, las dos cosas:
   prometía el prompt) y `TOPE_DE_VUELTAS_DEL_TURNO` por agente, el doble, para que un orquestador que vuelve a
   encargar no reinicie la cuenta. Al pasarlo se pide el corte por la pieza del presupuesto: la siguiente llamada lleva
   la orden de cerrar con lo que funciona, lo que dijo la última crítica y lo que falta, y sus tool calls se tiran.
+
+## Una cadena que acaba pulsando se lee sola (30-10-2026)
+
+Medido en las pruebas de la calculadora: el desarrollador pulsaba las teclas de un caso en una orden de `xone-hotswap`
+y leía el resultado en OTRA, caso a caso. La receta de «todos los casos en una orden, cada uno con su lectura» se puso
+en la skill (no la leyó) y después en su texto de pruebas (la leyó y siguió igual): DeepSeek va paso a paso. Petición
+suya: por código. Si el ÚLTIMO comando de la cadena es una acción (`click`, `fill`, `pressKey`…), el cliente añade la
+lectura de los textos pintados (`"automatico": true`), ESTABLE: relee por la misma conexión hasta que dos lecturas
+coinciden (tope 2,5 s), porque justo tras pulsar la pantalla aún no se ha repintado (medido: «7 +» en vez de «15»).
+En el emulador, AC 7 8 devolvió el display «78» en la misma orden, en 810 ms.

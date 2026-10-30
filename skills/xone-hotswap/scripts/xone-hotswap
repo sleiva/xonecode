@@ -241,6 +241,8 @@ const ATAJO = Symbol("atajo");
 const ESPERA_POR_OMISION_MS = 5_000;
 /** Cada cuánto se vuelve a mirar mientras se espera: el `waitForElement` del framework sondea cada 250 ms. */
 const CADENCIA_MS = 300;
+/** Cuánto se espera, como mucho, a que la pantalla deje de cambiar tras pulsar (la lectura automática). */
+const TOPE_DE_LECTURA_ESTABLE_MS = 2500;
 
 /** `esperar Elige antes timeout=8000` → el texto (todo lo que no sea `timeout=`) y la espera en ms. */
 function textoYTimeout(resto) {
@@ -344,6 +346,18 @@ for (const trozo of partirPorSeparador(utiles)) {
   }
   const atajo = ATAJOS[cabeza];
   comandos.push(atajo ? atajo(resto) : aplicarPares({ command: cabeza }, resto));
+}
+
+/**
+ * **Una cadena que ACABA pulsando se lee sola**: se le añade la lectura de los textos pintados, ESTABLE (`estable`).
+ * Medido en las pruebas de la calculadora: aun con la receta en la skill y en su prompt, el desarrollador pulsaba en una
+ * orden y leía el resultado en OTRA, caso a caso —dos viajes por caso, unos 100 mil tokens cada uno—. Con la lectura
+ * en la misma respuesta, el segundo viaje sobra. Estable porque justo tras pulsar la pantalla aún no se ha repintado
+ * (medido: `textos` inmediato daba «7 +» y no «15»): se relee hasta que dos lecturas coinciden, con tope.
+ */
+const ACCIONES = new Set(["click", "fill", "longPress", "pressKey", "tap", "swipe", "scroll", "setText"]);
+if (comandos.length > 0 && ACCIONES.has(comandos[comandos.length - 1].command)) {
+  comandos.push({ command: "getAllElements", format: "uiautomator", [ATAJO]: { tipo: "estable", timeout: TOPE_DE_LECTURA_ESTABLE_MS } });
 }
 
 if (seco) {
@@ -534,6 +548,22 @@ ws.onmessage = (ev) => {
  * con tiempo): se reenvía el mismo `getAllElements` por la misma conexión.
  */
 function resolverAtajo(atajo, textos) {
+  if (atajo.tipo === "estable") {
+    const ahora = JSON.stringify(textos);
+    const ms = Date.now() - atajo.desde;
+    if (atajo.anterior !== ahora && ms < atajo.timeout) {
+      atajo.anterior = ahora;
+      const otra = pendiente;
+      setTimeout(() => {
+        rearmar();
+        ws.send(JSON.stringify(otra));
+      }, CADENCIA_MS);
+      return true;
+    }
+    const recortados = textos.slice(0, TOPE_DE_TEXTOS).map((t) => (t.length > 120 ? `${t.slice(0, 120)}…` : t));
+    console.log(JSON.stringify({ comando: "textos", automatico: true, textos: recortados, ...(textos.length > TOPE_DE_TEXTOS ? { total: textos.length } : {}) }));
+    return false;
+  }
   if (atajo.tipo === "textos") {
     const recortados = textos.slice(0, TOPE_DE_TEXTOS).map((t) => (t.length > 120 ? `${t.slice(0, 120)}…` : t));
     console.log(JSON.stringify({ comando: "textos", textos: recortados, ...(textos.length > TOPE_DE_TEXTOS ? { total: textos.length } : {}) }));

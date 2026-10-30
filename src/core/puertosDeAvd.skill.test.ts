@@ -183,14 +183,15 @@ describe("el script xone-hotswap real, con --dry-run", () => {
     execFileSync(process.execPath, [script, ...args], { encoding: "utf8", env: { ...process.env, HOTSWAP_URL: "wss://127.0.0.1:1/hotswap", XONECODE_DISPOSITIVO: "" } }).trim();
   it.each([
     [["getAllElements", "--dry-run"], '{"command":"getAllElements"}'],
-    [["click", "name=X", "--dry-run"], '{"command":"click","name":"X"}'],
-    [["--serie", "emulator-5556", "click", "name=X", "--dry-run"], '{"command":"click","name":"X"}'],
-    [["--dry-run", "click", "name=X", "--", "click", "name=Y"], '{"command":"click","name":"X"}\n{"command":"click","name":"Y"}'],
+    [["click", "name=X", "--dry-run"], '{"command":"click","name":"X"}\n{"command":"getAllElements","format":"uiautomator"}'],
+    [["--serie", "emulator-5556", "click", "name=X", "--dry-run"], '{"command":"click","name":"X"}\n{"command":"getAllElements","format":"uiautomator"}'],
+    [["--dry-run", "click", "name=X", "--", "click", "name=Y"], '{"command":"click","name":"X"}\n{"command":"click","name":"Y"}\n{"command":"getAllElements","format":"uiautomator"}'],
     // Los atajos del 22-10-2026 (medido contra pixel8): `js` sin Base64 a mano y `abrir` directo a una ventana.
     [["--dry-run", "js", "return", "1+1;"], `{"command":"runScript","scriptLanguage":"javascript","scriptText":"${Buffer.from("return 1+1;").toString("base64")}"}`],
     [["--dry-run", "abrir", "MenuAlbaranes"], `{"command":"runScript","scriptLanguage":"javascript","scriptText":"${Buffer.from('ui.openMenu("MenuAlbaranes"); return "abierta MenuAlbaranes";').toString("base64")}"}`],
     // Los del 27-10-2026 (medido en Busme): atrás por el canal y los textos pintados sin uiautomator dump.
-    [["--dry-run", "atras"], '{"command":"pressKey","keyCode":4}'],
+    // Acabar pulsando (también «atrás») añade la lectura de los textos: ver «una cadena que ACABA pulsando».
+    [["--dry-run", "atras"], '{"command":"pressKey","keyCode":4}\n{"command":"getAllElements","format":"uiautomator"}'],
     [["--dry-run", "textos"], '{"command":"getAllElements","format":"uiautomator"}'],
     [["--dry-run", "esperar", "Elige", "antes", "timeout=800"], '{"command":"getAllElements","format":"uiautomator"}'],
   ])("%j", (args, esperado) => {
@@ -258,6 +259,26 @@ describe("el script xone-hotswap real, contra un servidor de mentira", () => {
   it("js sin return avisa antes del viaje; con return, no", async () => {
     expect((await correrContra({ result: true, status: "" }, "js", "var a=1; a")).err).toContain("sin «return» no devuelve nada");
     expect((await correrContra({ result: true, status: "1" }, "js", "return 1;")).err).not.toContain("return");
+  }, 20_000);
+
+  /**
+   * Medido en las pruebas de la calculadora: aun con la receta en la skill y en su prompt, el desarrollador pulsaba en una
+   * orden y leía en OTRA, caso a caso. Una cadena que acaba pulsando se lee sola, y ESTABLE: tras pulsar, la pantalla
+   * aún no se ha repintado (medido: «7 +» en vez de «15»).
+   */
+  it("una cadena que ACABA pulsando devuelve sola los textos, cuando la pantalla deja de cambiar", async () => {
+    const ok = { result: true, status: "" };
+    const r = await correrContra([ok, ok, volcado("7 +"), volcado("15"), volcado("15")], "click", "name=K_8", "--", "click", "name=K_EQ");
+    expect(r.codigo).toBe(0);
+    const ultima = JSON.parse(r.out.trim().split("\n").at(-1)!);
+    expect(ultima).toEqual({ comando: "textos", automatico: true, textos: ["15"] });
+    expect(r.peticiones).toBe(5);
+  }, 20_000);
+
+  it("si la cadena ya acaba LEYENDO (js, textos…), no se le añade nada", async () => {
+    const r = await correrContra([{ result: true, status: "" }, { result: true, status: "15" }], "click", "name=K_EQ", "--", "js", "return self.R;");
+    expect(r.peticiones).toBe(2);
+    expect(r.out).not.toContain("automatico");
   }, 20_000);
 
   it("rechazado (result:false) sale con 1 y lo dice; aceptado, con 0", async () => {

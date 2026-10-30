@@ -161,6 +161,10 @@ en OTRA, caso a caso —unos 15 casos, 30 viajes—. Pulsar y leer van juntos, y
 xone-hotswap click name=MAP_K_AC -- click name=MAP_K_7 -- click name=MAP_K_MUL -- click name=MAP_K_8 -- click name=MAP_K_EQ -- js 'return "7*8 -> "+self.MAP_RESULT;' -- click name=MAP_K_AC -- click name=MAP_K_9 -- click name=MAP_K_DIV -- click name=MAP_K_0 -- click name=MAP_K_EQ -- js 'return "9/0 -> "+self.MAP_RESULT;' -- textos
 ```
 
+Y una cadena que ACABA pulsando (`click`, `fill`, `atras`…) devuelve SOLA los textos pintados al final
+(`"automatico": true`), esperando a que la pantalla deje de cambiar: no hace falta otra orden para ver
+el display. Un `js` sigue haciendo falta para un valor que no se pinta.
+
 En UNA línea (con `ejecutar_script` no valen `\` ni saltos). Cada `js` lleva su ETIQUETA dentro
 (`"7*8 -> "`) para saber de qué caso es cada línea. Separa en otra orden solo lo que dependa de lo
 que acabas de leer.
