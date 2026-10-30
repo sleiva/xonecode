@@ -134,7 +134,7 @@ import { crearControlDePresupuesto, MARGEN_SOBRE_EL_PRESUPUESTO, RESUMEN_DE_RELL
 import type { ToolDeLangchain } from "./toolsPropias.js";
 import { crearNavegacionXone } from "../../grafo/navegacionXone.js";
 import { crearValidarFicheroXone } from "../../grafo/validarFicheroXone.js";
-import { topeResuelto, umbralDeCompactacion } from "../../../core/contextos.js";
+import { topeDeSalidaDeCompactacion, topeResuelto, umbralDeCompactacion } from "../../../core/contextos.js";
 import { parsear } from "../../../core/modelos.js";
 import { cargar as cargarConfig } from "../../config/configEnDisco.js";
 import { hechosDelProyectoDe } from "../../navegacion/hechosEnDisco.js";
@@ -1514,6 +1514,19 @@ export async function abrirSesionTrueforge(
   // El raíz, con la caché de UNA HORA (`DuracionDeCache`): espera a cada especialista y con 5 min la perdía entera.
   const llm = modeloParaTrueforge({ modelo: () => clienteDe("papel:trabajo:raiz", () => modelos.paraPapel("trabajo", undefined, undefined, undefined, "1h")), senal: () => aborto?.signal, alRazonar });
   /**
+   * El tope de salida del RESUMEN (`core/contextos.ts#topeDeSalidaDeCompactacion`): sin él, DeepSeek lo cortaba en 8.192.
+   * `undefined` con un proveedor no medido o un id que no se entiende: el del cliente, como antes.
+   */
+  const topeDeCompactacion = (): number | undefined => {
+    const id = modelos.idDePapel?.("trabajo");
+    if (id === undefined) return undefined;
+    try {
+      return topeDeSalidaDeCompactacion(parsear(id).proveedor);
+    } catch {
+      return undefined;
+    }
+  };
+  /**
    * El modelo de la COMPACTACIÓN: el mismo del raíz, con el pensamiento APAGADO donde el modelo lo
    * admite (`core/esfuerzo.ts#pensamientoAplicable`: hoy DeepSeek; en los demás no se manda nada que
    * no esté medido, así que se quedan como el raíz). Resumir no necesita razonar, y medido en dos
@@ -1521,7 +1534,7 @@ export async function abrirSesionTrueforge(
    * resumen de ~4.000, 72 s de los 164 del turno, y en otro, 13 compactaciones en 30 min.
    */
   const llmDeCompactacion = modeloParaTrueforge({
-    modelo: () => clienteDe("papel:trabajo:compactacion", () => modelos.paraPapel("trabajo", undefined, undefined, "apagado")),
+    modelo: () => clienteDe("papel:trabajo:compactacion", () => modelos.paraPapel("trabajo", undefined, undefined, "apagado", undefined, topeDeCompactacion())),
     senal: () => aborto?.signal,
     alRazonar,
   });

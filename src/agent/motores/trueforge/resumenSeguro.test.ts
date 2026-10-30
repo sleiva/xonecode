@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { conResumenSeguro, mensajesDeLaPersona } from "./resumenSeguro.js";
+import { MARCA_DE_CORTE_POR_TOPE } from "./modeloLangchain.js";
 
 const CANDIDATO =
   "<0><user>:Quisiera que creáramos la calculadora\ncon el diseño anexo<1><assistant>:Voy a mirar" +
@@ -41,6 +42,19 @@ describe("un resumen de contexto vacío no borra el encargo", () => {
     expect(r.output.content).toContain("calculadora");
     expect(r.output.content).toContain("Drawer");
     expect(avisos).toHaveLength(2);
+  });
+
+  /** Medido en la prueba grande de la calculadora: un resumen de 8.192 tokens justos, el tope por omisión de DeepSeek. */
+  it("uno CORTADO por el tope se conserva, avisa, y lleva detrás los mensajes de la persona", async () => {
+    const avisos: string[] = [];
+    const c = {
+      createNonStream: (async () => ({ output: { role: "assistant", content: "<analysis>1. Primary Request: la calc" }, usage: { input_tokens: 1 }, [MARCA_DE_CORTE_POR_TOPE]: true })) as unknown as (c: never) => Promise<never>,
+    };
+    const r = (await conResumenSeguro(c, (t) => avisos.push(t)).createNonStream(cuerpo)) as unknown as { output: { content: string } };
+    expect(r.output.content.startsWith("<analysis>1. Primary Request: la calc")).toBe(true);
+    expect(r.output.content).toContain("RESUMEN CORTADO");
+    expect(r.output.content).toContain("y que salga en el Drawer");
+    expect(avisos.join("\n")).toMatch(/se cortó por el tope de salida/);
   });
 
   it("el resto del cliente no se toca, y un texto de otro formato no lanza", async () => {

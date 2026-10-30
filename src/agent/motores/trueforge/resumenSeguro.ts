@@ -16,6 +16,8 @@
  * lanzar, y el test de este fichero lo delata.
  */
 
+import { MARCA_DE_CORTE_POR_TOPE } from "./modeloLangchain.js";
+
 export interface RespuestaDeResumen {
   output: { content?: unknown; [k: string]: unknown };
   [k: string]: unknown;
@@ -42,6 +44,20 @@ export function resumenDeRescate(candidato: string): string {
   ].join("\n\n");
 }
 
+/**
+ * Un resumen CORTADO por el tope de salida, con los mensajes de la persona detrás. El prompt de la librería deja al final lo
+ * pendiente y el trabajo en curso, que es justo lo que se pierde: medido en la prueba grande de la calculadora, un resumen
+ * de 8.192 tokens justos (el tope por omisión de DeepSeek). Lo escrito se conserva; el encargo, también.
+ */
+export function conMensajesTrasElCorte(resumen: string, candidato: string): string {
+  const mensajes = mensajesDeLaPersona(candidato);
+  return [
+    resumen,
+    "[RESUMEN CORTADO: se acabó el tope de salida antes de terminarlo, así que pueden faltar lo pendiente y lo que se estaba haciendo. Abajo, los mensajes de la persona tal como llegaron; el último es el encargo en curso.]",
+    ...(mensajes.length === 0 ? ["(no se pudieron recuperar los mensajes)"] : mensajes.map((t, i) => `Mensaje ${String(i + 1)} de la persona:\n${t}`)),
+  ].join("\n\n");
+}
+
 const vacio = (r: RespuestaDeResumen): boolean => typeof r.output.content !== "string" || r.output.content.trim() === "";
 
 /** El cliente con la compactación protegida. Todo lo demás del cliente pasa igual. */
@@ -54,11 +70,14 @@ export function conResumenSeguro<T extends ClienteDeResumen>(cliente: T, avisar?
         avisar?.("compactación: resumen vacío, se reintenta");
         r = (await cliente.createNonStream(cuerpo)) as unknown as RespuestaDeResumen;
       }
+      const mensajes = (cuerpo as { messages?: Array<{ content?: unknown }> }).messages ?? [];
+      const candidato = typeof mensajes[0]?.content === "string" ? mensajes[0].content : "";
       if (vacio(r)) {
         avisar?.("compactación: resumen vacío otra vez, se conservan los mensajes de la persona");
-        const mensajes = (cuerpo as { messages?: Array<{ content?: unknown }> }).messages ?? [];
-        const candidato = typeof mensajes[0]?.content === "string" ? mensajes[0].content : "";
         r = { ...r, output: { ...r.output, content: resumenDeRescate(candidato) } };
+      } else if (r[MARCA_DE_CORTE_POR_TOPE] === true) {
+        avisar?.("compactación: el resumen se cortó por el tope de salida; se le añaden los mensajes de la persona");
+        r = { ...r, output: { ...r.output, content: conMensajesTrasElCorte(String(r.output.content), candidato) } };
       }
       return r as never;
     },

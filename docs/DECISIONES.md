@@ -10163,3 +10163,24 @@ lo veía — 17-38 mil tokens de salida por crítica con `high`. Ahora `invocarV
 llamada (`alConsumir`) y TrueForge lo suma al turno y al modelo del papel `afilado`, a la traza con origen
 `xone_critica_visual`, y lo QUITA del contraste con las métricas del motor, que no ven esas llamadas. Muestra pequeña: una
 pantalla. `describe_image` sigue sin contar.
+
+## La compactación del raíz salía cortada (30-10-2026)
+
+Medido en la prueba grande de la calculadora (calc2): el orquestador perdía caché casi entera en UNA llamada, la
+compactación (93,5 mil de entrada sin caché de 191 mil en todo el turno), y esa llamada devolvió 8.192 tokens JUSTOS.
+Contra la API: DeepSeek sin `max_tokens` corta la salida en 8.192 con `finish_reason: "length"` (acepta hasta 393.216;
+con 16.384 pedidos escribe 16.384), y no le mandábamos ninguno. El prompt de la librería pide primero un `<analysis>` y
+deja al FINAL del `<summary>` lo pendiente, el trabajo en curso y el siguiente paso: lo que se pierde al cortar. Y
+`resumenSeguro.ts` solo miraba si venía vacío.
+
+- La compactación pide su tope (`core/contextos.ts#topeDeSalidaDeCompactacion`, 32.768, solo DeepSeek: lo medido). Va
+  al CONSTRUIR el cliente (`ModelosPort.paraPapel(…, topeDeSalida)`): fijar `maxTokens` en el cliente ya construido no
+  llega a la petición, porque `@langchain/openai` 1.5.5 lo copia a su cliente interno de completions (medido con el
+  cuerpo de la petición); y por `modelKwargs` tampoco, porque `max_tokens` se sobrescribe después con `undefined`.
+- Si aun así se corta, el adaptador lo marca (`MARCA_DE_CORTE_POR_TOPE`, con `finish_reason` en `stop`, que es lo que la
+  librería espera de un texto) y `resumenSeguro.ts` conserva lo escrito y le añade los mensajes de la persona, como al
+  resumen vacío.
+
+**Lo que NO se arregla**: que la compactación no aproveche la caché. La librería manda el historial convertido en UN
+mensaje de texto, sin el sistema ni las tools, así que no comparte prefijo con nada (unos 0,1 M efectivos por
+compactación). Arreglarlo es escribir nuestra propia compactación con el mismo prefijo que una llamada normal.

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { topeDeContexto, topeDeSalida, topeResuelto, umbralDeCompactacion } from "./contextos.js";
+import { TOPE_DE_SALIDA_DE_COMPACTACION, topeDeContexto, topeDeSalida, topeDeSalidaDeCompactacion, topeResuelto, umbralDeCompactacion } from "./contextos.js";
 
 describe("topeDeContexto", () => {
   it("las familias conocidas tienen tope, emparejadas por prefijo", () => {
@@ -126,5 +126,15 @@ describe("umbralDeCompactacion", () => {
     expect(umbralDeCompactacion(undefined)).toBe(32_000);
     expect(umbralDeCompactacion(0)).toBe(32_000);
     expect(umbralDeCompactacion(Number.NaN)).toBe(32_000);
+  });
+});
+
+/** Medido: DeepSeek sin `max_tokens` corta en 8.192, y el resumen de la compactación salió cortado. Solo lo medido. */
+describe("topeDeSalidaDeCompactacion", () => {
+  it("a DeepSeek, por encima de su 8.192 por omisión; a los demás, nada (el del cliente)", () => {
+    expect(topeDeSalidaDeCompactacion("deepseek")).toBe(TOPE_DE_SALIDA_DE_COMPACTACION);
+    expect(TOPE_DE_SALIDA_DE_COMPACTACION).toBeGreaterThan(8_192);
+    expect(TOPE_DE_SALIDA_DE_COMPACTACION).toBeLessThanOrEqual(393_216);
+    for (const p of ["anthropic", "openai", "gemini", "ollama", "nvidia"] as const) expect(topeDeSalidaDeCompactacion(p)).toBeUndefined();
   });
 });

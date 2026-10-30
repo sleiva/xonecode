@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { TOPE_DE_SALIDA_DE_COMPACTACION } from "../../../core/contextos.js";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
@@ -858,6 +859,44 @@ describe("una sesión con el motor TrueForge", () => {
     // Las tres llamadas pagan, la del resumen incluida; la ventana es la de la ÚLTIMA normal.
     expect(s.consumo().modelo).toMatchObject({ entrada: 41_900, salida: 62 });
     expect(s.consumo().contexto).toBe(1_000);
+  }, 30_000);
+
+  /**
+   * Medido en la prueba grande de la calculadora: con DeepSeek el resumen salió de 8.192 tokens justos —su tope por omisión—,
+   * cortado, y se aceptó sin decir nada. Ahora la compactación pide su tope, y si aun así se corta, el encargo no se pierde.
+   */
+  it("con DeepSeek la compactación pide su tope de salida, y un resumen CORTADO lleva detrás el encargo", async () => {
+    const raiz = proyecto();
+    const { m, vistos } = modelosConGuion([
+      [
+        new AIMessageChunk({
+          content: "",
+          tool_call_chunks: [{ index: 0, id: "n1", name: "ls", args: JSON.stringify({ path: "/" }) }],
+          usage_metadata: { input_tokens: 130_000, output_tokens: 10, total_tokens: 130_010 },
+        }),
+      ],
+      [
+        new AIMessageChunk({ content: "<analysis>RESUMEN-A-MEDIAS" }),
+        new AIMessageChunk({ content: "", response_metadata: { finish_reason: "length" }, usage_metadata: { input_tokens: 900, output_tokens: 8_192, total_tokens: 9_092 } }),
+      ],
+      [new AIMessageChunk({ content: "Listo." })],
+    ]);
+    const topes: unknown[] = [];
+    const espia = {
+      ...m,
+      idDePapel: () => "deepseek/deepseek-flash",
+      paraPapel: (papel: string, esfuerzo?: string, clase?: string, pensamiento?: string, cache?: string, tope?: number) => {
+        if (pensamiento === "apagado") topes.push(tope);
+        return (m.paraPapel as (...a: unknown[]) => unknown)(papel, esfuerzo, clase, pensamiento, cache, tope);
+      },
+    } as unknown as ModelosPort;
+    const s = await abrirSesionTrueforge({ raiz, modelos: espia, entorno: ENTORNO, skills: CATALOGO });
+    await s.turno("crea la calculadora del diseño", piel().p);
+    expect(topes).toEqual([TOPE_DE_SALIDA_DE_COMPACTACION]);
+    const tras = vistos[2]!.join("\n");
+    expect(tras).toContain("RESUMEN-A-MEDIAS");
+    expect(tras).toContain("RESUMEN CORTADO");
+    expect(tras).toContain("crea la calculadora del diseño");
   }, 30_000);
 
   it("solo el raíz pide la caché de UNA HORA: espera a los especialistas más de 5 min, y ellos llaman seguido", async () => {

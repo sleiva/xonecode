@@ -98,9 +98,9 @@ export class Modelos implements ModelosPort {
     this.esfuerzoDeLaSesion = esfuerzo;
   }
 
-  paraPapel(papel: Papel, esfuerzo?: Esfuerzo, clase?: ClaseDeTrabajo, pensamiento?: Pensamiento, cache?: DuracionDeCache): unknown {
+  paraPapel(papel: Papel, esfuerzo?: Esfuerzo, clase?: ClaseDeTrabajo, pensamiento?: Pensamiento, cache?: DuracionDeCache, topeDeSalida?: number): unknown {
     return construirModelo(
-      this.eleccion[papel], this.personalizados(), esfuerzo ?? this.esfuerzoDeLaSesion, this.capacidades, this.identidad, clase, pensamiento, cache,
+      this.eleccion[papel], this.personalizados(), esfuerzo ?? this.esfuerzoDeLaSesion, this.capacidades, this.identidad, clase, pensamiento, cache, topeDeSalida,
     );
   }
 
@@ -164,6 +164,8 @@ function construirCompatibleOpenAi(
   esfuerzo?: Esfuerzo,
   identidad: () => string | undefined = () => undefined,
   sinPensamiento = false,
+  /** Al CONSTRUIR: el cliente copia `maxTokens` a su cliente interno de completions, y cambiarlo después no llega (medido). */
+  topeDeSalida?: number,
 ): unknown {
   const apiKey = process.env[variable];
   if (apiKey === undefined || apiKey.trim() === "") {
@@ -220,6 +222,7 @@ function construirCompatibleOpenAi(
   const esOpenCode = proveedor === "opencode-go" || proveedor === "opencode-zen";
   return new ChatOpenAI({
     model: modelo, apiKey,
+    ...(topeDeSalida === undefined ? {} : { maxTokens: topeDeSalida }),
     configuration: {
       baseURL: baseUrl,
       ...(proveedor === "deepseek"
@@ -306,6 +309,7 @@ function construirModelo(
   clase?: ClaseDeTrabajo,
   pensamiento?: Pensamiento,
   cache?: DuracionDeCache,
+  topeDeSalidaPedido?: number,
 ): unknown {
     /**
      * **El nivel se criba AQUÍ y contra ESTE modelo, no donde se eligió.**
@@ -347,7 +351,7 @@ function construirModelo(
         // Enumerados uno a uno, y no un `default`, para que el switch siga siendo
         // exhaustivo: el día que se añada un proveedor, esto tiene que dar un error de
         // compilación y no construir un cliente equivocado en silencio.
-        return construirCompatibleOpenAi(proveedor, modelo, COMPATIBLES_OPENAI[proveedor], pensamientoApagado ? undefined : esfuerzo, identidad, pensamientoApagado);
+        return construirCompatibleOpenAi(proveedor, modelo, COMPATIBLES_OPENAI[proveedor], pensamientoApagado ? undefined : esfuerzo, identidad, pensamientoApagado, topeDeSalidaPedido);
       case "openai":
         return new ChatOpenAI({
           model: modelo,

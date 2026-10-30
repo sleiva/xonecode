@@ -38,6 +38,13 @@ export const CORTES_SEGUIDOS_ANTES_DE_PARAR = 2;
  * verdad: `response_metadata` no trae nada). Mirar solo el primero dejaba pasar los cortes de Claude, y
  * LangChain «reparaba» su `write_file`: medio fichero escrito sin avisar.
  */
+/**
+ * La marca de una respuesta de TEXTO cortada por el tope de salida, en el objeto que devuelve el adaptador. La librería
+ * no la mira; la lee la compactación (`resumenSeguro.ts`), que si no sustituiría el contexto por un resumen a medias sin
+ * saberlo. El `finish_reason` se queda en `stop`: es lo que la librería espera de una respuesta sin tool calls.
+ */
+export const MARCA_DE_CORTE_POR_TOPE = "__xonecode_cortada_por_tope";
+
 export function cortadaPorTopeDeSalida(mensaje: AIMessageChunk | undefined): boolean {
   if (mensaje === undefined) return false;
   const meta = mensaje.response_metadata as { finish_reason?: unknown; stop_reason?: unknown } | undefined;
@@ -335,6 +342,7 @@ export function modeloParaTrueforge(opciones: {
         ...(uso?.output_token_details?.reasoning === undefined ? {} : { reasoning_tokens: uso.output_token_details.reasoning }),
       },
       finish_reason: llamadas.length > 0 ? "tool_calls" : "stop",
+      ...(cortadaPorTope && llamadas.length === 0 ? { [MARCA_DE_CORTE_POR_TOPE]: true } : {}),
     } as RawAssistantMessageWithUsage;
   }
 

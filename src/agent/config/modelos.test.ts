@@ -88,6 +88,37 @@ describe("el cliente de Anthropic, contra su propio invocationParams", () => {
  * Sin red: construir un cliente y preguntarle sus parámetros no llama a nadie.
  */
 /**
+ * El tope de salida de la compactación, en el cuerpo que se MANDA a DeepSeek. Medido: fijar `maxTokens` en el cliente YA
+ * construido no llega a la petición (lo copia a su cliente interno al construirse), así que va al construir.
+ */
+describe("el tope de salida pedido viaja a DeepSeek", () => {
+  const anterior = process.env.DEEPSEEK_API_KEY;
+  const fetchAnterior = globalThis.fetch;
+  afterEach(() => {
+    globalThis.fetch = fetchAnterior;
+    if (anterior === undefined) delete process.env.DEEPSEEK_API_KEY;
+    else process.env.DEEPSEEK_API_KEY = anterior;
+  });
+
+  it("con él, `max_tokens` en el cuerpo; sin él, ninguno (el del proveedor)", async () => {
+    process.env.DEEPSEEK_API_KEY = "sk-de-pega";
+    const cuerpos: Record<string, unknown>[] = [];
+    globalThis.fetch = (async (_url: unknown, init?: { body?: unknown }) => {
+      cuerpos.push(JSON.parse(String(init?.body)));
+      return new Response(
+        JSON.stringify({ id: "x", object: "chat.completion", created: 0, model: "deepseek-flash", choices: [{ index: 0, message: { role: "assistant", content: "ok" }, finish_reason: "stop" }], usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 } }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      );
+    }) as typeof fetch;
+    const modelos = new Modelos({ bandera: "deepseek/deepseek-flash" });
+    for (const cliente of [modelos.paraPapel("trabajo", undefined, undefined, "apagado", undefined, 32_768), modelos.paraPapel("trabajo")]) {
+      await (cliente as { invoke: (m: unknown) => Promise<unknown> }).invoke([{ role: "user", content: "hola" }]);
+    }
+    expect(cuerpos.map((c) => c["max_tokens"])).toEqual([32_768, undefined]);
+  });
+});
+
+/**
  * La CACHÉ de Anthropic, en el cuerpo que se MANDA. Medido el 21-10-2026 con `claude-sonnet-5-5`: sin `cache_control` la
  * segunda llamada leía 0 de caché. Aquí no vale `invocationParams()` —su `cache_control` sale de las opciones de cada
  * llamada y llega `undefined`—: lo que cuenta es la petición HTTP, y se captura con un `fetch` de pega, sin red.

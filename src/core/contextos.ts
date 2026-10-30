@@ -119,6 +119,20 @@ export function umbralDeCompactacion(tope: number | undefined): number {
 }
 
 /**
+ * El tope de SALIDA del RESUMEN de la compactación, o `undefined` para dejar el del cliente.
+ *
+ * Medido contra la API (30-10-2026): DeepSeek SIN `max_tokens` corta la salida en 8.192 con `finish_reason: "length"`, y
+ * acepta hasta 393.216; con 16.384 pedidos escribe 16.384. Y nosotros no le mandamos ninguno: en la prueba grande de la
+ * calculadora el resumen del raíz salió de 8.192 justos, cortado, y el prompt de la librería deja al FINAL lo pendiente
+ * y el trabajo en curso. Solo DeepSeek, que es lo medido: a otro compatible un tope alto podría rechazarlo.
+ */
+export const TOPE_DE_SALIDA_DE_COMPACTACION = 32_768;
+
+export function topeDeSalidaDeCompactacion(proveedor: Proveedor): number | undefined {
+  return proveedor === "deepseek" ? TOPE_DE_SALIDA_DE_COMPACTACION : undefined;
+}
+
+/**
  * El tope de SALIDA que le fijamos a un modelo, o `undefined` para dejarlo en manos del
  * cliente.
  *

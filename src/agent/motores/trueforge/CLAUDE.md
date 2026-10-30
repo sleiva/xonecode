@@ -51,6 +51,9 @@ Ante una discrepancia con el código, **el código manda**.
   Lo abierto se salda como INTERRUPCIÓN (`textoDeInterrupcion`), nunca con «vuelve a pedirlo».
 - **Solo se compacta el raíz**, a un umbral de la ventana de SU modelo (`core/contextos.ts#umbralDeCompactacion`, entre
   `UMBRAL_DE_COMPACTACION_MINIMO` y `UMBRAL_DE_COMPACTACION_MAXIMO`) y **con el pensamiento APAGADO** (`llmDeCompactacion`).
+  **Con su tope de salida** (`topeDeSalidaDeCompactacion`, al CONSTRUIR el cliente: después no llega): DeepSeek sin él corta
+  en 8.192. Un resumen cortado igualmente se marca (`MARCA_DE_CORTE_POR_TOPE`) y lleva detrás los mensajes de la persona
+  (`resumenSeguro.ts`). La petición de la librería va SIN caché (el historial en un solo mensaje): límite declarado.
 - **Cada especialista recuerda sus encargos de la sesión** (`memoriaDeEspecialistas.ts`, `definition.messages`; nunca lo
   que leyeron otros). Entero (`TOPE_COMPLETA_TOKENS`), REDUCIDO (`TOPE_REDUCIDA_TOKENS`) o la VENTANA reciente
   (`ventanaDeHistorial`). En la reducida, sus encargos a otro van enteros y un `write_file`/`edit_file` largo se CUENTA en

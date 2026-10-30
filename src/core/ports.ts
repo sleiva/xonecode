@@ -398,8 +398,10 @@ export interface ModelosPort {
    * nivel elegido y el modelo resuelto— está dentro.
    *
    * `cache` sigue la misma regla: opcional, ausente es la de omisión, y quien no tiene caché que pedir la ignora.
+   * `topeDeSalida` también: hoy solo lo aplican los compatibles con OpenAI (la compactación de DeepSeek,
+   * `core/contextos.ts#topeDeSalidaDeCompactacion`); ausente, el del cliente.
    */
-  paraPapel(papel: Papel, esfuerzo?: Esfuerzo, clase?: ClaseDeTrabajo, pensamiento?: Pensamiento, cache?: DuracionDeCache): unknown;
+  paraPapel(papel: Papel, esfuerzo?: Esfuerzo, clase?: ClaseDeTrabajo, pensamiento?: Pensamiento, cache?: DuracionDeCache, topeDeSalida?: number): unknown;
   /**
    * Un modelo CONCRETO, «proveedor/modelo», para el subagente que fija el suyo
    * (`core/agentes.ts`). Los papeles no sirven para esto: son tres funciones del turno
