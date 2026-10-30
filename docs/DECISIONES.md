@@ -10184,3 +10184,20 @@ deja al FINAL del `<summary>` lo pendiente, el trabajo en curso y el siguiente p
 **Lo que NO se arregla**: que la compactación no aproveche la caché. La librería manda el historial convertido en UN
 mensaje de texto, sin el sistema ni las tools, así que no comparte prefijo con nada (unos 0,1 M efectivos por
 compactación). Arreglarlo es escribir nuestra propia compactación con el mismo prefijo que una llamada normal.
+
+## La shell no escribe el proyecto (30-10-2026)
+
+Medido en la prueba grande de la calculadora (calc2): `run` rechazó todas las escrituras (la prueba estaba mal montada:
+la entrada era un fin de fichero), y el sistema dio la vuelta. El orquestador encargó al desarrollador dejar la colección
+en `/artefactos/entrega/`, al diseñador sus iconos allí, y al device-controller copiarlos al proyecto con `cp` —«las
+escrituras en la raíz se rechazan, hazlo por shell»—, y dejó un `Menu.xne.bak` en la raíz. 35 escrituras en
+`/artefactos/entrega/`, tres agentes por vuelta y 58 minutos. En uso real eso se salta la decisión de la persona, la
+conversión a UTF-8 y la cola de escrituras.
+
+Petición suya: la shell NO se quita (el device-controller la necesita para el aparato); lo que no puede es escribir las
+colecciones, que son del desarrollador. Se COMPRUEBA en vez de leer la orden: un `cp` o un `>` se reconocen, un
+`python3 -c` o una ruta en una variable no. `proyectoSinShell.ts` guarda copia del proyecto fuera de `.xonecode/` y
+`.git/` (453 ficheros y 26 MB en MyAllXOne: se lee entera una vez y después solo se mira fecha y tamaño), y tras cada
+orden de `execute` o `ejecutar_script` deshace lo cambiado, creado o borrado y lo añade a la salida con código ≠ 0. Las
+escrituras del backend de los agentes se anotan como buenas, porque los especialistas corren en paralelo. Lo que la shell
+escribe en `/artefactos/` y `/hotswap/` (dentro de `.xonecode/`) no se toca.

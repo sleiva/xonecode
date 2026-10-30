@@ -263,6 +263,31 @@ describe("una sesión con el motor TrueForge", () => {
     expect(tras).toContain("pásala con pantalla=/artefactos/cap.png");
   }, 30_000);
 
+  /**
+   * Medido en la prueba grande de la calculadora: el device-controller copió la colección al proyecto con `cp` («las
+   * escrituras en la raíz se rechazan, hazlo por shell»). La shell no escribe el proyecto: se deshace y se le dice.
+   */
+  it("lo que el device-controller copia al proyecto con la shell se DESHACE; lo que deja en artefactos, no", async () => {
+    const raiz = proyecto();
+    writeFileSync(join(raiz, "Menu.xne"), "<coll name=\"Menu\"/>\n");
+    const artefactos = mkdtempSync(join(tmpdir(), "xc-art-"));
+    writeFileSync(join(artefactos, "Calculadora.xne"), "<coll name=\"Calculadora\"/>\n");
+    const { m, vistos } = modelosConGuion([
+      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "device-controller", input: "instala la calculadora" }) }] })],
+      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "x1", name: "execute", args: JSON.stringify({ command: `cp "$XONECODE_ARTEFACTOS/Calculadora.xne" Calculadora.xne && cp Menu.xne Menu.xne.bak && echo hecho > "$XONECODE_ARTEFACTOS/nota.txt"` }) }] })],
+      [new AIMessageChunk({ content: "No he podido instalarla." })],
+      [new AIMessageChunk({ content: "Hecho." })],
+    ]);
+    const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, artefactos });
+    await s.turno("instala la calculadora", piel().p);
+    expect(existsSync(join(raiz, "Calculadora.xne"))).toBe(false);
+    expect(existsSync(join(raiz, "Menu.xne.bak"))).toBe(false);
+    expect(readFileSync(join(artefactos, "nota.txt"), "utf8")).toBe("hecho\n");
+    const loQueLeyo = vistos[2]!.join("\n");
+    expect(loQueLeyo).toContain("Se han DESHECHO: /Calculadora.xne, /Menu.xne.bak");
+    expect(loQueLeyo).toContain("developer-xone");
+  }, 30_000);
+
   it("cada tool dice QUIÉN la pidió: el orquestador delega, el especialista escribe con su nombre", async () => {
     const s = await abrirSesionTrueforge({
       raiz: proyecto(),

@@ -134,6 +134,8 @@ Una línea cada uno; el detalle, en el `CLAUDE.md` de su carpeta (tabla de abajo
 - **La shell la lleva UNO, declarado en su `.md`** (`ejecucion`, cierto solo con `"true"`), sin
   `permissions` (deepagents lanza) y sin las claves de API en su entorno. Quien declara `scripts: true`
   corre los SCRIPTS de sus skills sin shell (`ejecutar_script`, forma estrecha) y conserva sus escrituras.
+  **La shell no escribe el proyecto** (TrueForge, `proyectoSinShell.ts`): lo que una orden cambia fuera de
+  `.xonecode/` y `.git/` se DESHACE y se le dice; las colecciones las escribe el desarrollador.
 - **El HITL va por NOMBRE de tool en todo lo que escribe** (`write_file`, `edit_file`,
   `incorporar_adjunto`, `traer_fuente`). Lo que no se entiende es RECHAZO (fail-closed), y una
   escritura REMOTA va siempre a una persona, también en modo autónomo.

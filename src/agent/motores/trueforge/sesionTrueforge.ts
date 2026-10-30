@@ -89,6 +89,7 @@ import { accionDelJuez, type HechosDelTurno, type VeredictoDelTurno } from "../.
 import type { Entorno } from "../../config/entorno.js";
 import { modeloParaTrueforge } from "./modeloLangchain.js";
 import { NOMBRE_EJECUTAR_SCRIPT, TOOLS_DE_LECTURA, type BackendDeFicheros } from "./toolsDeFichero.js";
+import { conEscriturasAnotadas, conGuardaDelProyecto, crearGuardaDelProyecto } from "./proyectoSinShell.js";
 import { falloDelMotorDe, topeAgotadoDe, traducirEvento, type PensamientoPorHilo } from "./eventosTrueforge.js";
 import { anuncioDeSkills } from "./skillsTrueforge.js";
 import {
@@ -1152,7 +1153,13 @@ export async function abrirSesionTrueforge(
       // Decisión suya: un `.xne` de 8 bits que el agente escribe queda en UTF-8, en el mismo commit del cambio.
       aUtf8: true,
     });
-  const backend = montarBackend() as unknown as BackendDeFicheros;
+  /**
+   * **La shell no escribe el proyecto** (`proyectoSinShell.ts`): lo que una orden cambie fuera de `.xonecode/` se deshace y
+   * se le dice. Medido en la prueba grande de la calculadora: con las escrituras rechazadas, el device-controller copió la
+   * colección al proyecto con `cp`. Las escrituras del backend de los agentes se anotan como buenas.
+   */
+  const guardaDelProyecto = crearGuardaDelProyecto(raiz);
+  const backend = conEscriturasAnotadas(montarBackend() as unknown as BackendDeFicheros, guardaDelProyecto);
 
   /**
    * **Los motores EXTERNOS**, por el MISMO puerto que deepagents (`subagenteExterno.ts`), con sus
@@ -1789,7 +1796,7 @@ export async function abrirSesionTrueforge(
       // En Windows, cada script con el Node del servidor y su ruta: por su shebang desde el Git Bash no arrancaban.
       lanzadorDeScripts: (a) => lanzadorDeScriptsEn(process.platform, scriptsConRuta(raiz, a.skills), process.execPath),
       conShell: () =>
-        montarBackend({
+        conGuardaDelProyecto(montarBackend({
           entorno: conTrazaDelEntorno(entornoDeLaShellDelProyecto(raiz, opciones.artefactos)),
           // Cada orden, con la traza encendida (IXCODE-72): qué shell la corrió y qué ficheros dejó en la raíz.
           ...(diagnostico?.orden === undefined ? {} : { traza: (orden) => diagnostico.orden?.("shell propia", orden) }),
@@ -1800,7 +1807,7 @@ export async function abrirSesionTrueforge(
         }) as unknown as {
           execute(c: string): unknown;
           write(ruta: string, contenido: string): unknown;
-        },
+        }, guardaDelProyecto),
     });
     const nombres = toolsDe(piezas);
     const nota = [

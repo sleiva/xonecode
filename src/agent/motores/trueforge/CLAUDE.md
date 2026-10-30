@@ -140,6 +140,12 @@ Ante una discrepancia con el código, **el código manda**.
   `ui.showToast` ni `appData.writeConsoleString`; FUNCIONALES aparte de VISUALES (`RONDAS_VISUALES`, el mismo número que
   su prompt).
 - **`TASKS.md` con casillas o no se escribe** (`core/tareasDelPlan.ts#motivoDeTasksInaceptable`): solo al escribirlo ENTERO.
+- **La shell no escribe el proyecto** (`proyectoSinShell.ts`, `conGuardaDelProyecto` sobre el backend que ejecuta, en
+  `execute` y en `ejecutar_script`): tras cada orden se compara el proyecto fuera de `.xonecode/` y `.git/` con su copia, y
+  lo cambiado, creado o borrado se DESHACE y se añade a la salida con código ≠ 0. Las escrituras del backend de los agentes
+  se ANOTAN (`conEscriturasAnotadas`) para no deshacer un `write_file` en paralelo. **Límites**: un fichero de más de
+  `TOPE_DE_COPIA_BYTES` se detecta y no se deshace; `incorporar_adjunto`, `traer_fuente` y el editor de la persona escriben
+  sin anotar, así que hechos MIENTRAS corre una orden se deshacen; el hijo de Claude Code va por su propio camino.
 - **Quien ejecuta no busca con la shell** (`core/shellDeAgente.ts#motivoDeComandoRechazado`): `find`, `grep -r`, `ls -R`
   → error que manda a `glob`/`grep`/`ls`; ni rutas VIRTUALES; ni SQL que escribe por `xone-hotswap`. Lista de lo visto,
   no filtro: límite declarado.
