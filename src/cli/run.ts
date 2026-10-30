@@ -10,7 +10,7 @@ import { Modelos } from "../agent/config/modelos.js";
 import { juzgarPantalla, invocarVisualConModelos } from "../agent/dispositivos/juezVisual.js";
 import { proveedoresPersonalizados } from "../agent/config/configEnDisco.js";
 import { abrirSesionReal } from "../agent/turno/turnoReal.js";
-import { TOPE_MAXIMO_DE_RONDAS_DE_ENTORNO, topeDeRondasDeEntorno, VARIABLE_DEL_TOPE_DE_RONDAS } from "../core/modoDeEscritura.js";
+import { runAutonomoPedido, TOPE_MAXIMO_DE_RONDAS_DE_ENTORNO, topeDeRondasDeEntorno, VARIABLE_DE_RUN_AUTONOMO, VARIABLE_DEL_TOPE_DE_RONDAS } from "../core/modoDeEscritura.js";
 import { SimuladorVerifier } from "../agent/turno/verificador.js";
 import { pintarGasto } from "../agent/turno/informeDeTraza.js";
 import { hidratarFuentesDeDisco } from "./fuentesDeDisco.js";
@@ -166,12 +166,19 @@ async function correrReal(opciones: OpcionesRun, escribir: Escribir): Promise<nu
     );
   }
 
+  // Autónomo solo si se pide EXPLÍCITAMENTE, para medir (`runAutonomoPedido`): por omisión nada se aplica sin un «s».
+  const autonomo = runAutonomoPedido(entornoDeProceso[VARIABLE_DE_RUN_AUTONOMO]);
+  if (autonomo) {
+    escribir(`  modo AUTÓNOMO (por ${VARIABLE_DE_RUN_AUTONOMO}=1): las escrituras se aplican sin preguntar y las preguntas se contestan solas\n`);
+  }
+
   const sesion = await abrirSesionReal({
     raiz,
     modelos,
     skills,
     entorno,
     ...(topeDeRondas === undefined ? {} : { topeDeRondas }),
+    ...(autonomo ? { sinAprobacion: () => true } : {}),
     // El simulador de verdad. Su ausencia en la máquina no se descubre aquí sino al
     // verificar, y entonces se dice en el turno — sin tumbar nada.
     verifier: new SimuladorVerifier(),

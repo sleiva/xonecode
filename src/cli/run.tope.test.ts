@@ -74,3 +74,17 @@ describe("topeDeRondasDeEntorno", () => {
     }
   });
 });
+
+/** Medido en la prueba grande de la calculadora: sin esto no había forma de medir un turno entero con `run`. */
+describe("XONECODE_RUN_AUTONOMO en run", () => {
+  it("con «1» exacto, la sesión escribe sin preguntar y se DICE; sin ella o con otro valor, no", async () => {
+    const salida = await correr({ XONECODE_RUN_AUTONOMO: "1" });
+    expect((capturado.opciones?.["sinAprobacion"] as (() => boolean) | undefined)?.()).toBe(true);
+    expect(salida).toMatch(/modo AUTÓNOMO/);
+    for (const otro of [{}, { XONECODE_RUN_AUTONOMO: "si" }, { XONECODE_RUN_AUTONOMO: "true" }, { XONECODE_RUN_AUTONOMO: "" }]) {
+      const s = await correr(otro);
+      expect(capturado.opciones, JSON.stringify(otro)).not.toHaveProperty("sinAprobacion");
+      expect(s).not.toMatch(/modo AUTÓNOMO/);
+    }
+  });
+});

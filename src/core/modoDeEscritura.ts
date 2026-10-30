@@ -106,6 +106,19 @@ export const TOPE_DE_RONDAS_DE_CONSOLA = 50;
 export const VARIABLE_DEL_TOPE_DE_RONDAS = "XONECODE_TOPE_DE_RONDAS";
 export const TOPE_MAXIMO_DE_RONDAS_DE_ENTORNO = 50;
 
+/**
+ * `XONECODE_RUN_AUTONOMO=1`: `run` aplica las escrituras SIN preguntar y contesta solo las preguntas, como el modo autónomo
+ * de la consola. Solo para MEDIR un turno entero: medido en la prueba grande de la calculadora (30-10-2026), con el tope de
+ * rondas el turno se cortaba antes de que corriera el verificador, y con la entrada vacía se rechazaron todas las
+ * escrituras y el sistema las dio la vuelta por la shell. Por omisión `run` sigue sin aplicar nada sin un «s» explícito
+ * —es lo que CI lee en el código 2—; esto hay que pedirlo con este valor EXACTO.
+ */
+export const VARIABLE_DE_RUN_AUTONOMO = "XONECODE_RUN_AUTONOMO";
+
+export function runAutonomoPedido(valor: string | undefined): boolean {
+  return valor?.trim() === "1";
+}
+
 export function topeDeRondasDeEntorno(valor: string | undefined): number | undefined {
   const v = valor?.trim();
   if (v === undefined || !/^[1-9][0-9]{0,2}$/.test(v)) return undefined;

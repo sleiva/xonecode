@@ -55,7 +55,9 @@ Ante una discrepancia con el código, **el código manda**.
   marca: todo lo que lee una `consulta` la toma por pendiente. En supervisado llegan a la persona.
   El tope de rondas de la consola vale lo MISMO que el de una tarea
   (`TOPE_DE_RONDAS_DE_CONSOLA`, `TOPE_DE_RONDAS_DE_TAREA`; subidos juntos cuando el ajuste de una pantalla contra su
-  maqueta los agotaba en un turno); sin nadie delante se queda el cinco de `MAX_APPROVAL_ROUNDS`. Lo
+  maqueta los agotaba en un turno); sin nadie delante se queda el cinco de `MAX_APPROVAL_ROUNDS`. **`run` no lee el
+  modo**: nada se aplica sin un «s» explícito, salvo con `XONECODE_RUN_AUTONOMO=1` EXACTO (`runAutonomoPedido`), que es
+  para MEDIR un turno entero y se dice en la cabecera. Lo
   que `/aprobacion` EXPLICA lo decide el destino, no la línea (`Consola.modoALaVista`): donde el
   modo está siempre a la vista (la web) sale una línea; donde no (el terminal) salen los tres
   detalles.
