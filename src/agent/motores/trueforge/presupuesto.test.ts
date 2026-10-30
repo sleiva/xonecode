@@ -12,18 +12,20 @@ describe("el presupuesto de llamadas de un hijo: al agotarse, cierra con un resu
     expect(p.soloTexto("hijo")).toBe(false);
     expect(p.antesDeLlamar("hijo")).toBe(textoDePresupuestoAgotado(3));
     expect(p.soloTexto("hijo")).toBe(true);
-    expect(p.agotado("hijo")).toBe(3);
+    expect(p.agotado("hijo")).toEqual({ motivo: "llamadas", limite: 3 });
     expect(p.antesDeLlamar("hijo")).toBeUndefined();
   });
 
   it("un corte pedido desde fuera (el tope de vueltas) llega en la SIGUIENTE llamada, una vez, y desde ahí solo texto", () => {
     const p = crearControlDePresupuesto();
     p.nacio("hijo", 100);
-    p.cortar("raiz-no-registrado", "x");
+    p.cortar("raiz-no-registrado", "x", 1);
     expect(p.antesDeLlamar("raiz-no-registrado")).toBeUndefined();
-    p.cortar("hijo", textoDeVueltasAgotadas(6, false));
+    p.cortar("hijo", textoDeVueltasAgotadas(6, false), 6);
     expect(p.antesDeLlamar("hijo")).toContain("tope de 6 vueltas de ajuste en este encargo");
     expect(p.soloTexto("hijo")).toBe(true);
+    // La traza dice el motivo de verdad: vueltas, no el presupuesto de llamadas (medido: salía «límite 100»).
+    expect(p.agotado("hijo")).toEqual({ motivo: "vueltas", limite: 6 });
     expect(p.antesDeLlamar("hijo")).toBeUndefined();
     p.reiniciar();
     p.nacio("hijo", 100);

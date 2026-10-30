@@ -10258,3 +10258,17 @@ suya: por código. Si el ÚLTIMO comando de la cadena es una acción (`click`, `
 lectura de los textos pintados (`"automatico": true`), ESTABLE: relee por la misma conexión hasta que dos lecturas
 coinciden (tope 2,5 s), porque justo tras pulsar la pantalla aún no se ha repintado (medido: «7 +» en vez de «15»).
 En el emulador, AC 7 8 devolvió el display «78» en la misma orden, en 810 ms.
+
+## Lo que dejó la primera prueba que terminó sola (30-10-2026)
+
+La prueba de la calculadora con la 0.67.0 terminó sola (35 min, 3,26 M, verificador en verde). Cuatro cosas, arregladas:
+
+- **La cifra de estructura era una puerta trasera.** `BUCLE_DE_CALIDAD` decía «si la estructura O el crítico señalan
+  diferencias, repite», y el orquestador encargó una tercera vuelta porque la distancia vertical había subido unos puntos,
+  sin rojos del crítico (el tope la cortó a los 27 s). Ahora la cifra de `comparar_capturas` es un DATO; otra vuelta,
+  solo con el crítico en rojo.
+- **La traza contaba un corte por vueltas como el presupuesto** (`limite: 300`). Ahora dice el motivo y su número.
+- **Un valor de ejemplo de la maqueta pintado fijo**: el `TASKS.md` mandó `self.MAP_HIST = "1,240 × 15% + 450 = 636"`.
+  El analista sabe que esos valores son de ejemplo y el desarrollador no los copia aunque el plan lo diga.
+- **El analista retocó su plan a pedacitos**: 26 `edit_file` (0-3 en las pasadas anteriores), cada uno una llamada de
+  unos 100 mil. Tope por encargo (`TOPE_DE_RETOQUES_DEL_PLAN`): pasado, error y «reescríbelo de una vez o entrégalo».

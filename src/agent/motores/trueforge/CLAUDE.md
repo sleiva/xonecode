@@ -144,7 +144,11 @@ Ante una discrepancia con el código, **el código manda**.
   orquestador y desarrollador), y por CÓDIGO un tope de vueltas (recargas/despliegues o llamadas al de pruebas):
   `TOPE_DE_VUELTAS_POR_ENCARGO` (`RONDAS_VISUALES` + 1) y `TOPE_DE_VUELTAS_DEL_TURNO` por agente sumando encargos
   (`contarVuelta`). Corta con la pieza del presupuesto (`presupuesto.ts#cortar`, `textoDeVueltasAgotadas`): cierra con
-  resumen, y la orden no pasa a la memoria (`sinOrdenDePresupuesto`).
+  resumen, y la orden no pasa a la memoria (`sinOrdenDePresupuesto`). La traza dice el MOTIVO del corte (`agotado` →
+  `{motivo, limite}`: llamadas o vueltas). La cifra de `comparar_capturas` es un dato, no un motivo de otra vuelta.
+- **Un plan no se pule a trozos** (`toolsDeFichero.ts#TOPE_DE_RETOQUES_DEL_PLAN`): pasado ese número de `edit_file` sobre
+  `/planes/` en un encargo, se devuelve error y se pide reescribirlo de una vez (`write_file` vale en `/planes/`).
+- **Los valores de una maqueta son DE EJEMPLO**: ni el plan los manda escribir fijos ni el desarrollador los copia.
 - **La shell no escribe el proyecto** (`proyectoSinShell.ts`, `conGuardaDelProyecto` sobre el backend que ejecuta, en
   `execute` y en `ejecutar_script`): tras cada orden se compara el proyecto fuera de `.xonecode/` y `.git/` con su copia, y
   lo cambiado, creado o borrado se DESHACE y se añade a la salida con código ≠ 0. Las escrituras del backend de los agentes

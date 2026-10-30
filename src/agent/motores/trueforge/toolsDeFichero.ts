@@ -372,6 +372,21 @@ async function ejecutar(
  * El `ToolSource` de TrueForge con las seis tools. La aprobación NO se decide aquí: la pone el
  * `ToolSet` que lo envuelve (`requireApprovalForTools`), y la tool solo corre tras el «sí».
  */
+/**
+ * Cuántos `edit_file` sobre los ficheros de un PLAN (`/planes/`) se admiten en UN encargo. Medido en la prueba de la
+ * calculadora (30-10-2026): el analista escribió sus cuatro documentos y los RETOCÓ a pedacitos —26 ediciones, cada una
+ * una llamada con unos 100 mil de contexto—, cuando en las pasadas anteriores fueron de 0 a 3. Un plan no se pule a
+ * trozos: lo importante se reescribe de una vez (`write_file` vale en `/planes/`) y lo menor se deja.
+ */
+export const TOPE_DE_RETOQUES_DEL_PLAN = 10;
+
+export function textoDeRetoquesDelPlan(retoques: number): string {
+  return (
+    `Llevas ${String(retoques)} retoques a los ficheros del plan en este encargo y ya no se aplican más: un plan no se pule a trozos. ` +
+    "Si falta algo IMPORTANTE, reescribe ese fichero entero de una vez con write_file; si es un detalle, déjalo y entrega el plan."
+  );
+}
+
 export function fuenteDeFicheros(opciones: {
   backend: BackendDeFicheros;
   reglas: readonly ReglaDeRuta[];
@@ -380,6 +395,8 @@ export function fuenteDeFicheros(opciones: {
 }) {
   const ofrecidas = opciones.tools ?? TOOLS_DE_FICHERO;
   const esDeFichero = (n: string): n is ToolDeFichero => (ofrecidas as readonly string[]).includes(n);
+  /** Los retoques de ESTE encargo a sus ficheros de plan (`TOPE_DE_RETOQUES_DEL_PLAN`): la fuente se crea por hijo. */
+  let retoquesDelPlan = 0;
   return {
     name: "xone",
     id: "xone",
@@ -409,6 +426,10 @@ export function fuenteDeFicheros(opciones: {
       const args = { ...crudos, [campo]: ruta };
       if (decidirAccesoDeRuta(opciones.reglas, operacion, ruta) === "deny") {
         return toolResultResponse({ text: `permission denied: ${operacion} ${ruta}`, isError: true });
+      }
+      if (params.name === "edit_file" && ruta.startsWith("/planes/")) {
+        retoquesDelPlan += 1;
+        if (retoquesDelPlan > TOPE_DE_RETOQUES_DEL_PLAN) return toolResultResponse({ text: textoDeRetoquesDelPlan(retoquesDelPlan - 1), isError: true });
       }
       try {
         const { texto, error } = await ejecutar(opciones.backend, params.name, args, (r) => decidirAccesoDeRuta(opciones.reglas, "read", r) === "allow");

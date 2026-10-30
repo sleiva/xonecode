@@ -45,7 +45,7 @@ export interface DiagnosticoDeTools {
    * como un fallo de enrutado lo que era el tope cortando— y es el tipo de dato que solo se
    * echa de menos cuando ya te ha engañado.
    */
-  corte?(origen: string, limite: number): void;
+  corte?(origen: string, limite: number, motivo?: "llamadas" | "vueltas"): void;
   /**
    * `origen` distingue el orquestador de un especialista, y es EXACTO (sale del namespace del
    * stream, ver `puente.ts#esDelPadre`). No dice CUÁL especialista: sus segmentos son ids
@@ -177,8 +177,8 @@ export function crearDiagnosticoDeTools(
     modelo(origen, uso) {
       escribir({ tipo: "modelo", origen, ...uso });
     },
-    corte(origen, limite) {
-      escribir({ tipo: "corte", origen, limite });
+    corte(origen, limite, motivo) {
+      escribir({ tipo: "corte", origen, limite, ...(motivo === undefined ? {} : { motivo }) });
     },
     contraste(c) {
       escribir({ tipo: "contraste", ...c });

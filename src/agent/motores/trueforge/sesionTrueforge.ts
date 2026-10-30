@@ -173,20 +173,23 @@ const HILO_RAIZ = "main";
  * Rehaciendo una calculadora de Stitch, el orquestador dio la pantalla por buena una y otra vez con
  * el crítico en verde, porque corría SIN la maqueta: su verde significaba «nada roto» y no veía que
  * faltaba la barra superior. Con la maqueta a mano (`/diseno/`, `/adjuntos/`), el bucle es este, y
- * termina: una condición de parada de estructura y un tope de vueltas, porque sin tope un crítico
- * y un agente pueden retocar para siempre.
+ * termina: decide el CRÍTICO en rojo, con un tope de vueltas, porque sin tope un crítico y un agente
+ * pueden retocar para siempre. La cifra de estructura es un dato y no un motivo: medido en la prueba de
+ * la calculadora (30-10-2026), el texto decía «si la estructura O el crítico señalan diferencias,
+ * repite», y el orquestador encargó una tercera vuelta porque la distancia vertical había subido unos
+ * puntos, con el crítico ya sin rojos que arreglar.
  */
 const BUCLE_DE_CALIDAD = [
   "SI EL ENCARGO TRAE UN DISEÑO (una imagen en /diseno/, /adjuntos/ o /artefactos/), SER FIEL A ÉL es parte del",
   "encargo, y se comprueba con números y con ojos. Tras cada cambio visual: pide al conductor una captura NATIVA",
   "nueva y contrástala con `comparar_capturas` y con `xone_critica_visual`, pasando el diseño como `referencia` en las",
-  "dos. Sin referencia el crítico solo dice «nada roto», que no es «se parece». Si la estructura o el crítico señalan",
-  "diferencias con el diseño —piezas que faltan, tamaños, formas—, delega el arreglo en quien MAQUETA la pantalla (el que escribe su `.xne`, no el de los recursos) con esas diferencias concretas y",
-  "repite. Para cuando la distancia estructural baje del 10 % en vertical y en horizontal y el crítico no señale diferencias de forma con el diseño, o tras TRES vueltas, y",
-  "di lo que sigue faltando en vez de darlo por hecho.",
+  "dos. Sin referencia el crítico solo dice «nada roto», que no es «se parece».",
   "QUIÉN DECIDE OTRA VUELTA ES EL CRÍTICO: con lo funcional ya comprobado, encarga otra vuelta de ajuste visual SOLO si el último",
-  "`xone_critica_visual` dio ROJO, y con lo que señaló. Con VERDE —aunque traiga «detalles»— no hay otra: la pantalla está hecha y",
-  "los detalles se dicen en tu respuesta. Además el harness CORTA a quien ajusta tras unas vueltas por encargo y por turno.",
+  "`xone_critica_visual` dio ROJO, a quien MAQUETA la pantalla (el que escribe su `.xne`, no el de los recursos) y con lo que",
+  "señaló. La cifra de `comparar_capturas` es un DATO para el crítico y para tu respuesta, NO un motivo de otra vuelta por sí",
+  "sola: que la distancia suba o baje unos puntos sin rojo del crítico no se persigue. Con VERDE —aunque traiga «detalles»—",
+  "no hay otra: la pantalla está hecha. Para también tras TRES vueltas, y di lo que sigue faltando en vez de darlo por hecho.",
+  "Además el harness CORTA a quien ajusta tras unas vueltas por encargo y por turno.",
 ].join("\n");
 
 /**
@@ -580,6 +583,8 @@ export function textoDelBucle(
           `  pasa el crítico, arregla TODAS las diferencias en la misma ronda y solo entonces pide otra captura. ${String(RONDAS_VISUALES)} rondas como mucho.`,
         ]),
     "- Una pantalla que se parece a la maqueta con datos de ejemplo fijos NO está terminada: la lógica tiene que funcionar.",
+    "  Los valores que pinta la maqueta (cifras, historial, nombres) son de EJEMPLO: no los copies fijos al código aunque el",
+    "  plan lo diga; ese sitio enseña el valor real o arranca vacío.",
     ...(elMismo
       ? ["Lo que diga el aparato manda sobre lo que crees haber escrito: si el log dice que la app se cae, se cae."]
       : ["Lo que te devuelva es lo que ha visto, no un permiso para dar el trabajo por bueno: si dice que la app se cae, se cae."]),
@@ -1136,8 +1141,8 @@ export async function abrirSesionTrueforge(
     const quien = especialistaDeHilo.get(hilo) ?? quienEs.get(hilo) ?? hilo;
     const t = (vueltasDelTurno.get(quien) ?? 0) + 1;
     vueltasDelTurno.set(quien, t);
-    if (n >= TOPE_DE_VUELTAS_POR_ENCARGO) presupuesto.cortar(hilo, textoDeVueltasAgotadas(n, false));
-    else if (t >= TOPE_DE_VUELTAS_DEL_TURNO) presupuesto.cortar(hilo, textoDeVueltasAgotadas(t, true));
+    if (n >= TOPE_DE_VUELTAS_POR_ENCARGO) presupuesto.cortar(hilo, textoDeVueltasAgotadas(n, false), n);
+    else if (t >= TOPE_DE_VUELTAS_DEL_TURNO) presupuesto.cortar(hilo, textoDeVueltasAgotadas(t, true), t);
   };
   /** Tool calls tiradas por DETENER en la sesión: si se queda en cero, el filtro es solo red. */
   let llamadasTiradasPorDetener = 0;
@@ -2297,8 +2302,9 @@ export async function abrirSesionTrueforge(
       }
       // El corte por PRESUPUESTO cierra bien (con su resumen), así que la librería no lo dice: se dice aquí.
       if (deHilo === HILO_RAIZ) falloDelMotorDelTurno ??= falloDelMotorDe(evento);
-      const tope = topeAgotadoDe(evento) ?? (evento.type === "internal.agent.done" ? presupuesto.agotado(deHilo) : undefined);
-      if (tope !== undefined) diagnostico?.corte?.(quienEs.get(deHilo) ?? deHilo, tope);
+      const delPresupuesto = evento.type === "internal.agent.done" ? presupuesto.agotado(deHilo) : undefined;
+      const tope = topeAgotadoDe(evento) ?? delPresupuesto?.limite;
+      if (tope !== undefined) diagnostico?.corte?.(quienEs.get(deHilo) ?? deHilo, tope, delPresupuesto?.motivo);
       const { eventos, uso } = traducirEvento(evento, (h) => especialistaDeHilo.get(h), pensamientos);
       // La «llamada» de un hijo externo es el producto entero: su consumo llega por su propio
       // callback (`externo`), y contarla aquí sumaría una llamada de modelo a ceros por delegación.

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { backendDeAgente } from "../../grafo/proyecto.js";
 import { permisosDe } from "../../grafo/perfiles.js";
-import { CARACTERES_POR_LECTURA, decidirAccesoDeRuta, fuenteDeEjecucion, fuenteDeFicheros, lecturaAcotada, normalizarRuta, seReescribeConEdit, type BackendDeFicheros } from "./toolsDeFichero.js";
+import { CARACTERES_POR_LECTURA, TOPE_DE_RETOQUES_DEL_PLAN, decidirAccesoDeRuta, fuenteDeEjecucion, fuenteDeFicheros, lecturaAcotada, normalizarRuta, seReescribeConEdit, type BackendDeFicheros } from "./toolsDeFichero.js";
 
 /**
  * Contra el backend REAL, con toda su pila de guardas: lo que se prueba es que las tools de
@@ -31,6 +31,23 @@ function proyecto() {
 }
 
 describe("las tools de fichero de TrueForge, sobre el backend real", () => {
+  // Medido en la prueba de la calculadora: el analista retocó su plan a pedacitos, 26 `edit_file` de ~100 mil de contexto.
+  it("los retoques al PLAN tienen tope por encargo; pasado, se dice que se reescriba de una vez", async () => {
+    const { llamar } = proyecto();
+    const lineas = Array.from({ length: TOPE_DE_RETOQUES_DEL_PLAN + 2 }, (_, i) => `linea-${String(i)}`);
+    expect((await llamar("write_file", { file_path: "/planes/p/PLAN.md", content: lineas.join("\n") + "\n" })).error).toBe(false);
+    for (let i = 0; i < TOPE_DE_RETOQUES_DEL_PLAN; i++) {
+      const r = await llamar("edit_file", { file_path: "/planes/p/PLAN.md", old_string: `linea-${String(i)}\n`, new_string: `hecha-${String(i)}\n` });
+      expect(r.error, r.texto).toBe(false);
+    }
+    const pasado = await llamar("edit_file", { file_path: "/planes/p/PLAN.md", old_string: `linea-${String(TOPE_DE_RETOQUES_DEL_PLAN)}\n`, new_string: "x\n" });
+    expect(pasado.error).toBe(true);
+    expect(pasado.texto).toContain("reescribe ese fichero entero de una vez con write_file");
+    // Reescribirlo entero sigue valiendo, y un fichero del PROYECTO no cuenta en este tope.
+    expect((await llamar("write_file", { file_path: "/planes/p/PLAN.md", content: "nuevo\n" })).error).toBe(false);
+    expect((await llamar("edit_file", { file_path: "/Clientes.xne", old_string: "Clientes", new_string: "Clientes2" })).error).toBe(false);
+  });
+
   it("una IMAGEN no se lee como texto: la respuesta trae la llamada a describe_image ya escrita (IXCODE-23)", async () => {
     const { raiz, llamar } = proyecto();
     mkdirSync(join(raiz, "icons"));

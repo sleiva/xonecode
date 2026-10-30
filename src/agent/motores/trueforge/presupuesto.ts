@@ -52,7 +52,9 @@ export function crearControlDePresupuesto() {
   const llamadas = new Map<string, number>();
   const agotados = new Set<string>();
   /** Un corte pedido desde fuera (el tope de vueltas): se entrega en la SIGUIENTE llamada de ese hilo. */
-  const cortesPedidos = new Map<string, string>();
+  const cortesPedidos = new Map<string, { orden: string; vueltas: number }>();
+  /** Los hilos cortados por VUELTAS y no por llamadas, con cuántas: la traza dice el motivo de verdad. */
+  const porVueltas = new Map<string, number>();
 
   return {
     reiniciar() {
@@ -60,11 +62,12 @@ export function crearControlDePresupuesto() {
       llamadas.clear();
       agotados.clear();
       cortesPedidos.clear();
+      porVueltas.clear();
     },
     /** Cierra ESE hilo en su próxima llamada con `orden`, como al agotar el presupuesto. Solo un hijo registrado. */
-    cortar(threadId: string, orden: string) {
+    cortar(threadId: string, orden: string, vueltas: number) {
       if (!limites.has(threadId) || agotados.has(threadId)) return;
-      cortesPedidos.set(threadId, orden);
+      cortesPedidos.set(threadId, { orden, vueltas });
     },
     /** Al crear un hijo, con su presupuesto. El raíz no se registra: tiene su propio tope. */
     nacio(threadId: string, limite: number) {
@@ -79,7 +82,8 @@ export function crearControlDePresupuesto() {
       if (pedido !== undefined) {
         cortesPedidos.delete(threadId);
         agotados.add(threadId);
-        return pedido;
+        porVueltas.set(threadId, pedido.vueltas);
+        return pedido.orden;
       }
       const n = (llamadas.get(threadId) ?? 0) + 1;
       llamadas.set(threadId, n);
@@ -91,9 +95,16 @@ export function crearControlDePresupuesto() {
     soloTexto(threadId: string): boolean {
       return agotados.has(threadId);
     },
-    /** El presupuesto que agotó ese hilo, si lo agotó. */
-    agotado(threadId: string): number | undefined {
-      return agotados.has(threadId) ? limites.get(threadId) : undefined;
+    /**
+     * Por qué se cortó ese hilo, si se cortó: el presupuesto de LLAMADAS que agotó, o las VUELTAS con las que se le cortó.
+     * Medido en la prueba de la calculadora: un corte por vueltas salía en la traza como «límite 300», el presupuesto.
+     */
+    agotado(threadId: string): { motivo: "llamadas" | "vueltas"; limite: number } | undefined {
+      if (!agotados.has(threadId)) return undefined;
+      const vueltas = porVueltas.get(threadId);
+      if (vueltas !== undefined) return { motivo: "vueltas", limite: vueltas };
+      const limite = limites.get(threadId);
+      return limite === undefined ? undefined : { motivo: "llamadas", limite };
     },
   };
 }

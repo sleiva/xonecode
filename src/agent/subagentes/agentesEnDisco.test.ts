@@ -371,6 +371,13 @@ describe("sembrarAgentes", () => {
    * Lo que se comprueba ahora es la SUSTANCIA, no la redacción: que quien escribe avisa de que
    * se aprueba, y que los papeles siguen siendo los que son.
    */
+  // Medido en la prueba de la calculadora: el TASKS.md mandó pintar fijo el historial de ejemplo de la maqueta.
+  it("quien hace el plan desde un diseño sabe que los valores de la maqueta son DE EJEMPLO", () => {
+    const planes = AGENTES_DE_SERIE.filter((a) => a.instrucciones?.includes("destílalo UNA vez"));
+    expect(planes.length).toBeGreaterThan(0);
+    for (const a of planes) expect(a.instrucciones, a.nombre).toContain("son DE EJEMPLO");
+  });
+
   it("las descripciones dicen cómo se USA cada uno, y las capacidades no han cambiado", () => {
     const dev = AGENTES_DE_SERIE.find((a) => a.nombre === "developer-xone")!;
     expect(dev.descripcion).toMatch(/aprobaci[oó]n/i);

@@ -3695,6 +3695,17 @@ describe("el bucle de calidad de un diseño en la nota del orquestador (IXCODE-1
     expect(con).toMatch(/TRES vueltas/);
     expect(notaDeDelegacion(AGENTES_DE_SERIE)).not.toMatch(/SER FIEL A ÉL/);
   });
+
+  // Medido en la prueba de la calculadora: «si la estructura O el crítico señalan diferencias, repite» dejó una puerta
+  // trasera, y el orquestador encargó otra vuelta por la cifra vertical con el crítico sin rojos que arreglar.
+  it("otra vuelta la decide el crítico en ROJO; la cifra de estructura sola no", async () => {
+    const { notaDeDelegacion } = await import("./sesionTrueforge.js");
+    const { AGENTES_DE_SERIE } = await import("../../subagentes/agentesEnDisco.js");
+    const con = notaDeDelegacion(AGENTES_DE_SERIE, { conComparacion: true });
+    expect(con).toContain("QUIÉN DECIDE OTRA VUELTA ES EL CRÍTICO");
+    expect(con).toContain("NO un motivo de otra vuelta por sí\nsola");
+    expect(con).not.toMatch(/la estructura o el crítico señalan/i);
+  });
 });
 
 describe("la traza de TrueForge dice QUIÉN llamó a qué y qué se le pidió (IXCODE-18)", () => {
@@ -4159,6 +4170,8 @@ describe("en una tarea: el plan asignado y la captura del desarrollador", () => 
     expect(t).toContain("TODOS los casos en UNA llamada");
     expect(t).toContain("DETRÁS\n  su lectura etiquetada");
     expect(t).toContain("va en `/artefactos/`, nunca en el proyecto");
+    // Y los valores de la maqueta no se copian fijos (medido: el historial de ejemplo pintado siempre).
+    expect(t).toContain("son de EJEMPLO: no los copies fijos al código aunque el");
   });
 
   // Medido en Maset (23-10-2026, «el botón Entrar en rojo»): cuatro sintaxis de `launchApplication` tras reiniciar, dos
