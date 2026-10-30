@@ -131,7 +131,7 @@ import { crearMemoriaDeEspecialistas, sinOrdenDePresupuesto } from "./memoriaDeE
 import { crearEsperas } from "./esperas.js";
 import { conResumenSeguro } from "./resumenSeguro.js";
 import { crearControlDeDetencion, RESUMEN_DE_RELLENO } from "./detencion.js";
-import { crearControlDePresupuesto, MARGEN_SOBRE_EL_PRESUPUESTO, RESUMEN_DE_RELLENO_DEL_PRESUPUESTO, textoDeVueltasAgotadas } from "./presupuesto.js";
+import { crearControlDePresupuesto, MARGEN_SOBRE_EL_PRESUPUESTO, RESUMEN_DE_RELLENO_DEL_PRESUPUESTO, textoDeVueltasAgotadas, textoDeVueltasDelTurnoAgotadas } from "./presupuesto.js";
 import type { ToolDeLangchain } from "./toolsPropias.js";
 import { crearNavegacionXone } from "../../grafo/navegacionXone.js";
 import { crearValidarFicheroXone } from "../../grafo/validarFicheroXone.js";
@@ -1793,6 +1793,14 @@ export async function abrirSesionTrueforge(
         anotarPaso("trueforge.no-arranca", `${agente.nombre}: ${razon.slice(0, 80)}`)();
         return hiloQueNoArranca(agente.nombre, [], params, llm, logger, razon);
       }
+    }
+    // Quien agotó sus vueltas del TURNO no arranca otro encargo, haya o no persona: cortado, cada encargo nuevo editaba
+    // hasta su primera recarga y volvía (`textoDeVueltasDelTurnoAgotadas`).
+    const vueltasYaHechas = agente === undefined ? 0 : (vueltasDelTurno.get(agente.nombre) ?? 0);
+    if (delRaiz && agente !== undefined && vueltasYaHechas >= TOPE_DE_VUELTAS_DEL_TURNO) {
+      anotarPaso("trueforge.tope-de-vueltas", `${agente.nombre}: ${String(vueltasYaHechas)} vueltas en el turno, no arranca otro`)();
+      diagnostico?.memoria?.(agente.nombre, "arranca-sin", "tope de vueltas del turno");
+      return hiloQueNoArranca(agente.nombre, [], params, llm, logger, textoDeVueltasDelTurnoAgotadas(agente.nombre, vueltasYaHechas));
     }
     // Pasado el tope de encargos al desarrollador en una TAREA, no arranca: el orquestador recibe la orden de cerrar.
     if (opciones.trabajoSinPersona === true && agente?.nombre === "developer-xone" && delRaiz) {

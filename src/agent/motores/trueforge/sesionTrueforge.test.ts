@@ -1751,6 +1751,30 @@ describe("una sesión con el motor TrueForge", () => {
       expect(todo).toHaveLength(corte + 2);
     }, 30_000);
 
+    /**
+     * Medido en la prueba de la calculadora (0.68.0): cortado por el tope del TURNO, el orquestador le encargó otras tres
+     * pasadas, y cada una editaba hasta su primera recarga. Agotado el del turno, el encargo siguiente ni arranca.
+     */
+    it("agotadas las vueltas del turno, el siguiente encargo no arranca y el orquestador recibe la orden de cerrar", async () => {
+      const raiz = conDesarrolladorQueLlamaAlDePruebas(proyecto());
+      const delega = (id: string) =>
+        new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id, name: "create_sub_agent", args: JSON.stringify({ name: "developer-xone", input: "otra pasada" }) }] });
+      const encargo = (e: string) => [
+        [delega(e)],
+        ...Array.from({ length: TOPE_DE_VUELTAS_POR_ENCARGO }, (_, i) => [[llama(`${e}n${String(i)}`)], [new AIMessageChunk({ content: `Falla ${String(i)}.` })]]).flat(),
+        [new AIMessageChunk({ content: `Devuelvo ${e}.` })],
+      ];
+      const { m, vistos } = modelosConGuion([...encargo("e1"), ...encargo("e2"), [delega("e3")], [new AIMessageChunk({ content: "Cierro con lo que falta." })]]);
+      const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, bucleDelDesarrollador: true });
+      const r = piel();
+      await s.turno("haz", r.p);
+      const ultima = texto(vistos, vistos.length - 1);
+      expect(ultima).toContain(`developer-xone NO HA ARRANCADO: ya hizo ${String(2 * TOPE_DE_VUELTAS_POR_ENCARGO)} vueltas de ajuste en este turno`);
+      expect(r.tokens.join("")).toContain("Cierro con lo que falta.");
+      // Dos encargos enteros y, del tercero, solo la delegación del raíz y su cierre: el desarrollador no llamó al modelo.
+      expect(vistos).toHaveLength(2 * (2 + 2 * TOPE_DE_VUELTAS_POR_ENCARGO) + 2);
+    }, 30_000);
+
     it("sin el interruptor del bucle no hay contador ni aviso", async () => {
       const raiz = proyecto();
       const { m, vistos } = modelosConGuion([

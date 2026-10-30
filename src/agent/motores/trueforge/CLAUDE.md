@@ -146,6 +146,8 @@ Ante una discrepancia con el código, **el código manda**.
   (`contarVuelta`). Corta con la pieza del presupuesto (`presupuesto.ts#cortar`, `textoDeVueltasAgotadas`): cierra con
   resumen, y la orden no pasa a la memoria (`sinOrdenDePresupuesto`). La traza dice el MOTIVO del corte (`agotado` →
   `{motivo, limite}`: llamadas o vueltas). La cifra de `comparar_capturas` es un dato, no un motivo de otra vuelta.
+  **Agotado el del turno, el encargo siguiente a ese agente NO ARRANCA** (`hiloQueNoArranca` con
+  `textoDeVueltasDelTurnoAgotadas`), haya o no persona: cortado, cada encargo nuevo editaba hasta su primera recarga.
 - **Un plan no se pule a trozos** (`toolsDeFichero.ts#TOPE_DE_RETOQUES_DEL_PLAN`): pasado ese número de `edit_file` sobre
   `/planes/` en un encargo, se devuelve error y se pide reescribirlo de una vez (`write_file` vale en `/planes/`).
 - **Los valores de una maqueta son DE EJEMPLO**: ni el plan los manda escribir fijos ni el desarrollador los copia.

@@ -10272,3 +10272,18 @@ La prueba de la calculadora con la 0.67.0 terminó sola (35 min, 3,26 M, verific
   El analista sabe que esos valores son de ejemplo y el desarrollador no los copia aunque el plan lo diga.
 - **El analista retocó su plan a pedacitos**: 26 `edit_file` (0-3 en las pasadas anteriores), cada uno una llamada de
   unos 100 mil. Tope por encargo (`TOPE_DE_RETOQUES_DEL_PLAN`): pasado, error y «reescríbelo de una vez o entrégalo».
+
+## El tope de vueltas del turno no frenaba nada (30-10-2026)
+
+La prueba con la 0.68.0 terminó sola, con el verificador en verde, pero costó casi el doble: 63 min, 605 llamadas y
+5,66 M efectivos (antes 35 min, 319 y 3,26 M). La traza ya decía el motivo de cada corte: el developer se cortó
+por vueltas en 6 (su encargo) y luego en 12, 13, 14 y 15. El orquestador respetó la regla del crítico, porque cada
+vuelta llegó con un ROJO (un punto y dos iconos flotantes fuera de su píldora, el reloj 83 px bajo, el color del
+avatar), pero el tope del TURNO solo cortaba: el encargo siguiente arrancaba igual, editaba hasta su primera
+recarga y se cortaba allí. Después de agotar el tope hubo 8 encargos más (developer, device-controller que lo
+comprobaba y designer), unos 1,2 M, y uno de ellos metió una regresión (la quinta fila del teclado recortada) que
+pidió otro. El tope de encargos de las tareas (`TOPE_DE_ENCARGOS_AL_DESARROLLADOR`) no aplicaba: `run` no es una tarea.
+
+Arreglo: con las vueltas del turno agotadas, el encargo siguiente a ese agente NO ARRANCA (`hiloQueNoArranca` con
+`textoDeVueltasDelTurnoAgotadas`), haya o no persona, y el orquestador recibe la orden de cerrar con lo que la última
+crítica dejó por ajustar. El precio: esos ROJOS de pulido quedan para la persona en vez de perseguirse en el mismo turno.

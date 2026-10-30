@@ -37,6 +37,20 @@ export function textoDeVueltasAgotadas(vueltas: number, delTurno: boolean): stri
   );
 }
 
+/**
+ * Lo que recibe el ORQUESTADOR cuando encarga a quien ya agotó sus vueltas del turno: ese encargo no arranca. Medido en la
+ * prueba de la calculadora (30-10-2026, 0.68.0): cortado por el tope del turno, el orquestador le encargó otras tres
+ * «últimas pasadas»; cada una editaba hasta su primera recarga, se cortaba ahí y mandaba al de pruebas a comprobar —ocho
+ * encargos y unos 1,2 M de tokens después del tope—, y una de ellas metió una regresión que pidió otra.
+ */
+export function textoDeVueltasDelTurnoAgotadas(nombre: string, vueltas: number): string {
+  return (
+    `${nombre} NO HA ARRANCADO: ya hizo ${String(vueltas)} vueltas de ajuste en este turno, que es el tope. CIERRA AHORA con lo que hay: ` +
+    "lo hecho y medido, y lo que la última crítica visual dejó por ajustar, cada cosa concreta, para que la persona decida si sigue. " +
+    `No vuelvas a llamar a ${nombre} en este turno.`
+  );
+}
+
 export function textoDePresupuestoAgotado(limite: number): string {
   return (
     `[Se acabó tu presupuesto de ${limite} llamadas. Para aquí: no hagas ninguna llamada más —no se ejecutaría—. ` +
