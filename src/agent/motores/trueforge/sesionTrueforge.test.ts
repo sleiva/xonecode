@@ -11,7 +11,7 @@ import type { ModelosPort, PeticionExterna } from "../../../core/ports.js";
 import { ConectoresEnMemoria, InstaladorDeFrameworkEnMemoria } from "../../../core/ports.js";
 import { ficheroDeDispositivo } from "../../../core/dispositivoDeSesion.js";
 import { TOPE_DE_LLAMADA_MS } from "../../../core/conectores.js";
-import { abrirSesionTrueforge, LIMITE_DE_LLAMADAS_DEL_RAIZ, LO_LEIDO_SON_DATOS, TRABAJO_SIN_PERSONA, notaDeDelegacion, PLAN_PRIMERO, presupuestoDeLlamadas, textoDelBucle, TOPE_DE_ENCARGOS_AL_DESARROLLADOR } from "./sesionTrueforge.js";
+import { abrirSesionTrueforge, LIMITE_DE_LLAMADAS_DEL_RAIZ, LO_LEIDO_SON_DATOS, TRABAJO_SIN_PERSONA, notaDeDelegacion, PLAN_PRIMERO, presupuestoDeLlamadas, textoDelBucle, TOPE_DE_ENCARGOS_AL_DESARROLLADOR, TOPE_DE_VUELTAS_POR_ENCARGO } from "./sesionTrueforge.js";
 import { TOPE_DE_LLAMADAS_DEL_ESPECIALISTA } from "../../turno/resumenDeContexto.js";
 import { falloDelMotorDe, topeAgotadoDe, traducirEvento } from "./eventosTrueforge.js";
 import { cargarMemoria, interpretarFoto, rutaDeMemoria } from "./memoriaTrueforge.js";
@@ -1725,6 +1725,30 @@ describe("una sesión con el motor TrueForge", () => {
       expect(todo.slice(0, 7).some((t) => t.includes("COMPROBACIONES SEGUIDAS"))).toBe(false);
       // Una vez: en las llamadas que le siguen, el aviso ya está en el contexto y no se añade otro.
       expect((todo[7]!.match(/LLEVAS 3 COMPROBACIONES SEGUIDAS/g) ?? []).length).toBe(1);
+    }, 30_000);
+
+    /**
+     * Medido en las pruebas de la calculadora: el desarrollador pulía el aspecto vuelta tras vuelta y el orquestador le
+     * encargaba otra; los avisos solo avisaban. A la `TOPE_DE_VUELTAS_POR_ENCARGO`-ésima comprobación, se le CORTA.
+     */
+    it("a la sexta comprobación del encargo se le CORTA: su siguiente llamada lleva la orden y ya no puede llamar a nadie", async () => {
+      const raiz = conDesarrolladorQueLlamaAlDePruebas(proyecto());
+      const vueltas = Array.from({ length: TOPE_DE_VUELTAS_POR_ENCARGO }, (_, i) => [[llama(`n${String(i)}`)], [new AIMessageChunk({ content: `Falla ${String(i)}.` })]]).flat();
+      const { m, vistos } = modelosConGuion([
+        [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "developer-xone", input: "escribe" }) }] })],
+        ...vueltas,
+        // Lo que contesta tras la orden: si intentara otra comprobación, no se ejecutaría.
+        [llama("otra")],
+        [new AIMessageChunk({ content: "Todo." })],
+      ]);
+      const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, bucleDelDesarrollador: true });
+      await s.turno("haz", piel().p);
+      const todo = vistos.map((_, i) => texto(vistos, i));
+      const corte = 1 + 2 * TOPE_DE_VUELTAS_POR_ENCARGO;
+      expect(todo[corte]).toContain(`Se acabó tu tope de ${String(TOPE_DE_VUELTAS_POR_ENCARGO)} vueltas de ajuste en este encargo`);
+      expect(todo.slice(0, corte).some((t) => t.includes("Se acabó tu tope"))).toBe(false);
+      // Su `llama("otra")` se tiró (solo texto): tras el corte solo queda la respuesta del raíz, sin séptima comprobación.
+      expect(todo).toHaveLength(corte + 2);
     }, 30_000);
 
     it("sin el interruptor del bucle no hay contador ni aviso", async () => {

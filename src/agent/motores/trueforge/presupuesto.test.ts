@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { capacidadDeNotas } from "./capacidades.js";
 import { crearControlDeDetencion } from "./detencion.js";
-import { crearControlDePresupuesto, textoDePresupuestoAgotado } from "./presupuesto.js";
+import { crearControlDePresupuesto, textoDePresupuestoAgotado, textoDeVueltasAgotadas } from "./presupuesto.js";
 
 describe("el presupuesto de llamadas de un hijo: al agotarse, cierra con un resumen", () => {
   it("la orden llega ANTES de la llamada número `limite`, una sola vez, y desde ahí solo texto", () => {
@@ -13,6 +13,20 @@ describe("el presupuesto de llamadas de un hijo: al agotarse, cierra con un resu
     expect(p.antesDeLlamar("hijo")).toBe(textoDePresupuestoAgotado(3));
     expect(p.soloTexto("hijo")).toBe(true);
     expect(p.agotado("hijo")).toBe(3);
+    expect(p.antesDeLlamar("hijo")).toBeUndefined();
+  });
+
+  it("un corte pedido desde fuera (el tope de vueltas) llega en la SIGUIENTE llamada, una vez, y desde ahí solo texto", () => {
+    const p = crearControlDePresupuesto();
+    p.nacio("hijo", 100);
+    p.cortar("raiz-no-registrado", "x");
+    expect(p.antesDeLlamar("raiz-no-registrado")).toBeUndefined();
+    p.cortar("hijo", textoDeVueltasAgotadas(6, false));
+    expect(p.antesDeLlamar("hijo")).toContain("tope de 6 vueltas de ajuste en este encargo");
+    expect(p.soloTexto("hijo")).toBe(true);
+    expect(p.antesDeLlamar("hijo")).toBeUndefined();
+    p.reiniciar();
+    p.nacio("hijo", 100);
     expect(p.antesDeLlamar("hijo")).toBeUndefined();
   });
 

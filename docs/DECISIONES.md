@@ -10231,3 +10231,20 @@ minutos salieron dos desperdicios:
   MyAllXOne: cursivas, Roboto Thin con peso 250, una de iconos).
 
 La ruta virtual en la shell (`ls /diseno/`) que también se vio ya estaba cubierta: se rechazó y el agente la repitió bien.
+
+## El ajuste visual termina: el crítico decide y un tope corta (30-10-2026)
+
+Medido en las pruebas de la calculadora: lo que manda en el gasto es pulir el aspecto. Por encargo, el desarrollador hacía
+4-8 recargas (editar, recargar, capturar, describir, medir con `js`), y el orquestador le encargaba otra vuelta tras cada
+entrega: en una prueba, cuatro encargos, 25 recargas y unos 4 M de tokens, con la calculadora ya funcionando desde el
+segundo. Los prompts ya decían «TRES vueltas» (orquestador) y «`RONDAS_VISUALES` vueltas» (desarrollador), y
+`UMBRALES_DE_VUELTAS` avisaba: nada de eso paraba.
+
+Decisión suya, las dos cosas:
+
+- **El crítico decide**: con lo funcional comprobado, otra vuelta solo si el último `xone_critica_visual` dio ROJO; con
+  verde, aunque traiga «detalles», se entrega. Va en el prompt del orquestador (`BUCLE_DE_CALIDAD`) y del desarrollador.
+- **Un tope por código**: `TOPE_DE_VUELTAS_POR_ENCARGO` (la primera comprobación más las `RONDAS_VISUALES` que ya
+  prometía el prompt) y `TOPE_DE_VUELTAS_DEL_TURNO` por agente, el doble, para que un orquestador que vuelve a
+  encargar no reinicie la cuenta. Al pasarlo se pide el corte por la pieza del presupuesto: la siguiente llamada lleva
+  la orden de cerrar con lo que funciona, lo que dijo la última crítica y lo que falta, y sus tool calls se tiran.

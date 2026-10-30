@@ -212,7 +212,8 @@ export const NOTA_DE_ENCARGO_CORTADO =
  * el que lo perdía entero, y el siguiente empezaba de cero.
  */
 export function sinOrdenDePresupuesto(mensajes: readonly unknown[]): unknown[] {
-  const orden = /\[Se acabó tu presupuesto de \d+ llamadas\.[^\]]*\]/g;
+  // La del presupuesto y la del tope de vueltas (`presupuesto.ts#textoDeVueltasAgotadas`): heredadas, cortarían igual.
+  const orden = /\[Se acabó tu (?:presupuesto de \d+ llamadas|tope de \d+ vueltas de ajuste[^.]*)\.[^\]]*\]/g;
   const limpiar = (texto: string): string => texto.replace(orden, NOTA_DE_ENCARGO_CORTADO);
   return mensajes.map((m) => {
     if (typeof m !== "object" || m === null || (m as { role?: unknown }).role !== "user") return m;

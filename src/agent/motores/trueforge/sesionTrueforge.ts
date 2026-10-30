@@ -131,7 +131,7 @@ import { crearMemoriaDeEspecialistas, sinOrdenDePresupuesto } from "./memoriaDeE
 import { crearEsperas } from "./esperas.js";
 import { conResumenSeguro } from "./resumenSeguro.js";
 import { crearControlDeDetencion, RESUMEN_DE_RELLENO } from "./detencion.js";
-import { crearControlDePresupuesto, MARGEN_SOBRE_EL_PRESUPUESTO, RESUMEN_DE_RELLENO_DEL_PRESUPUESTO } from "./presupuesto.js";
+import { crearControlDePresupuesto, MARGEN_SOBRE_EL_PRESUPUESTO, RESUMEN_DE_RELLENO_DEL_PRESUPUESTO, textoDeVueltasAgotadas } from "./presupuesto.js";
 import type { ToolDeLangchain } from "./toolsPropias.js";
 import { crearNavegacionXone } from "../../grafo/navegacionXone.js";
 import { crearValidarFicheroXone } from "../../grafo/validarFicheroXone.js";
@@ -184,6 +184,9 @@ const BUCLE_DE_CALIDAD = [
   "diferencias con el diseño —piezas que faltan, tamaños, formas—, delega el arreglo en quien MAQUETA la pantalla (el que escribe su `.xne`, no el de los recursos) con esas diferencias concretas y",
   "repite. Para cuando la distancia estructural baje del 10 % en vertical y en horizontal y el crítico no señale diferencias de forma con el diseño, o tras TRES vueltas, y",
   "di lo que sigue faltando en vez de darlo por hecho.",
+  "QUIÉN DECIDE OTRA VUELTA ES EL CRÍTICO: con lo funcional ya comprobado, encarga otra vuelta de ajuste visual SOLO si el último",
+  "`xone_critica_visual` dio ROJO, y con lo que señaló. Con VERDE —aunque traiga «detalles»— no hay otra: la pantalla está hecha y",
+  "los detalles se dicen en tu respuesta. Además el harness CORTA a quien ajusta tras unas vueltas por encargo y por turno.",
 ].join("\n");
 
 /**
@@ -413,6 +416,17 @@ export function textoDeCapturas(capturas: number): string {
 export const UMBRALES_DE_VUELTAS = [3, 5] as const;
 
 /**
+ * **Y con cuántas se le CORTA** (petición suya, 30-10-2026: «el crítico decide, y un tope»). Medido en las pruebas de la
+ * calculadora: el desarrollador hacía 4-8 recargas por encargo puliendo el aspecto y el orquestador le encargaba otra
+ * vuelta tras cada entrega —cuatro encargos, 25 recargas, unos 4 M de tokens—; el prompt decía «`RONDAS_VISUALES`
+ * vueltas» y los avisos de `UMBRALES_DE_VUELTAS` solo avisaban. Por ENCARGO, la primera comprobación más esas vueltas; por
+ * TURNO y agente, el doble: un orquestador que vuelve a encargar no reinicia la cuenta. Se corta con la pieza del
+ * presupuesto (`presupuesto.ts#cortar`): el encargo cierra con un resumen, no mudo.
+ */
+export const TOPE_DE_VUELTAS_POR_ENCARGO = RONDAS_VISUALES + 1;
+export const TOPE_DE_VUELTAS_DEL_TURNO = 2 * TOPE_DE_VUELTAS_POR_ENCARGO;
+
+/**
  * El aviso: no dice «para», dice «cambia de procedimiento». La misma familia de fallo se vio arreglada de cinco
  * maneras (un control que falta, y al arreglarlo, otro): lo que hay que hacer es aislar la causa una vez y aplicarla
  * a todos los sitios, no reescribir otra vez.
@@ -589,6 +603,8 @@ export function textoDelBucle(
                 "lo descartes como «no fiable»; si no estás de acuerdo, dilo con el dato.",
                 "El crítico cuesta un minuto y un modelo: pásalo UNA vez al CERRAR cada pantalla (y otra solo si arreglaste lo que dijo),",
                 "no tras cada retoque; para los retoques está `comparar_capturas`. El juicio es tuyo: no se lo devuelvas al que te encargó.",
+                "Y DECIDE si sigues: si da VERDE —aunque traiga «detalles»—, ENTREGA, que los detalles no justifican otra vuelta; si da ROJO,",
+                "arregla lo que señala y pásalo otra vez. El harness te corta tras unas vueltas (recargas o despliegues): no las gastes en pulir.",
               ]
             : [
                 "estructura contra la maqueta con números). Pídele al de pruebas una captura y que te diga su nombre; pásala con `pantalla` y,",
@@ -1106,6 +1122,18 @@ export async function abrirSesionTrueforge(
   const detencion = crearControlDeDetencion(HILO_RAIZ);
   /** El presupuesto de llamadas de cada hijo (`presupuesto.ts`): al agotarse cierra con un resumen. */
   const presupuesto = crearControlDePresupuesto();
+  /** Las vueltas de cada AGENTE en el turno, sumando sus encargos (`TOPE_DE_VUELTAS_DEL_TURNO`). */
+  const vueltasDelTurno = new Map<string, number>();
+  /** Una comprobación más de ese hilo: cuenta en su encargo y en su turno, y al pasar un tope pide el corte. */
+  const contarVuelta = (hilo: string): void => {
+    const n = (vueltasDeCadaHilo.get(hilo) ?? 0) + 1;
+    vueltasDeCadaHilo.set(hilo, n);
+    const quien = especialistaDeHilo.get(hilo) ?? quienEs.get(hilo) ?? hilo;
+    const t = (vueltasDelTurno.get(quien) ?? 0) + 1;
+    vueltasDelTurno.set(quien, t);
+    if (n >= TOPE_DE_VUELTAS_POR_ENCARGO) presupuesto.cortar(hilo, textoDeVueltasAgotadas(n, false));
+    else if (t >= TOPE_DE_VUELTAS_DEL_TURNO) presupuesto.cortar(hilo, textoDeVueltasAgotadas(t, true));
+  };
   /** Tool calls tiradas por DETENER en la sesión: si se queda en cero, el filtro es solo red. */
   let llamadasTiradasPorDetener = 0;
   /**
@@ -1725,7 +1753,7 @@ export async function abrirSesionTrueforge(
     // Cuenta una COMPROBACIÓN: quien lleva un lazo llamó a quien ejecuta. Es lo que dispara el aviso de vueltas.
     if (concedido && agente?.ejecucion === true && params.parent !== undefined) {
       const padre = (params.parent as { thread_id?: string }).thread_id ?? "";
-      if (padre !== "") vueltasDeCadaHilo.set(padre, (vueltasDeCadaHilo.get(padre) ?? 0) + 1);
+      if (padre !== "") contarVuelta(padre);
     }
     // ¿Arranca? Un especialista que declara `espera` NO arranca mientras haya vivo —o anunciado por el mismo mensaje del
     // orquestador— uno de esos: se le devuelve al instante diciéndolo, y el orquestador lo llama de nuevo con el informe del
@@ -2162,7 +2190,7 @@ export async function abrirSesionTrueforge(
             // Una COMPROBACIÓN de quien prueba él mismo (`ejecutar_script`): cada recarga o despliegue, como cada llamada al de
             // pruebas para quien no lo hace. Es lo que dispara el aviso de vueltas (`textoDeVueltas`).
             if (t.function.name === NOMBRE_EJECUTAR_SCRIPT && typeof args["command"] === "string" && /^\s*xone-(recargar|desplegar)-android\b/.test(args["command"])) {
-              vueltasDeCadaHilo.set(deHilo, (vueltasDeCadaHilo.get(deHilo) ?? 0) + 1);
+              contarVuelta(deHilo);
             }
             // Qué le pide el orquestador a quién: el encargo, acotado (ver `DiagnosticoDeTools.delegacion`).
             if (t.function.name === "create_sub_agent" && typeof args["name"] === "string" && typeof args["input"] === "string") {
@@ -2333,6 +2361,7 @@ export async function abrirSesionTrueforge(
       recordatorioDeIdioma = undefined;
       detencion.reiniciar();
       presupuesto.reiniciar();
+      vueltasDelTurno.clear();
       const instantanea = await tomarInstantanea(raiz, opciones.entorno.git);
       const tope = opciones.topeDeRondas ?? MAX_APPROVAL_ROUNDS;
       const aplicadasSinPreguntar: string[] = [];

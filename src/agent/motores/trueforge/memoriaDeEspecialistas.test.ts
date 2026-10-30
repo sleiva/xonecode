@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { MAX_CARACTERES_DE_ARGUMENTO, MAX_CARACTERES_DE_RESULTADO, MAX_CARACTERES_DE_RESULTADO_CORTA, TOPE_COMPLETA_TOKENS, TOPE_CORTA_TOKENS, TOPE_REDUCIDA_TOKENS, crearMemoriaDeEspecialistas, reducirHistorial, ventanaDeHistorial, NOTA_DE_ENCARGO_CORTADO, PREFIJO_DE_ID_EN_MEMORIA, sinOrdenDePresupuesto } from "./memoriaDeEspecialistas.js";
-import { textoDePresupuestoAgotado } from "./presupuesto.js";
+import { textoDePresupuestoAgotado, textoDeVueltasAgotadas } from "./presupuesto.js";
 import { conEcoDeRazonamiento, crearMemoriaDeEco } from "../../config/ecoDeRazonamiento.js";
 
 const MSGS = [{ role: "user", content: "haz" }, { role: "assistant", content: "hecho" }];
@@ -261,5 +261,14 @@ describe("la memoria CORTA de quien maneja el aparato (Maset: 23 y 43 mil tokens
     const m = crearMemoriaDeEspecialistas();
     m.abrir("consultant-xone", "h1");
     expect(m.cerrar("h1", { bien: true, mensajes: ORDEN, tokens: 1_000 })).toBe("guardada");
+  });
+});
+
+/** Cortado por el tope de VUELTAS, la orden tampoco se hereda: el siguiente encargo pararía sin que nadie se lo pidiera. */
+describe("la orden del tope de vueltas no pasa a la memoria", () => {
+  it("se cambia por la nota, igual que la del presupuesto", () => {
+    const orden = textoDeVueltasAgotadas(12, true);
+    const [m] = sinOrdenDePresupuesto([{ role: "user", content: `antes ${orden} después` }]) as { content: string }[];
+    expect(m!.content).toBe(`antes ${NOTA_DE_ENCARGO_CORTADO} después`);
   });
 });

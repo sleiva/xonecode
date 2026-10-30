@@ -140,6 +140,11 @@ Ante una discrepancia con el código, **el código manda**.
   `ui.showToast` ni `appData.writeConsoleString`; FUNCIONALES aparte de VISUALES (`RONDAS_VISUALES`, el mismo número que
   su prompt).
 - **`TASKS.md` con casillas o no se escribe** (`core/tareasDelPlan.ts#motivoDeTasksInaceptable`): solo al escribirlo ENTERO.
+- **El ajuste visual TERMINA** (petición suya): otra vuelta solo si el último `xone_critica_visual` dio ROJO (prompt de
+  orquestador y desarrollador), y por CÓDIGO un tope de vueltas (recargas/despliegues o llamadas al de pruebas):
+  `TOPE_DE_VUELTAS_POR_ENCARGO` (`RONDAS_VISUALES` + 1) y `TOPE_DE_VUELTAS_DEL_TURNO` por agente sumando encargos
+  (`contarVuelta`). Corta con la pieza del presupuesto (`presupuesto.ts#cortar`, `textoDeVueltasAgotadas`): cierra con
+  resumen, y la orden no pasa a la memoria (`sinOrdenDePresupuesto`).
 - **La shell no escribe el proyecto** (`proyectoSinShell.ts`, `conGuardaDelProyecto` sobre el backend que ejecuta, en
   `execute` y en `ejecutar_script`): tras cada orden se compara el proyecto fuera de `.xonecode/` y `.git/` con su copia, y
   lo cambiado, creado o borrado se DESHACE y se añade a la salida con código ≠ 0. Las escrituras del backend de los agentes
