@@ -67,6 +67,19 @@ export const MAX_CARACTERES_DE_ENCARGO = 8_000;
 type LlamadaAMensaje = { function?: { arguments?: unknown; [k: string]: unknown }; [k: string]: unknown };
 type Mensaje = { role?: string; content?: unknown; reasoning_content?: unknown; tool_calls?: LlamadaAMensaje[]; [k: string]: unknown };
 
+/**
+ * El prefijo de los ids de tool call en la memoria REDUCIDA. Quitar `reasoning_content` del mensaje no basta: `@langchain/openai`
+ * nunca lo manda, así que el eco (`agent/config/ecoDeRazonamiento.ts`) lo volvía a pegar por id, y DeepSeek lo cobra. Medido en
+ * el ejemplo de la calculadora: el desarrollador arrancaba su segundo encargo con 109 mil de entrada cuando la memoria creía
+ * mandar 38 mil. Con otro id el eco no lo encuentra. Medido contra la API (30-10-2026): delante del mensaje de usuario del
+ * encargo nuevo acepta un asistente sin razonamiento y con un id que no conoce, y no lo repone ella (dentro de un mismo turno
+ * sí lo repone por id: allí solo `""` lo deja fuera, pero eso no es asunto de la memoria).
+ */
+export const PREFIJO_DE_ID_EN_MEMORIA = "mem_";
+
+const enMemoria = (id: unknown): unknown =>
+  typeof id === "string" && id !== "" && !id.startsWith(PREFIJO_DE_ID_EN_MEMORIA) ? `${PREFIJO_DE_ID_EN_MEMORIA}${id}` : id;
+
 const tokensDe = (mensajes: readonly unknown[]): number => Math.ceil(JSON.stringify(mensajes).length / CARACTERES_POR_TOKEN);
 
 /**
@@ -111,11 +124,12 @@ export function reducirHistorial(
     if (m.role === "tool") {
       const id = (m as { tool_call_id?: unknown }).tool_call_id;
       if (typeof id === "string" && contadas.has(id)) continue;
+      const conId = { ...m, tool_call_id: enMemoria(id) };
       if (typeof m.content === "string" && m.content.length > maxResultado) {
-        salida.push({ ...m, content: `${m.content.slice(0, maxResultado)}\n[recortado: eran ${String(m.content.length)} caracteres; vuelve a leerlo si lo necesitas]` });
+        salida.push({ ...conId, content: `${m.content.slice(0, maxResultado)}\n[recortado: eran ${String(m.content.length)} caracteres; vuelve a leerlo si lo necesitas]` });
         continue;
       }
-      salida.push(m);
+      salida.push(conId);
       continue;
     }
     if (m.role === "assistant") {
@@ -129,14 +143,15 @@ export function reducirHistorial(
       const hechas: string[] = [];
       for (const t of resto.tool_calls) {
         const contada = contar(t);
-        if (contada === undefined) quedan.push(t);
+        // Con el id de la memoria (`PREFIJO_DE_ID_EN_MEMORIA`): con el suyo, el razonamiento quitado volvería por él.
+        if (contada === undefined) quedan.push({ ...t, id: enMemoria(t["id"]) });
         else {
           hechas.push(contada);
           if (typeof t["id"] === "string") contadas.add(t["id"]);
         }
       }
       if (hechas.length === 0) {
-        salida.push(resto);
+        salida.push({ ...resto, tool_calls: quedan });
         continue;
       }
       const texto = typeof resto.content === "string" ? resto.content : "";

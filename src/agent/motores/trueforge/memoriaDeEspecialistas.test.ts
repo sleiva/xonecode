@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { MAX_CARACTERES_DE_ARGUMENTO, MAX_CARACTERES_DE_RESULTADO, MAX_CARACTERES_DE_RESULTADO_CORTA, TOPE_COMPLETA_TOKENS, TOPE_CORTA_TOKENS, TOPE_REDUCIDA_TOKENS, crearMemoriaDeEspecialistas, reducirHistorial, ventanaDeHistorial, NOTA_DE_ENCARGO_CORTADO, sinOrdenDePresupuesto } from "./memoriaDeEspecialistas.js";
+import { MAX_CARACTERES_DE_ARGUMENTO, MAX_CARACTERES_DE_RESULTADO, MAX_CARACTERES_DE_RESULTADO_CORTA, TOPE_COMPLETA_TOKENS, TOPE_CORTA_TOKENS, TOPE_REDUCIDA_TOKENS, crearMemoriaDeEspecialistas, reducirHistorial, ventanaDeHistorial, NOTA_DE_ENCARGO_CORTADO, PREFIJO_DE_ID_EN_MEMORIA, sinOrdenDePresupuesto } from "./memoriaDeEspecialistas.js";
 import { textoDePresupuestoAgotado } from "./presupuesto.js";
+import { conEcoDeRazonamiento, crearMemoriaDeEco } from "../../config/ecoDeRazonamiento.js";
 
 const MSGS = [{ role: "user", content: "haz" }, { role: "assistant", content: "hecho" }];
 
@@ -170,9 +171,40 @@ describe("los argumentos largos de sus llamadas, en la memoria reducida (Maset: 
       { role: "tool", tool_call_id: "a", content: "contenido" },
       { role: "tool", tool_call_id: "b", content: "Successfully" },
     ]) as { role: string; content?: string; tool_calls?: { id: string }[]; tool_call_id?: string }[];
-    expect(ms[0]!.tool_calls!.map((t) => t.id)).toEqual(["a"]);
+    expect(ms[0]!.tool_calls!.map((t) => t.id)).toEqual(["mem_a"]);
     expect(ms[0]!.content).toContain("edit_file sobre /x.xne");
-    expect(ms.filter((m) => m.role === "tool").map((m) => m.tool_call_id)).toEqual(["a"]);
+    expect(ms.filter((m) => m.role === "tool").map((m) => m.tool_call_id)).toEqual(["mem_a"]);
+  });
+});
+
+/**
+ * El razonamiento que la memoria reducida quita NO puede volver por el id de su tool call. Medido en el ejemplo de la
+ * calculadora (30-10-2026): el desarrollador arrancaba su segundo encargo con 109 mil de entrada y la memoria creía mandar
+ * 38 mil; el eco lo pegaba por id.
+ */
+describe("la memoria reducida cambia los ids para que el razonamiento quitado no vuelva", () => {
+  const HISTORIAL = [
+    { role: "user", content: "encargo 1" },
+    { role: "assistant", content: "", reasoning_content: "pienso muchísimo", tool_calls: [{ id: "call_00_x", type: "function", function: { name: "read_file", arguments: "{\"file_path\":\"/a\"}" } }] },
+    { role: "tool", tool_call_id: "call_00_x", content: "contenido" },
+    { role: "assistant", content: "hecho" },
+  ];
+
+  it("el asistente y su respuesta, con el MISMO id nuevo; y reducir dos veces no lo repite", () => {
+    const una = reducirHistorial(HISTORIAL) as { tool_calls?: { id: string }[]; tool_call_id?: string }[];
+    expect(una[1]!.tool_calls![0]!.id).toBe(`${PREFIJO_DE_ID_EN_MEMORIA}call_00_x`);
+    expect(una[2]!.tool_call_id).toBe(`${PREFIJO_DE_ID_EN_MEMORIA}call_00_x`);
+    expect(reducirHistorial(una)).toEqual(una);
+  });
+
+  it("y el eco de DeepSeek, que recuerda el id ORIGINAL, ya no le pega el razonamiento", () => {
+    const eco = crearMemoriaDeEco();
+    eco.recordar("call_00_x", "pienso muchísimo");
+    // Sin reducir, el eco lo repone: ésa es la fuga.
+    const sinReducir = HISTORIAL.map(({ reasoning_content: _r, ...m }) => m);
+    expect(JSON.stringify(conEcoDeRazonamiento({ messages: sinReducir }, eco))).toContain("pienso muchísimo");
+    const reducida = [...reducirHistorial(HISTORIAL), { role: "user", content: "encargo 2" }];
+    expect(JSON.stringify(conEcoDeRazonamiento({ messages: reducida as never }, eco))).not.toContain("pienso muchísimo");
   });
 });
 

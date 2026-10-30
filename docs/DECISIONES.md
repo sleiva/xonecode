@@ -10113,3 +10113,29 @@ hubo respuesta), y por ella pasan el latido de reiniciar, `contesta()` y el bucl
 `launchApplication` rechazado ahora lo DICE y sale, en vez de esperar 15 s culpando al servidor. El cliente no cambia:
 el agente sigue viendo el 1 cuando un comando suyo es rechazado. Tras el arreglo, en el mismo emulador: reiniciar 2 s
 y desplegar 6 s, los dos con 0. La consola web no estaba afectada (`src/agent/dispositivos` usa su propio cliente).
+
+## El razonamiento que la memoria quitaba volvía por el eco (30-10-2026)
+
+Medido en el ejemplo de la calculadora (intento 4): el desarrollador arrancó su segundo encargo con 109 mil de entrada
+cuando la memoria (`arranca-con`) creía mandar 38 mil; el diseñador, 42 mil frente a 14. `reducirHistorial` quitaba
+`reasoning_content`, pero `@langchain/openai` no lo manda nunca y el eco (`agent/config/ecoDeRazonamiento.ts`) lo vuelve a
+pegar por el id de la tool call: el razonamiento del encargo anterior iba en cada llamada del siguiente.
+
+Medido contra la API de DeepSeek (`deepseek-flash`, 30-10-2026):
+- **Lo cobra**: un `reasoning_content` antiguo de unos 5 mil tokens sube `prompt_tokens` igual dentro del turno que delante
+  de un mensaje de usuario nuevo.
+- **Dentro de un turno lo REPONE por id**: el mismo historial con y sin la clave cuenta lo mismo; solo `""` lo deja fuera.
+  Por eso la nota del 24-09 («acepta el historial sin `reasoning_content`») era el servidor reponiéndolo, no aceptándolo.
+- **Delante de un mensaje de usuario nuevo no lo exige ni lo repone**, con ids conocidos o no (200 en todas las vueltas
+  siguientes).
+
+Así que la memoria reducida **cambia los ids** de sus tool calls (`PREFIJO_DE_ID_EN_MEMORIA`, en el asistente y en su
+respuesta, sin repetirse al reducir otra vez): el eco no los encuentra y la API no los pide. Se eligió la frontera de la
+MEMORIA y no «el último mensaje de usuario» en el eco porque a mitad de un encargo entran mensajes de usuario del harness
+(idioma, informes de hijos, presupuesto, avisos de vueltas): esa regla habría quitado razonamiento DENTRO del bucle, que es
+otra decisión con riesgo de calidad, y roto la caché en cada aviso. Estimado sobre la traza: unos 48 mil tokens menos en cada
+una de las 61 llamadas del segundo encargo del desarrollador (≈2,9 M de 32,3 M de entrada). **Sin medir en un turno real.**
+
+Quitar el razonamiento de las vueltas viejas DENTRO de un encargo (mandar `""` salvo en el último asistente) ahorraría un
+22 % de entrada en ese mismo turno, casi toda en caché (≈16 % efectivo, porque rompe la caché un mensaje antes en cada
+llamada). Queda como experimento: el riesgo es que el modelo vuelva a razonar lo ya pensado y suba la SALIDA, que es lo lento.
