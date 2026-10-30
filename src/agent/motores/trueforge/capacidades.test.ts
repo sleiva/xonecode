@@ -260,7 +260,7 @@ describe("capacidadDeNotas contra el orquestador real: la entrega ocurre de verd
     ]);
     const notas: Nota[] = [];
     const raiz = new AgentThread({
-      definition: { modelClient: modeloParaTrueforge({ modelo: () => modelo }), instruction: "reglas" },
+      definition: { modelClient: modeloParaTrueforge({ modelo: () => modelo }), modelName: "prueba", instruction: "reglas" },
       threadId: "main",
       title: "main",
       capabilities: [capacidadDeNotas(notas).capability, capacidadDeFecha().capability] as never,
@@ -299,7 +299,7 @@ describe("capacidadDeNotas contra el orquestador real: la entrega ocurre de verd
     const notas: Nota[] = [crearNota("nota compartida")];
     const { modelo: modeloHijo, recibidos: recibidosHijo } = modeloGuionizado([[new AIMessageChunk({ content: "Visto." })]]);
     const hijo = new AgentThread({
-      definition: { modelClient: modeloParaTrueforge({ modelo: () => modeloHijo }), messages: [{ role: "user", content: "encargo" }] },
+      definition: { modelClient: modeloParaTrueforge({ modelo: () => modeloHijo }), modelName: "prueba", messages: [{ role: "user", content: "encargo" }] },
       threadId: "hijo-1",
       title: "hijo-1",
       capabilities: [capacidadDeNotas(notas).capability] as never,
@@ -322,7 +322,7 @@ describe("capacidadDeNotas contra el orquestador real: la entrega ocurre de verd
 describe("escribeSinPreguntar (tarea de fondo)", () => {
   const aprobacionDe = (piezas: ReturnType<typeof capacidadesDelEspecialista>, nombre: string): unknown => {
     const ts = (piezas.find((c) => c.nombre === nombre)!.capability.systemToolSets as unknown[])[0] as Record<string, unknown>;
-    return (ts["policy"] as { requireApprovalForTools: unknown }).requireApprovalForTools;
+    return (ts["toolSelectorPolicy"] as { requireApprovalForTools: unknown }).requireApprovalForTools;
   };
   it("con persona delante, write_file pide aprobación; en una tarea, no", () => {
     expect(aprobacionDe(capacidadesDelEspecialista(agente({}), "x", deps()), "ficheros")).toEqual(expect.arrayContaining(["write_file", "edit_file"]));

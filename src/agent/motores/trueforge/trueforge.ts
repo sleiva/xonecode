@@ -1,7 +1,7 @@
 /**
  * TODO lo que XOneCode usa de `@truefoundry/trueforge-core`, por un solo sitio.
  *
- * La librería es 0.x (fijada EXACTA a 0.2.1 en `package.json`) y no promete compatibilidad entre
+ * La librería es 0.x (fijada EXACTA a 0.181.0 en `package.json`) y no promete compatibilidad entre
  * versiones. Con los imports repartidos por el motor, subirla obligaba a revisar cada fichero; aquí
  * se revisa uno. Dos clases de cosas, y se separan a propósito:
  *
@@ -22,7 +22,7 @@
  * Es una constante y no una lectura de su `package.json`: leerlo desde otro fichero sería una
  * segunda puerta a la librería, y aquí subirla se revisa de todas formas.
  */
-export const VERSION_DE_TRUEFORGE = "0.2.1";
+export const VERSION_DE_TRUEFORGE = "0.181.0";
 
 export {
   AgentThread,
@@ -44,7 +44,7 @@ import type {
   AgentTracing,
 } from "@truefoundry/trueforge-core/core";
 
-// ── Rutas profundas: fuera de la API pública de 0.2.1, y solo TIPOS ──────────────────────────
+// ── Rutas profundas: fuera de la API pública, y solo TIPOS ──────────────────────────
 export type { ExtendedChatCompletionChunk, RawAssistantMessageWithUsage } from "@truefoundry/trueforge-core/core/llm/LLMTypes";
 
 // ── El trazado mudo: no trazamos con la librería (la traza es la nuestra, `diagnosticoDeTools`) ─

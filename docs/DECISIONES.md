@@ -10201,3 +10201,18 @@ colecciones, que son del desarrollador. Se COMPRUEBA en vez de leer la orden: un
 orden de `execute` o `ejecutar_script` deshace lo cambiado, creado o borrado y lo añade a la salida con código ≠ 0. Las
 escrituras del backend de los agentes se anotan como buenas, porque los especialistas corren en paralelo. Lo que la shell
 escribe en `/artefactos/` y `/hotswap/` (dentro de `.xonecode/`) no se toca.
+
+## TrueForge 0.2.1 → 0.181.0 (30-10-2026)
+
+Petición suya, tras revisar las versiones. Lo que decide: `npm audit --omit=dev` baja de 23 avisos a 18 —se van
+`shell-quote` (crítico), `undici`, `follow-redirects` y el SDK de MCP (altos) y el de la propia `trueforge-core`—. Lo
+demás que trae no nos cambia nada: la compactación sigue con el mismo formato (sin caché ni tope de salida: lo de la
+0.62.1 sigue haciendo falta), los reintentos y los timeouts van por un `fetch` que no usamos, y un subagente con
+`finish_reason: "length"` ahora acaba en error, pero nuestro adaptador devuelve `stop`/`tool_calls` y los cortes son
+nuestros. Trae eventos `thread.context_compaction_*` que la traza podría usar.
+
+El port: versión EXACTA (npm la pone con `^` y `frontera.test.ts` lo caza), `approvalPolicies: undefined` en los
+`ToolSet`, un campo interno renombrado en un test (`policy` → `toolSelectorPolicy`) y **`modelName`, obligatorio en
+`AgentDefinition`**. La trampa: las definiciones de los hijos van con `as never`, así que sin `modelName` el compilador
+calla, y medido en un worktree ningún hijo trabajaba (114 tests en rojo). Probado con la suite entera y con una sesión
+real con DeepSeek: el orquestador delega, el analista razona en sus 8 llamadas y la respuesta vuelve.

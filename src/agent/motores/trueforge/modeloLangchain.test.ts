@@ -61,9 +61,9 @@ describe("el modelo de TrueForge hecho con nuestro modelo de LangChain", () => {
       toolCallInfo: async () => ({ type: "mcp", mcp_server_id: "xone", mcp_server_name: "xone", original_tool_name: "read_file" }),
     };
     const logger = winston.createLogger({ silent: true, transports: [] });
-    const toolSet = new ToolSet({ source: source as never, selectors: { enableTools: ["@all"], disableTools: [], preloadTools: [], requireApprovalForTools: [] }, preload: true });
+    const toolSet = new ToolSet({ source: source as never, selectors: { enableTools: ["@all"], disableTools: [], preloadTools: [], requireApprovalForTools: [] }, preload: true, approvalPolicies: undefined });
     const raiz = new AgentThread({
-      definition: { modelClient: modeloParaTrueforge({ modelo: () => modelo }), instruction: "reglas de XOne" },
+      definition: { modelClient: modeloParaTrueforge({ modelo: () => modelo }), modelName: "prueba", instruction: "reglas de XOne" },
       threadId: "main",
       title: "main",
       capabilities: [{ systemToolSets: [toolSet] }] as never,
@@ -126,9 +126,9 @@ describe("una llamada con los argumentos ROTOS no se pierde", () => {
       toolCallInfo: async () => ({ type: "mcp", mcp_server_id: "xone", mcp_server_name: "xone", original_tool_name: "read_file" }),
     };
     const logger = winston.createLogger({ silent: true, transports: [] });
-    const toolSet = new ToolSet({ source: source as never, selectors: { enableTools: ["@all"], disableTools: [], preloadTools: [], requireApprovalForTools: [] }, preload: true });
+    const toolSet = new ToolSet({ source: source as never, selectors: { enableTools: ["@all"], disableTools: [], preloadTools: [], requireApprovalForTools: [] }, preload: true, approvalPolicies: undefined });
     const raiz = new AgentThread({
-      definition: { modelClient: modeloParaTrueforge({ modelo: () => modelo }), instruction: "reglas" },
+      definition: { modelClient: modeloParaTrueforge({ modelo: () => modelo }), modelName: "prueba", instruction: "reglas" },
       threadId: "main",
       title: "main",
       capabilities: [{ systemToolSets: [toolSet] }] as never,

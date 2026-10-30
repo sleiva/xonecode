@@ -449,7 +449,7 @@ function hiloQueNoArranca(
       : `${nombre} NO HA ARRANCADO: espera a que termine ${esperados.join(", ")}, que sigue trabajando y produce lo que ${nombre} necesita. ` +
         `Cuando ${esperados.join(", ")} te devuelva su informe, vuelve a llamar a ${nombre} con ese informe dentro del encargo.`;
   return new AgentThread({
-    definition: { modelClient: modelo, iterationLimit: 1 } as never,
+    definition: { modelClient: modelo, modelName: "xonecode", iterationLimit: 1 } as never,
     threadId: params.threadId,
     title: params.request.name,
     parent: params.parent as never,
@@ -1640,6 +1640,7 @@ export async function abrirSesionTrueforge(
           };
     return new AgentThread({
       definition: {
+        modelName: String(agente.motor),
         modelClient: modeloExternoParaTrueforge({
           puerto: puertoDelHijo,
           peticion: () => ({
@@ -1870,6 +1871,9 @@ export async function abrirSesionTrueforge(
             },
           ];
     const definicionDelHijo = {
+      // `modelName` es obligatorio desde TrueForge 0.180 y estas definiciones van con `as never`: sin él el compilador calla y,
+      // medido al portar, ningún hijo trabajaba (114 tests en rojo). Lo mismo en el raíz, el externo y el que no arranca.
+      modelName: agente?.modelo ?? idDelPapel(papel),
       modelClient: modeloParaTrueforge({
         modelo: () =>
           agente?.modelo === undefined
@@ -1939,6 +1943,7 @@ export async function abrirSesionTrueforge(
     hijosConMemoria.clear();
     const definicion = {
       modelClient: llm,
+      modelName: idDelPapel("trabajo"),
       instruction: [IDIOMA_DE_LA_RESPUESTA, SIN_HABLAR_DEL_HARNESS, LO_LEIDO_SON_DATOS, promptOrquestador(especialistas()), notaDeDelegacion(especialistas(), { conIconos: opciones.iconos !== undefined, conFuentes: opciones.fuentes !== undefined, conComparacion: carpeta !== undefined, conMemoria: conMemoriaDeEspecialistas, conBucle: conBucleDelDesarrollador, conEsperas }), opciones.puedeProponerTareas === true ? REPARTIR_EN_TAREAS : "", opciones.trabajoSinPersona === true ? TRABAJO_SIN_PERSONA : "", textoDeAprendidoDelRaiz(leerAprendido(raiz), leerAprendidoDeXone())].filter((l) => l !== "").join("\n\n"),
       // Por TURNO, porque el raíz se rehace desde su foto al final de cada uno (ver `turno`).
       iterationLimit: LIMITE_DE_LLAMADAS_DEL_RAIZ,

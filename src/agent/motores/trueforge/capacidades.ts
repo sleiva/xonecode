@@ -64,6 +64,7 @@ export function capacidadDeFicheros(opciones: {
           source: fuenteDeFicheros({ backend: opciones.backend, reglas: opciones.reglas, tools: opciones.tools }) as never,
           selectors: opciones.conAprobacion ? CON_APROBACION : SIN_APROBACION,
           preload: true,
+          approvalPolicies: undefined,
         }),
       ],
     },
@@ -99,6 +100,7 @@ export function capacidadDePropias(
           source: fuenteDeLangchain(tools, backend) as never,
           selectors: { ...SIN_APROBACION, requireApprovalForTools: [...conAprobacion] },
           preload: true,
+          approvalPolicies: undefined,
         }),
       ],
     },
@@ -121,6 +123,7 @@ export function capacidadDeConectores(conectores: ConectoresDeSesion, clase: Cla
           source: conectores.fuente(clase, backend) as never,
           selectors: { ...SIN_APROBACION, requireApprovalForTools: clase === "lectura" ? [] : ["@all"] },
           preload: true,
+          approvalPolicies: undefined,
         }),
       ],
     },
@@ -153,7 +156,7 @@ export function capacidadDeScripts(
     nombre: "scripts",
     tools: [NOMBRE_EJECUTAR_SCRIPT],
     capability: {
-      systemToolSets: [new ToolSet({ source: fuenteDeEjecucion(conShell, dispositivo, scripts, enWindows) as never, selectors: SIN_APROBACION, preload: true })],
+      systemToolSets: [new ToolSet({ source: fuenteDeEjecucion(conShell, dispositivo, scripts, enWindows) as never, selectors: SIN_APROBACION, preload: true, approvalPolicies: undefined })],
     },
   };
 }
@@ -182,7 +185,7 @@ export function capacidadDeEjecucion(
     nombre: "ejecucion",
     tools: ["execute"],
     capability: {
-      systemToolSets: [new ToolSet({ source: fuenteDeEjecucion(conShell, dispositivo, undefined, enWindows) as never, selectors: SIN_APROBACION, preload: true })],
+      systemToolSets: [new ToolSet({ source: fuenteDeEjecucion(conShell, dispositivo, undefined, enWindows) as never, selectors: SIN_APROBACION, preload: true, approvalPolicies: undefined })],
     },
   };
 }
