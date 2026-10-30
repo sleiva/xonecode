@@ -4152,6 +4152,15 @@ describe("en una tarea: el plan asignado y la captura del desarrollador", () => 
     expect(t).toContain("Tu respuesta final nombra la ÚLTIMA captura");
   });
 
+  // Medido en las pruebas de la calculadora: pulsaba en una llamada y leía en otra, caso a caso (30 viajes), y dejó un
+  // `zz_prueba.js` de ensayo en la raíz del proyecto, donde se queda porque no hay forma de borrarlo.
+  it("le dice que pruebe TODOS los casos en UNA llamada, cada uno con su lectura, y que lo de ensayo va a /artefactos/", () => {
+    const t = textoDelBucle(["designer-xone"], { conCritica: true, pruebaElMismo: true });
+    expect(t).toContain("TODOS los casos en UNA llamada");
+    expect(t).toContain("DETRÁS\n  su lectura etiquetada");
+    expect(t).toContain("va en `/artefactos/`, nunca en el proyecto");
+  });
+
   // Medido en Maset (23-10-2026, «el botón Entrar en rojo»): cuatro sintaxis de `launchApplication` tras reiniciar, dos
   // `--help`, `git` sin tenerlo; y el orquestador delegó en el device-controller, que en una tarea no arranca.
   it("le dice que la app ya está lanzada, que no adivine sintaxis ni use git, y que lo puntual se captura recortado", () => {

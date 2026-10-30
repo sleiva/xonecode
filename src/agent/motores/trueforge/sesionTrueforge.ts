@@ -556,9 +556,13 @@ export function textoDelBucle(
     "  el aviso no deja rastro y el segundo es legacy y no llega al log de Android.",
     ...(elMismo
       ? [
-          "- FUNCIONAL: `xone-log-android --limpiar`, las acciones con `xone-hotswap` (click, fill, waitForElement… varias en UNA",
-          "  llamada separadas por `--`) y `xone-log-android --app`: cada caso pasa o falla con lo que salió. SIN capturas. Corrige",
-          "  todos los fallos juntos y repite solo los que fallaron.",
+          "- FUNCIONAL: `xone-log-android --limpiar`, las acciones con `xone-hotswap` y `xone-log-android --app`: cada caso pasa o",
+          "  falla con lo que salió. SIN capturas. TODOS los casos en UNA llamada de `xone-hotswap`, cada uno con sus clics y DETRÁS",
+          "  su lectura etiquetada: `xone-hotswap click name=K_7 -- click name=K_MUL -- click name=K_8 -- click name=K_EQ -- js",
+          "  'return \"7*8 -> \"+self.RESULTADO;' -- click name=K_AC -- …` (en una sola línea). Pulsar en una llamada y leer en otra,",
+          "  caso a caso, dobla los viajes: medido, 30 en vez de 2. Corrige todos los fallos juntos y repite solo los que fallaron.",
+          "- Lo que escribas SOLO para probar (un .js de ensayo, notas) va en `/artefactos/`, nunca en el proyecto: ahí se quedaría,",
+          "  porque no hay forma de borrarlo.",
           "- VISUAL, solo cuando lo funcional pasa: UNA captura por ronda (`xone-hotswap shot`, o `xone-captura-android` si hay un",
           "  diálogo encima). Entre retoques mide con `comparar_capturas` (sin modelo, siempre la misma cifra para las mismas dos",
           `  imágenes): arregla TODAS las diferencias en la misma ronda y solo entonces otra captura. ${String(RONDAS_VISUALES)} rondas como mucho.`,
