@@ -22,7 +22,7 @@
  */
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
-import { canalDeGranja, serieAndroid, rutaDeAdb, NODE, dormir, PUERTO_DEL_HOTSWAP, puertoConMotivo, asegurarTunel } from "../lib/dispositivo.mjs";
+import { canalDeGranja, serieAndroid, rutaDeAdb, dormir, salidaDelCliente, PUERTO_DEL_HOTSWAP, puertoConMotivo, asegurarTunel } from "../lib/dispositivo.mjs";
 import { esperarAppEnGranja, lanzarEnGranja, reiniciarCopia } from "../lib/granja.mjs";
 
 const PAQUETE = "com.xone.android.framework";
@@ -100,11 +100,9 @@ const mandar = (comando) => {
   const pares = Object.entries(resto).map(([k, v]) =>
     `${k}=${typeof v === "object" && v !== null ? JSON.stringify(v) : String(v)}`,
   );
-  return execFileSync(NODE, [cliente, command, ...pares], {
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "ignore"],
-    env: { ...process.env, HOTSWAP_URL: process.env.HOTSWAP_URL ?? `wss://127.0.0.1:${PUERTO}/hotswap` },
-  }).trim();
+  // Un rechazo (`result:false`) vuelve como salida y no lanza: el latido de abajo pregunta con `getAllElements`, que
+  // sin app contesta «App is not running» y hace salir al cliente con 1 (`salidaDelCliente`).
+  return salidaDelCliente(cliente, [command, ...pares], process.env.HOTSWAP_URL ?? `wss://127.0.0.1:${PUERTO}/hotswap`);
 };
 
 /**
@@ -199,7 +197,12 @@ if (app === undefined) {
   console.log("host reiniciado y canal listo. Ninguna app cargada.");
 } else {
   console.log(`lanzando ${app}`);
-  console.log(mandar({ command: "launchApplication", appName: app }));
+  const lanzada = mandar({ command: "launchApplication", appName: app });
+  console.log(lanzada);
+  if (lanzada.includes('"result":false')) {
+    console.error(`el framework rechazó lanzar «${app}»: comprueba el nombre, o súbela antes con xone-desplegar-android.`);
+    process.exit(1);
+  }
   for (let intento = 1; intento <= 10; intento++) {
     const salida = mandar({ command: "getAllElements", format: "xone" });
     if (!salida.includes("App is not running")) {

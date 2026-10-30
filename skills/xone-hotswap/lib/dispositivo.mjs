@@ -51,6 +51,29 @@ export function rutaDeAdb(entorno = process.env) {
 /** El `node` que YA corre este script: no depende de que esté en el PATH (en Windows a menudo no lo está). */
 export const NODE = process.execPath;
 
+/**
+ * Lo que el cliente `xone-hotswap` imprime para `argumentos`, TAMBIÉN cuando el servidor rechaza el comando.
+ *
+ * Desde que un `result:false` hace salir al cliente con 1 (para que el agente no pruebe sintaxis a ciegas),
+ * `getAllElements` con el framework vivo y SIN app —«App is not running»— sale con 1 igual que sin servidor. Los
+ * latidos de reiniciar y desplegar lo tomaban por canal muerto: medido, 25 s y 68 s esperando a un servidor que ya
+ * contestaba. Un rechazo ES una respuesta; solo sin respuesta (nadie escucha, red) se lanza. Con su stderr CALLADO:
+ * aquí que falle es la pregunta, no un error que deba leer quien mira la salida.
+ */
+export function salidaDelCliente(cliente, argumentos, url, ejecutar = execFileSync) {
+  try {
+    return String(ejecutar(NODE, [cliente, ...argumentos], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+      env: { ...process.env, HOTSWAP_URL: url },
+    })).trim();
+  } catch (error) {
+    const salida = String(error?.stdout ?? "");
+    if (salida.includes('"result":false')) return salida.trim();
+    throw error;
+  }
+}
+
 /** Espera síncrona sin lanzar procesos: `sleep` no existe en Windows. */
 export function dormir(segundos) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, Number(segundos) * 1000);

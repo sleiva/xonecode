@@ -49,7 +49,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { basename, join, relative, sep } from "node:path";
 import { deflateRawSync } from "node:zlib";
-import { serieAndroid, rutaDeAdb, NODE, dormir, PUERTO_DEL_HOTSWAP, puertoConMotivo, asegurarTunel, canalDeGranja } from "../lib/dispositivo.mjs";
+import { serieAndroid, rutaDeAdb, NODE, dormir, salidaDelCliente, PUERTO_DEL_HOTSWAP, puertoConMotivo, asegurarTunel, canalDeGranja } from "../lib/dispositivo.mjs";
 import { comandoEnGranja, esperarAppEnGranja, excepcionDeGetLog, subirAGranja } from "../lib/granja.mjs";
 
 const PAQUETE = "com.xone.android.framework";
@@ -457,13 +457,9 @@ function exigirFramework() {
    */
   const contesta = () => {
     try {
-      // Con su stderr CALLADO: aquí que falle es la respuesta, no un error, y la línea del cliente
-      // («no se pudo hablar con el aparato») haría creer que el despliegue va mal.
-      execFileSync(NODE, [cliente, "getAllElements", "format=xone"], {
-        encoding: "utf8",
-        stdio: ["ignore", "pipe", "ignore"],
-        env: { ...process.env, HOTSWAP_URL: process.env.HOTSWAP_URL ?? `wss://127.0.0.1:${PUERTO}/hotswap` },
-      });
+      // `salidaDelCliente` calla su stderr y cuenta un rechazo («App is not running», que desde el `result:false`
+      // sale con 1) como respuesta: solo lanza si no hay nadie al otro lado.
+      salidaDelCliente(cliente, ["getAllElements", "format=xone"], process.env.HOTSWAP_URL ?? `wss://127.0.0.1:${PUERTO}/hotswap`);
       return true;
     } catch {
       return false;
@@ -517,10 +513,17 @@ function exigirFramework() {
    * así que el primer intento moría con «Received network error or non-101 status code».
    * Se espera a que CONTESTE, que es la condición de verdad, en vez de dormir un rato fijo.
    */
+  // Un rechazo de `launchApplication` es una respuesta (`salidaDelCliente`): el canal está en pie y la app no
+  // existe con ese nombre. Tomarlo por canal caído hacía esperar 15 s y culpar al servidor.
+  const canal = process.env.HOTSWAP_URL ?? `wss://127.0.0.1:${PUERTO}/hotswap`;
   let listo = false;
   for (let intento = 1; intento <= 15 && !listo; intento++) {
     try {
-      mandar({ command: "launchApplication", appName: app });
+      const lanzada = salidaDelCliente(cliente, ["launchApplication", `appName=${app}`], canal);
+      if (lanzada.includes('"result":false')) {
+        console.error(`el framework rechazó lanzar «${app}»: ${lanzada.slice(0, 300)}`);
+        process.exit(1);
+      }
       listo = true;
     } catch {
       esperar(1);
@@ -536,7 +539,8 @@ function exigirFramework() {
   // reintenta porque la app tarda unos segundos en tener pantalla, y se espera a una
   // CONDICIÓN y no a un número fijo de segundos.
   for (let intento = 1; intento <= 10; intento++) {
-    const salida = mandar({ command: "getAllElements", format: "xone" });
+    // Sin app todavía, el servidor contesta «App is not running» con `result:false`: es la respuesta que se espera.
+    const salida = salidaDelCliente(cliente, ["getAllElements", "format=xone"], canal);
     if (!salida.includes("App is not running")) {
       console.log(salida);
       /**

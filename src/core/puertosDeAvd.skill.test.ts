@@ -22,6 +22,7 @@ type Lib = {
     puerto: number,
     deps?: { entorno?: Record<string, string>; ejecutar?: Deps["ejecutar"]; negar?: (t: string) => never; poner?: boolean },
   ) => { estado: string; dueno?: string };
+  salidaDelCliente: (cliente: string, argumentos: string[], url: string, ejecutar?: (...a: unknown[]) => string) => string;
 };
 
 // La skill no puede importar TypeScript: la regla vive dos veces, y esto es lo que impide que diverjan.
@@ -265,6 +266,76 @@ describe("el script xone-hotswap real, contra un servidor de mentira", () => {
     expect(malo.err).toContain("el servidor rechazó launchapplication");
     expect((await correrContra({ result: true, status: "" }, "launchApplication", "appName=maset")).codigo).toBe(0);
   }, 20_000);
+});
+
+/**
+ * Un rechazo del servidor es una RESPUESTA para quien solo pregunta si el canal está en pie. Medido en el emulador
+ * (28-10-2026): con el framework vivo y sin app, `getAllElements` contesta «App is not running» con `result:false`, el
+ * cliente sale con 1 desde que eso cuenta como rechazo, y reiniciar (25 s) y desplegar (68 s) daban el canal por muerto.
+ */
+describe("salidaDelCliente: el latido de los scripts acepta un rechazo y no un silencio", () => {
+  const cliente = resolve(__dirname, "../../skills/xone-hotswap/scripts/xone-hotswap");
+  const modulo = pathToFileURL(resolve(__dirname, "../../skills/xone-hotswap/lib/dispositivo.mjs")).href;
+
+  /** `salidaDelCliente` es síncrona: corre en un hijo para que el servidor de mentira de este proceso pueda contestar. */
+  async function latido(url: string): Promise<{ codigo: number | null; out: string }> {
+    const { spawn } = await import("node:child_process");
+    const programa = `import { salidaDelCliente } from ${JSON.stringify(modulo)};
+      try { console.log(salidaDelCliente(${JSON.stringify(cliente)}, ["getAllElements", "format=xone"], ${JSON.stringify(url)})); }
+      catch { process.exit(3); }`;
+    const hijo = spawn(process.execPath, ["--input-type=module", "-e", programa], { env: { ...process.env, XONECODE_DISPOSITIVO: "" } });
+    let out = "";
+    hijo.stdout.on("data", (d) => (out += String(d)));
+    const codigo = await new Promise<number | null>((r) => hijo.on("close", r));
+    return { codigo, out };
+  }
+
+  it("framework vivo y sin app: «App is not running» vuelve como salida, no como canal muerto", async () => {
+    const { WebSocketServer } = await import("ws");
+    const servidor = new WebSocketServer({ port: 0, host: "127.0.0.1" });
+    await new Promise<void>((r) => servidor.once("listening", () => r()));
+    servidor.on("connection", (ws) => {
+      ws.send(JSON.stringify({ command: "server_hello" }));
+      ws.on("message", () => ws.send(JSON.stringify({ result: false, status: "App is not running" })));
+    });
+    const puerto = (servidor.address() as { port: number }).port;
+    const r = await latido(`ws://127.0.0.1:${puerto}/hotswap`);
+    servidor.close();
+    expect(r.codigo).toBe(0);
+    expect(r.out).toContain("App is not running");
+  }, 20_000);
+
+  it("sin nadie escuchando, lanza: eso sí es canal muerto", async () => {
+    const { createServer } = await import("node:net");
+    const libre = createServer();
+    await new Promise<void>((r) => libre.listen(0, "127.0.0.1", () => r()));
+    const puerto = (libre.address() as { port: number }).port;
+    await new Promise<void>((r) => libre.close(() => r()));
+    expect((await latido(`ws://127.0.0.1:${puerto}/hotswap`)).codigo).toBe(3);
+  }, 20_000);
+
+  it("un fallo sin `result:false` en la salida se relanza", () => {
+    const sinRespuesta = Object.assign(new Error("ECONNREFUSED"), { stdout: "" });
+    expect(() => lib.salidaDelCliente("c", ["getAllElements"], "ws://x", () => { throw sinRespuesta; })).toThrow("ECONNREFUSED");
+    const rechazo = Object.assign(new Error("salió con 1"), { stdout: '{"comando":"getAllElements","result":false,"status":"App is not running"}\n' });
+    expect(lib.salidaDelCliente("c", ["getAllElements"], "ws://x", () => { throw rechazo; })).toContain("App is not running");
+  });
+
+  it("reiniciar y desplegar preguntan al canal SOLO por salidaDelCliente", () => {
+    for (const nombre of ["xone-reiniciar-android", "xone-desplegar-android"]) {
+      const texto = readFileSync(resolve(__dirname, `../../skills/xone-hotswap/scripts/${nombre}`), "utf8");
+      // El cliente a pelo con getAllElements era el latido que tomaba el rechazo por silencio.
+      expect(texto, nombre).not.toMatch(/execFileSync\(NODE, \[cliente, "getAllElements"/);
+      expect(texto, nombre).toContain("salidaDelCliente(");
+    }
+    // reiniciar pasa todos sus comandos por `mandar`, y `mandar` es `salidaDelCliente`.
+    const reiniciar = readFileSync(resolve(__dirname, "../../skills/xone-hotswap/scripts/xone-reiniciar-android"), "utf8");
+    expect(reiniciar).toMatch(/const mandar = [\s\S]*?return salidaDelCliente\(/);
+    // desplegar conserva su `mandar` a pelo para la captura, pero ninguna pregunta de árbol pasa ya por él.
+    const desplegar = readFileSync(resolve(__dirname, "../../skills/xone-hotswap/scripts/xone-desplegar-android"), "utf8");
+    expect(desplegar).not.toMatch(/mandar\(\{ command: "getAllElements"/);
+    expect(desplegar).not.toMatch(/mandar\(\{ command: "launchApplication"/);
+  });
 });
 
 describe("xone-desplegar-android avisa de que sustituye la base del aparato", () => {

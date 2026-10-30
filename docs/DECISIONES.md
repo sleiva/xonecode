@@ -10097,3 +10097,19 @@ más reciente. Estimado sobre esas trazas: el encargo de 23 llamadas que arranca
 **Sin medir en un turno real**: hay que ver con `XONECODE_TRACE_TOOLS=1` que los `arranca-con` bajan y que no vuelven
 las órdenes de descubrimiento.
 
+
+## El latido de reiniciar y desplegar tomaba un rechazo por silencio (30-10-2026)
+
+Medido en el ejemplo de la calculadora en MyAllXOne (29-10-2026), traza del desarrollador: `xone-reiniciar-android`
+salió con 1 a los 25 s («el canal no levantó»), `xone-desplegar-android` con 1 a los 66 s («el servidor del framework no
+arrancó en 60 s») y otra vez a los 12 s; lo desatascó un `launchApplication` a mano. Reproducido en el emulador con el
+framework VIVO y sin app.
+
+La causa era nuestra: desde que un `result:false` hace salir a `xone-hotswap` con 1 (para que el agente no probara
+sintaxis a ciegas), `getAllElements` sin app —`{"result":false,"status":"App is not running"}`— sale con 1 igual que sin
+servidor, y los dos scripts lo usaban de latido mirando solo el código de salida. Un rechazo ES una respuesta: la regla
+vive UNA vez en `lib/dispositivo.mjs#salidaDelCliente` (devuelve la salida si trae `"result":false`, lanza solo si no
+hubo respuesta), y por ella pasan el latido de reiniciar, `contesta()` y el bucle final de desplegar. Un
+`launchApplication` rechazado ahora lo DICE y sale, en vez de esperar 15 s culpando al servidor. El cliente no cambia:
+el agente sigue viendo el 1 cuando un comando suyo es rechazado. Tras el arreglo, en el mismo emulador: reiniciar 2 s
+y desplegar 6 s, los dos con 0. La consola web no estaba afectada (`src/agent/dispositivos` usa su propio cliente).
