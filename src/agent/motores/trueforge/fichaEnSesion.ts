@@ -128,7 +128,14 @@ export function crearFichaDeSesion(opciones: {
         const primera = contenido.split("\n")[0]?.slice(0, 160) ?? "";
         ficha = conEvidencia(ficha, { tipo: "validacion", resumen: primera, quien, cuando }).ficha;
       } else if ((nombre === "ejecutar_script" || nombre === "execute") && ORDEN_DE_CAPTURA.test(orden)) {
-        const ruta = /\/artefactos\/[^\s"'<>]+\.(?:png|jpe?g|webp)/.exec(contenido)?.[0] ?? "captura";
+        // La ruta virtual si la salida la trae; si no, el NOMBRE que dice el script (`xone-captura-android`: «captura
+        // guardada como captura-….png»), que vive en `/artefactos/`. Medido en la pasada 6: 13 de 14 capturas quedaron sin
+        // ruta y la auditoría de cierre no tuvo imagen que mirar.
+        const nombreDelScript = /guardada como (captura-[\w.-]+\.(?:png|jpe?g|webp))\b/.exec(contenido)?.[1];
+        const ruta =
+          /\/artefactos\/[^\s"'<>]+\.(?:png|jpe?g|webp)/.exec(contenido)?.[0] ??
+          (nombreDelScript === undefined ? undefined : `/artefactos/${nombreDelScript}`) ??
+          "captura";
         ficha = conEvidencia(ficha, { tipo: "captura", resumen: ruta, quien, cuando }).ficha;
       } else if ((nombre === "ejecutar_script" || nombre === "execute") && ORDEN_DE_CASOS.test(orden)) {
         const casos = casosDeLaSalida(contenido);

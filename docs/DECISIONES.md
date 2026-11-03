@@ -10465,3 +10465,9 @@ esperas (`esperas.ts`) y, como nunca nació, el anuncio no se retiraba: el desar
 (cuatro en 40 s; se paró la pasada). El fallo era antiguo y latente —cualquier encargo devuelto por una espera, un tope o
 una regla dejaba su anuncio—; la regla de `TAREA:` lo hizo saltar. Ahora todo encargo devuelto pasa por
 `devolverSinArrancar`, que lo retira.
+
+**Y la captura guarda su ruta aunque el script solo diga el nombre (03-11-2026).** La pasada 6 de la calculadora llegó al
+final (34 min, todas las tareas, el menú y la prueba de punta a punta) y la auditoría de cierre corrió por primera vez:
+dos criterios, los dos «no se ve» porque «su captura no guardó la ruta de la imagen». 13 de las 14 capturas de la ficha
+se habían guardado como «captura»: `xone-captura-android` dice «captura guardada como captura-….png», sin `/artefactos/`,
+y la ficha solo reconocía la ruta entera. Ahora toma también el nombre que dice el script.

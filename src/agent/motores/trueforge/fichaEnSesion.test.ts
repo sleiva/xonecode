@@ -165,3 +165,17 @@ describe("con la auditoría de cierre", () => {
     expect(f.alCerrar("verde", todo).join("\n")).toContain("tarea 01: hecha");
   });
 });
+
+/** Medido en la pasada 6: el script dice el NOMBRE, no la ruta, y la auditoría se quedaba sin imagen. */
+describe("la captura guarda su ruta aunque el script solo diga el nombre", () => {
+  it("«captura guardada como captura-….png» queda como /artefactos/captura-….png", () => {
+    const f = crearFichaDeSesion({ raiz: proyecto(), continuar: true });
+    f.alResultado(
+      "ejecutar_script",
+      { command: "xone-captura-android" },
+      "captura guardada como captura-1793725650576.png (128000 bytes). Es de la vía nativa: enseña lo que el SISTEMA pinta, no lo que la app host dice.",
+      "developer-xone"
+    );
+    expect(f.ficha().evidencias.at(-1)?.resumen).toBe("/artefactos/captura-1793725650576.png");
+  });
+});
