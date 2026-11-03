@@ -4269,7 +4269,7 @@ describe("en una tarea: el plan asignado y la captura del desarrollador", () => 
     expect(t).not.toContain("Captura en el MISMO ESTADO que la maqueta");
     expect(t).toContain("son de ejemplo: no los inyectes ni los escribas");
     // Y la captura de una ronda visual es la NATIVA, con el crítico nombrado (en la 8 capturó con `shot` y no midió nunca).
-    expect(t).toContain("UNA captura por ronda con `xone-captura-android`");
+    expect(t).toContain("UNA captura por ronda, `xone-probar … --captura` (la nativa");
     expect(t).toContain("pasa `xone_critica_visual`");
     expect(t).toContain("Tu respuesta final nombra la ÚLTIMA captura");
   });
@@ -4278,8 +4278,11 @@ describe("en una tarea: el plan asignado y la captura del desarrollador", () => 
   // `zz_prueba.js` de ensayo en la raíz del proyecto, donde se queda porque no hay forma de borrarlo.
   it("le dice que pruebe TODOS los casos en UNA llamada separados por ---, y que lo de ensayo va a /artefactos/", () => {
     const t = textoDelBucle(["designer-xone"], { conCritica: true, pruebaElMismo: true });
-    expect(t).toContain("TODOS los casos en UNA llamada");
+    expect(t).toContain("con TODOS los casos en esa llamada");
     expect(t).toContain("separados por `---`");
+    // Y el ciclo entero en UNA orden (medido en la pasada 9: 163 de 412 llamadas eran un script del aparato suelto).
+    expect(t).toContain("PRUEBA CON `xone-probar`");
+    expect(t).toContain("`xone-probar --recargar calculadora.js --abrir Calculadora click name=K_7");
     expect(t).toContain("click name=K_EQ --- click name=K_AC");
     expect(t).toContain("va en `/artefactos/`, nunca en el proyecto");
     // Y los valores de la maqueta no se copian fijos (medido: el historial de ejemplo pintado siempre).

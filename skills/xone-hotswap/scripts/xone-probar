@@ -1,0 +1,42 @@
+#!/usr/bin/env node
+/**
+ * PROBAR en una orden: recarga lo editado, abre la ventana, limpia el log, corre los casos, lee el log de la app y
+ * captura. El porqué, medido, y el plan de pasos están en `../lib/probar.mjs`.
+ *
+ *   xone-probar --recargar calculadora.js --abrir Calculadora --captura click name=K_7 -- click name=K_EQ --- click name=K_AC
+ *
+ * Cada paso es el script hermano (mismo directorio), lanzado con este mismo Node —como `xone-granja` reenvía: en Windows
+ * no hay shebang que valga— y con el mismo entorno, así que la sesión, el aparato y la granja son los suyos. Su salida se
+ * copia tal cual bajo una cabecera; sale con el código del primer paso que falló.
+ */
+import { spawnSync } from "node:child_process";
+import { join } from "node:path";
+import { AYUDA_DE_PROBAR, cierreDePrueba, leerOrden, planDePrueba } from "../lib/probar.mjs";
+
+const leida = leerOrden(process.argv.slice(2));
+if ("error" in leida) {
+  console.error(`xone-probar: ${leida.error}\n\n${AYUDA_DE_PROBAR}`);
+  process.exit(2);
+}
+if (leida.orden.ayuda) {
+  console.log(AYUDA_DE_PROBAR);
+  process.exit(0);
+}
+
+const resultados = [];
+for (const paso of planDePrueba(leida.orden)) {
+  const r = spawnSync(process.execPath, [join(import.meta.dirname, paso.script), ...paso.args], { encoding: "utf8", env: { ...process.env, ...(paso.env ?? {}) }, maxBuffer: 64 * 1024 * 1024 });
+  const codigo = r.error !== undefined ? 1 : (r.status ?? 1);
+  const texto = [r.stdout ?? "", r.stderr ?? "", r.error === undefined ? "" : `no se pudo lanzar ${paso.script} (${r.error.code ?? r.error.message})`]
+    .map((t) => t.trimEnd())
+    .filter((t) => t !== "")
+    .join("\n");
+  // Limpiar el log solo se cuenta si falla: su «ok» no le dice nada a nadie.
+  if (!(paso.callado === true && codigo === 0)) console.log(`── ${paso.etiqueta} ──\n${texto === "" ? "(sin salida)" : texto}\n`);
+  const cortado = codigo !== 0 && paso.para;
+  resultados.push({ etiqueta: paso.etiqueta, codigo, cortado });
+  if (cortado) break;
+  if (paso.esperaDespues !== undefined) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, paso.esperaDespues);
+}
+console.log(cierreDePrueba(resultados));
+process.exit(resultados.find((r) => r.codigo !== 0)?.codigo ?? 0);

@@ -23,6 +23,7 @@ Los scripts se llaman por su nombre, sin `--serie` ni `--puerto`: ya van a la co
 
 | quieres… | úsalo | en la granja |
 |---|---|---|
+| **PROBAR lo que cambiaste** | `xone-probar --recargar A.js --abrir Coleccion [--captura] click name=X --- click name=Y` | el ciclo entero en UNA llamada, como en local; el log no se vacía antes (aquí no se puede): mira la hora de las líneas |
 | **poner la app en la copia** | `xone-desplegar-android` | sube el proyecto **con su base (`bd/`)** y la lanza; dice en qué colección quedó. Sin `bd/gestion.db` la app abre con «Base de datos no encontrada» |
 | **subir lo que cambiaste** | `xone-recargar-android A.xne default.css …` | igual que en local, por el canal; no toca la base |
 | **dónde estoy** | `xone-hotswap screen` | una línea: colección, diálogos, ventana |

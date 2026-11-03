@@ -24,6 +24,7 @@ No cuestan lo mismo, ni de lejos. Por orden de lo que vas a necesitar:
 
 | quieres saber… | úsalo | por qué |
 |---|---|---|
+| **PROBAR lo que cambiaste** | `xone-probar --recargar A.js --abrir Coleccion [--captura] click name=X -- click name=Y --- click name=Z` | el ciclo ENTERO en UNA llamada: recarga, abre, limpia el log, corre todos los casos (`---` los separa), trae el log de la app y, con `--captura`, captura. Paso a paso eran 6-10 llamadas por prueba |
 | **dónde estoy** | `screen` | una línea: colección activa, diálogos abiertos, ventana con el foco |
 | **subir lo que cambiaste** | `xone-recargar-android A.xne default.css icons/x.svg icons/y.svg` | TODO en UNA llamada: sube cada uno y aplica una vez. Sin argumentos compara con el aparato y sube solo lo que difiere. Uno a uno son N viajes, y con iconos N relanzamientos |
 | **desplegar entero** | `xone-desplegar-android` | solo la PRIMERA vez o con fuentes nuevas: **sustituye la base de datos del aparato** y borra tus datos de prueba. Para todo lo demás, `xone-recargar-android` |
@@ -122,6 +123,13 @@ xone-desplegar-android --app MiApp --serie emulator-5554
 xone-recargar-android
 xone-recargar-android MenuPrincipal.xne functions.js      # solo esos, sin comparar
 xone-recargar-android icons/a.svg icons/b.svg icons/c.svg # varios iconos: UNA llamada, UN relanzamiento
+
+# PROBAR lo que cambiaste, en UNA orden: recarga, abre la ventana, limpia el log, corre los casos
+# (sintaxis de xone-hotswap: -- encadena pasos, --- separa casos), trae el log de la app y captura.
+# Si la recarga o el abrir fallan, para ahí y dice cuál; un caso que falla no corta: el log lo explica.
+xone-probar --recargar calculadora.js --abrir Calculadora \
+  click name=K_7 -- click name=K_MUL -- click name=K_8 -- click name=K_EQ --- click name=K_AC -- click name=K_9
+xone-probar --abrir Calculadora --captura     # sin casos: los textos de la pantalla y la captura
 
 # Cualquier comando del catálogo de más abajo (varios en orden, si le pasas varios):
 xone-hotswap elements                    # atajo de getAllElements format=xone

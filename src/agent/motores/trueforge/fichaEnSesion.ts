@@ -27,8 +27,8 @@ import { conEstadoDeTarea, leerTareasDelPlan, type EstadoDeTarea, type TareaDelP
 
 /** Lo que el agente ve fuera del proyecto: no forma parte de la versión del trabajo. */
 const FUERA_DEL_PROYECTO = /^\/(artefactos|planes|hotswap|large_tool_results|conversation_history|adjuntos|skills|diseno)\//;
-const ORDEN_DE_CAPTURA = /xone-captura-android|xone-hotswap\s+shot\b/;
-const ORDEN_DE_CASOS = /^\s*xone-hotswap\b/;
+const ORDEN_DE_CAPTURA = /xone-captura-android|xone-hotswap\s+shot\b|xone-probar\b[^\n]*\s--captura\b/;
+const ORDEN_DE_CASOS = /^\s*xone-(hotswap|probar)\b/;
 /** Lo que se guarda del objetivo: la petición literal, sin los bloques que el harness pone detrás. */
 const TOPE_DEL_OBJETIVO = 2_000;
 
@@ -127,20 +127,21 @@ export function crearFichaDeSesion(opciones: {
       if (nombre === "validar_fichero_xone") {
         const primera = contenido.split("\n")[0]?.slice(0, 160) ?? "";
         ficha = conEvidencia(ficha, { tipo: "validacion", resumen: primera, quien, cuando }).ficha;
-      } else if ((nombre === "ejecutar_script" || nombre === "execute") && ORDEN_DE_CAPTURA.test(orden)) {
-        // La ruta virtual si la salida la trae; si no, el NOMBRE que dice el script (`xone-captura-android`: «captura
-        // guardada como captura-….png»), que vive en `/artefactos/`. Medido en la pasada 6: 13 de 14 capturas quedaron sin
-        // ruta y la auditoría de cierre no tuvo imagen que mirar.
-        const nombreDelScript = /guardada como (captura-[\w.-]+\.(?:png|jpe?g|webp))\b/.exec(contenido)?.[1];
-        const ruta =
-          /\/artefactos\/[^\s"'<>]+\.(?:png|jpe?g|webp)/.exec(contenido)?.[0] ??
-          (nombreDelScript === undefined ? undefined : `/artefactos/${nombreDelScript}`) ??
-          "captura";
-        ficha = conEvidencia(ficha, { tipo: "captura", resumen: ruta, quien, cuando }).ficha;
-      } else if ((nombre === "ejecutar_script" || nombre === "execute") && ORDEN_DE_CASOS.test(orden)) {
-        const casos = casosDeLaSalida(contenido);
-        if (casos === undefined) return;
-        ficha = conEvidencia(ficha, { tipo: "casos", resumen: casos.resumen.slice(0, 400), quien, cuando }).ficha;
+      } else if ((nombre === "ejecutar_script" || nombre === "execute") && (ORDEN_DE_CAPTURA.test(orden) || ORDEN_DE_CASOS.test(orden))) {
+        // `xone-probar` trae las DOS en una salida: los casos y la captura, cada una su evidencia.
+        const casos = ORDEN_DE_CASOS.test(orden) ? casosDeLaSalida(contenido) : undefined;
+        if (casos !== undefined) ficha = conEvidencia(ficha, { tipo: "casos", resumen: casos.resumen.slice(0, 400), quien, cuando }).ficha;
+        if (ORDEN_DE_CAPTURA.test(orden)) {
+          // La ruta virtual si la salida la trae; si no, el NOMBRE que dice el script (`xone-captura-android`: «captura
+          // guardada como captura-….png»), que vive en `/artefactos/`. Medido en la pasada 6: 13 de 14 capturas quedaron sin
+          // ruta y la auditoría de cierre no tuvo imagen que mirar.
+          const nombreDelScript = /guardada como (captura-[\w.-]+\.(?:png|jpe?g|webp))\b/.exec(contenido)?.[1];
+          const ruta =
+            /\/artefactos\/[^\s"'<>]+\.(?:png|jpe?g|webp)/.exec(contenido)?.[0] ??
+            (nombreDelScript === undefined ? undefined : `/artefactos/${nombreDelScript}`) ??
+            "captura";
+          ficha = conEvidencia(ficha, { tipo: "captura", resumen: ruta, quien, cuando }).ficha;
+        } else if (casos === undefined) return;
       } else if (nombre === "comparar_capturas") {
         const primera = contenido.split("\n")[0]?.slice(0, 200) ?? "";
         ficha = conEvidencia(ficha, { tipo: "medida", resumen: primera, quien, cuando }).ficha;

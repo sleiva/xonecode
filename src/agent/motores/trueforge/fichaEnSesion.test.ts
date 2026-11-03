@@ -179,3 +179,18 @@ describe("la captura guarda su ruta aunque el script solo diga el nombre", () =>
     expect(f.ficha().evidencias.at(-1)?.resumen).toBe("/artefactos/captura-1793725650576.png");
   });
 });
+
+/** `xone-probar` prueba en UNA orden: sus casos y su captura son dos evidencias, como si hubieran sido dos órdenes. */
+describe("xone-probar deja casos y captura", () => {
+  it("con --captura, las dos; sin ella, solo los casos", () => {
+    const f = crearFichaDeSesion({ raiz: proyecto(), continuar: true });
+    const salida = `── casos ──\n${CASOS}\n\n── captura ──\ncaptura guardada como captura-1.png (100 bytes).\n\nxone-probar: 5 paso(s), todos bien`;
+    f.alResultado("ejecutar_script", { command: "xone-probar --recargar Calc.xne --captura click name=K_7 --- click name=K_8" }, salida, "developer-xone");
+    expect(f.ficha().evidencias.map((e) => [e.tipo, e.resumen])).toEqual([
+      ["casos", "1 caso(s): AC 7 ADD 8 EQ → 15"],
+      ["captura", "/artefactos/captura-1.png"],
+    ]);
+    f.alResultado("ejecutar_script", { command: "xone-probar click name=K_7" }, `── casos ──\n${CASOS}`, "developer-xone");
+    expect(f.ficha().evidencias.map((e) => e.tipo)).toEqual(["casos", "captura", "casos"]);
+  });
+});

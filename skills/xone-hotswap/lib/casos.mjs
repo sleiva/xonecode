@@ -8,6 +8,9 @@
  * más CORTO que repetir la orden, y la salida no repite los treinta textos fijos de la pantalla en cada caso.
  */
 
+/** La variable con la que `xone-probar` pide la salida de casos aunque haya UNO solo. */
+export const COMO_CASOS = "XONE_HOTSWAP_COMO_CASOS";
+
 /** El separador de casos; `--` sigue separando comandos dentro de uno. */
 export const SEPARADOR_DE_CASOS = "---";
 

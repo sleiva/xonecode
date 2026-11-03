@@ -7,7 +7,9 @@
  * (`W System.err: … Exception`) repetida una y otra vez. Mandarlo a un fichero no servía: el log es justo lo que hay que
  * leer, y abrirlo era otra llamada.
  *
- * - Un AVISO del sistema (nivel W que no es de la app) se agrupa aunque no vaya seguido: es ruido que se repite.
+ * - Lo del SISTEMA (cualquier línea que no es de la app: avisos W y errores E/F del framework) se agrupa aunque no vaya
+ *   seguido, y comparando sin los números `0x…`: es ruido que se repite. Medido con `xone-probar` (03-11-2026): un caso de
+ *   cinco teclas traía ~60 «E droid.framework: Invalid resource ID 0x600001ee.» que solo cambiaban en el número.
  * - Lo que escribe la APP y los errores (E/F) solo se agrupan si van SEGUIDOS: el orden de «tecla 7, tecla 8, tecla 7» es
  *   información.
  * - Como mucho las últimas `TOPE_DE_LINEAS_DEL_LOG`, diciendo cuántas se omitieron y cómo pedir más.
@@ -21,21 +23,23 @@ export function sinCabecera(linea) {
 }
 
 const esDeLaApp = (l) => /\bXOneJavaScript\s*(\(\s*\d+\))?\s*:/.test(l);
-const esAviso = (l) => !esDeLaApp(l) && /^W[\s/]/.test(sinCabecera(l));
+/** La clave con la que se agrupa lo del sistema: sin cabecera y sin los números hexadecimales, que cambian en cada línea. */
+const claveDelSistema = (l) => sinCabecera(l).replace(/0x[0-9a-fA-F]+/g, "0x…");
 
 export function compactarLog(lineas, tope = TOPE_DE_LINEAS_DEL_LOG) {
   const salida = [];
   const avisos = new Map();
   for (const l of lineas) {
     const clave = sinCabecera(l);
-    if (esAviso(l)) {
-      const ya = avisos.get(clave);
+    if (!esDeLaApp(l)) {
+      const delSistema = claveDelSistema(l);
+      const ya = avisos.get(delSistema);
       if (ya !== undefined) {
         ya.veces += 1;
         continue;
       }
       const fila = { texto: l, veces: 1 };
-      avisos.set(clave, fila);
+      avisos.set(delSistema, fila);
       salida.push(fila);
       continue;
     }

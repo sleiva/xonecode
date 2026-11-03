@@ -56,7 +56,7 @@ process.on("warning", (aviso) => {
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { guardarGeometria } from "../lib/geometria.mjs";
-import { diferenciaDeTextos, partirEnCasos, pasosDelCaso } from "../lib/casos.mjs";
+import { COMO_CASOS, diferenciaDeTextos, partirEnCasos, pasosDelCaso } from "../lib/casos.mjs";
 import { asegurarTunel, canalDeGranja, dispositivoDeLaSesion, puertoConMotivo, retirarOpciones, serieAndroid, PUERTO_DEL_HOTSWAP } from "../lib/dispositivo.mjs";
 
 /**
@@ -129,6 +129,7 @@ LA RECETA (lo eficiente, en este orden):
   3. xone-hotswap abrir <Colección>                      ir directo a la ventana que pruebas
   4. xone-hotswap shot name=<control>                    capturar SOLO lo que pruebas (más barato que la pantalla)
   Si de verdad hay que lanzarla: xone-hotswap launchApplication appName=<app>
+  PROBAR tras editar es UNA orden, no cuatro: xone-probar --recargar <ficheros> --abrir <Colección> <casos con ---> [--captura]
   Un comando que el servidor rechaza (result:false) hace salir con 1: no lo repitas con otra sintaxis a ciegas.
 
   xone-hotswap click name=MAP_BT
@@ -368,7 +369,8 @@ const lecturaEstable = (extra = {}) => ({ command: "getAllElements", format: "ui
  * BASE), y cada caso que acaba pulsando se lee solo y sale como lo que CAMBIÓ respecto a esa base, con sus pasos.
  */
 const casos = partirEnCasos(utiles);
-const variosCasos = casos.length > 1;
+// `xone-probar` los pide SIEMPRE como casos, también uno solo: su salida es la misma forma y la ficha la lee (`COMO_CASOS`).
+const variosCasos = casos.length > 1 || (casos.length === 1 && process.env[COMO_CASOS] === "1");
 if (variosCasos) comandos.push(lecturaEstable({ base: true }));
 casos.forEach((caso, i) => {
   const deEste = partirPorSeparador(caso).map(comandoDe);

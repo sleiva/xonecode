@@ -44,3 +44,16 @@ describe("el log de la app, compacto", () => {
     expect(lib.compactarLog(l)).toEqual(l);
   });
 });
+
+describe("el ruido del framework, una vez", () => {
+  const error = (hora: string, id: string) => linea(hora, 30789, `E droid.framework: Invalid resource ID ${id}.`);
+
+  it("los errores del sistema que solo cambian en el número 0x… salen UNA vez con cuántas, aunque los corte la app", () => {
+    const salida = lib.compactarLog([error("01.000", "0x600001ee"), error("01.100", "0x0000001f"), app("01.200", "CALC tecla 0"), error("01.300", "0x600001ef")]);
+    expect(salida).toEqual([`${error("01.000", "0x600001ee")}  (×3)`, app("01.200", "CALC tecla 0")]);
+  });
+
+  it("lo de la app no se junta por el número: «tecla 0x1» y «tecla 0x2» son dos", () => {
+    expect(lib.compactarLog([app("01.000", "id 0x1"), app("01.100", "id 0x2")])).toHaveLength(2);
+  });
+});

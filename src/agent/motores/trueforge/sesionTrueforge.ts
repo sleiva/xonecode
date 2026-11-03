@@ -405,8 +405,13 @@ export function respuestaAutonomaRecomendada(elegida: string): string {
 export const RESPUESTA_AUTONOMA_SIN_RECOMENDADA =
   "Modo autónomo: no hay nadie a quien preguntar. Decide tú con lo que dicen el encargo y el plan, sigue, y di en tu respuesta final qué elegiste y por qué.";
 
-/** Un comando que saca una captura de pantalla del aparato. */
-export const COMANDO_DE_CAPTURA = /xone-captura-android|xone-hotswap\s+shot\b|\bscreencap\b/;
+/** Un comando que saca una captura de pantalla del aparato (`xone-probar` solo con `--captura`). */
+export const COMANDO_DE_CAPTURA = /xone-captura-android|xone-hotswap\s+shot\b|\bscreencap\b|xone-probar\b[^\n]*\s--captura\b/;
+/**
+ * Una orden que lleva lo editado al aparato: recargar, desplegar, o `xone-probar --recargar`. Cada una cuenta una vuelta
+ * (`contarVuelta`); si `xone-probar` no contara, probar con él saltaría el tope de vueltas del encargo.
+ */
+export const ORDEN_QUE_RECARGA = /^\s*xone-(recargar|desplegar)-android\b|^\s*xone-probar\b[^\n]*\s--recargar\b/;
 
 /** Con cuántas capturas de UN encargo se le avisa a quien ejecuta. */
 export const UMBRALES_DE_CAPTURAS = [2, 4] as const;
@@ -551,15 +556,20 @@ export function textoDelBucle(
     ...(elMismo
       ? [
           `Tu bucle es: escribe, prueba TÚ en el aparato con \`${NOMBRE_EJECUTAR_SCRIPT}\` (los scripts de \`xone-hotswap\`), lee lo que sale y corrige.`,
-          "Antes de comprobar nada, `xone-recargar-android` (1-2 s: sube solo lo que cambió); si la app no contesta, `xone-desplegar-android`.",
-          "Junta los cambios antes de recargar: no recargues por cada línea.",
+          // Medido en la pasada 9 de la calculadora (03-11-2026): 163 de sus 412 llamadas eran UN script del aparato —recargar,
+          // abrir, limpiar el log, un caso, otro, el log, la captura—, cada una un viaje con todo el contexto.
+          "PRUEBA CON `xone-probar`, que hace el ciclo entero en UNA llamada: recarga lo que cambió, abre la ventana, limpia el log,",
+          "corre TODOS los casos, te trae el log de la app y, con `--captura`, captura:",
+          "  `xone-probar --recargar calculadora.js --abrir Calculadora click name=K_7 -- click name=K_EQ --- click name=K_AC -- click name=K_9 …`",
+          "(las opciones delante; los casos con la sintaxis de `xone-hotswap`: `--` encadena pasos, `---` separa casos). Si la app no",
+          "contesta, `xone-desplegar-android`. Junta los cambios antes de probar: no pruebes por cada línea.",
           // Medido en Maset (21→22-10-2026): de 100 llamadas por vuelta, ~39 conducían el aparato —volviendo a navegar desde el
           // arranque en cada prueba— y ~35 releían: default.css 73 veces y la skill de hotswap 54. Solo ~14 escribían.
           "TUS LLAMADAS SE ACABAN (unas 100 por encargo): no las gastes en navegar ni en releer.",
           "- Ve DIRECTO a la ventana: `xone-hotswap abrir <Colección>` (y `screen` tras un segundo). No repitas login y menús en cada prueba.",
           "- Los comandos que necesitas son estos y no hace falta releer la skill: `screen`, `abrir <Coll>`, `js 'return …;'`,",
           "  `click name=X`, `fill name=X value=…`, `waitForElement name=X timeout=5000`, `shot name=X` (varios en UNA llamada, separados por",
-          "  `--`); `xone-log-android --limpiar` y `--app`; `xone-recargar-android`. `elements` solo para explorar: es enorme.",
+          "  `--`). Recargar, limpiar el log, leerlo y capturar ya los hace `xone-probar`. `elements` solo para explorar: es enorme.",
           "- El CSS: busca la clase que vas a tocar con `xone_navegacion` (operación `estilos`) o un `grep` de su nombre. No leas",
           "  `default.css` entero, y lo que ya leíste en este encargo no lo vuelvas a leer.",
           "- `describe_image` sobre tu captura solo si `comparar_capturas` no cuadra y necesitas ver por qué: cada una es un modelo aparte.",
@@ -582,18 +592,18 @@ export function textoDelBucle(
     "  el aviso no deja rastro y el segundo es legacy y no llega al log de Android.",
     ...(elMismo
       ? [
-          "- FUNCIONAL: `xone-log-android --limpiar`, las acciones con `xone-hotswap` y `xone-log-android --app`: cada caso pasa o",
-          "  falla con lo que salió. SIN capturas. TODOS los casos en UNA llamada de `xone-hotswap`, separados por `---`:",
-          "  `xone-hotswap click name=K_7 -- click name=K_MUL -- click name=K_8 -- click name=K_EQ --- click name=K_AC -- click name=K_9 …`",
-          "  (en una sola línea). Cada caso te vuelve en UNA línea con sus pasos y lo que cambió en pantalla. Un caso por llamada",
-          "  multiplica los viajes: medido, hasta 68 llamadas donde bastaban 2. Corrige todos los fallos juntos.",
+          "- FUNCIONAL: `xone-probar` SIN `--captura`, con TODOS los casos en esa llamada, separados por `---`:",
+          "  `xone-probar --recargar calculadora.js --abrir Calculadora click name=K_7 -- click name=K_MUL -- click name=K_8 -- click name=K_EQ --- click name=K_AC -- click name=K_9 …`",
+          "  (en una sola línea). Cada caso te vuelve en UNA línea con sus pasos y lo que cambió en pantalla, y detrás el log de la",
+          "  app: cada caso pasa o falla con lo que salió. Un caso por llamada multiplica los viajes: medido, hasta 68 llamadas",
+          "  donde bastaban 2. Corrige todos los fallos juntos.",
           "- Lo que escribas SOLO para probar (un .js de ensayo, notas) va en `/artefactos/`, nunca en el proyecto: ahí se quedaría,",
           "  porque no hay forma de borrarlo.",
           // Medido en la pasada 8 de la calculadora (DeepSeek flash): con `shot` primero en esta línea capturó 16 veces con él, no
           // pasó ni una vez el crítico ni la comparación, y pulió el CSS con `describe_image`. La nativa guarda la GEOMETRÍA
           // que el crítico mide, y tras cada captura el harness ya le pone delante la medida.
-          "- VISUAL, solo cuando lo funcional pasa: UNA captura por ronda con `xone-captura-android` (la nativa: guarda la geometría",
-          "  que mide el crítico; `shot name=<control>` solo para un control suelto). Tras cada captura el harness te pone la MEDIDA",
+          "- VISUAL, solo cuando lo funcional pasa: UNA captura por ronda, `xone-probar … --captura` (la nativa: guarda la geometría",
+          "  que mide el crítico; `xone-hotswap shot name=<control>` solo para un control suelto). Tras cada captura el harness te pone la MEDIDA",
           "  contra la maqueta; con ella, pasa `xone_critica_visual` (pantalla = esa captura, referencia = la maqueta) y arregla TODAS",
           `  las diferencias en la misma ronda antes de otra captura. ${String(RONDAS_VISUALES)} rondas como mucho. \`describe_image\` no mide: no lo uses para pulir.`,
           // Medido en Maset: la maqueta pinta el paso firmado y con filas; la captura era el paso vacío, y salía 24 % «distinta».
@@ -2297,7 +2307,7 @@ export async function abrirSesionTrueforge(
             }
             // Una COMPROBACIÓN de quien prueba él mismo (`ejecutar_script`): cada recarga o despliegue, como cada llamada al de
             // pruebas para quien no lo hace. Es lo que dispara el aviso de vueltas (`textoDeVueltas`).
-            if (t.function.name === NOMBRE_EJECUTAR_SCRIPT && typeof args["command"] === "string" && /^\s*xone-(recargar|desplegar)-android\b/.test(args["command"])) {
+            if (t.function.name === NOMBRE_EJECUTAR_SCRIPT && typeof args["command"] === "string" && ORDEN_QUE_RECARGA.test(args["command"])) {
               contarVuelta(deHilo);
             }
             // Qué le pide el orquestador a quién: el encargo, acotado (ver `DiagnosticoDeTools.delegacion`).

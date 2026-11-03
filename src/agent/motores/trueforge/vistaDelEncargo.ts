@@ -24,8 +24,8 @@
  * con caché costaría la décima parte. Estimado sobre esa traza: unos 300 mil más de entrada efectiva (+36 %).
  */
 
-/** La orden que abre una vuelta: recargar, desplegar o reiniciar la app en el aparato. */
-export const ORDEN_DE_VUELTA = /^\s*xone-(recargar|desplegar|reiniciar)-android\b/;
+/** La orden que abre una vuelta: recargar, desplegar o reiniciar la app en el aparato, o `xone-probar --recargar`. */
+export const ORDEN_DE_VUELTA = /^\s*xone-(recargar|desplegar|reiniciar)-android\b|^\s*xone-probar\b[^\n]*\s--recargar\b/;
 /** Lo que se conserva de un resultado de una vuelta pasada. */
 export const MAX_CARACTERES_DE_VUELTA_PASADA = 300;
 

@@ -105,7 +105,9 @@ Ante una discrepancia con el código, **el código manda**.
   `launchApplication` a ciegas porque todas salían con 0. En una tarea el orquestador no delega pruebas en el
   device-controller ni pide comprobar la rama (`TRABAJO_SIN_PERSONA`).
 - **Quien corre sus scripts PRUEBA ÉL** (`textoDelBucle#pruebaElMismo`, cuando lleva `ejecutar_script`): recarga,
-  toca, lee el log y captura sin un hijo; `comparar_capturas` entre retoques y el crítico UNA vez al cerrar cada
+  toca, lee el log y captura sin un hijo, y todo eso en UNA orden, `xone-probar` (`skills/xone-hotswap/lib/probar.mjs`:
+  compone los scripts hermanos; el harness la reconoce como captura con `--captura` y como vuelta con `--recargar`,
+  `COMANDO_DE_CAPTURA`/`ORDEN_QUE_RECARGA`, y la ficha saca de su salida casos Y captura); `comparar_capturas` entre retoques y el crítico UNA vez al cerrar cada
   pantalla. Cada `xone-recargar/desplegar-android` cuenta una vuelta. Sus scripts, sin `xone-a-utf8` (`scriptsDeTrueforge`): ese es del hijo de
   Claude Code, y aquí cada `.xne` se escribe en su codificación.
 - **Avisos por umbral, no «para»** (`textoDelBucle`, `capacidadDeAvisoDeVueltas`, `UMBRALES_DE_VUELTAS`): UN mensaje de
