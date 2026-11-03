@@ -10471,3 +10471,10 @@ final (34 min, todas las tareas, el menú y la prueba de punta a punta) y la aud
 dos criterios, los dos «no se ve» porque «su captura no guardó la ruta de la imagen». 13 de las 14 capturas de la ficha
 se habían guardado como «captura»: `xone-captura-android` dice «captura guardada como captura-….png», sin `/artefactos/`,
 y la ficha solo reconocía la ruta entera. Ahora toma también el nombre que dice el script.
+
+**Y un keep-alive no cuenta como dato en la vigilancia de llamadas (03-11-2026).** En la pasada 7 de la calculadora
+(DeepSeek flash en los tres papeles) el analista murió con `read ETIMEDOUT` y, justo después, una llamada del orquestador
+estuvo 27,5 minutos abierta y devolvió 218 tokens. DeepSeek, con la petición en cola, manda comentarios SSE (`: keep-alive`)
+para que la conexión no se cierre; la vigilancia (`vigilanciaDeLlamada.ts`) los contaba como datos y cada uno reiniciaba el
+reloj, así que no cortaba nunca. Ahora los dos plazos —hasta el primer dato y de silencio— solo los mueve un trozo con
+contenido; los latidos pasan tal cual.

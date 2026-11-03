@@ -92,3 +92,37 @@ describe("el cliente reintenta la llamada cortada", () => {
     expect(llamadas).toBe(2);
   }, 20_000);
 });
+
+/**
+ * Medido en la pasada 7 de la calculadora (DeepSeek flash): una llamada del orquestador estuvo 27,5 minutos abierta y
+ * devolvió 218 tokens. DeepSeek, con la petición en cola, manda comentarios SSE (`: keep-alive`) para no cerrar la
+ * conexión, y cada uno reiniciaba el reloj: la llamada no se cortaba nunca.
+ */
+describe("un keep-alive no cuenta como dato", () => {
+  /** Unos trozos y después, para siempre, un `: keep-alive` cada 10 ms. */
+  const conLatidos = (trozos: string[]): ReadableStream<Uint8Array> => {
+    let i = 0;
+    return new ReadableStream<Uint8Array>({
+      pull: (c) =>
+        i < trozos.length
+          ? void c.enqueue(bytes(trozos[i++]!))
+          : new Promise<void>((listo) => setTimeout(() => (c.enqueue(bytes(": keep-alive\n\n")), listo()), 10)),
+    });
+  };
+
+  it("solo latidos antes del primer dato: se corta y LANZA igual que sin un byte", async () => {
+    const f = fetchConVigilancia(async () => new Response(conLatidos([])), topes);
+    await expect(f("https://x")).rejects.toBeInstanceOf(LlamadaSinRespuesta);
+  });
+
+  it("solo latidos a mitad: el flujo falla con el motivo, aunque la conexión siga viva", async () => {
+    const f = fetchConVigilancia(async () => new Response(conLatidos(["data: a\n\n"])), topes);
+    const r = await f("https://x");
+    await expect(leer(r)).rejects.toBeInstanceOf(LlamadaSinRespuesta);
+  });
+
+  it("los latidos entre datos de verdad pasan tal cual y no rompen nada", async () => {
+    const f = fetchConVigilancia(async () => new Response(cuerpo([": keep-alive\n\n", "data: a\n\n", ": keep-alive\n\n", "data: b\n\n"])), topes);
+    expect(await leer(await f("https://x"))).toBe(": keep-alive\n\ndata: a\n\n: keep-alive\n\ndata: b\n\n");
+  });
+});

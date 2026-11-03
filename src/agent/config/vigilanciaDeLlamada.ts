@@ -17,6 +17,15 @@
 export const TOPE_HASTA_EL_PRIMER_DATO_MS = 120_000;
 export const TOPE_DE_SILENCIO_DEL_MODELO_MS = 180_000;
 
+const decodificador = new TextDecoder();
+/** Un trozo que solo trae comentarios SSE (`: keep-alive`) o líneas en blanco: la conexión vive, pero no es respuesta. */
+export function soloLatido(trozo: Uint8Array): boolean {
+  return decodificador
+    .decode(trozo, { stream: false })
+    .split(/\r?\n/)
+    .every((l) => l.trim() === "" || l.startsWith(":"));
+}
+
 /** El fallo de una llamada que no contestó a tiempo. Sin ruta ni cuerpo: solo cuánto se esperó. */
 export class LlamadaSinRespuesta extends Error {
   constructor(motivo: string) {
@@ -49,25 +58,42 @@ export function fetchConVigilancia(
       return { vence, parar: () => clearTimeout(id) };
     };
 
+    /**
+     * **Un keep-alive no es un dato.** Medido en la pasada 7 de la calculadora (DeepSeek flash): con la petición en cola,
+     * DeepSeek manda comentarios SSE (`: keep-alive`) para no cerrar la conexión, y cada uno reiniciaba el reloj; una llamada
+     * del orquestador estuvo 27,5 minutos abierta y devolvió 218 tokens. Esos trozos pasan tal cual, pero no mueven el plazo.
+     */
     const hastaElPrimero = reloj(topes.primerDato, `el modelo no empezó a responder en ${String(Math.round(topes.primerDato / 1000))} s`);
     try {
       const respuesta = await Promise.race([fetchBase(entrada, { ...init, signal: control.signal }), hastaElPrimero.vence]);
       if (respuesta.body === null) return respuesta;
       const lector = respuesta.body.getReader();
-      const primero = await Promise.race([lector.read(), hastaElPrimero.vence]);
+      // Hasta el primer trozo con CONTENIDO: los latidos de antes se guardan para pasarlos delante.
+      const delante: Uint8Array[] = [];
+      let primero = await Promise.race([lector.read(), hastaElPrimero.vence]);
+      while (!primero.done && soloLatido(primero.value)) {
+        delante.push(primero.value);
+        primero = await Promise.race([lector.read(), hastaElPrimero.vence]);
+      }
       hastaElPrimero.parar();
       const silencio = `el modelo dejó de responder a mitad (${String(Math.round(topes.silencio / 1000))} s sin datos)`;
+      // El plazo de silencio cuenta desde el último DATO, no desde el último trozo: un latido no lo mueve.
+      let plazo = Date.now() + topes.silencio;
       const flujo = new ReadableStream<Uint8Array>({
         start(c) {
+          for (const latido of delante) c.enqueue(latido);
           if (primero.done) c.close();
           else c.enqueue(primero.value);
         },
         async pull(c) {
-          const espera = reloj(topes.silencio, silencio);
+          const espera = reloj(Math.max(0, plazo - Date.now()), silencio);
           try {
             const { done, value } = await Promise.race([lector.read(), espera.vence]);
             if (done) c.close();
-            else c.enqueue(value);
+            else {
+              if (!soloLatido(value)) plazo = Date.now() + topes.silencio;
+              c.enqueue(value);
+            }
           } catch (error) {
             c.error(error);
           } finally {
