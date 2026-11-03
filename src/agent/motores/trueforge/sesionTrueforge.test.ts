@@ -1792,7 +1792,9 @@ describe("una sesión con el motor TrueForge", () => {
         pide("d1", "create_sub_agent", { name: "developer-xone", input: "haz la pantalla" }),
         pide("l1", "read_file", { file_path: "/Grande.xne" }),
         pide("e1", "edit_file", { file_path: "/Grande.xne", old_string: "AZ", new_string: "BZ" }),
-        pide("r1", "ejecutar_script", { command: "xone-recargar-android Grande.xne" }),
+        // Por `execute`, que el developer NO tiene: marca la vuelta sin ejecutar nada. Con `ejecutar_script` el script
+        // corría de verdad contra el emulador de quien pasaba el suite (visto en su log: `Grande.xne` de cada pasada).
+        pide("r1", "execute", { command: "xone-recargar-android Grande.xne" }),
         [new AIMessageChunk({ content: "Hecho." })],
         [new AIMessageChunk({ content: "Fin." })],
       ]);

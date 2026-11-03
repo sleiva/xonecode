@@ -10349,3 +10349,9 @@ y lo quitado solo ahorra la décima parte de su tamaño en cada llamada siguient
 trabajo con la caché intacta: unos 1.129 mil de entrada efectiva frente a 829 mil (+36 %). La cuenta de papel daba un 25 % de
 ahorro porque suponía que lo viejo era sobre todo resultado de tools. Lo que queda: que entre menos desde el principio
 (paquetes de contexto) y medir aparte el razonamiento viejo.
+
+**Y una trampa del test de la vista (03-11-2026):** el test de sesión pedía `ejecutar_script xone-recargar-android`, y como
+los scripts de la skill existen y el emulador estaba arrancado, el script corría DE VERDAD contra el aparato de quien pasaba
+el suite (visto en su log: un `Grande.xne` de cada pasada de `npm test`). Rompía la regla de que `npm test` no toca un
+aparato. Ahora la orden va por `execute`, que el developer no tiene: marca la vuelta sin ejecutar nada. Comprobado con el
+log del emulador limpio antes del suite entero: ni una línea de los proyectos temporales de los tests.
