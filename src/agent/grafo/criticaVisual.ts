@@ -139,6 +139,8 @@ export interface DependenciasDeCritica {
 interface GeometriaDeLaCritica {
   lineas: string[];
   hechos: string[];
+  /** Textos de la maqueta que la geometría da por datos de muestra (`HallazgosDeGeometria.datosDeEjemplo`). */
+  datosDeEjemplo: string[];
   bloqueante: boolean;
   /** El aparato medido, si la captura trae su árbol: da las cajas en que se mide cada control. */
   aparato?: GeometriaDelAparato;
@@ -178,6 +180,7 @@ async function geometriaDe(
         "falta, filas, tamaños). Sácala con `xone-captura-android` o `xone-hotswap shot`, que lo guardan a la vez.",
       ],
       hechos: [],
+      datosDeEjemplo: [],
       bloqueante: false,
     };
   }
@@ -197,6 +200,7 @@ async function geometriaDe(
         "MEDIDO. Para comparar con la maqueta, captura la pantalla entera (`xone-hotswap shot` sin `name=`).",
       ],
       hechos: [],
+      datosDeEjemplo: [],
       bloqueante: false,
       parcial: true,
     };
@@ -229,6 +233,7 @@ async function geometriaDe(
   return {
     lineas,
     hechos: [...h.bloqueantes, ...h.diferencias],
+    datosDeEjemplo: h.datosDeEjemplo,
     bloqueante: h.bloqueantes.length > 0,
     aparato,
     ...(maqueta === undefined ? {} : { maqueta }),
@@ -541,7 +546,7 @@ export function crearCriticaVisual(deps: DependenciasDeCritica) {
         const medida = comparacion !== undefined && estilo?.completa === true ? (hayQueArreglar(comparacion) ? ("rojo" as const) : ("verde" as const)) : undefined;
         const mirada =
           medida === undefined || referencia !== undefined
-            ? await juzgarPantalla(abierta, { pantalla: entrada.pantalla }, deps.invocar, referencia, [...(geometria?.hechos ?? []), ...(comparacion?.recortes ?? [])])
+            ? await juzgarPantalla(abierta, { pantalla: entrada.pantalla }, deps.invocar, referencia, [...(geometria?.hechos ?? []), ...(comparacion?.recortes ?? [])], geometria?.datosDeEjemplo ?? [])
             : { veredicto: medida, observaciones: [], necesito: [] };
         // Una mirada que no dijo nada legible no tumba lo medido: queda lo que dijo la medida.
         veredicto =

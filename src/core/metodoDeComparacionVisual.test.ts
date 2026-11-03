@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { confirmadas, METODO_DE_COMPARACION_VISUAL, unirObservaciones } from "./metodoDeComparacionVisual.js";
+import { confirmadas, METODO_DE_COMPARACION_VISUAL, sinDatosDeEjemplo, unirObservaciones } from "./metodoDeComparacionVisual.js";
 
 describe("las observaciones de dos pasadas, sin las repetidas", () => {
   it("las dos pasadas reales de Maset: se queda una por diferencia", () => {
@@ -75,5 +75,25 @@ describe("confirmadas: lo que vieron las dos pasadas", () => {
 
   it("y lo que la otra pasada vio y la primera no, también queda suelto", () => {
     expect(confirmadas([[], ["El logo es más pequeño."]])).toEqual({ confirmadas: [], sueltas: ["El logo es más pequeño."] });
+  });
+});
+
+/** Medido en la calculadora (03-11-2026): el primer motivo del rojo era el dato de muestra del visor. */
+describe("una diferencia de diseño que cita un dato de ejemplo", () => {
+  const LINEA =
+    "Pantalla de la calculadora: en la maqueta hay una segunda línea de operación («4,850.50 ÷ 2.5») entre el historial y el resultado; en la captura no existe y queda un hueco vacío.";
+  const TECLAS = "Teclado, botones: en la maqueta son óvalos achatados; en la captura son círculos casi redondos.";
+
+  it("baja a detalle si cita ENTERO un texto que la geometría dio por dato de muestra", () => {
+    expect(sinDatosDeEjemplo([LINEA, TECLAS], ["9:41", "4,850.50 ÷ 2.5"])).toEqual({ diseno: [TECLAS], bajadas: [LINEA] });
+  });
+
+  it("sin tildes ni mayúsculas ni espacios de más; pero un trozo del dato no es el dato", () => {
+    expect(sinDatosDeEjemplo(["Falta el «Total  Día»."], ["total dia"]).bajadas).toHaveLength(1);
+    expect(sinDatosDeEjemplo(["Falta el «4,850.50»."], ["4,850.50 ÷ 2.5"]).bajadas).toEqual([]);
+  });
+
+  it("sin datos medidos no cambia nada", () => {
+    expect(sinDatosDeEjemplo([LINEA], [])).toEqual({ diseno: [LINEA], bajadas: [] });
   });
 });

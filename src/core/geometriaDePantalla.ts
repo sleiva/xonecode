@@ -89,6 +89,12 @@ export interface HallazgosDeGeometria {
   diferencias: string[];
   /** Lo que no se pudo comparar y por qué: se dice, no se calla. */
   notas: string[];
+  /**
+   * Los TEXTOS de la maqueta que no están en el aparato ni hay otro en su sitio: datos de muestra (el «4,850.50 ÷ 2.5» del
+   * visor de la calculadora). Tal cual, sin comillas: los lee el veredicto con maqueta (`juezVisual.ts`) para que una
+   * diferencia de DISEÑO que solo diga que faltan no ponga el rojo.
+   */
+  datosDeEjemplo: string[];
 }
 
 /** Cuántos hallazgos de cada clase como mucho: más es ruido que nadie lee. */
@@ -252,7 +258,7 @@ export function hallazgosDelAparato(g: GeometriaDelAparato): HallazgosDeGeometri
       if (ancho * alto > menor * 0.2) diferencias.push(`${nombrar(conTexto[i]!)} y ${nombrar(conTexto[j]!)} se SOLAPAN.`);
     }
   }
-  return { bloqueantes, diferencias, notas };
+  return { bloqueantes, diferencias, notas, datosDeEjemplo: [] };
 }
 
 // ---------------------------------------------------------------- nivel 2: contra la maqueta
@@ -458,9 +464,11 @@ const mediana = (xs: readonly number[]): number => {
   const o = [...xs].sort((a, b) => a - b);
   return o.length === 0 ? 0 : o.length % 2 === 1 ? o[(o.length - 1) / 2]! : (o[o.length / 2 - 1]! + o[o.length / 2]!) / 2;
 };
+/** El texto de un elemento como se LEE: sin el nombre de icono que lo precede en el `code.html` («history 4,850.50»). */
+const textoLeido = (e: ElementoDeMaqueta): string => e.texto.trim().replace(/^[a-z_]+\s+/, "");
 const etiqueta = (e: ElementoDeMaqueta): string => {
   const t = e.texto.trim();
-  return /^[a-z][a-z0-9_]*$/.test(t) ? `el icono «${t}»` : `«${t.replace(/^[a-z_]+\s+/, "")}»`;
+  return /^[a-z][a-z0-9_]*$/.test(t) ? `el icono «${t}»` : `«${textoLeido(e)}»`;
 };
 const veces = (x: number): string => x.toFixed(1).replace(".", ",");
 const mayuscula = (t: string): string => t.charAt(0).toUpperCase() + t.slice(1);
@@ -513,6 +521,7 @@ export function compararConMaqueta(m: MaquetaMedida, g: GeometriaDelAparato, mod
   const filasConPareja = new Set(parejas.map((p) => p.maqueta.caja.y));
   const sinFila: string[] = [];
   const datos: string[] = [];
+  const datosDeEjemplo: string[] = [];
   const enImagen: string[] = [];
   /**
    * ¿Cae el centro de este texto de la maqueta DENTRO de una imagen del aparato? Entonces está dibujado en ella (un
@@ -634,6 +643,7 @@ export function compararConMaqueta(m: MaquetaMedida, g: GeometriaDelAparato, mod
       );
     } else if (!aproximada && e.boton !== true && textoParaEmparejar(e.texto) !== "" && (!tieneLetras(textoParaEmparejar(e.texto)) || pareceDatoDeEjemplo(textoVisible(e.texto)))) {
       datos.push(etiqueta(e));
+      datosDeEjemplo.push(textoLeido(e));
     } else if (!aproximada && textoParaEmparejar(e.texto) !== "" && dentroDeUnaImagen(e)) {
       enImagen.push(etiqueta(e));
     } else if (textoParaEmparejar(e.texto) === "") {
@@ -651,7 +661,10 @@ export function compararConMaqueta(m: MaquetaMedida, g: GeometriaDelAparato, mod
       // que la pantalla use visualmente el diseño (decisión suya, 22-10-2026; medido en Maset: «ESPARREGUERA», la población de
       // ejemplo, bloqueaba la crítica). Un BOTÓN que falta sí: eso es diseño. Lo que se VE que falta lo dice el modelo.
       if (enSuSitio === undefined && e.boton === true) bloqueantes.push(`${etiqueta(e)} de ${laMaqueta} NO está en ${elAparato} (ningún control con ese texto).`);
-      else if (enSuSitio === undefined) datos.push(etiqueta(e));
+      else if (enSuSitio === undefined) {
+        datos.push(etiqueta(e));
+        datosDeEjemplo.push(textoLeido(e));
+      }
       else {
         libres.delete(enSuSitio);
         notas.push(`${etiqueta(e)} de ${laMaqueta} dice «${textoVisible(enSuSitio.texto ?? "")}» en ${elAparato}: otro texto en su sitio (empieza donde él), no falta.`);
@@ -704,7 +717,7 @@ export function compararConMaqueta(m: MaquetaMedida, g: GeometriaDelAparato, mod
   const medibles = parejas.filter((p) => p.otroTexto !== true && !datoEmparejadoConUnaImagen(p));
   if (medibles.length < 2) {
     notas.push("con menos de dos controles emparejados no hay filas ni tamaños que comparar.");
-    return { bloqueantes, diferencias, notas };
+    return { bloqueantes, diferencias, notas, datosDeEjemplo };
   }
 
   const filaM = filas(medibles.map((p) => p.maqueta.caja));
@@ -794,7 +807,7 @@ export function compararConMaqueta(m: MaquetaMedida, g: GeometriaDelAparato, mod
   // suelto —o de los de una tarjeta, que se parte— es lo que ocupan sus letras, y en XOne la etiqueta ocupa el ancho
   // que se le da. Medido en Maset: «ENTREGAS», «LIQUIDACIÓN» e «INCIDENCIAS» salían «aplastados» y el orquestador
   // mandó otra vuelta al desarrollador por ello.
-  if (aproximada) return { bloqueantes, diferencias, notas };
+  if (aproximada) return { bloqueantes, diferencias, notas, datosDeEjemplo };
   const yaDichos = new Set(diferencias.filter((d) => d.includes("veces el ancho")).map((d) => d.split(" mide ")[0]));
   medibles.forEach((p, i) => {
     if (!comparable(i) || yaDichos.has(etiqueta(p.maqueta)) || p.maqueta.boton !== true) return;
@@ -806,13 +819,13 @@ export function compararConMaqueta(m: MaquetaMedida, g: GeometriaDelAparato, mod
       diferencias.push(`${etiqueta(p.maqueta)} tiene otra PROPORCIÓN: alto/ancho ${fmt(pa)} en el aparato y ${fmt(pm)} en la maqueta (${pa < pm ? "más aplastado" : "más estirado"}).`);
     }
   });
-  return { bloqueantes, diferencias, notas };
+  return { bloqueantes, diferencias, notas, datosDeEjemplo };
 }
 
 /** Los dos niveles juntos, recortados al tope, y sin repetir. */
 export function hallazgosDeGeometria(g: GeometriaDelAparato, m?: MaquetaMedida): HallazgosDeGeometria {
   const aparato = hallazgosDelAparato(g);
-  const maqueta = m === undefined ? { bloqueantes: [], diferencias: [], notas: [] } : compararConMaqueta(m, g);
+  const maqueta = m === undefined ? { bloqueantes: [], diferencias: [], notas: [], datosDeEjemplo: [] } : compararConMaqueta(m, g);
   const unico = (xs: string[]): string[] => [...new Set(xs)];
   const recorte = (xs: string[]): string[] =>
     xs.length <= TOPE_DE_HALLAZGOS ? xs : [...xs.slice(0, TOPE_DE_HALLAZGOS), `… y ${xs.length - TOPE_DE_HALLAZGOS} más del mismo tipo.`];
@@ -820,6 +833,7 @@ export function hallazgosDeGeometria(g: GeometriaDelAparato, m?: MaquetaMedida):
     bloqueantes: recorte(unico([...aparato.bloqueantes, ...maqueta.bloqueantes])),
     diferencias: recorte(unico([...aparato.diferencias, ...maqueta.diferencias])),
     notas: unico([...aparato.notas, ...maqueta.notas]),
+    datosDeEjemplo: unico(maqueta.datosDeEjemplo),
   };
 }
 

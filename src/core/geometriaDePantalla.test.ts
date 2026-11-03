@@ -47,12 +47,12 @@ describe("la geometría de la calculadora real", () => {
       barras: { estado: { izquierda: 0, arriba: 0, derecha: 390, abajo: 24 }, navegacion: { izquierda: 0, arriba: 730, derecha: 390, abajo: 746 } },
       controles: maqueta.elementos.map((e) => ({ ...(textoParaEmparejar(e.texto) === "" ? {} : { texto: e.texto }), tipo: "prop", caja: e.caja })),
     };
-    expect(hallazgosDeGeometria(comoAparato, maqueta)).toEqual({ bloqueantes: [], diferencias: [], notas: [] });
+    expect(hallazgosDeGeometria(comoAparato, maqueta)).toEqual({ bloqueantes: [], diferencias: [], notas: [], datosDeEjemplo: [] });
   });
 
   it("el informe separa lo medido y dice si hubo maqueta", () => {
     expect(informeDeGeometria(h, true)[0]).toMatch(/^GEOMETRÍA, MEDIDA .*maqueta/);
-    expect(informeDeGeometria({ bloqueantes: [], diferencias: [], notas: [] }, false).join("\n")).toContain("sin cajas de la maqueta");
+    expect(informeDeGeometria({ bloqueantes: [], diferencias: [], notas: [], datosDeEjemplo: [] }, false).join("\n")).toContain("sin cajas de la maqueta");
   });
 });
 
@@ -236,6 +236,11 @@ describe("una pantalla de tarjetas (Maset): datos de ejemplo, texto dentro de un
     expect(emparejar(maqueta, aparato).parejas.some((p) => p.maqueta.texto === "0")).toBe(false);
   });
 
+  it("y esos datos salen TAL CUAL, sin comillas, para que el veredicto no los pida (`datosDeEjemplo`)", () => {
+    expect(h.datosDeEjemplo).toEqual(expect.arrayContaining(["09:41", "0"]));
+    expect(h.datosDeEjemplo).not.toContain("VINS & CAVES • 1777");
+  });
+
   it("pero una TECLA que falta sigue siendo bloqueante", () => {
     expect(h.bloqueantes).toContain("«7» de la maqueta NO está en el aparato (ningún control con ese texto).");
   });
@@ -349,7 +354,7 @@ describe("cajaParaElEstilo: el estilo de un texto se mide en su ENVOLTORIO (el f
 describe("los bloqueantes van MARCADOS en el informe, y se leen de vuelta", () => {
   it("la marca está en la línea y `bloqueantesDelInforme` los saca sin ella", async () => {
     const { bloqueantesDelInforme, MARCA_DE_BLOQUEANTE } = await import("./geometriaDePantalla.js");
-    const lineas = informeDeGeometria({ bloqueantes: ["«=» queda TAPADO"], diferencias: ["otra cosa"], notas: [] }, true);
+    const lineas = informeDeGeometria({ bloqueantes: ["«=» queda TAPADO"], diferencias: ["otra cosa"], notas: [], datosDeEjemplo: [] }, true);
     expect(lineas).toContain(`- ${MARCA_DE_BLOQUEANTE}«=» queda TAPADO`);
     expect(bloqueantesDelInforme(lineas.join("\n"))).toEqual(["«=» queda TAPADO"]);
   });

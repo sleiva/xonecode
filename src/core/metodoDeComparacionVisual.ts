@@ -153,3 +153,25 @@ export function unirObservaciones(...listas: readonly (readonly string[])[]): st
   }
   return salida.map((o) => o.texto);
 }
+
+/** Un texto citado, comparable: sin tildes, minúsculas y sin espacios repetidos. */
+const citable = (texto: string): string => sinTildes(texto.toLowerCase()).replace(/\s+/g, " ").trim();
+
+/**
+ * **Una diferencia de DISEÑO que solo cita un DATO DE EJEMPLO de la maqueta no pone el rojo**: baja a detalle. Los datos los
+ * MIDE la geometría (`HallazgosDeGeometria.datosDeEjemplo`: textos de la maqueta que no están en el aparato ni tienen otro
+ * en su sitio), así que la observación no puede hablar de su estilo —en la captura no está—: solo de que falta, y un dato de
+ * muestra no falta. Medido en la calculadora (03-11-2026): la geometría daba «4,850.50 ÷ 2.5» por dato de muestra y las
+ * dos miradas lo ponían como primer motivo del rojo («falta la segunda línea de operación»); el orquestador mandó pintarlo
+ * fijo y el desarrollador lo escribió en el `.xne`. Se compara por CITA («…») entera, nunca por palabras sueltas: un «12»
+ * citado de pasada no es el dato. Puro.
+ */
+export function sinDatosDeEjemplo(
+  diseno: readonly string[],
+  datosDeEjemplo: readonly string[]
+): { diseno: string[]; bajadas: string[] } {
+  const datos = new Set(datosDeEjemplo.map(citable).filter((d) => d !== ""));
+  if (datos.size === 0) return { diseno: [...diseno], bajadas: [] };
+  const citaUnDato = (o: string): boolean => [...o.matchAll(/«([^»]+)»/g)].some((m) => datos.has(citable(m[1]!)));
+  return { diseno: diseno.filter((o) => !citaUnDato(o)), bajadas: diseno.filter(citaUnDato) };
+}

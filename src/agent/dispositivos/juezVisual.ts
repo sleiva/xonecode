@@ -35,7 +35,7 @@ import type { Esfuerzo } from "../../core/esfuerzo.js";
 import { maquetaParaElModelo } from "./maquetaParaElModelo.js";
 import { interpretarDescripcion, promptDescribirPantalla, type PantallaDescrita } from "../../core/descripcionDePantalla.js";
 import { objetoDe } from "../tareas/juezDeTarea.js";
-import { confirmadas, METODO_DE_COMPARACION_VISUAL, PASADAS_DE_COMPARACION, unirObservaciones } from "../../core/metodoDeComparacionVisual.js";
+import { confirmadas, METODO_DE_COMPARACION_VISUAL, PASADAS_DE_COMPARACION, sinDatosDeEjemplo, unirObservaciones } from "../../core/metodoDeComparacionVisual.js";
 
 /** El papel del juez, el mismo que el de tareas. `core/modelos.ts` lo reserva para esto. */
 export const PAPEL_DEL_JUEZ_VISUAL: Papel = "afilado";
@@ -272,7 +272,12 @@ export async function juzgarPantalla(
    * que adivinar la estructura —medido: no vio una «=» tapada y se inventó colores— y para que su
    * texto no los contradiga. Él se queda con lo que solo se ve: formas, colores, jerarquía.
    */
-  hechos: readonly string[] = []
+  hechos: readonly string[] = [],
+  /**
+   * Los DATOS DE EJEMPLO de la maqueta que midió la geometría (`HallazgosDeGeometria.datosDeEjemplo`): una diferencia de
+   * diseño que los cita baja a detalle (`sinDatosDeEjemplo`). Solo cuentan con maqueta.
+   */
+  datosDeEjemplo: readonly string[] = []
 ): Promise<VeredictoVisual> {
   const base = referencia === undefined ? PROMPT_VISUAL : PROMPT_VISUAL_CON_REFERENCIA;
   const conHechos =
@@ -301,7 +306,7 @@ export async function juzgarPantalla(
   }
   const leidos = textos.map(leerVeredicto).filter((v): v is VeredictoLeido => v !== undefined);
   if (leidos.length === 0) return { veredicto: "indeterminado", observaciones: [], necesito: [] };
-  if (referencia !== undefined) return veredictoConMaqueta(leidos);
+  if (referencia !== undefined) return veredictoConMaqueta(leidos, datosDeEjemplo);
   const observaciones = unirObservaciones(...leidos.map((l) => l.observaciones)).slice(0, TOPE_DE_OBSERVACIONES);
   const necesito = [...new Set(leidos.flatMap((l) => l.necesito))].slice(0, TOPE_DE_PETICIONES);
   /**
@@ -357,9 +362,14 @@ function leerVeredicto(texto: string): VeredictoLeido | undefined {
  * otra pantalla no es verde. Medido el 21-10-2026: con «rojo si se ve cualquier cosa», las 31 críticas con maqueta del
  * workspace eran rojas, también las de pantallas que respetaban el diseño.
  */
-function veredictoConMaqueta(leidos: readonly VeredictoLeido[]): VeredictoVisual {
-  const { confirmadas: diseno, sueltas } = confirmadas(leidos.map((l) => l.diseno));
-  const detalles = unirObservaciones(sueltas, ...leidos.map((l) => l.detalles)).slice(0, TOPE_DE_OBSERVACIONES);
+function veredictoConMaqueta(leidos: readonly VeredictoLeido[], datosDeEjemplo: readonly string[]): VeredictoVisual {
+  const { confirmadas: vistas, sueltas } = confirmadas(leidos.map((l) => l.diseno));
+  const { diseno, bajadas } = sinDatosDeEjemplo(vistas, datosDeEjemplo);
+  const detalles = unirObservaciones(
+    bajadas.map((o) => `${o} (es un dato de ejemplo de la maqueta: no falta, no lo escribas fijo)`),
+    sueltas,
+    ...leidos.map((l) => l.detalles)
+  ).slice(0, TOPE_DE_OBSERVACIONES);
   const necesito = [...new Set(leidos.flatMap((l) => l.necesito))].slice(0, TOPE_DE_PETICIONES);
   const observaciones = [...diseno, ...detalles];
   const veredicto = diseno.length > 0 ? "rojo" : necesito.length > 0 ? "indeterminado" : "verde";

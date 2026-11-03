@@ -190,6 +190,8 @@ const BUCLE_DE_CALIDAD = [
   "señaló. La cifra de `comparar_capturas` es un DATO para el crítico y para tu respuesta, NO un motivo de otra vuelta por sí",
   "sola: que la distancia suba o baje unos puntos sin rojo del crítico no se persigue. Con VERDE —aunque traiga «detalles»—",
   "no hay otra: la pantalla está hecha. Para también tras TRES vueltas, y di lo que sigue faltando en vez de darlo por hecho.",
+  "Lo que señala se pasa como ESTILO y SITIO, nunca como un VALOR que escribir: las cifras, expresiones y nombres que pinta",
+  "la maqueta son de ejemplo, y pedir que se pinten fijos mete un bug.",
   "Además el harness CORTA a quien ajusta tras unas vueltas por encargo y por turno.",
 ].join("\n");
 
@@ -583,8 +585,8 @@ export function textoDelBucle(
           `  pasa el crítico, arregla TODAS las diferencias en la misma ronda y solo entonces pide otra captura. ${String(RONDAS_VISUALES)} rondas como mucho.`,
         ]),
     "- Una pantalla que se parece a la maqueta con datos de ejemplo fijos NO está terminada: la lógica tiene que funcionar.",
-    "  Los valores que pinta la maqueta (cifras, historial, nombres) son de EJEMPLO: no los copies fijos al código aunque el",
-    "  plan lo diga; ese sitio enseña el valor real o arranca vacío.",
+    "  Los valores que pinta la maqueta (cifras, historial, nombres) son de EJEMPLO: no los copies fijos al código aunque lo",
+    "  pidan el plan, tu encargo o el crítico; ese sitio enseña el valor real o arranca vacío, y si te lo piden, dilo al devolver.",
     ...(elMismo
       ? ["Lo que diga el aparato manda sobre lo que crees haber escrito: si el log dice que la app se cae, se cae."]
       : ["Lo que te devuelva es lo que ha visto, no un permiso para dar el trabajo por bueno: si dice que la app se cae, se cae."]),

@@ -297,6 +297,24 @@ describe("el crítico con una maqueta delante", () => {
     expect(v.detalles).toHaveLength(2);
   });
 
+  it("lo de diseño que solo cita un DATO DE EJEMPLO medido baja a detalle: VERDE, y dice que no se escriba fijo", async () => {
+    // Las dos miradas reales de la calculadora (03-11-2026); la geometría daba «4,850.50 ÷ 2.5» por dato de muestra.
+    const LINEA_A = "En la maqueta hay una segunda línea de operación («4,850.50 ÷ 2.5») entre el historial y el resultado; en la captura queda un hueco vacío.";
+    const LINEA_B = "Falta la línea de expresión «4,850.50 ÷ 2.5» sobre el resultado.";
+    let n = 0;
+    const v = await juzgarPantalla(
+      PANTALLA,
+      { pantalla: "X" },
+      async () => JSON.stringify(++n === 1 ? { diseno: [LINEA_A], detalles: [] } : { diseno: [LINEA_B], detalles: [] }),
+      PANTALLA,
+      [],
+      ["9:41", "4,850.50 ÷ 2.5"]
+    );
+    expect(v.veredicto).toBe("verde");
+    expect(v.diseno).toEqual([]);
+    expect(v.detalles?.[0]).toContain("es un dato de ejemplo de la maqueta: no falta, no lo escribas fijo");
+  });
+
   it("si aún pide otra pantalla y nada de diseño está confirmado, es INDETERMINADO", async () => {
     const v = await dos({ diseno: [], detalles: [], necesito: ["Productos"] }, { diseno: [], detalles: [] });
     expect(v.veredicto).toBe("indeterminado");

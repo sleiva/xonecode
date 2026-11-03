@@ -10411,3 +10411,14 @@ aparato (`device-controller`)». Ahora `recibeMarcarCriterios` excluye a quien l
 planes no son suyos y que devuelva lo que ve, y las skills (`xone-plan-builder`, `xone-spec-builder`) y el analista dicen
 que cada tarea CONSTRUYE y la prueba quien la construye: ni tareas de solo comprobar o medir, ni entregas que sean un
 documento del plan.
+
+**Y el dato de ejemplo que el crítico pedía pintar (03-11-2026).** En la misma pasada, la geometría del crítico daba
+«4,850.50 ÷ 2.5» (la expresión de muestra del visor de la maqueta) por dato de ejemplo que no falta, y las dos miradas del
+modelo lo ponían como primer motivo del ROJO: «falta la segunda línea de operación; queda un hueco vacío», que es la regla
+del método de que un SITIO vacío sí es una diferencia. El orquestador lo pasó como orden («al inicio muéstrala con ese valor
+de ejemplo») y el desarrollador lo escribió fijo en el `.xne` y lo usó como condición en el `.js`: un bug, y una casilla de
+la T2 marcada en falso. Ahora la geometría devuelve esos textos (`datosDeEjemplo`) y el veredicto con maqueta baja a detalle
+la diferencia de DISEÑO que cita uno entero (`sinDatosDeEjemplo`): el texto no está en la captura, así que la observación
+solo puede decir que falta. Por cita entera y no por palabras, para no bajar lo que menciona un «12» de pasada. Y el
+orquestador pasa lo que señala el crítico como estilo y sitio, nunca como valor; el desarrollador no lo escribe fijo aunque
+se lo pida el encargo. Sin medir todavía con modelo.

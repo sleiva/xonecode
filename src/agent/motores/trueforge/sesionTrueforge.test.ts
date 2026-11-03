@@ -4272,7 +4272,7 @@ describe("en una tarea: el plan asignado y la captura del desarrollador", () => 
     expect(t).toContain("click name=K_EQ --- click name=K_AC");
     expect(t).toContain("va en `/artefactos/`, nunca en el proyecto");
     // Y los valores de la maqueta no se copian fijos (medido: el historial de ejemplo pintado siempre).
-    expect(t).toContain("son de EJEMPLO: no los copies fijos al código aunque el");
+    expect(t).toContain("son de EJEMPLO: no los copies fijos al código aunque lo");
   });
 
   // Medido en Maset (23-10-2026, «el botón Entrar en rojo»): cuatro sintaxis de `launchApplication` tras reiniciar, dos
