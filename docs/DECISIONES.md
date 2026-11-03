@@ -10330,3 +10330,12 @@ editó después. Dos decisiones con su porqué:
   Cuenta de papel con la prueba13 (6 vueltas): de unos 2 M a unos 1,5 M ese encargo. Sin medir todavía con modelo.
 - **Ni argumentos ni razonamiento.** Una nota en un argumento acabó escrita dentro de un fichero (Maset); y quitar el
   razonamiento dentro del turno puede dar el 400 de DeepSeek. El razonamiento viejo es el otro gran peso y queda aparte.
+
+## El juez del turno pregunta con el modelo vigente (03-11-2026)
+
+Medido en una sesión de Maset: se abrió con DeepSeek, se cambió a GLM por Ollama con `/modelo`, y cada turno se quedaba
+colgado al cerrar. El agente ya respondía con GLM, pero el juez del turno (`crearJuezDelTurno`, en `cli/main.ts`) se
+había montado UNA vez al abrir la sesión, con un `Modelos` propio hecho con la configuración de entonces, y seguía
+preguntando a DeepSeek, saturado; la traza enseñaba la única conexión abierta, a DeepSeek. El crítico visual no tenía el
+fallo porque ya construía su `Modelos` en cada llamada. Ahora el juez también (`ejecutorReal.test.ts` lo ata: abrir con
+uno, cambiar `estado.fuentes`, preguntar con el otro; sin el arreglo el test da el modelo viejo).

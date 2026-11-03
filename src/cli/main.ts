@@ -616,8 +616,12 @@ export function crearEjecutorReal(
          * el que se juzga ese turno. Juzgar es una pregunta corta y cerrada; recortarle el
          * razonamiento porque alguien puso `low` para ahorrar en el trabajo sería aplicar
          * una decisión donde no se tomó.
+         *
+         * **Y se construye en CADA llamada, con la configuración de ahora**, como el crítico visual: montado una vez al
+         * abrir, tras un `/modelo` el agente iba con el nuevo y el juez seguía con el de la apertura (medido en Maset: un
+         * DeepSeek saturado colgaba el cierre de cada turno de una sesión que ya iba con GLM).
          */
-        juezDelTurno: crearJuezDelTurno(new Modelos(estado.fuentes, proveedoresPersonalizados)),
+        juezDelTurno: (caso) => crearJuezDelTurno(new Modelos(estado.fuentes, proveedoresPersonalizados))(caso),
         // La raíz va PUESTA, y es lo que hace que las skills DEL PROYECTO
         // (`<raiz>/.xonecode/skills/`) entren en el catálogo. Sin ella el agente recibiría
         // solo las de serie y las globales, y un subagente que declarase una del proyecto

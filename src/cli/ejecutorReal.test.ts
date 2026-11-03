@@ -17,6 +17,8 @@ import type { ResultadoDeTurno } from "../core/entrega.js";
 const dobles = vi.hoisted(() => ({
   abrirSesionReal: vi.fn(),
   inspeccionar: vi.fn(),
+  /** Con qué modelo pregunta el juez en cada llamada (`idDePapel("afilado")`). */
+  modelosDelJuez: [] as string[],
 }));
 
 vi.mock("../agent/turno/turnoReal.js", () => ({
@@ -28,6 +30,13 @@ vi.mock("../agent/turno/ficherosDelProyecto.js", () => ({
   PROFUNDIDAD_DEL_TAB: 4,
 }));
 vi.mock("../agent/config/entorno.js", () => ({ inspeccionar: dobles.inspeccionar }));
+// El juez no pregunta a ningún modelo: apunta con cuál lo habría hecho.
+vi.mock("../agent/turno/juezDelTurnoConModelo.js", () => ({
+  crearJuezDelTurno: (m: { idDePapel: (p: string) => string }) => async () => {
+    dobles.modelosDelJuez.push(m.idDePapel("afilado"));
+    return { cumplimiento: "cumple", motivo: "" };
+  },
+}));
 
 const { crearEjecutorReal } = await import("./main.js");
 const { TOPE_DE_RONDAS_DE_CONSOLA } = await import("../core/modoDeEscritura.js");
@@ -380,6 +389,27 @@ describe("el juez del turno llega a la sesión", () => {
 
     const opciones = dobles.abrirSesionReal.mock.calls[0]![0] as { juezDelTurno?: unknown };
     expect(typeof opciones.juezDelTurno).toBe("function");
+  });
+
+  /**
+   * Medido en Maset (03-11-2026): la sesión se abrió con DeepSeek, se cambió a GLM por Ollama con `/modelo` y el turno se
+   * quedaba colgado al cerrar: el agente ya iba con GLM, pero el juez seguía preguntando a DeepSeek, saturado. El juez se
+   * montaba UNA vez con la configuración de la apertura. Tiene que preguntar con la de AHORA, como el crítico visual.
+   */
+  it("pregunta con el modelo VIGENTE, también después de cambiarlo con /modelo", async () => {
+    dobles.modelosDelJuez.length = 0;
+    dobles.abrirSesionReal.mockImplementation(async () => ({
+      turno: async () => ({ bitacora: { todo: [] }, cambios: [], cortadoPorTope: false, verificador: "verde" as const, pendientes: 0 }),
+    }));
+    const estado = { ...ESTADO, fuentes: { bandera: "deepseek/deepseek-flash" } };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await crearEjecutorReal(() => {})("haz algo", estado, consolaDeMentira() as any);
+    const juez = (dobles.abrirSesionReal.mock.calls[0]![0] as { juezDelTurno: (c: unknown) => Promise<unknown> }).juezDelTurno;
+    await juez({ objetivo: "x", respuesta: "y", hechos: {} });
+    // `/modelo` cambia `estado.fuentes` por otro objeto.
+    estado.fuentes = { bandera: "ollama/glm-5.3-flash:cloud" };
+    await juez({ objetivo: "x", respuesta: "y", hechos: {} });
+    expect(dobles.modelosDelJuez).toEqual(["deepseek/deepseek-flash", "ollama/glm-5.3-flash:cloud"]);
   });
 });
 
