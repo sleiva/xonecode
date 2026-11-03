@@ -27,6 +27,16 @@ describe("la ficha de un trabajo", () => {
     expect(vigente(e, {})).toBe(false);
   });
 
+  it("un fichero escrito DESPUÉS también la caduca: la prueba no lo vio", () => {
+    const { ficha, id } = conEvidencia(fichaNueva(pedido), { tipo: "captura", resumen: "/artefactos/c.png", quien: "device-controller", cuando: ahora });
+    const e = ficha.evidencias.find((x) => x.id === id)!;
+    expect(vigente(e, {})).toBe(true);
+    const despues = conEscritura(ficha, "/icons/tecla.svg", "h1", "designer-xone", ahora);
+    expect(pruebaVigente(despues, { "/icons/tecla.svg": "h1" })).toBeUndefined();
+    // Escrito y borrado después: la versión vuelve a ser la misma.
+    expect(vigente(e, { "/icons/tecla.svg": undefined })).toBe(true);
+  });
+
   it("para marcar hace falta una prueba EN EL APARATO vigente; validar o escribir no cuentan", () => {
     let f = conEscritura(fichaNueva(pedido), "/Calc.xne", "h1", "developer-xone", ahora);
     f = conEvidencia(f, { tipo: "validacion", resumen: "valida", quien: "developer-xone", cuando: ahora }).ficha;

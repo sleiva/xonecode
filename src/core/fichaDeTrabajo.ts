@@ -87,9 +87,14 @@ export function conEvidencia(
   return { ficha: { ...f, evidencias: [...f.evidencias, evidencia] }, id };
 }
 
-/** ¿Sigue valiendo? Cada fichero que registró tiene la misma huella AHORA. Un fichero que ya no existe la caduca. */
+/**
+ * ¿Sigue valiendo? La versión del trabajo es la MISMA que cuando se produjo: cada fichero que registró tiene la misma
+ * huella ahora, y ninguno escrito DESPUÉS existe. Un fichero que ya no existe la caduca. Medido: una captura sacada antes
+ * de que el diseñador escribiera sus SVG tenía la versión vacía y respaldó seis casillas de esos SVG.
+ */
 export function vigente(e: Evidencia, huellasActuales: Readonly<Record<string, string | undefined>>): boolean {
-  return Object.entries(e.version).every(([ruta, huella]) => huellasActuales[ruta] === huella);
+  const rutas = new Set([...Object.keys(e.version), ...Object.keys(huellasActuales)]);
+  return [...rutas].every((ruta) => huellasActuales[ruta] === e.version[ruta]);
 }
 
 /**
