@@ -2230,6 +2230,13 @@ export interface AgenteDelCable {
    * del modelo elegido (`core/esfuerzo.ts`), y por eso la ventana lo pinta pegado a él.
    */
   esfuerzo?: Esfuerzo;
+  /** El papel de modelo que declara su `.md`; ausente = se deduce (`core/agentes.ts#papelDe`). */
+  papel?: Papel;
+  /**
+   * El papel con que corre DE VERDAD, ya deducido por el servidor: Ajustes → Modelos dice con él quién usa cada papel, sin
+   * repetir la regla en el cliente. Solo de salida: al guardar no se lee.
+   */
+  papelEnVigor?: Papel;
   skills: string[];
   instrucciones: string;
   origen?: string;

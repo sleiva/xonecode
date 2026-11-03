@@ -78,7 +78,7 @@ import { carpetaDeHotswap } from "../../../core/hotswap.js";
 import { cargarAgentes } from "../../subagentes/agentesEnDisco.js";
 import { bloqueDeAprendido, NOMBRE_APUNTAR_APRENDIZAJE, USO_DE_APRENDIDO_EXTERNO, USO_DE_APUNTAR_APRENDIZAJE } from "../../../core/aprendido.js";
 import { crearApuntarAprendizaje, leerAprendido, leerAprendidoDeXone } from "../../grafo/aprendido.js";
-import { fichaDeAgente, promptDeAgente, recibeMarcarCriterios, recibeNucleoDeTrabajo, repartirSkills, skillsConLasDeQuienLlama, textoDeCarpetaDePlanes, textoDeCarpetasDeLaSesion, textoDeTrabajoSinLlamar, type Agente } from "../../../core/agentes.js";
+import { fichaDeAgente, papelDe, promptDeAgente, recibeMarcarCriterios, recibeNucleoDeTrabajo, repartirSkills, skillsConLasDeQuienLlama, textoDeCarpetaDePlanes, textoDeCarpetasDeLaSesion, textoDeTrabajoSinLlamar, type Agente } from "../../../core/agentes.js";
 import { PERFIL_DEL_ORQUESTADOR, promptOrquestador } from "../../grafo/xoneAgent.js";
 import { permisosDe, seDetieneEn, TEXTO_HITL } from "../../grafo/perfiles.js";
 import { cambioDe } from "../../turno/interrupts.js";
@@ -1681,7 +1681,7 @@ export async function abrirSesionTrueforge(
           if (peticion.senal?.aborted === true) throw error;
           const hasta = apuntarSiSeAgoto(motor, error);
           if (hasta === undefined) throw error;
-          const modelo = idDelPapel(agente.soloLectura === true ? "rapido" : "trabajo");
+          const modelo = idDelPapel(papelDe(agente));
           eventosExternos.empujar({ tipo: "aviso", texto: avisoDeAgotamiento(motor, agente.nombre, hasta, modelo), severidad: "aviso" });
           return textoDeExternoAgotado(motor, agente.nombre, hasta, modelo);
         }
@@ -1780,7 +1780,7 @@ export async function abrirSesionTrueforge(
     const agotadoHasta = declarado !== undefined && declarado.motor !== "modelo" ? agotadoHastaAhora(declarado.motor) : undefined;
     const agente = declarado !== undefined && agotadoHasta !== undefined ? conModeloPorDefecto(declarado) : declarado;
     if (declarado !== undefined && agotadoHasta !== undefined) {
-      const modelo = idDelPapel(declarado.soloLectura === true ? "rapido" : "trabajo");
+      const modelo = idDelPapel(papelDe(declarado));
       eventosExternos.empujar({ tipo: "aviso", texto: avisoDeFallback(declarado.motor, declarado.nombre, agotadoHasta, modelo), severidad: "aviso" });
       anotarPaso("trueforge.fallback", `${declarado.nombre}: ${declarado.motor} sin cuota, con ${modelo}`)();
     }
@@ -1933,7 +1933,7 @@ export async function abrirSesionTrueforge(
             .filter((l) => l !== undefined)
             .join("\n")
             .trimEnd();
-    const papel = agente?.soloLectura === true ? "rapido" : "trabajo";
+    const papel = papelDe(agente);
     modeloDeHilo.set(params.threadId, agente?.modelo ?? idDelPapel(papel));
     const claseDeEsfuerzo = agente === undefined ? undefined : claseDeTrabajo(agente);
     // La memoria del especialista: su conversación anterior de ESTA sesión, si la hay y se puede usar.

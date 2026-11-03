@@ -10433,3 +10433,11 @@ ahora la T2» nombra dos y es correcto. Lo que NO arregla, medido en la misma tr
 sube de 35 a 142 mil dentro del encargo pero con el 98 % en caché, y el siguiente encargo arranca ya con 86 mil porque
 conserva su memoria; lo que tarda es GENERAR (llamadas de 5 a 22 mil tokens de salida seguidas de un `grep`). Eso es el
 esfuerzo, que se mide aparte. Fuera de las tareas de fondo, donde manda el tope de encargos.
+
+**Y el papel de modelo por agente (03-11-2026).** Ajustes → Modelos guardaba UN modelo en los tres papeles, y el papel de
+cada especialista se deducía de «solo lectura» (rápido) o no (trabajo). Con eso el ANALISTA —que no toca el proyecto pero
+escribe el plan, lo más difícil del trabajo— caía en «rápido», el papel pensado para el modelo barato; nadie lo había
+decidido (la misma trampa ya estaba apuntada con el device-controller). Ahora un desplegable por papel en Ajustes → Modelos,
+con quién lo usa deducido por el servidor, y un campo `papel` en el `.md` con su selector en Subagentes. Reparto de serie,
+decisión suya: rápido = device-controller y consultor; trabajo = orquestador, developer y designer; afilado = analista,
+crítico visual y juez de cierre. Sin `papel`, la deducción de siempre: no cambia nada a quien no lo toque.

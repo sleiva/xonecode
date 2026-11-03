@@ -70,11 +70,21 @@ import { urlDeEntornoAceptable, AVISO_DE_URL } from "./Wizard.js";
  * Los tres papeles de modelo en Ajustes → Modelos, en el orden en que importan, con quién usa cada uno. El reparto es el de
  * `agent/motores/trueforge/sesionTrueforge.ts` (`papel` de cada especialista) y los jueces (`PAPEL_DEL_JUEZ*`).
  */
-const PAPELES_EN_AJUSTES: readonly { papel: Papel; titulo: string; quien: string }[] = [
-  { papel: "trabajo", titulo: "Trabajo", quien: "El orquestador, el desarrollador, el diseñador y quien prueba en el aparato." },
-  { papel: "rapido", titulo: "Rápido", quien: "Los de solo lectura: el analista (escribe el plan) y el consultor." },
-  { papel: "afilado", titulo: "Afilado", quien: "Los que juzgan: el crítico visual y el juez de cierre de una tarea." },
+const PAPELES_EN_AJUSTES: readonly { papel: Papel; titulo: string; fijos: string }[] = [
+  { papel: "trabajo", titulo: "Trabajo", fijos: "el orquestador" },
+  { papel: "rapido", titulo: "Rápido", fijos: "" },
+  { papel: "afilado", titulo: "Afilado", fijos: "el crítico visual y el juez de cierre" },
 ];
+
+/**
+ * Quién usa un papel: lo FIJO del harness (el orquestador, los jueces) y los subagentes de motor propio sin modelo propio
+ * cuyo papel EN VIGOR es ese, tal como lo deduce el servidor (`papelEnVigor`). Sin la lista de agentes, solo lo fijo.
+ */
+function quienUsaElPapel(papel: Papel, fijos: string, agentes: readonly AgenteDelCable[] | undefined): string {
+  const suyos = (agentes ?? []).filter((a) => a.motor === "modelo" && a.modelo === undefined && a.papelEnVigor === papel).map((a) => a.nombre);
+  const todos = [...(fijos === "" ? [] : [fijos]), ...suyos];
+  return todos.length === 0 ? "Ahora no lo usa nadie." : `Quién lo usa: ${todos.join(", ")}.`;
+}
 
 /** Lo que el servidor contesta a `planear`: qué copias se moverían, o por qué no se puede. */
 export interface PlanDeWorkspace {
@@ -2394,7 +2404,8 @@ export function Ajustes({
                   lleva el analista, que escribe el plan. Sin `porPapel` (un servidor de antes),
                   el de trabajo enseña `porDefecto` y los otros dos no afirman nada.
                 */
-                PAPELES_EN_AJUSTES.map(({ papel, titulo, quien }) => {
+                PAPELES_EN_AJUSTES.map(({ papel, titulo, fijos }) => {
+                  const quien = quienUsaElPapel(papel, fijos, agentes?.lista);
                   const actual = modelosPorPapel?.[papel] ?? (papel === "trabajo" ? modeloPorDefecto : undefined);
                   return (
                     <div key={papel} className={estilos.elegirModelo}>

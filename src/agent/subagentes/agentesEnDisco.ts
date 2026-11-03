@@ -1159,6 +1159,8 @@ export const AGENTES_DE_SERIE: readonly Agente[] = [
       "plataforma, y dice cuándo no lo sabe en vez de deducirlo.",
     motor: "modelo",
     soloLectura: true,
+    // Papel de modelo: decisión suya (03-11-2026); sin él se deduciría de `soloLectura` (`papelDe`).
+    papel: "rapido",
     /**
      * **Sin las visuales, y eso es una DECISIÓN de reparto, no un recorte a ciegas.**
      *
@@ -1186,6 +1188,8 @@ export const AGENTES_DE_SERIE: readonly Agente[] = [
       "devuelve como decisión PENDIENTE.",
     motor: "modelo",
     soloLectura: true,
+    // Papel de modelo: decisión suya (03-11-2026); sin él se deduciría de `soloLectura` (`papelDe`).
+    papel: "afilado",
     skills: ["xone-spec-builder", "xone-plan-builder", "archify", "artifacts-builder", "openui-builder"],
     /**
      * **El plan va DELANTE del reconocimiento, y el orden es la mitad del arreglo.**
@@ -1272,6 +1276,8 @@ export const AGENTES_DE_SERIE: readonly Agente[] = [
      * el camino normal de tocar el proyecto siga siendo el que pasa por la aprobación y el diff.
      */
     soloLectura: false,
+    // Papel de modelo: decisión suya (03-11-2026); sin él se deduciría de `soloLectura` (`papelDe`).
+    papel: "rapido",
     /**
      * **El único de serie con ejecución**, y lo que concede no es «correr un comando»: una
      * shell no pasa por `permisosDe` ni por el `virtualMode`, así que alcanza el disco

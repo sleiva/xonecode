@@ -27,7 +27,7 @@ Trozo del mapa de la raíz; el porqué medido, en `docs/DECISIONES.md`. **El có
 
 # Modelos, configuración y credenciales
 
-- **Modelos por papel** (`core/modelos.ts`): `rapido`, `trabajo`, `afilado` (juez). Omisión
+- **Modelos por papel** (`core/modelos.ts`): `rapido`, `trabajo`, `afilado` (juez). **El papel de un especialista lo declara su `.md`** (`papel`, `agentes.ts#papelDe`); sin él, solo lectura → rápido y el resto → trabajo. Ajustes → Modelos fija el defecto de CADA papel y dice quién lo usa con el `papelEnVigor` que deduce el servidor. Omisión
   Ollama. Precedencia `--modelo-<papel>` > `--modelo` > `XONECODE_MODELO` > proyecto > global,
   con `origen`.
 - **`config.json` RECHAZA claves**; van en `~/.xonecode/auth.json` (0600). `authEnDisco.ts`

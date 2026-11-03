@@ -100,6 +100,16 @@ describe("store del cliente", () => {
     expect(s.leer().aprobacion).toBeUndefined();
   });
 
+  it("el papel de un agente pasa la lista blanca por su VALOR: uno inventado no llega", () => {
+    const s = crearStoreDelCliente();
+    const base = { descripcion: "d", motor: "modelo", soloLectura: true, skills: [], instrucciones: "" };
+    s.aplicar({ clase: "agentes", agentes: [{ ...base, nombre: "a", papel: "afilado", papelEnVigor: "afilado" }, { ...base, nombre: "b", papel: "jefe", papelEnVigor: "rapido" }], problemas: [] } as never);
+    const lista = s.leer().agentes!.lista;
+    expect(lista[0]).toMatchObject({ papel: "afilado", papelEnVigor: "afilado" });
+    expect(lista[1]!.papel).toBeUndefined();
+    expect(lista[1]!.papelEnVigor).toBe("rapido");
+  });
+
   it("el defecto por papel entra solo con los TRES papeles como texto: a medias no se afirma", () => {
     const s = crearStoreDelCliente();
     const porPapel = { rapido: "anthropic/claude-haiku-5-5", trabajo: "anthropic/claude-sonnet-5-5", afilado: "anthropic/claude-sonnet-5-5" };

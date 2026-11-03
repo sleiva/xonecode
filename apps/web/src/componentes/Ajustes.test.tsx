@@ -2199,11 +2199,20 @@ describe("Ajustes: el modelo por defecto", () => {
     expect(alElegirModelo).toHaveBeenCalledTimes(1);
   });
 
-  it("un desplegable por PAPEL, cada uno con quién lo usa, y elegir en uno manda SOLO ese papel", () => {
+  it("un desplegable por PAPEL, cada uno con quién lo usa de VERDAD, y elegir en uno manda SOLO ese papel", () => {
     const alElegirModelo = vi.fn();
-    abrir({ modelosPorPapel: { trabajo: "anthropic/claude-x", rapido: "anthropic/claude-r", afilado: "anthropic/claude-a" }, alElegirModelo });
-    expect(screen.getByText(/el analista \(escribe el plan\)/)).toBeTruthy();
-    expect(screen.getByText(/el crítico visual y el juez de cierre/)).toBeTruthy();
+    const agente = (nombre: string, papelEnVigor: "rapido" | "trabajo" | "afilado", modelo?: string) => ({
+      nombre, descripcion: "d", motor: "modelo" as const, soloLectura: false, skills: [], instrucciones: "", papelEnVigor, ...(modelo === undefined ? {} : { modelo }),
+    });
+    abrir({
+      modelosPorPapel: { trabajo: "anthropic/claude-x", rapido: "anthropic/claude-r", afilado: "anthropic/claude-a" },
+      alElegirModelo,
+      agentes: { lista: [agente("analyst-xone", "afilado"), agente("device-controller", "rapido"), agente("con-su-modelo", "rapido", "x/y")], problemas: [] },
+    });
+    // El que lleva modelo propio no usa su papel: no se nombra.
+    expect(screen.getByText("Quién lo usa: device-controller.")).toBeTruthy();
+    expect(screen.getByText("Quién lo usa: el crítico visual y el juez de cierre, analyst-xone.")).toBeTruthy();
+    expect(screen.getByText("Quién lo usa: el orquestador.")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "anthropic/claude-r" }));
     fireEvent.click(screen.getByRole("menuitem", { name: /Anthropic/i }));
     fireEvent.click(screen.getByRole("menuitemradio", { name: "Claude Y" }));

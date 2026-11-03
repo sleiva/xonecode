@@ -21,6 +21,7 @@ import { recibeBuscarIcono } from "./iconos.js";
 import { METODO_DE_COMPARACION_VISUAL } from "./metodoDeComparacionVisual.js";
 import { recibeFuentes } from "./fuentes.js";
 import { NUCLEO_XONE, NUCLEO_XONE_EXTERNO } from "./nucleoXone.js";
+import type { Papel } from "./ports.js";
 
 /** De qué está hecho un subagente. Los tres van al MISMO sitio: la lista de deepagents. */
 export type Motor = "modelo" | "claude-code" | "codex" | "opencode";
@@ -82,6 +83,13 @@ export interface Agente {
    * esfuerzo. Un valor que no es exactamente uno de los dos se descarta.
    */
   pensamiento?: Pensamiento;
+  /**
+   * Con qué MODELO por defecto corre (`rapido`, `trabajo`, `afilado` de Ajustes → Modelos), si no lleva `modelo` propio.
+   * Ausente = se deduce como siempre (`papelDe`): solo lectura → rápido, el resto → trabajo. Existe porque esa deducción
+   * mandaba el PLAN al modelo barato: el analista no toca el proyecto pero escribe `/planes/` (decisión suya, 03-11-2026:
+   * rápido = device-controller y consultor; trabajo = developer y designer; afilado = analista y los jueces).
+   */
+  papel?: Papel;
   /** Sin escribir nada. Decide `permisosDe` y si se le monta el HITL. */
   soloLectura: boolean;
   /**
@@ -771,6 +779,8 @@ export function leerAgente(
         ? { esfuerzo: (campos["esfuerzo"] ?? "").trim() as Esfuerzo }
         : {}),
       ...(esPensamiento((campos["pensamiento"] ?? "").trim()) ? { pensamiento: (campos["pensamiento"] ?? "").trim() as Pensamiento } : {}),
+      // Contra la lista cerrada, como el esfuerzo: otro valor se descarta y el papel se deduce.
+      ...(esPapel((campos["papel"] ?? "").trim()) ? { papel: (campos["papel"] ?? "").trim() as Papel } : {}),
       // Misma forma que `skills`: una lista separada por comas. Cada entrada se normaliza
       // a ruta virtual absoluta para que `doc`, `/doc` y `/doc/` digan lo mismo — quien
       // escribe un `.md` no tiene por qué saber cuál esperamos.
@@ -844,6 +854,7 @@ export function escribirAgente(agente: Agente): string {
     ...(agente.modelo === undefined ? [] : [`modelo: ${agente.modelo}`]),
     ...(agente.esfuerzo === undefined ? [] : [`esfuerzo: ${agente.esfuerzo}`]),
     ...(agente.pensamiento === undefined ? [] : [`pensamiento: ${agente.pensamiento}`]),
+    ...(agente.papel === undefined ? [] : [`papel: ${agente.papel}`]),
     `soloLectura: ${agente.soloLectura}`,
     ...(agente.ejecucion === true ? ["ejecucion: true"] : []),
     ...(agente.scripts === true ? ["scripts: true"] : []),
@@ -865,4 +876,15 @@ export function escribirAgente(agente: Agente): string {
  */
 export function admiteEjecucion(motor: Motor): boolean {
   return motor === "modelo" || motor === "claude-code";
+}
+
+const PAPELES_DE_AGENTE: readonly Papel[] = ["rapido", "trabajo", "afilado"];
+const esPapel = (v: string): v is Papel => (PAPELES_DE_AGENTE as readonly string[]).includes(v);
+
+/**
+ * **El papel de modelo de un especialista**: el que declara su `.md`, y si no, el de siempre (solo lectura → rápido; el
+ * resto → trabajo). UNA regla para el hilo, el modelo que se anuncia y el fallback de un externo sin cuota.
+ */
+export function papelDe(a: Pick<Agente, "papel" | "soloLectura"> | undefined): Papel {
+  return a?.papel ?? (a?.soloLectura === true ? "rapido" : "trabajo");
 }

@@ -10,6 +10,7 @@ import {
   MAPA_DEL_PROYECTO,
   motivoDeNombreInaceptable,
   nombreSugerido,
+  papelDe,
   promptDeAgente,
   REGLAS_XONE,
   type Agente,
@@ -556,5 +557,24 @@ describe("textoDeCarpetasDeLaSesion", () => {
     expect(t).toContain("`/artefactos/` es /w/P/.xonecode/sesiones/s/artefactos/");
     expect(t).toContain("`/hotswap/` es /w/P/.xonecode/sesiones/s/hotswap/");
     expect(t).toMatch(/Read/);
+  });
+});
+
+describe("el papel de modelo de un agente", () => {
+  it("se lee, se escribe y vuelve igual; un valor que no es un papel se descarta", () => {
+    const r = leerAgente("analista", "---\ndescripcion: planifica\nmotor: modelo\npapel: afilado\nsoloLectura: true\nskills: []\n---\ncuerpo", "global");
+    if ("error" in r) throw new Error(r.error);
+    expect(r.agente.papel).toBe("afilado");
+    expect(escribirAgente(r.agente)).toContain("\npapel: afilado\n");
+    const malo = leerAgente("x", "---\ndescripcion: d\nmotor: modelo\npapel: jefe\nsoloLectura: true\nskills: []\n---\nc", "global");
+    if ("error" in malo) throw new Error(malo.error);
+    expect(malo.agente.papel).toBeUndefined();
+  });
+
+  it("sin declararlo se deduce como siempre: solo lectura → rápido, el resto → trabajo", () => {
+    expect(papelDe({ soloLectura: true })).toBe("rapido");
+    expect(papelDe({ soloLectura: false })).toBe("trabajo");
+    expect(papelDe({ soloLectura: true, papel: "afilado" })).toBe("afilado");
+    expect(papelDe(undefined)).toBe("trabajo");
   });
 });

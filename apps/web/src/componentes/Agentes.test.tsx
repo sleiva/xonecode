@@ -268,6 +268,21 @@ describe("Agentes", () => {
     expect(screen.queryByText(/lo trae XOneCode/)).toBeNull();
   });
 
+  it("el PAPEL se elige y viaja al guardar; guardar sin tocarlo conserva el que tenía", () => {
+    const alGuardar = vi.fn();
+    render(<Agentes {...manejadores} alGuardar={alGuardar} agentes={[{ ...REVISOR, papel: "afilado" }]} />);
+    irA("Tuyos");
+    fireEvent.click(screen.getByRole("button", { name: "Editar revisor" }));
+    expect((screen.getByLabelText(/^Papel/) as HTMLSelectElement).value).toBe("afilado");
+    fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
+    expect(alGuardar).toHaveBeenLastCalledWith(expect.objectContaining({ papel: "afilado" }), "global", undefined);
+
+    fireEvent.click(screen.getByRole("button", { name: "Editar revisor" }));
+    fireEvent.change(screen.getByLabelText(/^Papel/), { target: { value: "rapido" } });
+    fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
+    expect(alGuardar).toHaveBeenLastCalledWith(expect.objectContaining({ papel: "rapido" }), "global", undefined);
+  });
+
   it("renombrar manda el nombre de ANTES; guardar sin tocarlo NO lo manda", () => {
     // Es lo único que distingue un renombrado de un guardado, y el servidor no tiene otra
     // forma de saberlo: la lista que tiene delante ya no lleva el nombre viejo.

@@ -7,7 +7,7 @@ import {
   IconTrashOutline16,
 } from "@deepseek-ai/dsh-client-ui-primitives";
 import type {
-  ProveedorDeModelos, AgenteDelCable, SkillDelCable, Esfuerzo } from "../tipos.js";
+  ProveedorDeModelos, AgenteDelCable, SkillDelCable, Esfuerzo, Papel } from "../tipos.js";
 import { ESFUERZOS } from "../tipos.js";
 import { abreviar } from "../cifras.js";
 import { Desplegable } from "./Desplegable.js";
@@ -683,6 +683,32 @@ export function Agentes({
             configuración, y un campo nuestro no llega hasta allí. Quien tenga un `.md` con
             `esfuerzo` y un motor externo ve el aviso de abajo, no un control que miente.
           */}
+          {/*
+            El PAPEL, solo con motor propio: es qué modelo por defecto de Ajustes → Modelos usa cuando arriba no se elige
+            uno. Sin fijar, lo deduce el servidor (solo lectura → Rápido; el resto → Trabajo).
+          */}
+          {editando.motor === "modelo" ? (
+            <label className={estilos.campo}>
+              <span className={estilos.rotulo}>
+                Papel <span className={estilos.pista}>— qué modelo por defecto usa si no eliges uno arriba</span>
+              </span>
+              <Desplegable
+                value={editando.papel ?? ""}
+                onChange={(e) =>
+                  setEditando({
+                    ...editando,
+                    ...(e.target.value === "" ? { papel: undefined } : { papel: e.target.value as Papel }),
+                  })
+                }
+              >
+                <option value="">Sin fijar — solo lectura: Rápido; el resto: Trabajo</option>
+                <option value="rapido">Rápido</option>
+                <option value="trabajo">Trabajo</option>
+                <option value="afilado">Afilado</option>
+              </Desplegable>
+            </label>
+          ) : null}
+
           {(editando.motor === "modelo" && nivelesDelModelo.length > 0) || editando.motor === "claude-code" ? (
             <label className={estilos.campo}>
               <span className={estilos.rotulo}>

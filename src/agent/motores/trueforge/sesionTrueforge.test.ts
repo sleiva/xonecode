@@ -4409,3 +4409,34 @@ describe("un encargo de un plan es UNA tarea, con su línea `TAREA:`", () => {
     expect(vistos.map((v) => v.join("\n")).some((t) => t.includes("no dice qué tarea"))).toBe(false);
   }, 30_000);
 });
+
+/** Decisión suya (03-11-2026): el analista escribe el plan, y con «solo lectura → rápido» lo hacía el modelo barato. */
+describe("el papel de modelo de cada especialista", () => {
+  it("el analista de serie corre con AFILADO y el consultor con RÁPIDO; el raíz, con trabajo", async () => {
+    const raiz = proyecto();
+    const delega = (id: string, nombre: string) =>
+      new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id, name: "create_sub_agent", args: JSON.stringify({ name: nombre, input: "mira" }) }] });
+    const { m } = modelosConGuion([
+      [delega("a1", "analyst-xone")],
+      [new AIMessageChunk({ content: "plan" })],
+      [delega("c1", "consultant-xone")],
+      [new AIMessageChunk({ content: "respuesta" })],
+      [new AIMessageChunk({ content: "Hecho." })],
+    ]);
+    const papeles: string[] = [];
+    const conPapel = {
+      ...m,
+      paraPapel: (papel: string, ...resto: unknown[]) => {
+        const base = (m.paraPapel as (...a: unknown[]) => { stream: (x: unknown) => unknown; bindTools: (t: unknown) => unknown })(papel, ...resto);
+        const propio = {
+          bindTools: (t: unknown) => (base.bindTools(t), propio),
+          stream: (x: unknown) => (papeles.push(papel), base.stream(x)),
+        };
+        return propio;
+      },
+    } as unknown as ModelosPort;
+    const s = await abrirSesionTrueforge({ raiz, modelos: conPapel, entorno: ENTORNO, skills: CATALOGO });
+    await s.turno("planifica y pregunta", piel().p);
+    expect(papeles).toEqual(["trabajo", "afilado", "trabajo", "rapido", "trabajo"]);
+  }, 30_000);
+});

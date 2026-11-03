@@ -38,7 +38,7 @@ import { randomUUID } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { homedir, tmpdir } from "node:os";
 import type { Acto } from "../../core/actos.js";
-import { conLoQueLaVentanaNoEdita, escribirAgente, leerAgente, motivoDeNombreInaceptable, type Agente } from "../../core/agentes.js";
+import { conLoQueLaVentanaNoEdita, escribirAgente, leerAgente, motivoDeNombreInaceptable, papelDe, type Agente } from "../../core/agentes.js";
 import {
   motivoDeNombreDeSkillInaceptable,
   nombreDeSkillSugerido,
@@ -1764,6 +1764,8 @@ export function montarRutas(
         ...(a.ejecucion === true ? { ejecucion: true } : {}),
         // Igual que arriba: ausente es «no hay ninguno fijado», que es un dato y no un hueco.
         ...(a.esfuerzo === undefined ? {} : { esfuerzo: a.esfuerzo }),
+        ...(a.papel === undefined ? {} : { papel: a.papel }),
+        papelEnVigor: papelDe(a),
         skills: a.skills,
         instrucciones: a.instrucciones,
         origen: a.origen,
@@ -1863,8 +1865,10 @@ export function montarRutas(
          * el guardado los borraría (`core/agentes.ts#conLoQueLaVentanaNoEdita`).
          */
         const previo = cargarAgentes(abierto?.raiz).agentes.find((a) => a.nombre === (renombrandoDe ?? mensaje.agente.nombre));
+        // `papelEnVigor` es solo de salida: lo deduce el servidor y no se escribe en el `.md`.
+        const { papelEnVigor: _enVigor, ...delCable } = mensaje.agente;
         const candidato = conLoQueLaVentanaNoEdita(previo, {
-          ...mensaje.agente,
+          ...delCable,
           motor: mensaje.agente.motor as Agente["motor"],
           origen: mensaje.ambito,
         } as Agente);

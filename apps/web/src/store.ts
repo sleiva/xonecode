@@ -1668,6 +1668,9 @@ export function crearStoreDelCliente(): {
                 ...(typeof a.esfuerzo === "string" && (ESFUERZOS as readonly string[]).includes(a.esfuerzo)
                   ? { esfuerzo: a.esfuerzo }
                   : {}),
+                // El papel, por la lista blanca y por su VALOR, como el esfuerzo: sin él, guardar sin tocarlo lo borraría.
+                ...(typeof a.papel === "string" && (PAPELES as readonly string[]).includes(a.papel) ? { papel: a.papel } : {}),
+                ...(typeof a.papelEnVigor === "string" && (PAPELES as readonly string[]).includes(a.papelEnVigor) ? { papelEnVigor: a.papelEnVigor } : {}),
                 skills: [...a.skills],
                 instrucciones: a.instrucciones,
                 ...(a.origen === undefined ? {} : { origen: a.origen }),
