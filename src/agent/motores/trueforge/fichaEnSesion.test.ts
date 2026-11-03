@@ -108,3 +108,18 @@ describe("una escritura que se aplica después de contestar la tool", () => {
     expect("motivo" in f.respaldo()).toBe(true);
   });
 });
+
+describe("una escritura que pasa por aprobación y no devuelve respuesta", () => {
+  it("basta con haberla PEDIDO: al llegar al disco entra en la versión, y la captura de antes ya no vale", () => {
+    const raiz = proyecto();
+    const f = crearFichaDeSesion({ raiz, continuar: true });
+    f.alResultado("ejecutar_script", { command: "xone-captura-android" }, "guardada /artefactos/a.png", "device-controller");
+    expect("evidencia" in f.respaldo()).toBe(true);
+    f.alPedir("write_file", { file_path: "/icons/tecla.svg" });
+    f.alPedir("write_file", { file_path: "/planes/calc/TASKS.md" });
+    mkdirSync(join(raiz, "icons"), { recursive: true });
+    writeFileSync(join(raiz, "icons", "tecla.svg"), "<svg/>");
+    expect("motivo" in f.respaldo()).toBe(true);
+    expect(Object.keys(f.ficha().escritos)).toEqual(["/icons/tecla.svg"]);
+  });
+});

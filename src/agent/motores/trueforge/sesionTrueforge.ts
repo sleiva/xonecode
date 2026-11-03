@@ -2204,6 +2204,7 @@ export async function abrirSesionTrueforge(
               args = {};
             }
             llamadas.set(claveDe(deHilo, t.id), { nombre: t.function.name, args });
+            fichaDeTrabajo.alPedir(t.function.name, args);
             if (t.function.name === "write_file" || t.function.name === "edit_file" || esEscrituraBinaria(t.function.name)) {
               escriturasEnVuelo.set(claveDe(deHilo, t.id), { nombre: t.function.name, args });
             }

@@ -33,6 +33,11 @@ const TOPE_DEL_OBJETIVO = 2_000;
 
 export interface FichaDeSesion {
   alEmpezarTurno(peticion: string): void;
+  /**
+   * Una escritura PEDIDA, al llamar a la tool: la que pasa por aprobación no devuelve su respuesta por el mismo camino
+   * (medido: 71 escrituras al proyecto, ninguna respuesta), así que se apunta aquí y su huella se toma al llegar al disco.
+   */
+  alPedir(nombre: string, args: Record<string, unknown>): void;
   alResultado(nombre: string, args: Record<string, unknown>, contenido: string, quien: string): void;
   /** Para `marcar_criterios_del_plan`: la prueba vigente que respalda marcar AHORA, o por qué no se puede. */
   respaldo(): { evidencia: string } | { motivo: string };
@@ -93,6 +98,12 @@ export function crearFichaDeSesion(opciones: {
       const dato = { texto, procedencia: "persona" as const, cuando: ahora() };
       ficha = ficha.objetivo === undefined ? { ...ficha, objetivo: dato } : { ...ficha, aclaraciones: [...ficha.aclaraciones, dato] };
       guardar();
+    },
+    alPedir(nombre, args) {
+      if (nombre !== "write_file" && nombre !== "edit_file") return;
+      const ruta = typeof args["file_path"] === "string" ? args["file_path"] : undefined;
+      if (ruta === undefined || FUERA_DEL_PROYECTO.test(ruta)) return;
+      pedidos.add(ruta);
     },
     alResultado(nombre, args, contenido, quien) {
       const cuando = ahora();

@@ -1831,6 +1831,22 @@ describe("una sesión con el motor TrueForge", () => {
       expect(r.ficha?.[0]).toContain("evidencias:");
     }, 30_000);
 
+    /** Medido en una pasada real: 71 escrituras y la ficha cerró con «ficheros escritos: 0». */
+    it("lo que escribe un hijo entra en la ficha con su huella", async () => {
+      const raiz = proyecto();
+      const pide = (id: string, name: string, args: Record<string, unknown>) => [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id, name, args: JSON.stringify(args) }] })];
+      const { m } = modelosConGuion([
+        pide("d1", "create_sub_agent", { name: "developer-xone", input: "crea Nueva.xne" }),
+        pide("w1", "write_file", { file_path: "/Nueva.xne", content: "<coll name=\"Nueva\"/>\n" }),
+        [new AIMessageChunk({ content: "Hecho." })],
+        [new AIMessageChunk({ content: "Fin." })],
+      ]);
+      const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, trabajoSinPersona: true });
+      const r = await s.turno("crea la pantalla", piel().p);
+      expect(readFileSync(join(raiz, "Nueva.xne"), "utf8")).toContain("Nueva");
+      expect(r.ficha?.[0]).toContain("ficheros escritos: 1");
+    }, 30_000);
+
     it("sin el interruptor del bucle no hay contador ni aviso", async () => {
       const raiz = proyecto();
       const { m, vistos } = modelosConGuion([
@@ -3548,6 +3564,7 @@ describe("`marcar_criterios_del_plan` en TrueForge: marca quien construye, no el
   /** Una ficha con una prueba en el aparato vigente: sin ella la marca se rechaza (ver «marcar un criterio sin prueba»). */
   const conPrueba = () => ({
     alEmpezarTurno: () => {},
+    alPedir: () => {},
     alResultado: () => {},
     respaldo: () => ({ evidencia: "e1" }),
     alMarcar: () => {},
