@@ -99,6 +99,13 @@ describe("qué piezas lleva cada especialista, por lo que declara su `.md`", () 
     expect(await corrida(undefined)).toEqual(["xone-hotswap screen 2>&1 | tail -5"]);
   });
 
+  it("con xone-probar, quien prueba él mismo no tiene los scripts que ya hace (medido: con ellos a mano, lo usó cero veces)", () => {
+    const todos = ["xone-hotswap", "xone-probar", "xone-recargar-android", "xone-log-android", "xone-captura-android", "xone-desplegar-android"];
+    expect(scriptsDeTrueforge(todos)).toEqual(["xone-hotswap", "xone-probar", "xone-desplegar-android"]);
+    // Sin xone-probar (una skill del usuario sin él), se quedan: si no, no podría probar.
+    expect(scriptsDeTrueforge(["xone-hotswap", "xone-log-android"])).toEqual(["xone-hotswap", "xone-log-android"]);
+  });
+
   it("xone-a-utf8 no es de TrueForge: escribe cada .xne en su codificación; es del hijo de Claude Code", () => {
     expect(scriptsDeTrueforge(["xone-hotswap", "xone-a-utf8", "xone-log-android"])).toEqual(["xone-hotswap", "xone-log-android"]);
     // Con solo ése, ni siquiera se monta la tool.

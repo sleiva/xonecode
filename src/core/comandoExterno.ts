@@ -111,6 +111,32 @@ export function conScriptsPorNode(comando: string, rutas: Readonly<Record<string
 /** El script de `xone-development` que pasa un `.xne` de 8 bits a UTF-8 (`skills/xone-development/lib/aUtf8.mjs`). */
 export const SCRIPT_A_UTF8 = "xone-a-utf8";
 
+/** El script que hace el ciclo de prueba entero en una orden (`skills/xone-hotswap/lib/probar.mjs`). */
+export const SCRIPT_DE_PROBAR = "xone-probar";
+
+/**
+ * Los scripts que `xone-probar` ya hace, y cómo pedirlo con él. A quien PRUEBA ÉL MISMO (`scripts: true`) no se le dan:
+ * medido en la pasada 10 de la calculadora (03-11-2026), con `xone-probar` en su lista y en su prompt lo usó CERO veces y
+ * siguió con 19 recargas, 11 capturas y 9 lecturas del log sueltas, cada una una vuelta con todo el contexto. Pedirlo en el
+ * prompt no cambia el hábito; quitar la alternativa, sí (como `write_file` sobre un `.xne` existente manda a `edit_file`).
+ */
+export const SUSTITUIDOS_POR_PROBAR: Readonly<Record<string, string>> = {
+  "xone-recargar-android": "xone-probar --recargar <ficheros> [--abrir <Colección>] [casos]",
+  "xone-log-android": "xone-probar [--abrir <Colección>] <casos> (trae el log de la app detrás de los casos)",
+  "xone-captura-android": "xone-probar [--abrir <Colección>] --captura [casos]",
+};
+
+/** El motivo para quien pide uno de los sustituidos y no lo tiene: con qué orden de `xone-probar` se hace. */
+export function motivoDeScriptSustituido(comando: string, scripts: readonly string[]): string | undefined {
+  const programa = comando.trim().split(/\s+/)[0] ?? "";
+  const como = SUSTITUIDOS_POR_PROBAR[programa];
+  if (como === undefined || scripts.includes(programa) || !scripts.includes(SCRIPT_DE_PROBAR)) return undefined;
+  return (
+    `«${programa}» no lo corres tú: probar es UNA orden, ${como}. Recarga, abre, limpia el log, corre los casos ` +
+    "(--- los separa), trae el log de la app y captura, en una sola llamada. `xone-hotswap` sigue para js, sql, elements y screen."
+  );
+}
+
 /**
  * Qué hacer con un `.xne` en ISO-8859-15 o windows-1252, que las tools de Claude Code no saben escribir. Medido:
  * 2.1.301 lo rechaza ANTES del hook y de `canUseTool` (xonecode no puede escribirlo por él), y 2.1.263/2.1.280

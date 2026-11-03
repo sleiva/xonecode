@@ -378,6 +378,19 @@ describe("ejecutar_script: los scripts de sus skills, sin shell", () => {
     return { fuente, corridos, correr };
   };
 
+  it("pedir un script que xone-probar ya hace devuelve la orden de xone-probar, y no corre nada", async () => {
+    const corridos: string[] = [];
+    const fuente = fuenteDeEjecucion(
+      { execute: (c: string) => { corridos.push(c); return { output: "ok", exitCode: 0 }; }, write: () => ({}) },
+      () => undefined,
+      ["xone-hotswap", "xone-probar"]
+    );
+    const r = (await fuente.callTool({ name: "ejecutar_script", arguments: { command: "xone-recargar-android calc.js" } })) as unknown as { result: { content: { text: string }[]; isError?: boolean } };
+    expect(r.result.isError).toBe(true);
+    expect(r.result.content[0]!.text).toContain("xone-probar --recargar <ficheros>");
+    expect(corridos).toEqual([]);
+  });
+
   it("se llama `ejecutar_script`, no `execute`, y su descripción nombra los scripts", async () => {
     const { fuente } = conScripts();
     const { result } = (await fuente.listTools()) as { result: { tools: { name: string; description: string }[] } };

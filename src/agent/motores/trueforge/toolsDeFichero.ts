@@ -36,7 +36,7 @@ import { desalojarSiGrande, MAXIMO_DE_COINCIDENCIAS, truncarSiLargo } from "./re
 import { motivoDeTasksInaceptable, RUTA_DE_TASKS } from "../../../core/tareasDelPlan.js";
 import { motivoDeComandoRechazado, motivoDeOtroAparato } from "../../../core/shellDeAgente.js";
 import type { DispositivoDeLaSesion } from "../../../core/dispositivoDeSesion.js";
-import { comandoConNode, conScriptsPorNode, motivoDeComandoExternoInaceptable } from "../../../core/comandoExterno.js";
+import { comandoConNode, conScriptsPorNode, motivoDeComandoExternoInaceptable, motivoDeScriptSustituido } from "../../../core/comandoExterno.js";
 
 /** El backend de deepagents en su versión nueva, en lo que se usa. */
 export interface BackendDeFicheros {
@@ -570,7 +570,8 @@ export function fuenteDeEjecucion(
       if (params.name !== nombre || typeof comando !== "string" || comando.trim() === "") {
         return toolResultResponse({ text: `${nombre} necesita un \`command\``, isError: true });
       }
-      const fueraDeForma = estrecha === undefined ? undefined : motivoDeComandoExternoInaceptable(comando, estrecha);
+      const fueraDeForma =
+        estrecha === undefined ? undefined : (motivoDeScriptSustituido(comando, estrecha) ?? motivoDeComandoExternoInaceptable(comando, estrecha));
       if (fueraDeForma !== undefined) return toolResultResponse({ text: fueraDeForma, isError: true });
       // Una búsqueda por el disco entero no se lanza (`motivoDeComandoRechazado`): se devuelve el camino bueno.
       // Y uno que iría a OTRO aparato que el de la sesión (`motivoDeOtroAparato`): el elegido se pasa siempre.

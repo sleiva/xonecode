@@ -578,7 +578,7 @@ export function textoDelBucle(
           "- `describe_image` sobre tu captura solo si `comparar_capturas` no cuadra y necesitas ver por qué: cada una es un modelo aparte.",
           // Medido en Maset (23-10-2026, «el botón Entrar en rojo»): tras reiniciar probó cuatro sintaxis de `launchApplication`
           // —todas salían con 0—, pidió dos `--help` y quiso comprobar la rama con `git`, que no tiene.
-          "- Tras `xone-reiniciar-android`, `xone-recargar-android` o `xone-desplegar-android` la app YA está lanzada: no la lances",
+          "- Tras `xone-probar --recargar` o `xone-desplegar-android` la app YA está lanzada: no la lances",
           "  otra vez. No pidas el `--help` de lo que ya está aquí; si un comando sale con error (código 1, `result:false`), lee el",
           "  mensaje y no pruebes otra sintaxis a ciegas.",
           "- No tienes `git` ni shell: la rama y los commits los lleva el harness, no los compruebes.",

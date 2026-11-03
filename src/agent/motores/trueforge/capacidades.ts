@@ -17,7 +17,7 @@ import type { DispositivoDeLaSesion } from "../../../core/dispositivoDeSesion.js
 import { permisosDe } from "../../grafo/perfiles.js";
 import { NOMBRE_INCORPORAR_ADJUNTO } from "../../../core/adjuntos.js";
 import { NOMBRE_TRAER_FUENTE } from "../../../core/fuentes.js";
-import { SCRIPT_A_UTF8 } from "../../../core/comandoExterno.js";
+import { SCRIPT_A_UTF8, SCRIPT_DE_PROBAR, SUSTITUIDOS_POR_PROBAR } from "../../../core/comandoExterno.js";
 import { NOMBRE_INSTALAR_FRAMEWORK } from "../../../core/frameworkLocal.js";
 import {
   fuenteDeEjecucion,
@@ -138,7 +138,9 @@ export function capacidadDeConectores(conectores: ConectoresDeSesion, clase: Cla
  * necesitarlo y buscó tildes por si tenía que convertir.
  */
 export function scriptsDeTrueforge(scripts: readonly string[]): string[] {
-  return scripts.filter((s) => s !== SCRIPT_A_UTF8);
+  // Y sin los que `xone-probar` ya hace, si lo tiene (`SUSTITUIDOS_POR_PROBAR`): con la alternativa a mano, no lo usa.
+  const conProbar = scripts.includes(SCRIPT_DE_PROBAR);
+  return scripts.filter((s) => s !== SCRIPT_A_UTF8 && !(conProbar && s in SUSTITUIDOS_POR_PROBAR));
 }
 
 /**
