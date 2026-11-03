@@ -177,6 +177,7 @@ describe("el ejecutor real DEVUELVE lo que el turno informó", () => {
       preexistentes: 2,
       motivoSinVerificar: "no está xone-simulator en el PATH",
       notasSobrantes: "cambia de idea",
+      ficha: ["evidencias: 2 vigente(s), 0 caducada(s); ficheros escritos: 1", "calc · tarea 01: hecha (2/2 marcados)"],
     };
 
     dobles.abrirSesionReal.mockImplementation(async () => ({

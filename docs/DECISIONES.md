@@ -10366,3 +10366,15 @@ la caché (la lección de la vista del encargo): `lib/log.mjs` agrupa el ruido r
 `System.err` una y otra vez, visto en el log real) y las repeticiones seguidas de la app, y deja como mucho las últimas
 `TOPE_DE_LINEAS_DEL_LOG` líneas diciendo cuántas omitió. Probado en el emulador: «tecla 7, tecla 7, tecla 8, tecla 7» sale
 como «tecla 7 (×2), tecla 8, tecla 7». El ahorro real, sin medir todavía en una pasada.
+
+## La ficha de trabajo, F1: «hecha» exige una prueba vigente (03-11-2026)
+
+Recomendaciones §1 y §5, con la forma de los objetivos de Codex (`codex-rs/ext/goal`: el objetivo fuera de la conversación y
+una auditoría de cierre contra la evidencia ACTUAL). Medido antes: `marcar_criterios_del_plan` marcaba con la palabra del
+agente y nunca desmarcaba; el estado de la tarea lo escribía el developer a mano; el juez no sabía qué se probó en el aparato
+ni sobre qué versión. Ahora la ficha (`core/fichaDeTrabajo.ts`, puro; `fichaEnSesion.ts`) la llena el código con lo que pasa
+por el harness y ata cada evidencia a las huellas de los ficheros escritos en el trabajo: editar después la caduca. Marcar
+exige una prueba en el aparato vigente (casos o captura), y al cerrar el código calcula el estado de cada tarea con marcas y
+lo escribe en su `TASKS.md`; `hecha` solo con todo respaldado vigente y el verificador en verde. El test del ejecutor cazó
+que `crearEjecutorReal` no reenviaba el campo nuevo (el patrón de siempre). Límite: la vigencia caduca de más (todos los
+ficheros del trabajo), y está sin medir con modelo cuántas marcas rechaza ni si obliga a repetir pruebas.

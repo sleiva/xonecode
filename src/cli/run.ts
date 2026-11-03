@@ -227,8 +227,9 @@ async function correrReal(opciones: OpcionesRun, escribir: Escribir): Promise<nu
   let cortadoPorTope = false;
   let falloDelMotor: string | undefined;
   let preguntaPendiente: string | undefined;
+  let ficha: readonly string[] | undefined;
   try {
-    ({ bitacora, cambios, cortadoPorTope, falloDelMotor, preguntaPendiente } = await sesion.turno(opciones.peticion, piel));
+    ({ bitacora, cambios, cortadoPorTope, falloDelMotor, preguntaPendiente, ficha } = await sesion.turno(opciones.peticion, piel));
   } catch (e) {
     if (!(e instanceof CorteSinHumano)) throw e;
     cambios = await instantanea.cambios();
@@ -245,6 +246,12 @@ async function correrReal(opciones: OpcionesRun, escribir: Escribir): Promise<nu
    */
   escribir("\n");
   for (const linea of pintarGasto(sesion.consumo(), sesion.tracker.calls)) escribir(`${linea}\n`);
+
+  // 6-ter. La FICHA de trabajo: con qué se da por hecho cada tarea (`core/fichaDeTrabajo.ts`). Ausente: el motor no la lleva.
+  if (ficha !== undefined && ficha.length > 0) {
+    escribir("\n--- ficha del trabajo ---\n");
+    for (const linea of ficha) escribir(`  ${linea}\n`);
+  }
 
   // 7. El diff contra la foto. Un turno que no tocó nada TIENE que verse igual.
   escribir("\n--- cambios en el proyecto ---\n");

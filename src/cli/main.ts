@@ -777,6 +777,7 @@ export function crearEjecutorReal(
       ...(resultado.motivoSinVerificar === undefined
         ? {}
         : { motivoSinVerificar: resultado.motivoSinVerificar }),
+      ...(resultado.ficha === undefined ? {} : { ficha: resultado.ficha }),
       ...(resultado.notasSobrantes === undefined
         ? {}
         : { notasSobrantes: resultado.notasSobrantes }),

@@ -28,7 +28,7 @@ import { skillsSegunOrigen, type OrigenDeDispositivos } from "../../../core/gran
 import { TOPE_DE_PREGUNTAS_CONTESTADAS_SOLAS, opcionRecomendada } from "../../../core/modoDeEscritura.js";
 import { claseDeTrabajo } from "../../../core/esfuerzo.js";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { CARPETA_DE_PLANES } from "../../../core/planes.js";
 import winston from "winston";
 import { AgentThread, AgentThreadOrchestrator, EventType, NOOP_AGENT_TRACING, askUserQuestion, contextCompaction, dynamicSubAgents } from "./trueforge.js";
@@ -148,6 +148,7 @@ import { crearBuscarFuente, crearTraerFuente, recibeFuentes } from "../../grafo/
 import { crearGenerarFondoSvg, recibeGenerarFondo } from "../../grafo/generarFondoSvg.js";
 import { crearCopiarArtefacto } from "../../grafo/copiarArtefacto.js";
 import { crearMarcarCriteriosDelPlan } from "../../grafo/marcarCriteriosDelPlan.js";
+import { crearFichaDeSesion, type FichaDeSesion } from "./fichaEnSesion.js";
 import { crearUnirSecciones } from "../../grafo/unirSecciones.js";
 import { crearIncorporarAdjunto, recibeIncorporarAdjunto } from "../../grafo/incorporarAdjunto.js";
 import { crearCriticaVisual } from "../../grafo/criticaVisual.js";
@@ -907,6 +908,8 @@ export interface OpcionesDeSesionTrueforge {
    * es poco, así que sale más cara. `XONECODE_VISTA_DEL_ENCARGO=1` la enciende, para medir.
    */
   vistaDelEncargo?: boolean;
+  /** La ficha de trabajo, para doblarla en un test; ausente es la real (`fichaEnSesion.ts`). */
+  fichaDeTrabajo?: FichaDeSesion;
   /**
    * El BUCLE del desarrollador: quien escribe puede llamar por su cuenta a los especialistas que su `.md`
    * declara en `llama` (hoy `device-controller`), y así prueba lo que escribe sin pasar por el orquestador.
@@ -1032,6 +1035,15 @@ export async function abrirSesionTrueforge(
   const especialistaDeHilo = new Map<string, string>();
   const conMemoriaDeEspecialistas = opciones.memoriaDeEspecialistas ?? process.env.XONECODE_SIN_MEMORIA_DE_ESPECIALISTAS !== "1";
   const conVistaDelEncargo = opciones.vistaDelEncargo ?? process.env.XONECODE_VISTA_DEL_ENCARGO === "1";
+  /**
+   * La FICHA de trabajo (`fichaEnSesion.ts`): junto a los artefactos de la sesión, `<sesion>/ficha.json`. Una sesión con
+   * identidad la retoma; sin ella (`run`), cada apertura empieza un trabajo nuevo.
+   */
+  const fichaDeTrabajo = opciones.fichaDeTrabajo ?? crearFichaDeSesion({
+    raiz,
+    ...(opciones.artefactos === undefined ? {} : { ruta: join(dirname(opciones.artefactos), "ficha.json") }),
+    continuar: opciones.artefactos !== undefined && /[\\/]sesiones[\\/]/.test(opciones.artefactos),
+  });
   // Encendido por omisión desde que se midió (calc9-calc15); `XONECODE_BUCLE_DEL_DEVELOPER=0` lo apaga para comparar.
   const conBucleDelDesarrollador = opciones.bucleDelDesarrollador ?? process.env.XONECODE_BUCLE_DEL_DEVELOPER !== "0";
   const conEsperas = opciones.esperasEntreHijos ?? true;
@@ -1533,7 +1545,7 @@ export async function abrirSesionTrueforge(
     // Lo aprendido del proyecto y del aparato, para los encargos siguientes: a quien trabaja (`recibeNucleoDeTrabajo`).
     ...(recibeNucleoDeTrabajo(agente) ? [crearApuntarAprendizaje({ raiz, quien: agente.nombre }) as unknown as ToolDeLangchain] : []),
     // Y marcar en el plan lo comprobado, con el reparto de deepagents (`recibeMarcarCriterios`).
-    ...(recibeMarcarCriterios(agente) ? [crearMarcarCriteriosDelPlan({ raiz }) as unknown as ToolDeLangchain] : []),
+    ...(recibeMarcarCriterios(agente) ? [crearMarcarCriteriosDelPlan({ raiz, ficha: fichaDeTrabajo }) as unknown as ToolDeLangchain] : []),
     // El BUCLE del desarrollador: quien puede llamar al de pruebas también tiene el crítico y la medida, para
     // juzgar la pantalla con lo que el otro capture. El veredicto sigue siendo de un modelo aparte, no suyo, y el
     // juez final del arnés revisa igual (`textoDelBucle`).
@@ -2240,6 +2252,10 @@ export async function abrirSesionTrueforge(
         }
         const chars = typeof evento.content === "string" ? evento.content.length : 0;
         diagnostico?.resultado?.(llamada?.nombre, llamada === undefined ? undefined : detalleDe(llamada.nombre, llamada.args), chars);
+        // La FICHA de trabajo: lo que se escribió, se validó y se probó en el aparato, con la versión de ese momento.
+        if (llamada !== undefined && typeof evento.content === "string") {
+          fichaDeTrabajo.alResultado(llamada.nombre, llamada.args, evento.content, quienEs.get(deHilo) ?? deHilo);
+        }
         // Un script que NO ARRANCA (no se encuentra él o su intérprete) es un fallo de la máquina, y la persona tiene que
         // saberlo: medido en Windows, los siete fallaron y solo lo decía, de pasada, el cierre del agente. Una vez por turno.
         if (!avisoDeScriptsDado && (llamada?.nombre === NOMBRE_EJECUTAR_SCRIPT || llamada?.nombre === "execute") && typeof evento.content === "string") {
@@ -2381,6 +2397,7 @@ export async function abrirSesionTrueforge(
     async turno(peticion: string, piel: Piel) {
       planAsignadoDelTurno = /PLAN DE ESTA TAREA: (\/planes\/[^/\s]+\/)/.exec(peticion)?.[1];
       if (cerrada) throw new Error("la sesión está cerrada");
+      fichaDeTrabajo.alEmpezarTurno(peticion);
       const t0 = Date.now();
       cancelado = false;
       recordatoriosEnElTurno = 0;
@@ -2952,10 +2969,15 @@ export async function abrirSesionTrueforge(
       detencion.reiniciar();
       presupuesto.reiniciar();
       notas.length = 0; // Se sirvieron o se reportan aquí: no siguen vivas para el próximo turno.
+      // El estado de cada tarea con marcas lo CALCULA la ficha y lo escribe en su TASKS.md (`fichaEnSesion.ts#alCerrar`).
+      // El veredicto se asigna dentro del generador de las pasadas: el compilador no ve ese cambio aquí.
+      const veredictoFinal = veredicto as "verde" | "rojo" | "no-corrio";
+      const resumenDeLaFicha = fichaDeTrabajo.alCerrar(veredictoFinal === "no-corrio" ? undefined : veredictoFinal);
       return {
         bitacora,
         cambios,
         cortadoPorTope,
+        ficha: resumenDeLaFicha,
         verificador: veredicto,
         pendientes: sinResolver,
         ...(cortadoPorTope ? { topeAgotado: tope } : {}),

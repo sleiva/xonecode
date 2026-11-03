@@ -50,7 +50,14 @@ function dentroDe(real: string, base: string): boolean {
   return real === base || real.startsWith(base.endsWith(sep) ? base : `${base}${sep}`);
 }
 
-export function crearMarcarCriteriosDelPlan(donde: { raiz: string }) {
+export function crearMarcarCriteriosDelPlan(donde: {
+  raiz: string;
+  /**
+   * La FICHA de trabajo (TrueForge, `fichaEnSesion.ts`): marcar exige una prueba en el aparato VIGENTE, y la marca queda
+   * respaldada por ella. Ausente (deepagents, legacy): se marca con la palabra del agente, como siempre.
+   */
+  ficha?: { respaldo(): { evidencia: string } | { motivo: string }; alMarcar(plan: string, tarea: string, criterios: readonly number[], evidencia: string): void };
+}) {
   return tool(
     async ({ plan, tarea, criterios }: z.infer<typeof ESQUEMA>) => {
       const nombre = plan.trim().replace(/^\/?planes\//, "").replace(/\/+$/, "");
@@ -68,9 +75,12 @@ export function crearMarcarCriteriosDelPlan(donde: { raiz: string }) {
       } catch {
         return `No existe el plan «${nombre}», o no tiene TASKS.md. Mira ${RUTA_PLANES} para ver cuáles hay.`;
       }
+      const respaldo = donde.ficha?.respaldo();
+      if (respaldo !== undefined && "motivo" in respaldo) return respaldo.motivo;
       const resultado = marcarCriterios(readFileSync(fichero, "utf8"), tarea.trim(), criterios);
       if ("error" in resultado) return resultado.error;
       if (resultado.marcados.length > 0) writeFileSync(fichero, resultado.texto);
+      if (respaldo !== undefined) donde.ficha?.alMarcar(nombre, tarea.trim(), [...resultado.marcados, ...resultado.yaEstaban], respaldo.evidencia);
       return (
         `${RUTA_PLANES}${nombre}/TASKS.md, tarea ${tarea.trim()}: ` +
         (resultado.marcados.length > 0 ? `marcados ${resultado.marcados.join(", ")}` : "nada nuevo que marcar") +

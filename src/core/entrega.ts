@@ -113,6 +113,11 @@ export interface ResultadoDeTurno {
    */
   falloDelMotor?: string;
   /**
+   * Lo que dice la FICHA de trabajo al cerrar (`core/fichaDeTrabajo.ts`): evidencias vigentes y caducadas, y el estado
+   * CALCULADO de cada tarea con marcas. Ausente = el motor no lleva ficha.
+   */
+  ficha?: readonly string[];
+  /**
    * Lo BLOQUEANTE medido por el crítico visual en su ÚLTIMA crítica del turno (el estado final de la pantalla): un
    * control tapado, fuera de la pantalla o que falta respecto a la maqueta. Es CRÍTICO para el cierre (`## CRITICAL`);
    * un defecto de detalle no. Ausente = no hubo crítica, o no dio nada bloqueante.

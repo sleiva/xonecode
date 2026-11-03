@@ -143,6 +143,12 @@ Ante una discrepancia con el código, **el código manda**.
 - **Pruebas por el LOG antes que la captura** (`xone-log-android --app`, `EJECUCION_EN_LA_MAQUINA`): `console.log`, nunca
   `ui.showToast` ni `appData.writeConsoleString`; FUNCIONALES aparte de VISUALES (`RONDAS_VISUALES`, el mismo número que
   su prompt).
+- **La FICHA de trabajo** (`core/fichaDeTrabajo.ts`, `fichaEnSesion.ts`; diseño en `docs/superpowers/specs/`): la llena SOLO el código con lo que pasa por el harness
+  —el objetivo literal, escrituras con su huella, validaciones, casos con `---`, capturas y medidas— y se guarda en
+  `<sesion>/ficha.json` (sin sesión, `run`, empieza de cero). Una evidencia vale mientras las huellas no cambien.
+  **Marcar un criterio exige una prueba en el aparato VIGENTE** (`marcar_criterios_del_plan` con `ficha`; sin ella, se
+  devuelve el motivo y no se marca), y **el estado de la tarea lo calcula el código al cerrar** y lo escribe en su
+  `TASKS.md`: `hecha` solo con todo respaldado vigente y el verificador en verde. El cierre de `run` la enseña.
 - **`TASKS.md` con casillas o no se escribe** (`core/tareasDelPlan.ts#motivoDeTasksInaceptable`): solo al escribirlo ENTERO.
 - **El ajuste visual TERMINA** (petición suya): otra vuelta solo si el último `xone_critica_visual` dio ROJO (prompt de
   orquestador y desarrollador), y por CÓDIGO un tope de vueltas (recargas/despliegues o llamadas al de pruebas):

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { fichaNueva } from "../../../core/fichaDeTrabajo.js";
 import { TOPE_DE_SALIDA_DE_COMPACTACION } from "../../../core/contextos.js";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
@@ -1806,6 +1807,30 @@ describe("una sesión con el motor TrueForge", () => {
       expect(tras.includes("[recortado:")).toBe(recortada);
     }, 30_000);
 
+    /**
+     * La FICHA de trabajo en la sesión real (`fichaEnSesion.ts`): marcar un criterio sin una prueba en el aparato posterior
+     * al último cambio se RECHAZA, devuelto al agente, y el TASKS.md no cambia; el turno cierra con lo que dice la ficha.
+     */
+    it("marcar un criterio sin prueba en el aparato se rechaza, y el turno cierra con la ficha", async () => {
+      const raiz = proyecto();
+      const plan = join(raiz, ".xonecode", "planes", "calc");
+      mkdirSync(plan, { recursive: true });
+      const tasks = "# Plan\n\n## 01 — Calculadora\n**Estado:** en curso\n- [ ] suma\n";
+      writeFileSync(join(plan, "TASKS.md"), tasks);
+      const pide = (id: string, name: string, args: Record<string, unknown>) => [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id, name, args: JSON.stringify(args) }] })];
+      const { m, vistos } = modelosConGuion([
+        pide("d1", "create_sub_agent", { name: "developer-xone", input: "haz la tarea 01 del plan calc" }),
+        pide("k1", "marcar_criterios_del_plan", { plan: "calc", tarea: "01", criterios: [1] }),
+        [new AIMessageChunk({ content: "Hecho." })],
+        [new AIMessageChunk({ content: "Fin." })],
+      ]);
+      const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, trabajoSinPersona: true });
+      const r = await s.turno("haz la calculadora", piel().p);
+      expect(vistos[2]!.join("\n")).toContain("No marcado: no hay una prueba en el aparato");
+      expect(readFileSync(join(plan, "TASKS.md"), "utf8")).toBe(tasks);
+      expect(r.ficha?.[0]).toContain("evidencias:");
+    }, 30_000);
+
     it("sin el interruptor del bucle no hay contador ni aviso", async () => {
       const raiz = proyecto();
       const { m, vistos } = modelosConGuion([
@@ -3520,6 +3545,15 @@ describe("las fuentes de Google Fonts en TrueForge: el diseñador las trae a fon
  * reparto quedaría escrito y sin probar.
  */
 describe("`marcar_criterios_del_plan` en TrueForge: el conductor marca lo que comprobó", () => {
+  /** Una ficha con una prueba en el aparato vigente: sin ella la marca se rechaza (ver «marcar un criterio sin prueba»). */
+  const conPrueba = () => ({
+    alEmpezarTurno: () => {},
+    alResultado: () => {},
+    respaldo: () => ({ evidencia: "e1" }),
+    alMarcar: () => {},
+    alCerrar: () => [],
+    ficha: () => fichaNueva(),
+  });
   it("el hijo que EJECUTA la tiene y el TASKS.md cambia; el raíz no la tiene", async () => {
     const raiz = proyecto();
     const dir = join(raiz, ".xonecode", "planes", "hoteles");
@@ -3531,7 +3565,7 @@ describe("`marcar_criterios_del_plan` en TrueForge: el conductor marca lo que co
       [new AIMessageChunk({ content: "Comprobado el 1." })],
       [new AIMessageChunk({ content: "Listo." })],
     ]);
-    const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, sinAprobacion: () => true });
+    const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, sinAprobacion: () => true, fichaDeTrabajo: conPrueba() });
     await s.turno("comprueba la T1", piel().p);
     expect(toolsPorLlamada[1]).toContain("marcar_criterios_del_plan");
     expect(toolsPorLlamada[0]).not.toContain("marcar_criterios_del_plan");
@@ -3551,7 +3585,7 @@ describe("`marcar_criterios_del_plan` en TrueForge: el conductor marca lo que co
       [new AIMessageChunk({ content: "Es una referencia." })],
       [new AIMessageChunk({ content: "Listo." })],
     ]);
-    const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, sinAprobacion: () => true });
+    const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, sinAprobacion: () => true, fichaDeTrabajo: conPrueba() });
     await s.turno("haz la T1", piel().p);
     expect(toolsPorLlamada[1]).toContain("marcar_criterios_del_plan");
     expect(toolsPorLlamada[4]).not.toContain("marcar_criterios_del_plan");
