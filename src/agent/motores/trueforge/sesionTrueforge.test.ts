@@ -1775,6 +1775,33 @@ describe("una sesión con el motor TrueForge", () => {
       expect(vistos).toHaveLength(2 * (2 + 2 * TOPE_DE_VUELTAS_POR_ENCARGO) + 2);
     }, 30_000);
 
+    /**
+     * Medido en la prueba13: el developer arrastraba las vueltas pasadas enteras (201 mil tokens al final). Tras una
+     * recarga, lo que leyó de un fichero que después editó le llega RECORTADO; con el interruptor apagado, entero.
+     */
+    it.each([
+      [true, true],
+      [false, false],
+    ])("tras recargar, la lectura de un fichero ya editado llega recortada (vista del encargo: %s)", async (vista, recortada) => {
+      const raiz = proyecto();
+      writeFileSync(join(raiz, "Grande.xne"), `A${"Z".repeat(2000)}\n`);
+      const pide = (id: string, name: string, args: Record<string, unknown>) => [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id, name, args: JSON.stringify(args) }] })];
+      const { m, vistos } = modelosConGuion([
+        pide("d1", "create_sub_agent", { name: "developer-xone", input: "haz la pantalla" }),
+        pide("l1", "read_file", { file_path: "/Grande.xne" }),
+        pide("e1", "edit_file", { file_path: "/Grande.xne", old_string: "AZ", new_string: "BZ" }),
+        pide("r1", "ejecutar_script", { command: "xone-recargar-android Grande.xne" }),
+        [new AIMessageChunk({ content: "Hecho." })],
+        [new AIMessageChunk({ content: "Fin." })],
+      ]);
+      const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, trabajoSinPersona: true, vistaDelEncargo: vista });
+      await s.turno("haz", piel().p);
+      // La llamada del developer DESPUÉS de recargar (la 5.ª de todas).
+      const tras = vistos[4]!.join("\n");
+      expect(tras.includes("Z".repeat(2000))).toBe(!recortada);
+      expect(tras.includes("[recortado:")).toBe(recortada);
+    }, 30_000);
+
     it("sin el interruptor del bucle no hay contador ni aviso", async () => {
       const raiz = proyecto();
       const { m, vistos } = modelosConGuion([

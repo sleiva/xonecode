@@ -10313,3 +10313,20 @@ si no llega en `TOPE_HASTA_EL_PRIMER_DATO_MS` la aborta y lanza, y el cliente de
 `ChatOpenAI` real y un servidor de mentira: la primera se cuelga, la segunda contesta). Si se para a mitad
 (`TOPE_DE_SILENCIO_DEL_MODELO_MS`) ya no se puede reintentar sin duplicar lo leído: el flujo falla con el motivo y el
 turno acaba como fallo del motor, reanudable, en vez de colgado.
+
+## Quien da vueltas no arrastra las pasadas enteras (03-11-2026)
+
+Medido en la prueba13 de la calculadora: el contexto del desarrollador pasó de 26 a 201 mil tokens en un encargo de 127
+llamadas (media 140 mil); el 39 % del crecimiento era lo devuelto por sus tools y, en la última llamada, el 99 % de eso
+tenía más de 10 llamadas de antigüedad. La memoria de especialistas recorta ENTRE encargos; dentro de uno no había nada.
+
+`vistaDelEncargo.ts` recorta, en la VISTA que va al modelo (`preLLMEphemeralProcessors`; el hilo y la memoria siguen
+enteros), lo que devolvieron las tools ANTES de la última recarga o despliegue, salvo la lectura de un fichero que no se
+editó después. Dos decisiones con su porqué:
+
+- **Solo en el límite de una vuelta, por la caché.** El proveedor cobra la décima parte de lo que repite el principio de
+  la llamada anterior (caché del 98–99 % en esas pasadas). Recortar en cada llamada rompería ese principio y saldría más
+  caro que no recortar; así la vista solo cambia al empezar una vuelta, y se paga una llamada sin caché ya más corta.
+  Cuenta de papel con la prueba13 (6 vueltas): de unos 2 M a unos 1,5 M ese encargo. Sin medir todavía con modelo.
+- **Ni argumentos ni razonamiento.** Una nota en un argumento acabó escrita dentro de un fichero (Maset); y quitar el
+  razonamiento dentro del turno puede dar el 400 de DeepSeek. El razonamiento viejo es el otro gran peso y queda aparte.

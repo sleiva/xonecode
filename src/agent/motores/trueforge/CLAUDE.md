@@ -59,7 +59,10 @@ Ante una discrepancia con el código, **el código manda**.
   (`ventanaDeHistorial`). En la reducida, sus encargos a otro van enteros y un `write_file`/`edit_file` largo se CUENTA en
   texto, sin respuesta: el modelo copia la FORMA de sus llamadas. **La reducida quita el razonamiento CAMBIANDO los ids**
   (`PREFIJO_DE_ID_EN_MEMORIA`): quitar la clave no basta, el eco de DeepSeek lo repegaba por id. Una encarnación viva por especialista; un hijo que falló o se detuvo no deja memoria; uno cortado por su presupuesto
-  sí, sin la orden de parar (`sinOrdenDePresupuesto`). **Quien lleva `ejecucion` la tiene CORTA** (`TOPE_CORTA_TOKENS`, siempre
+  sí, sin la orden de parar (`sinOrdenDePresupuesto`). **Dentro de un encargo, quien da vueltas ve las PASADAS recortadas** (`vistaDelEncargo.ts`,
+  `preLLMEphemeralProcessors`: la vista, no el hilo): lo anterior a la ÚLTIMA recarga/despliegue (`ORDEN_DE_VUELTA`), salvo
+  la lectura de un fichero que no cambió después; ni argumentos ni ids. Estable entre vueltas por la CACHÉ.
+  `XONECODE_SIN_VISTA_DEL_ENCARGO=1` la apaga. **Quien lleva `ejecucion` la tiene CORTA** (`TOPE_CORTA_TOKENS`, siempre
   reducida): lo que devuelven sus órdenes es estado de un aparato que caduca. Solo en
   memoria; `XONECODE_SIN_MEMORIA_DE_ESPECIALISTAS=1` la apaga.
 - **Los planes abiertos van detrás de la petición del raíz** (`core/planesAbiertos.ts`, `planesEnDisco.ts#planesParaElTurno`),

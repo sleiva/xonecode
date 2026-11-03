@@ -902,6 +902,11 @@ export interface OpcionesDeSesionTrueforge {
    */
   memoriaDeEspecialistas?: boolean;
   /**
+   * Que quien da vueltas (recarga, prueba, corrige) no arrastre las vueltas pasadas enteras en cada llamada
+   * (`vistaDelEncargo.ts`). Por omisión SÍ; `XONECODE_SIN_VISTA_DEL_ENCARGO=1` lo apaga, para comparar.
+   */
+  vistaDelEncargo?: boolean;
+  /**
    * El BUCLE del desarrollador: quien escribe puede llamar por su cuenta a los especialistas que su `.md`
    * declara en `llama` (hoy `device-controller`), y así prueba lo que escribe sin pasar por el orquestador.
    * Apagado por omisión: `XONECODE_BUCLE_DEL_DEVELOPER=1` lo enciende, para compararlo con una pasada sin él.
@@ -1025,6 +1030,7 @@ export async function abrirSesionTrueforge(
    */
   const especialistaDeHilo = new Map<string, string>();
   const conMemoriaDeEspecialistas = opciones.memoriaDeEspecialistas ?? process.env.XONECODE_SIN_MEMORIA_DE_ESPECIALISTAS !== "1";
+  const conVistaDelEncargo = opciones.vistaDelEncargo ?? process.env.XONECODE_SIN_VISTA_DEL_ENCARGO !== "1";
   // Encendido por omisión desde que se midió (calc9-calc15); `XONECODE_BUCLE_DEL_DEVELOPER=0` lo apaga para comparar.
   const conBucleDelDesarrollador = opciones.bucleDelDesarrollador ?? process.env.XONECODE_BUCLE_DEL_DEVELOPER !== "0";
   const conEsperas = opciones.esperasEntreHijos ?? true;
@@ -1831,6 +1837,7 @@ export async function abrirSesionTrueforge(
       conectores: conectoresDe,
       notas: capacidadDeNotasDeLaSesion,
       puedeLlamar: (a) => conBucleDelDesarrollador && (a.llama?.length ?? 0) > 0,
+      vistaDelEncargo: conVistaDelEncargo,
       informes: capacidadDeInformes,
       // Una tarea de fondo no tiene a quién preguntar: sus escrituras locales no esperan al control de la librería.
       ...(opciones.trabajoSinPersona === true ? { escribeSinPreguntar: true } : {}),

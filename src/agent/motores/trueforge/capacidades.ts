@@ -35,6 +35,7 @@ import { presupuestoDelPaso, type EscritorDeDesalojo } from "./recortes.js";
 import { entregarNotas, type Nota } from "./notas.js";
 import type { ControlDeDetencion } from "./detencion.js";
 import type { ControlDePresupuesto } from "./presupuesto.js";
+import { vistaDelEncargo } from "./vistaDelEncargo.js";
 
 /** Una pieza: la `AgentCapability` que se le da a TrueForge y las tools que añade. */
 export interface Capacidad {
@@ -397,6 +398,18 @@ export function capacidadDeAvisoDeVueltas(opciones: {
   };
 }
 
+/**
+ * La vista RECORTADA de quien da vueltas (`vistaDelEncargo.ts`), por `preLLMEphemeralProcessors`: cambia lo que se manda
+ * al modelo en cada llamada, no el hilo, así que la memoria y la foto siguen viendo el historial entero.
+ */
+export function capacidadDeVistaDelEncargo(): Capacidad {
+  return {
+    nombre: "vista-del-encargo",
+    tools: [],
+    capability: { preLLMEphemeralProcessors: [{ processPreLLMEphemeral: (mensajes: unknown[]) => vistaDelEncargo(mensajes) }] },
+  };
+}
+
 /** Lo que el backend y las tools de la sesión ponen para montar a un especialista. */
 export interface DependenciasDelEspecialista {
   backend: BackendDeFicheros & EscritorDeDesalojo;
@@ -416,6 +429,8 @@ export interface DependenciasDelEspecialista {
   puedeLlamar?: (agente: Agente) => boolean;
   /** El aviso de vueltas de ESTE agente, si lleva un lazo. Ausente es que no lo lleva. */
   vueltas?: (agente: Agente) => Capacidad | undefined;
+  /** Recortar las vueltas pasadas en la vista de quien da vueltas (`vistaDelEncargo.ts`). Ausente es que no. */
+  vistaDelEncargo?: boolean;
   /** Lo que escribieron los hijos que ESTE agente llame (`informesDeHijos.ts`): solo para quien puede llamar. */
   informes?: Capacidad;
   /** Las tools de los conectores MCP que le tocan a ESTE agente (el reparto vive en la sesión). */
@@ -479,6 +494,8 @@ export function capacidadesDelEspecialista(
     ...(deps.conectores?.(agente) ?? []),
     ...(deps.puedeLlamar?.(agente) === true ? [capacidadDeSubagentes(), ...(deps.informes === undefined ? [] : [deps.informes])] : []),
     ...(deps.vueltas?.(agente) === undefined ? [] : [deps.vueltas(agente)!]),
+    // Quien da vueltas con el aparato (la shell del conductor o los scripts del desarrollador) ve las pasadas recortadas.
+    ...(deps.vistaDelEncargo === true && (clase === "ejecuta" || agente.scripts === true) ? [capacidadDeVistaDelEncargo()] : []),
     capacidadDeRecortes(deps.backend),
     capacidadDeFecha(),
     deps.notas,
