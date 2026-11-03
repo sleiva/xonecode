@@ -10490,3 +10490,10 @@ pruebas (`ejecucion`), no al desarrollador que prueba él mismo; el prompt poní
 ESTADO que la maqueta, con datos» le empujaba a inyectar los de ejemplo. Ahora la medida va detrás de cada orden de captura
 de quien lleva `scripts`, la ronda visual pide la captura nativa y nombra el crítico, y los datos de la maqueta no se
 inyectan.
+
+**Y el tope de vueltas por encargo, a veinte (03-11-2026).** Era `RONDAS_VISUALES` + 1, seis, pensado para cortar el
+ajuste visual que no termina. Pero cuenta cada recarga o despliegue, también las de CONSTRUIR, y con una tarea por encargo y
+el desarrollador probando él mismo eso pesa: en la pasada 9 de la calculadora DeepSeek flash desplegó una vez y recargó seis
+en tres minutos —casi una por edición— y la tarea 01 se cortó con tres de cinco casillas. Decisión suya: subirlo bastante, a
+veinte; el del turno sigue siendo cuatro encargos llenos (ochenta). Las rondas visuales siguen en `RONDAS_VISUALES`, que es
+lo que dicen el prompt y la medida automática.

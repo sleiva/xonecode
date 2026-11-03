@@ -437,7 +437,13 @@ export const UMBRALES_DE_VUELTAS = [3, 5] as const;
  * TURNO y agente, el doble: un orquestador que vuelve a encargar no reinicia la cuenta. Se corta con la pieza del
  * presupuesto (`presupuesto.ts#cortar`): el encargo cierra con un resumen, no mudo.
  */
-export const TOPE_DE_VUELTAS_POR_ENCARGO = RONDAS_VISUALES + 1;
+/**
+ * Veinte por encargo, ya no las rondas visuales + 1 (decisión suya, 03-11-2026: «súbelo bastante»). Con una tarea por
+ * encargo y el desarrollador probando él mismo, cada recarga de CONSTRUIR cuenta igual que una de ajuste visual: medido
+ * en la pasada 9 de la calculadora (DeepSeek flash), un despliegue y seis recargas en tres minutos cortaron la tarea 01
+ * con tres de cinco casillas. Las rondas visuales siguen siendo `RONDAS_VISUALES`: eso lo dicen el prompt y la medida.
+ */
+export const TOPE_DE_VUELTAS_POR_ENCARGO = 20;
 /**
  * El del TURNO, CUATRO encargos llenos (decisión suya, 03-11-2026: «subámoslo más»). Con dos —doce recargas— bastaba cuando
  * un encargo era la pantalla entera; con UNA tarea por encargo (`core/encargoDeTarea.ts`) cada tarea necesita sus recargas
