@@ -2398,17 +2398,18 @@ export function Ajustes({
                   const actual = modelosPorPapel?.[papel] ?? (papel === "trabajo" ? modeloPorDefecto : undefined);
                   return (
                     <div key={papel} className={estilos.elegirModelo}>
-                      <PastillaDeModelo
-                        {...(actual === undefined ? {} : { actual })}
-                        proveedores={proveedores}
-                        alPedirCatalogo={alPedirCatalogo}
-                        alElegir={(id) => alElegirModelo(id, papel)}
-                        titulo={titulo}
-                        enLinea
-                      />
-                      <p className={estilos.nota}>
-                        <strong>{titulo}.</strong> {quien}
-                      </p>
+                      <div className={estilos.filaDePapel}>
+                        <span className={estilos.nombreDePapel}>{titulo}</span>
+                        <PastillaDeModelo
+                          {...(actual === undefined ? {} : { actual })}
+                          proveedores={proveedores}
+                          alPedirCatalogo={alPedirCatalogo}
+                          alElegir={(id) => alElegirModelo(id, papel)}
+                          titulo={titulo}
+                          enLinea
+                        />
+                      </div>
+                      <p className={estilos.nota}>{quien}</p>
                     </div>
                   );
                 })

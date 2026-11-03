@@ -422,6 +422,19 @@
   margin-bottom: 4px;
 }
 
+/* Ajustes → Modelos: el nombre del papel primero y su selector detrás, en la misma línea. Ancho
+   fijo del nombre para que los tres selectores empiecen en la misma vertical. */
+.filaDePapel {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.nombreDePapel {
+  min-width: 64px;
+  font-weight: 600;
+}
+
 /* La fila entera es la etiqueta: pulsar el nombre marca la casilla, que es lo que espera
    cualquiera que haya usado una lista de casillas. */
 .casilla {
