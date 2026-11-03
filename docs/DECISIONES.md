@@ -10355,3 +10355,14 @@ los scripts de la skill existen y el emulador estaba arrancado, el script corrí
 el suite (visto en su log: un `Grande.xne` de cada pasada de `npm test`). Rompía la regla de que `npm test` no toca un
 aparato. Ahora la orden va por `execute`, que el developer no tiene: marca la vuelta sin ejecutar nada. Comprobado con el
 log del emulador limpio antes del suite entero: ni una línea de los proyectos temporales de los tests.
+
+## El log del aparato sale compacto (03-11-2026)
+
+Medido en las pasadas de la calculadora (pruebas 10, 12, 13 y la de Sonnet): lo que las órdenes del aparato metían en el
+contexto sumaba 22–122 mil caracteres por pasada, y casi todo era UNA orden, `xone-log-android --app`, con 12–17 mil por
+llamada y 4–5 llamadas. El plan era desalojarlo a `/large_tool_results/`, pero el log es justo lo que el desarrollador lee:
+desalojado, lo habría abierto, y esa llamada extra se come el ahorro. Mejor que entre menos desde el principio, sin romper
+la caché (la lección de la vista del encargo): `lib/log.mjs` agrupa el ruido repetido del sistema (la misma advertencia de
+`System.err` una y otra vez, visto en el log real) y las repeticiones seguidas de la app, y deja como mucho las últimas
+`TOPE_DE_LINEAS_DEL_LOG` líneas diciendo cuántas omitió. Probado en el emulador: «tecla 7, tecla 7, tecla 8, tecla 7» sale
+como «tecla 7 (×2), tecla 8, tecla 7». El ahorro real, sin medir todavía en una pasada.

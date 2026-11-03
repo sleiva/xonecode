@@ -21,6 +21,7 @@
  *   xone-log-android --limpiar            vacía el buffer y sale (para aislar lo siguiente)
  *   xone-log-android --serie emulator-5554
  */
+import { compactarLog } from "../lib/log.mjs";
 import { execFileSync } from "node:child_process";
 import { canalDeGranja, serieAndroid, rutaDeAdb } from "../lib/dispositivo.mjs";
 import { comandoEnGranja, excepcionDeGetLog } from "../lib/granja.mjs";
@@ -142,7 +143,7 @@ function soloDeLaApp(texto) {
     .filter((l) => /\bXOneJavaScript\s*(\(\s*\d+\))?\s*:/.test(l) || /\s[EF](\s|\/)/.test(l) || /Caused by:|Exception/.test(l));
   return filas.length === 0
     ? "(la app no ha escrito nada con console.log ni ha dado errores en esas líneas; si esperabas una línea, no se ejecutó ese código)"
-    : filas.join("\n");
+    : compactarLog(filas).join("\n");
 }
 
 /** Lo que merece la pena leer de un volcado del host: errores, avisos y trazas de excepción. */
@@ -155,7 +156,7 @@ function soloInteresante(texto) {
     // Y el cuerpo de una traza de Java, que no lleva nivel en cada línea.
     return /\bat [\w$.]+\(|Caused by:|Exception|Error:/.test(l);
   });
-  return filas.length === 0 ? "(sin errores ni avisos en esas líneas)" : filas.join("\n");
+  return filas.length === 0 ? "(sin errores ni avisos en esas líneas)" : compactarLog(filas).join("\n");
 }
 
 console.log(salida.join("\n"));

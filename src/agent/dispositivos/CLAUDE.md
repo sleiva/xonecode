@@ -98,6 +98,10 @@ discrepancia, **el código manda**.
 - **Atrás, textos y esperas van por el canal, no por adb** (`xone-hotswap atras`, `textos`, `esperar`): se resuelven en
   el cliente sobre `getAllElements` con formato `uiautomator`, y valen igual en local y en la granja. `xone-arrancar-android`
   avisa si el emulador arrancó sin red (`ip route get`, no `ping`). El porqué medido, en `docs/DECISIONES.md`.
+- **El log sale COMPACTO** (`skills/xone-hotswap/lib/log.mjs`, en `xone-log-android` por omisión y con `--app`): un aviso
+  del sistema repetido (nivel W que no es de la app) sale una vez con «(×N)» aunque no vaya seguido; lo de la app y los
+  errores solo se agrupan si van SEGUIDOS (el orden es información); como mucho `TOPE_DE_LINEAS_DEL_LOG`, diciendo cuántas
+  se omitieron. Que entre menos desde el principio: el desalojo a fichero no servía, porque el log es justo lo que se lee.
 - **Varios casos en UNA orden, separados por `---`** (`skills/xone-hotswap/lib/casos.mjs`): se lee la pantalla antes del
   primero y cada caso que acaba pulsando se lee ESTABLE y sale como lo que CAMBIÓ (con repetidos), con sus pasos; las
   pulsaciones aceptadas no se imprimen. Sin `---`, una cadena que acaba pulsando se lee sola al final (`"automatico"`).
