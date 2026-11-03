@@ -177,6 +177,26 @@ describe("puerto del aparato, visto desde la skill", () => {
   });
 });
 
+describe("varios casos en una orden (lib/casos.mjs)", async () => {
+  const casos = (await import(pathToFileURL(resolve(__dirname, "../../skills/xone-hotswap/lib/casos.mjs")).href)) as {
+    partirEnCasos: (a: string[]) => string[][];
+    pasosDelCaso: (c: { command: string; name?: string }[]) => string;
+    diferenciaDeTextos: (base: string[], ahora: string[]) => { nuevos: string[]; quitados: string[] };
+  };
+  it("parte por --- y sin separador es un caso", () => {
+    expect(casos.partirEnCasos(["a", "--", "b", "---", "c", "---"])).toEqual([["a", "--", "b"], ["c"]]);
+    expect(casos.partirEnCasos(["a"])).toEqual([["a"]]);
+  });
+  it("los pasos sin el prefijo común de los nombres", () => {
+    expect(casos.pasosDelCaso([{ command: "click", name: "MAP_K_AC" }, { command: "click", name: "MAP_K_7" }])).toBe("AC 7");
+    expect(casos.pasosDelCaso([{ command: "click", name: "MAP_K_7" }, { command: "pressKey" }])).toBe("7 pressKey");
+  });
+  it("la diferencia cuenta repetidos y dice lo quitado", () => {
+    expect(casos.diferenciaDeTextos(["0", "9", "+"], ["9", "9", "+"])).toEqual({ nuevos: ["9"], quitados: ["0"] });
+    expect(casos.diferenciaDeTextos(["a"], ["a"])).toEqual({ nuevos: [], quitados: [] });
+  });
+});
+
 describe("el script xone-hotswap real, con --dry-run", () => {
   const script = resolve(__dirname, "../../skills/xone-hotswap/scripts/xone-hotswap");
   const correr = (...args: string[]) =>
@@ -194,6 +214,11 @@ describe("el script xone-hotswap real, con --dry-run", () => {
     [["--dry-run", "atras"], '{"command":"pressKey","keyCode":4}\n{"command":"getAllElements","format":"uiautomator"}'],
     [["--dry-run", "textos"], '{"command":"getAllElements","format":"uiautomator"}'],
     [["--dry-run", "esperar", "Elige", "antes", "timeout=800"], '{"command":"getAllElements","format":"uiautomator"}'],
+    // Varios casos con `---`: la lectura de antes, y detrás de cada caso que acaba pulsando, la suya; el que acaba leyendo, no.
+    [
+      ["--dry-run", "click", "name=X", "---", "click", "name=Y", "--", "js", "return", "1;"],
+      `{"command":"getAllElements","format":"uiautomator"}\n{"command":"click","name":"X"}\n{"command":"getAllElements","format":"uiautomator"}\n{"command":"click","name":"Y"}\n{"command":"runScript","scriptLanguage":"javascript","scriptText":"${Buffer.from("return 1;").toString("base64")}"}`,
+    ],
   ])("%j", (args, esperado) => {
     expect(correr(...args)).toBe(esperado);
   });
@@ -279,6 +304,26 @@ describe("el script xone-hotswap real, contra un servidor de mentira", () => {
     const r = await correrContra([{ result: true, status: "" }, { result: true, status: "15" }], "click", "name=K_EQ", "--", "js", "return self.R;");
     expect(r.peticiones).toBe(2);
     expect(r.out).not.toContain("automatico");
+  }, 20_000);
+
+  /**
+   * Medido en tres pasadas de la calculadora (03-11-2026): un caso por orden —hasta 68 órdenes de pulsar—. Con `---`,
+   * varios casos van en UNA: se lee la pantalla antes del primero y cada caso sale como lo que cambió, con sus pasos.
+   */
+  it("varios casos con ---: cada uno sale como lo que cambió respecto a la pantalla de antes, y las pulsaciones mudas no", async () => {
+    const ok = { result: true, status: "" };
+    const r = await correrContra(
+      // Cada lectura es ESTABLE: vale cuando dos volcados seguidos coinciden, también la de antes del primer caso.
+      [volcado("0", "7", "9"), volcado("0", "7", "9"), ok, ok, volcado("15", "7", "9"), volcado("15", "7", "9"), ok, volcado("0", "7", "9"), volcado("9", "7", "9")],
+      "click", "name=MAP_K_7", "--", "click", "name=MAP_K_EQ", "---", "click", "name=MAP_K_9",
+    );
+    expect(r.codigo).toBe(0);
+    const lineas = r.out.trim().split("\n").map((l) => JSON.parse(l) as unknown);
+    expect(lineas).toEqual([
+      { comando: "caso", caso: 1, pasos: "7 EQ", nuevos: ["15"], quitados: ["0"] },
+      // El «9» del visor cuenta aunque la tecla «9» ya estuviera: la diferencia lleva los repetidos.
+      { comando: "caso", caso: 2, pasos: "9", nuevos: ["9"], quitados: ["0"] },
+    ]);
   }, 20_000);
 
   it("rechazado (result:false) sale con 1 y lo dice; aceptado, con 0", async () => {

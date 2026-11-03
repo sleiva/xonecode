@@ -56,6 +56,7 @@ process.on("warning", (aviso) => {
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { guardarGeometria } from "../lib/geometria.mjs";
+import { diferenciaDeTextos, partirEnCasos, pasosDelCaso } from "../lib/casos.mjs";
 import { asegurarTunel, canalDeGranja, dispositivoDeLaSesion, puertoConMotivo, retirarOpciones, serieAndroid, PUERTO_DEL_HOTSWAP } from "../lib/dispositivo.mjs";
 
 /**
@@ -143,6 +144,9 @@ LA RECETA (lo eficiente, en este orden):
                                              Varios valores en UN viaje: js 'return JSON.stringify({A: self.MAP_A, B: self.MAP_B});'
   xone-hotswap atras                         volver atrás (pressKey 4); no uses adb keyevent
   xone-hotswap textos                        los textos PINTADOS en pantalla (diálogos incluidos), en una línea
+  xone-hotswap click name=K_7 -- click name=K_EQ --- click name=K_AC -- click name=K_9
+                                             VARIOS CASOS en una orden, separados por ---: cada caso sale en una línea
+                                             con sus pasos y lo que CAMBIÓ en pantalla. Prueba TODOS así, no uno por orden
   xone-hotswap click name=BTN -- esperar Elige antes timeout=5000
                                              espera a que se PINTE un texto (sin tildes ni mayúsculas); sale con 1
                                              si no aparece y dice qué había. Sustituye a uiautomator dump en bucle
@@ -258,16 +262,17 @@ function textoYTimeout(resto) {
 
 /**
  * Los textos que se VEN, sacados del volcado `uiautomator` (Android) o `uikit` (iOS, que acepta `uiautomator` como
- * alias): los atributos `text` y, en iOS, `label`. Sin repetir y sin vacíos, en el orden del árbol.
+ * alias): los atributos `text` y, en iOS, `label`. Sin repetir y sin vacíos, en el orden del árbol. Con `repetidos`, los
+ * repetidos se quedan: la diferencia de un caso los cuenta (el «9» del visor junto a la tecla «9»).
  */
-function textosDe(volcado) {
+function textosDe(volcado, repetidos = false) {
   if (typeof volcado !== "string") return [];
-  const vistos = new Set();
+  const vistos = [];
   for (const m of volcado.matchAll(/\s(?:text|label)="([^"]*)"/g)) {
     const t = desescaparXml(m[1]).trim();
-    if (t !== "") vistos.add(t);
+    if (t !== "") vistos.push(t);
   }
-  return [...vistos];
+  return repetidos ? vistos : [...new Set(vistos)];
 }
 
 function desescaparXml(t) {
@@ -307,7 +312,8 @@ const seco = pedidos.includes("--dry-run");
 const utiles = pedidos.filter((a) => a !== "--dry-run");
 
 const comandos = [];
-for (const trozo of partirPorSeparador(utiles)) {
+/** Un comando de la cadena, de `["click","name=X"]` a su objeto del protocolo. */
+function comandoDe(trozo) {
   const [cabeza, ...resto] = trozo;
   /**
    * **El JSON viejo se RECHAZA con la forma buena escrita, nunca se acepta a medias.**
@@ -345,7 +351,7 @@ for (const trozo of partirPorSeparador(utiles)) {
     );
   }
   const atajo = ATAJOS[cabeza];
-  comandos.push(atajo ? atajo(resto) : aplicarPares({ command: cabeza }, resto));
+  return atajo ? atajo(resto) : aplicarPares({ command: cabeza }, resto);
 }
 
 /**
@@ -356,9 +362,20 @@ for (const trozo of partirPorSeparador(utiles)) {
  * (medido: `textos` inmediato daba «7 +» y no «15»): se relee hasta que dos lecturas coinciden, con tope.
  */
 const ACCIONES = new Set(["click", "fill", "longPress", "pressKey", "tap", "swipe", "scroll", "setText"]);
-if (comandos.length > 0 && ACCIONES.has(comandos[comandos.length - 1].command)) {
-  comandos.push({ command: "getAllElements", format: "uiautomator", [ATAJO]: { tipo: "estable", timeout: TOPE_DE_LECTURA_ESTABLE_MS } });
-}
+const lecturaEstable = (extra = {}) => ({ command: "getAllElements", format: "uiautomator", [ATAJO]: { tipo: "estable", timeout: TOPE_DE_LECTURA_ESTABLE_MS, ...extra } });
+/**
+ * **Varios CASOS en una orden, separados por `---`** (`../lib/casos.mjs`): antes del primero se lee la pantalla (la
+ * BASE), y cada caso que acaba pulsando se lee solo y sale como lo que CAMBIÓ respecto a esa base, con sus pasos.
+ */
+const casos = partirEnCasos(utiles);
+const variosCasos = casos.length > 1;
+if (variosCasos) comandos.push(lecturaEstable({ base: true }));
+casos.forEach((caso, i) => {
+  const deEste = partirPorSeparador(caso).map(comandoDe);
+  comandos.push(...deEste);
+  const acabaPulsando = deEste.length > 0 && ACCIONES.has(deEste[deEste.length - 1].command);
+  if (acabaPulsando) comandos.push(lecturaEstable(variosCasos ? { caso: i + 1, pasos: pasosDelCaso(deEste) } : {}));
+});
 
 if (seco) {
   for (const c of comandos) console.log(JSON.stringify(c));
@@ -456,6 +473,8 @@ function sinBinarios(respuesta) {
 const rechazados = [];
 /** Los `esperar` que se quedaron sin ver su texto: también salen con 1, pero no los rechazó el servidor. */
 const noVistos = [];
+/** La pantalla de antes del primer caso, con repetidos: contra ella se mide cada uno. */
+let base;
 /** Lo más que se imprime de `textos`: una pantalla con una lista larga son cientos. */
 const TOPE_DE_TEXTOS = 80;
 const ws = new WebSocket(process.env.HOTSWAP_URL ?? urlPorOmision(puertoPedido, seriePedida));
@@ -532,13 +551,15 @@ ws.onmessage = (ev) => {
   // probaba otra sintaxis a ciegas (medido: cuatro formas de `launchApplication` seguidas, todas «bien»).
   const atajo = pendiente?.[ATAJO];
   if (atajo !== undefined && mensaje.result !== false) {
-    if (resolverAtajo(atajo, textosDe(mensaje.status))) return;
+    if (resolverAtajo(atajo, textosDe(mensaje.status, atajo.base === true || atajo.caso !== undefined))) return;
     pendiente = undefined;
     siguiente();
     return;
   }
   if (mensaje.result === false) rechazados.push(pendiente?.command ?? "?");
-  console.log(JSON.stringify({ comando: pendiente?.command, ...sinBinarios(mensaje) }));
+  // Con varios casos, una pulsación ACEPTADA y sin nada que decir no se imprime: lo que cuenta es la línea de su caso.
+  const pulsacionMuda = variosCasos && mensaje.result !== false && ACCIONES.has(pendiente?.command) && (mensaje.status ?? "") === "";
+  if (!pulsacionMuda) console.log(JSON.stringify({ comando: pendiente?.command, ...sinBinarios(mensaje) }));
   pendiente = undefined;
   siguiente();
 };
@@ -559,6 +580,17 @@ function resolverAtajo(atajo, textos) {
         ws.send(JSON.stringify(otra));
       }, CADENCIA_MS);
       return true;
+    }
+    // La base no se imprime: es contra lo que se mide cada caso.
+    if (atajo.base === true) {
+      base = textos;
+      return false;
+    }
+    if (atajo.caso !== undefined) {
+      const { nuevos, quitados } = diferenciaDeTextos(base ?? [], textos);
+      const corto = (l) => l.slice(0, TOPE_DE_TEXTOS).map((t) => (t.length > 120 ? `${t.slice(0, 120)}…` : t));
+      console.log(JSON.stringify({ comando: "caso", caso: atajo.caso, pasos: atajo.pasos, nuevos: corto(nuevos), ...(quitados.length > 0 ? { quitados: corto(quitados) } : {}) }));
+      return false;
     }
     const recortados = textos.slice(0, TOPE_DE_TEXTOS).map((t) => (t.length > 120 ? `${t.slice(0, 120)}…` : t));
     console.log(JSON.stringify({ comando: "textos", automatico: true, textos: recortados, ...(textos.length > TOPE_DE_TEXTOS ? { total: textos.length } : {}) }));

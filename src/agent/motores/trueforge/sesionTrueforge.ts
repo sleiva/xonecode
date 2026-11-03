@@ -560,11 +560,10 @@ export function textoDelBucle(
     ...(elMismo
       ? [
           "- FUNCIONAL: `xone-log-android --limpiar`, las acciones con `xone-hotswap` y `xone-log-android --app`: cada caso pasa o",
-          "  falla con lo que salió. SIN capturas. TODOS los casos en UNA llamada de `xone-hotswap`, cada uno con sus clics y DETRÁS",
-          "  su lectura etiquetada: `xone-hotswap click name=K_7 -- click name=K_MUL -- click name=K_8 -- click name=K_EQ -- js",
-          "  'return \"7*8 -> \"+self.RESULTADO;' -- click name=K_AC -- …` (en una sola línea). Pulsar en una llamada y leer en otra,",
-          "  caso a caso, dobla los viajes: medido, 30 en vez de 2. Una cadena que ACABA pulsando ya te devuelve sola los textos",
-          "  pintados (`\"automatico\": true`): no la sigas de otra orden solo para ver el display. Corrige todos los fallos juntos.",
+          "  falla con lo que salió. SIN capturas. TODOS los casos en UNA llamada de `xone-hotswap`, separados por `---`:",
+          "  `xone-hotswap click name=K_7 -- click name=K_MUL -- click name=K_8 -- click name=K_EQ --- click name=K_AC -- click name=K_9 …`",
+          "  (en una sola línea). Cada caso te vuelve en UNA línea con sus pasos y lo que cambió en pantalla. Un caso por llamada",
+          "  multiplica los viajes: medido, hasta 68 llamadas donde bastaban 2. Corrige todos los fallos juntos.",
           "- Lo que escribas SOLO para probar (un .js de ensayo, notas) va en `/artefactos/`, nunca en el proyecto: ahí se quedaría,",
           "  porque no hay forma de borrarlo.",
           "- VISUAL, solo cuando lo funcional pasa: UNA captura por ronda (`xone-hotswap shot`, o `xone-captura-android` si hay un",

@@ -4189,10 +4189,11 @@ describe("en una tarea: el plan asignado y la captura del desarrollador", () => 
 
   // Medido en las pruebas de la calculadora: pulsaba en una llamada y leía en otra, caso a caso (30 viajes), y dejó un
   // `zz_prueba.js` de ensayo en la raíz del proyecto, donde se queda porque no hay forma de borrarlo.
-  it("le dice que pruebe TODOS los casos en UNA llamada, cada uno con su lectura, y que lo de ensayo va a /artefactos/", () => {
+  it("le dice que pruebe TODOS los casos en UNA llamada separados por ---, y que lo de ensayo va a /artefactos/", () => {
     const t = textoDelBucle(["designer-xone"], { conCritica: true, pruebaElMismo: true });
     expect(t).toContain("TODOS los casos en UNA llamada");
-    expect(t).toContain("DETRÁS\n  su lectura etiquetada");
+    expect(t).toContain("separados por `---`");
+    expect(t).toContain("click name=K_EQ --- click name=K_AC");
     expect(t).toContain("va en `/artefactos/`, nunca en el proyecto");
     // Y los valores de la maqueta no se copian fijos (medido: el historial de ejemplo pintado siempre).
     expect(t).toContain("son de EJEMPLO: no los copies fijos al código aunque el");

@@ -10287,3 +10287,18 @@ pidió otro. El tope de encargos de las tareas (`TOPE_DE_ENCARGOS_AL_DESARROLLAD
 Arreglo: con las vueltas del turno agotadas, el encargo siguiente a ese agente NO ARRANCA (`hiloQueNoArranca` con
 `textoDeVueltasDelTurnoAgotadas`), haya o no persona, y el orquestador recibe la orden de cerrar con lo que la última
 crítica dejó por ajustar. El precio: esos ROJOS de pulido quedan para la persona en vez de perseguirse en el mismo turno.
+
+## Varios casos en una orden, por código (03-11-2026)
+
+Tres pasadas iguales con la 0.68.1 (2,25 M, 3,59 M y 3,28 M; las tres terminaron solas) separaron dónde se va la
+diferencia: el developer probaba un caso por orden de `xone-hotswap` —26, 17 y 68 órdenes de pulsar—, cada una un
+viaje de unos 100 mil tokens de contexto. La receta de la skill y de su texto (un `js` con su etiqueta detrás de
+cada caso) no la siguió en ninguna: en las tres trazas no hay ni una lectura a mitad de cadena. Era más larga de
+escribir que un caso por orden.
+
+Ahora `---` separa casos (`skills/xone-hotswap/lib/casos.mjs`): se lee la pantalla antes del primero y cada caso que
+acaba pulsando sale en una línea con sus pasos (`AC 7 MUL 8 EQ`, sin el prefijo común de los nombres) y lo que cambió
+respecto a esa pantalla. La diferencia cuenta repetidos: tras teclear 9, el «9» del visor sale aunque la tecla «9» ya
+estuviera (por eso `textosDe` los conserva aquí). Las pulsaciones aceptadas no se imprimen. Medido en el emulador sobre
+la calculadora de una pasada: cinco casos en una orden, 3,3 s, cada uno con su resultado correcto.
+El indicador para medirlo no es el total (varía demasiado) sino las órdenes de pulsar del developer por pasada.
