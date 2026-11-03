@@ -1774,6 +1774,15 @@ export async function abrirSesionTrueforge(
     threadId: string;
     parent: unknown;
   }): Promise<AgentThread> => {
+    /**
+     * Un encargo devuelto SIN arrancar (espera, tope o regla del encargo): su anuncio sale de las esperas
+     * (`esperas.ts#noArranco`). Sin eso, quien lo esperaba no arrancaba nunca: medido en la pasada 5 de la calculadora, el
+     * diseñador devuelto por no traer `TAREA:` dejó al desarrollador esperándolo y al orquestador reintentando en bucle.
+     */
+    const devolverSinArrancar = (nombre: string, esperados: readonly string[], razon?: string): AgentThread => {
+      esperas.noArranco(nombre);
+      return hiloQueNoArranca(nombre, esperados, params, llm, logger, razon);
+    };
     // Quién lo pide: el raíz, o un especialista que llama a otro. Un especialista solo puede llamar a los que su
     // `.md` declara en `llama` y con el interruptor puesto; lo demás cae al ayudante genérico de solo lectura,
     // el mismo de un nombre inventado, y se anota en la traza.
@@ -1807,7 +1816,7 @@ export async function abrirSesionTrueforge(
     if (agente !== undefined && debeEsperar.length > 0) {
       anotarPaso("trueforge.espera", `${agente.nombre} no arranca: espera a ${debeEsperar.join(", ")}`)();
       diagnostico?.memoria?.(agente.nombre, "arranca-sin", `espera a ${debeEsperar.join(", ")}`);
-      return hiloQueNoArranca(agente.nombre, debeEsperar, params, llm, logger);
+      return devolverSinArrancar(agente.nombre, debeEsperar);
     }
     const delRaiz = (params.parent as { thread_id?: string } | undefined)?.thread_id === HILO_RAIZ;
     /**
@@ -1825,7 +1834,7 @@ export async function abrirSesionTrueforge(
             : undefined;
       if (razon !== undefined) {
         anotarPaso("trueforge.no-arranca", `${agente.nombre}: ${razon.slice(0, 80)}`)();
-        return hiloQueNoArranca(agente.nombre, [], params, llm, logger, razon);
+        return devolverSinArrancar(agente.nombre, [], razon);
       }
     }
     // Quien agotó sus vueltas del TURNO no arranca otro encargo, haya o no persona: cortado, cada encargo nuevo editaba
@@ -1834,7 +1843,7 @@ export async function abrirSesionTrueforge(
     if (delRaiz && agente !== undefined && vueltasYaHechas >= TOPE_DE_VUELTAS_DEL_TURNO) {
       anotarPaso("trueforge.tope-de-vueltas", `${agente.nombre}: ${String(vueltasYaHechas)} vueltas en el turno, no arranca otro`)();
       diagnostico?.memoria?.(agente.nombre, "arranca-sin", "tope de vueltas del turno");
-      return hiloQueNoArranca(agente.nombre, [], params, llm, logger, textoDeVueltasDelTurnoAgotadas(agente.nombre, vueltasYaHechas));
+      return devolverSinArrancar(agente.nombre, [], textoDeVueltasDelTurnoAgotadas(agente.nombre, vueltasYaHechas));
     }
     /**
      * **Un encargo de un plan es UNA tarea, nombrada en su línea `TAREA:`** (`core/encargoDeTarea.ts`): lo que no la trae
@@ -1852,7 +1861,7 @@ export async function abrirSesionTrueforge(
       if (decision.tipo === "rechazo") {
         anotarPaso("trueforge.no-arranca", `${agente.nombre}: ${decision.motivo.slice(0, 80)}`)();
         diagnostico?.memoria?.(agente.nombre, "arranca-sin", "encargo sin UNA tarea del plan");
-        return hiloQueNoArranca(agente.nombre, [], params, llm, logger, decision.motivo);
+        return devolverSinArrancar(agente.nombre, [], decision.motivo);
       }
       if (decision.tipo === "tarea") params = { ...params, request: { ...params.request, input: decision.encargo } };
     }
@@ -1861,7 +1870,7 @@ export async function abrirSesionTrueforge(
       if (encargosAlDesarrolladorDelTurno >= TOPE_DE_ENCARGOS_AL_DESARROLLADOR) {
         anotarPaso("trueforge.tope-de-encargos", `developer-xone: ${String(encargosAlDesarrolladorDelTurno)} encargos, no arranca otro`)();
         diagnostico?.memoria?.(agente.nombre, "arranca-sin", "tope de encargos al desarrollador");
-        return hiloQueNoArranca(agente.nombre, [], params, llm, logger);
+        return devolverSinArrancar(agente.nombre, []);
       }
       encargosAlDesarrolladorDelTurno += 1;
     }

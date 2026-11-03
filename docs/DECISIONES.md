@@ -10457,3 +10457,11 @@ su «completion audit» (`ext/goal`) es una instrucción al propio agente que na
 prueba cubra TODO el criterio («una comprobación estrecha no prueba un criterio amplio»): con ella sigue sin refutar en falso
 y se vuelve algo más prudente (un defecto real salió dos de cinco veces como «no se ve» en vez de «contradice»). El auditor
 corre al cerrar el turno, solo sobre lo marcado con prueba vigente, y solo puede bajar el estado que calcula la ficha.
+
+**Y un encargo devuelto sin arrancar no deja su anuncio colgado (03-11-2026).** En la pasada 5 de la calculadora el primer
+encargo al diseñador no traía `TAREA:` y se devolvió sin arrancar (bien), pero al delegar ya se había ANUNCIADO en las
+esperas (`esperas.ts`) y, como nunca nació, el anuncio no se retiraba: el desarrollador, que declara `espera:
+[designer-xone]`, contestaba «espera a que termine designer-xone» a cada encargo y el orquestador lo reintentaba en bucle
+(cuatro en 40 s; se paró la pasada). El fallo era antiguo y latente —cualquier encargo devuelto por una espera, un tope o
+una regla dejaba su anuncio—; la regla de `TAREA:` lo hizo saltar. Ahora todo encargo devuelto pasa por
+`devolverSinArrancar`, que lo retira.

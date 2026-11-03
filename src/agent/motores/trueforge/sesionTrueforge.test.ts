@@ -4504,3 +4504,28 @@ describe("la auditoría de cierre en un turno", () => {
     expect(r.ficha?.join("\n")).toContain("no se pudo consultar al auditor");
   }, 20_000);
 });
+
+/** Medido en la pasada 5 de la calculadora: el bucle del orquestador reintentando al desarrollador. */
+describe("un encargo devuelto sin arrancar no deja a nadie esperándolo", () => {
+  it("el diseñador devuelto por no traer `TAREA:` no bloquea después al desarrollador, que lo espera", async () => {
+    const raiz = proyecto();
+    mkdirSync(join(raiz, ".xonecode", "planes", "calc"), { recursive: true });
+    writeFileSync(join(raiz, ".xonecode", "planes", "calc", "TASKS.md"), "# Calc\n\n## 01 — La pantalla\n**Estado:** pendiente\n- [ ] se ve\n");
+    const delega = (id: string, nombre: string, input: string) =>
+      new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id, name: "create_sub_agent", args: JSON.stringify({ name: nombre, input }) }] });
+    const { m, vistos } = modelosConGuion([
+      [delega("d1", "designer-xone", "Haz los iconos del plan /planes/calc/.")],
+      [delega("d2", "designer-xone", "TAREA: 01\nLos iconos del plan /planes/calc/.")],
+      [new AIMessageChunk({ content: "iconos hechos" })],
+      [delega("d3", "developer-xone", "TAREA: 01\nLa pantalla del plan /planes/calc/.")],
+      [new AIMessageChunk({ content: "pantalla hecha" })],
+      [new AIMessageChunk({ content: "Hecho." })],
+    ]);
+    const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, bucleDelDesarrollador: true });
+    await s.turno("haz la calculadora", piel().p);
+    expect(vistos[1]!.join("\n")).toContain("designer-xone NO HA ARRANCADO: el encargo es trabajo del plan /planes/calc/ y no dice qué tarea");
+    // El desarrollador ARRANCÓ: su primera llamada lleva su ficha de tarea, y nadie le dijo que esperase al diseñador.
+    expect(vistos.map((v) => v.join("\n")).some((t) => t.includes("espera a que termine designer-xone"))).toBe(false);
+    expect(vistos.map((v) => v.join("\n")).some((t) => t.includes("## 01 — La pantalla") && t.includes("La pantalla del plan"))).toBe(true);
+  }, 30_000);
+});

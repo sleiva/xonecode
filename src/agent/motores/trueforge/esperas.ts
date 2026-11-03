@@ -25,6 +25,12 @@ export interface Esperas {
   anunciar(nombre: string): void;
   /** Nació un hilo de `nombre` (deja de estar solo anunciado). */
   nacio(nombre: string, hilo: string): void;
+  /**
+   * Un encargo a `nombre` que NO arrancó (devuelto por una espera, un tope o una regla del encargo): su anuncio se retira.
+   * Sin esto quedaba anunciado para siempre y quien lo esperaba no arrancaba nunca (medido: un bucle del orquestador
+   * reintentando al desarrollador). No consta como terminado: no hizo nada.
+   */
+  noArranco(nombre: string): void;
   /** El hilo terminó (bien o mal): deja de estar vivo y consta que `nombre` terminó. */
   murio(hilo: string): void;
   /** De esos nombres, cuáles hay vivos o anunciados ahora, sin contar `propio`. */
@@ -44,6 +50,10 @@ export function crearEsperas(): Esperas {
   return {
     anunciar(nombre) {
       anunciados.push(nombre);
+    },
+    noArranco(nombre) {
+      const i = anunciados.indexOf(nombre);
+      if (i >= 0) anunciados.splice(i, 1);
     },
     nacio(nombre, hilo) {
       const i = anunciados.indexOf(nombre);

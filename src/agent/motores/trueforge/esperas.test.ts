@@ -44,3 +44,23 @@ describe("quién no arranca hasta que otro termine", () => {
     expect(e.terminados(["designer-xone"])).toEqual([]);
   });
 });
+
+/** Medido en la pasada 5 de la calculadora: el encargo al diseñador sin `TAREA:` no arrancó y su anuncio quedó colgado. */
+describe("un encargo que NO arranca", () => {
+  it("retira su anuncio: quien lo esperaba ya no espera a nadie, y no consta como terminado", () => {
+    const e = crearEsperas();
+    e.anunciar("designer-xone");
+    expect(e.vivos(["designer-xone"], "v")).toEqual(["designer-xone"]);
+    e.noArranco("designer-xone");
+    expect(e.vivos(["designer-xone"], "v")).toEqual([]);
+    expect(e.terminados(["designer-xone"])).toEqual([]);
+  });
+
+  it("retira UNO: si el orquestador pidió dos del mismo, el otro sigue anunciado", () => {
+    const e = crearEsperas();
+    e.anunciar("designer-xone");
+    e.anunciar("designer-xone");
+    e.noArranco("designer-xone");
+    expect(e.vivos(["designer-xone"])).toEqual(["designer-xone"]);
+  });
+});

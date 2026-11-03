@@ -91,7 +91,9 @@ Ante una discrepancia con el código, **el código manda**.
   `create_sub_agent` y SOLO esos especialistas (con artefactos, también `xone_critica_visual` y `comparar_capturas`); un
   nombre fuera cae al ayudante genérico de solo lectura. El juez final revisa igual.
 - **Un hijo NO ARRANCA mientras trabaja aquel del que depende** (`espera:` en el `.md`, `esperas.ts`): se devuelve al
-  orquestador al instante. **Nunca se espera bloqueando**. `developer-xone` espera a `designer-xone`.
+  orquestador al instante. **Nunca se espera bloqueando**. `developer-xone` espera a `designer-xone`. **Un encargo
+  devuelto sin arrancar retira su anuncio** (`crearHijo#devolverSinArrancar`, `esperas.ts#noArranco`): si no, quien lo
+  esperaba no arrancaba nunca.
 - **En Windows, `ejecutar_script` lanza `node '<ruta>' args`** (`lanzadorDeScriptsEn`, `comandoConNode`, el del hijo de
   Claude Code): por su shebang desde el Git Bash, con `MSYS_NO_PATHCONV`, node recibía `/c/Users/…` y no arrancaba
   ninguno. El `execute` LIBRE (device-controller) va tal cual tras definir cada script como función de bash que lo
