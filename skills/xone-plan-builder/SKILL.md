@@ -217,7 +217,9 @@ relee entero cada vez que alguien lo retoma.
   por adelantado, y cada agente la releía.
 - **Los criterios, comprobables en el aparato**, uno por casilla: «con 3 liquidaciones, el KPI suma las tres filas y sale
   `1.553,10 €`». Marcar uno exige una prueba en el aparato posterior al último cambio, así que un criterio que no se puede
-  probar allí no se podrá marcar nunca.
+  probar allí no se podrá marcar nunca. Dicen lo que se VE o se MIDE, no cómo está hecho: «el `rx` del SVG vale 41» o «no
+  se crean `.ttf`» no son criterios (lo comprueban el verificador y `validar_fichero_xone`). **Como mucho 8 por tarea y
+  200 caracteres cada uno**: el harness no escribe un `TASKS.md` que lo pase. Si una tarea necesita más, son dos tareas.
 - **Nombres consistentes con el spec**, y el `MAP_` según `xone-development`.
 - **No inventes lo que el spec no dice.** Si falta algo para descomponer, devuelve a `xone-spec-builder`.
 - **Evita rutas de archivo o snippets de código específicos** —envejecen rápido. Excepción: si un prototipo o el spec produjo un snippet que codifica una decisión más preciso que prosa (esquema, state machine), inclúyelo y nota su origen.

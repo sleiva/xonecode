@@ -151,7 +151,8 @@ Ante una discrepancia con el código, **el código manda**.
   `TASKS.md`: `hecha` solo con todo respaldado vigente y el verificador en verde. El cierre de `run` la enseña.
 - **`TASKS.md` con casillas o no se escribe** (`core/tareasDelPlan.ts#motivoDeTasksInaceptable`): solo al escribirlo ENTERO.
   **Y con topes** (también sumando partes con `append`): una tarjeta dice QUÉ, sin bloques de código y hasta
-  `TOPE_DE_TARJETA` sin contar casillas, estado ni dependencias; `PLAN.md` hasta `TOPE_DE_PLAN` y `DISENO.md` hasta
+  `TOPE_DE_TARJETA` sin contar casillas, estado ni dependencias, con hasta `TOPE_DE_CRITERIOS_POR_TAREA` criterios de hasta
+  `TOPE_DE_CRITERIO` (lo que se ve en el aparato, no cómo está hecho); `PLAN.md` hasta `TOPE_DE_PLAN` y `DISENO.md` hasta
   `TOPE_DE_DISENO` (`core/planes.ts#motivoDeDocumentoDelPlanLargo`). La skill y el analista citan los mismos números, y un
   test lo ata.
 - **El ajuste visual TERMINA** (petición suya): otra vuelta solo si el último `xone_critica_visual` dio ROJO (prompt de

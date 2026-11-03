@@ -10393,3 +10393,11 @@ palabras (`update_plan`). Ahora, al escribir (también por partes): una tarjeta 
 se devuelve diciendo qué se queda y dónde va lo demás. Las skills dicen la forma corta y los mismos números (un test lo ata),
 y `DISENO.md` pasa a tokens y piezas: la geometría la da `medir_maqueta`. Sin medir todavía con modelo cuántos rechazos
 provoca ni si el plan pierde algo que el developer necesitaba.
+
+**Y los criterios (03-11-2026).** Medido el plan de la calculadora con Sonnet contra esos topes: las tarjetas eran cortas
+(137–213 caracteres, salvo una de 909), pero el CÓMO se había mudado a las casillas, que el tope no contaba: 51 criterios en
+seis tareas, 14 en una, 24 de más de 200 caracteres, con medidas de SVG, `rx`, nombres de fichero y «no se crean `.ttf`».
+Eso además choca con la ficha: un criterio de construcción no se respalda con una prueba en el aparato. Ahora como mucho
+`TOPE_DE_CRITERIOS_POR_TAREA` por tarea y `TOPE_DE_CRITERIO` caracteres cada uno, y la skill dice que un criterio es lo que se
+ve o se mide en el aparato; si una tarea necesita más, son dos. Ese mismo plan, con las reglas nuevas, se reescribiría
+(`TASKS.md` y su `DISENO.md` de 9 mil); su `PLAN.md` de 10,4 mil pasa.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { conEstadoDeTarea, dependenciasDe, estadoReconocido, leerTareasDelPlan, marcarCriterios, progresoDeTarea, motivoDeTasksInaceptable, TOPE_DE_TARJETA } from "./tareasDelPlan.js";
+import { conEstadoDeTarea, dependenciasDe, estadoReconocido, leerTareasDelPlan, marcarCriterios, progresoDeTarea, motivoDeTasksInaceptable, TOPE_DE_CRITERIO, TOPE_DE_CRITERIOS_POR_TAREA, TOPE_DE_TARJETA } from "./tareasDelPlan.js";
 
 const TASKS = `# Plan de ejecución — Visitas
 
@@ -334,5 +334,26 @@ describe("los topes del plan escritos en la skill son los del código", () => {
     const analista = leer("src/agent/subagentes/agentesEnDisco.ts");
     expect(analista).toContain(`${miles(TOPE_DE_DISENO)} caracteres`);
     expect(analista).toContain(miles(TOPE_DE_PLAN));
+  });
+});
+
+/** Medido con Sonnet: con la tarjeta corta, el CÓMO pasó a las casillas (51 criterios en seis tareas, 14 en una). */
+describe("los criterios de una tarea: pocos y de lo que se ve", () => {
+  const con = (criterios: string[]) => `# Plan\n\n### 01 — Teclado\n**Qué entrega:** el teclado.\n${criterios.map((c) => `- [ ] ${c}`).join("\n")}\n`;
+  it("hasta el tope de criterios y de largo, se escribe", () => {
+    expect(motivoDeTasksInaceptable(con(Array.from({ length: TOPE_DE_CRITERIOS_POR_TAREA }, (_, i) => `7 + ${String(i)} muestra el resultado`)))).toBeUndefined();
+  });
+  it("uno más, o uno demasiado largo, se devuelve diciendo qué es un criterio", () => {
+    const muchos = motivoDeTasksInaceptable(con(Array.from({ length: TOPE_DE_CRITERIOS_POR_TAREA + 1 }, (_, i) => `caso ${String(i)}`)));
+    expect(muchos).toContain("demasiados criterios");
+    expect(muchos).toContain("lo que se VE o se MIDE");
+    expect(motivoDeTasksInaceptable(con(["x".repeat(TOPE_DE_CRITERIO + 1)]))).toContain(`${String(TOPE_DE_CRITERIO)} caracteres`);
+  });
+  it("la skill cita los mismos topes", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const skill = readFileSync(join(__dirname, "../../skills/xone-plan-builder/SKILL.md"), "utf8");
+    expect(skill).toContain(`Como mucho ${String(TOPE_DE_CRITERIOS_POR_TAREA)} por tarea y`);
+    expect(skill).toContain(`${String(TOPE_DE_CRITERIO)} caracteres cada uno`);
   });
 });

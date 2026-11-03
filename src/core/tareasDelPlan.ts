@@ -252,6 +252,16 @@ export const RUTA_DE_TASKS = /^\/planes\/[^/]+\/TASKS\.md$/;
  * por adelantado y repetido del PLAN. La skill ya pedía «decisiones, no código»; era texto.
  */
 export const TOPE_DE_TARJETA = 700;
+/**
+ * Y sus CRITERIOS: cuántos y de qué largo. Medido en la calculadora con Sonnet: con la tarjeta corta, el CÓMO se mudó a
+ * las casillas —«viewBox con proporción 213:177 ±2 %», «`rx` = 41», la lista de los doce ficheros—, 51 criterios en seis
+ * tareas y 14 en una. Un criterio dice lo que se VE o se MIDE en el aparato; lo de cómo está hecho lo comprueban el
+ * verificador y `validar_fichero_xone`, y no se puede respaldar con una prueba en el aparato (la ficha de trabajo).
+ */
+export const TOPE_DE_CRITERIOS_POR_TAREA = 8;
+export const TOPE_DE_CRITERIO = 200;
+const criteriosDe = (cuerpo: string): string[] =>
+  cuerpo.split("\n").filter((l) => CASILLA.test(l)).map((l) => l.replace(CASILLA, "").trim());
 /** El cuerpo de una tarjeta que cuenta para `TOPE_DE_TARJETA`: sin casillas, estado ni dependencias. */
 function textoDeTarjeta(cuerpo: string): string {
   return cuerpo
@@ -269,7 +279,19 @@ export function motivoDeTasksInaceptable(texto: string): string | undefined {
   const sin = tareas.filter((t) => t.criterios.total === 0).map((t) => t.numero);
   if (sin.length === 0) {
     const largas = tareas.filter((t) => textoDeTarjeta(t.cuerpo).length > TOPE_DE_TARJETA || /^```/m.test(t.cuerpo));
-    if (largas.length === 0) return undefined;
+    const criterios = tareas.filter((t) => {
+      const cs = criteriosDe(t.cuerpo);
+      return cs.length > TOPE_DE_CRITERIOS_POR_TAREA || cs.some((c) => c.length > TOPE_DE_CRITERIO);
+    });
+    if (largas.length === 0 && criterios.length === 0) return undefined;
+    if (largas.length === 0) {
+      return (
+        `El TASKS.md no se ha escrito: las tareas ${criterios.map((t) => t.numero).join(", ")} traen demasiados criterios o criterios ` +
+        `demasiado largos (como mucho ${String(TOPE_DE_CRITERIOS_POR_TAREA)} por tarea y ${String(TOPE_DE_CRITERIO)} caracteres cada uno). ` +
+        "Un criterio dice lo que se VE o se MIDE en el aparato («7 + 8 = muestra 15»), no cómo está hecho (medidas de un SVG, nombres " +
+        "de fichero): eso lo comprueban el verificador y `validar_fichero_xone`. Si una tarea necesita más, son dos tareas. Reescríbelo así."
+      );
+    }
     return (
       `El TASKS.md no se ha escrito: las tareas ${largas.map((t) => t.numero).join(", ")} explican el CÓMO. Cada tarjeta dice ` +
       `QUÉ entrega en una o dos líneas (sin contar sus casillas, como mucho ${String(TOPE_DE_TARJETA)} caracteres y sin bloques ` +
