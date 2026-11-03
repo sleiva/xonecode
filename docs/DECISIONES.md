@@ -10441,3 +10441,11 @@ decidido (la misma trampa ya estaba apuntada con el device-controller). Ahora un
 con quién lo usa deducido por el servidor, y un campo `papel` en el `.md` con su selector en Subagentes. Reparto de serie,
 decisión suya: rápido = device-controller y consultor; trabajo = orquestador, developer y designer; afilado = analista,
 crítico visual y juez de cierre. Sin `papel`, la deducción de siempre: no cambia nada a quien no lo toque.
+
+**Y el tope de vueltas del turno, a cuatro encargos (03-11-2026).** En la pasada 4 de la calculadora (una tarea por
+encargo, el developer en `medium`), el harness cortó al desarrollador por `TOPE_DE_VUELTAS_DEL_TURNO` justo al terminar la
+cuarta tarea: doce recargas, el doble del tope por encargo. Ese tope se puso contra el bucle visual, cuando un encargo era
+la pantalla entera; con una tarea por encargo cada tarea recarga para construir y probar, y la quinta (el menú y la prueba
+de punta a punta) no arrancó. A igualdad de avance la pasada fue más corta que la 3 (23 frente a 32 minutos, −31 % de
+salida, −9 % de entrada efectiva). Decisión suya: subirlo a cuatro encargos llenos. Contar por tarea (`TAREA:`) quedó como
+alternativa si vuelve a chocar.

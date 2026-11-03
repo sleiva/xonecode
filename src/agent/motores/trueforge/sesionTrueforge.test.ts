@@ -12,7 +12,7 @@ import type { ModelosPort, PeticionExterna } from "../../../core/ports.js";
 import { ConectoresEnMemoria, InstaladorDeFrameworkEnMemoria } from "../../../core/ports.js";
 import { ficheroDeDispositivo } from "../../../core/dispositivoDeSesion.js";
 import { TOPE_DE_LLAMADA_MS } from "../../../core/conectores.js";
-import { abrirSesionTrueforge, LIMITE_DE_LLAMADAS_DEL_RAIZ, LO_LEIDO_SON_DATOS, TRABAJO_SIN_PERSONA, notaDeDelegacion, PLAN_PRIMERO, presupuestoDeLlamadas, textoDelBucle, TOPE_DE_ENCARGOS_AL_DESARROLLADOR, TOPE_DE_VUELTAS_POR_ENCARGO } from "./sesionTrueforge.js";
+import { abrirSesionTrueforge, LIMITE_DE_LLAMADAS_DEL_RAIZ, LO_LEIDO_SON_DATOS, TRABAJO_SIN_PERSONA, notaDeDelegacion, PLAN_PRIMERO, presupuestoDeLlamadas, textoDelBucle, TOPE_DE_ENCARGOS_AL_DESARROLLADOR, TOPE_DE_VUELTAS_DEL_TURNO, TOPE_DE_VUELTAS_POR_ENCARGO } from "./sesionTrueforge.js";
 import { TOPE_DE_LLAMADAS_DEL_ESPECIALISTA } from "../../turno/resumenDeContexto.js";
 import { falloDelMotorDe, topeAgotadoDe, traducirEvento } from "./eventosTrueforge.js";
 import { cargarMemoria, interpretarFoto, rutaDeMemoria } from "./memoriaTrueforge.js";
@@ -1765,15 +1765,21 @@ describe("una sesión con el motor TrueForge", () => {
         ...Array.from({ length: TOPE_DE_VUELTAS_POR_ENCARGO }, (_, i) => [[llama(`${e}n${String(i)}`)], [new AIMessageChunk({ content: `Falla ${String(i)}.` })]]).flat(),
         [new AIMessageChunk({ content: `Devuelvo ${e}.` })],
       ];
-      const { m, vistos } = modelosConGuion([...encargo("e1"), ...encargo("e2"), [delega("e3")], [new AIMessageChunk({ content: "Cierro con lo que falta." })]]);
+      // Tantos encargos llenos como caben en el tope del TURNO, y uno más que ya no arranca.
+      const llenos = TOPE_DE_VUELTAS_DEL_TURNO / TOPE_DE_VUELTAS_POR_ENCARGO;
+      const { m, vistos } = modelosConGuion([
+        ...Array.from({ length: llenos }, (_, i) => encargo(`e${String(i + 1)}`)).flat(),
+        [delega("ultimo")],
+        [new AIMessageChunk({ content: "Cierro con lo que falta." })],
+      ]);
       const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, bucleDelDesarrollador: true });
       const r = piel();
       await s.turno("haz", r.p);
       const ultima = texto(vistos, vistos.length - 1);
-      expect(ultima).toContain(`developer-xone NO HA ARRANCADO: ya hizo ${String(2 * TOPE_DE_VUELTAS_POR_ENCARGO)} vueltas de ajuste en este turno`);
+      expect(ultima).toContain(`developer-xone NO HA ARRANCADO: ya hizo ${String(TOPE_DE_VUELTAS_DEL_TURNO)} vueltas de ajuste en este turno`);
       expect(r.tokens.join("")).toContain("Cierro con lo que falta.");
-      // Dos encargos enteros y, del tercero, solo la delegación del raíz y su cierre: el desarrollador no llamó al modelo.
-      expect(vistos).toHaveLength(2 * (2 + 2 * TOPE_DE_VUELTAS_POR_ENCARGO) + 2);
+      // Los encargos llenos enteros y, del último, solo la delegación del raíz y su cierre: el desarrollador no llamó al modelo.
+      expect(vistos).toHaveLength(llenos * (2 + 2 * TOPE_DE_VUELTAS_POR_ENCARGO) + 2);
     }, 30_000);
 
     /**

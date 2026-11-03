@@ -434,7 +434,13 @@ export const UMBRALES_DE_VUELTAS = [3, 5] as const;
  * presupuesto (`presupuesto.ts#cortar`): el encargo cierra con un resumen, no mudo.
  */
 export const TOPE_DE_VUELTAS_POR_ENCARGO = RONDAS_VISUALES + 1;
-export const TOPE_DE_VUELTAS_DEL_TURNO = 2 * TOPE_DE_VUELTAS_POR_ENCARGO;
+/**
+ * El del TURNO, CUATRO encargos llenos (decisión suya, 03-11-2026: «subámoslo más»). Con dos —doce recargas— bastaba cuando
+ * un encargo era la pantalla entera; con UNA tarea por encargo (`core/encargoDeTarea.ts`) cada tarea necesita sus recargas
+ * para construir y probar, y medido en la calculadora el desarrollador llegó a las doce justo al terminar la cuarta tarea:
+ * la quinta (el menú y la prueba de punta a punta) no arrancó y el ajuste visual se quedó sin ronda.
+ */
+export const TOPE_DE_VUELTAS_DEL_TURNO = 4 * TOPE_DE_VUELTAS_POR_ENCARGO;
 
 /**
  * El aviso: no dice «para», dice «cambia de procedimiento». La misma familia de fallo se vio arreglada de cinco
