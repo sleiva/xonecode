@@ -10302,3 +10302,14 @@ respecto a esa pantalla. La diferencia cuenta repetidos: tras teclear 9, el «9�
 estuviera (por eso `textosDe` los conserva aquí). Las pulsaciones aceptadas no se imprimen. Medido en el emulador sobre
 la calculadora de una pasada: cinco casos en una orden, 3,3 s, cada uno con su resultado correcto.
 El indicador para medirlo no es el total (varía demasiado) sino las órdenes de pulsar del developer por pasada.
+
+## Una llamada al modelo que no responde se corta (03-11-2026)
+
+Medido en el experimento 3 de la calculadora: una llamada del orquestador a DeepSeek dejó la conexión HTTPS abierta
+(`ESTABLISHED`, sin un byte) más de 12 minutos, y el turno entero esperando. No había con qué cortarla: TrueForge no
+reintenta por su cuenta y el tope del SDK no cubre un cuerpo de streaming que se para. Ahora un vigilante en el
+`fetch` del cliente (`agent/config/vigilanciaDeLlamada.ts`) no da la llamada por empezada hasta el PRIMER DATO del cuerpo:
+si no llega en `TOPE_HASTA_EL_PRIMER_DATO_MS` la aborta y lanza, y el cliente de LangChain la reintenta (probado con el
+`ChatOpenAI` real y un servidor de mentira: la primera se cuelga, la segunda contesta). Si se para a mitad
+(`TOPE_DE_SILENCIO_DEL_MODELO_MS`) ya no se puede reintentar sin duplicar lo leído: el flujo falla con el motivo y el
+turno acaba como fallo del motor, reanudable, en vez de colgado.

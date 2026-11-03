@@ -33,6 +33,9 @@ Trozo del mapa de la raíz; el porqué medido, en `docs/DECISIONES.md`. **El có
 - **`config.json` RECHAZA claves**; van en `~/.xonecode/auth.json` (0600). `authEnDisco.ts`
   nunca destruye lo que había y ante JSON roto PARA.
 - **Variable de entorno por proveedor en UN sitio** (`VARIABLES_POR_PROVEEDOR`).
+- **Una llamada al modelo que no responde se CORTA** (`agent/config/vigilanciaDeLlamada.ts`, en el `fetch` de los
+  compatibles OpenAI, DeepSeek debajo del eco): sin primer dato en `TOPE_HASTA_EL_PRIMER_DATO_MS` se aborta y LANZA, y el
+  cliente reintenta; un silencio de `TOPE_DE_SILENCIO_DEL_MODELO_MS` a mitad hace fallar el flujo (fallo del motor).
 - **Compatibles OpenAI = TABLA** (`COMPATIBLES_OPENAI`); clave EXIGIDA en
   `construirCompatibleOpenAi`. **Personalizados** (`custom:…`) solo en el `config.json` global; el del proyecto, aviso GRAVE.
 - **Una regla de URL** (`motivoDeEndpointInaceptable`): HTTPS sin credenciales, o `http://`

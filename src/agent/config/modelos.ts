@@ -13,6 +13,7 @@ import { TOPE_DE_SALIDA_SIN_STREAMING, topeDeSalida } from "../../core/contextos
 import { esfuerzoAplicable, pensamientoAplicable, type CapacidadesVivas, type ClaseDeTrabajo, type DuracionDeCache, type Esfuerzo, type Pensamiento } from "../../core/esfuerzo.js";
 import { baseUrlDeOllama, baseUrlDeOllamaCloud } from "./catalogoModelos.js";
 import { crearMemoriaDeEco, fetchConEcoDeRazonamiento } from "./ecoDeRazonamiento.js";
+import { fetchConVigilancia } from "./vigilanciaDeLlamada.js";
 import { ChatGoogleGenerativeAICompatible } from "./gemini.js";
 import { userIdDeDeepSeekEnDisco } from "./identidadEnDisco.js";
 
@@ -225,9 +226,8 @@ function construirCompatibleOpenAi(
     ...(topeDeSalida === undefined ? {} : { maxTokens: topeDeSalida }),
     configuration: {
       baseURL: baseUrl,
-      ...(proveedor === "deepseek"
-        ? { fetch: fetchConEcoDeRazonamiento(crearMemoriaDeEco()) }
-        : {}),
+      // Debajo de todo, la VIGILANCIA: una llamada que no responde se corta (`vigilanciaDeLlamada.ts`).
+      fetch: proveedor === "deepseek" ? fetchConEcoDeRazonamiento(crearMemoriaDeEco(), fetchConVigilancia()) : fetchConVigilancia(),
       ...(esOpenCode
         ? {
             defaultHeaders: {
