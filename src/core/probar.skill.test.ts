@@ -65,6 +65,10 @@ describe("xone-probar: el ciclo de prueba en una orden", () => {
     expect(pasos.filter((p) => p.para).map((p) => p.etiqueta)).toEqual(["recargar", "abrir X"]);
   });
 
+  it("un `---` tras las opciones abre los casos, no es una opción desconocida (pasada 11)", () => {
+    expect(orden(["--abrir", "Calculadora", "---", "screen"]).casos).toEqual(["---", "screen"]);
+  });
+
   it("una opción desconocida o sin valor es un error que lo dice", () => {
     expect(lib.leerOrden(["--abrir"])).toEqual({ error: "--abrir necesita un valor" });
     expect("error" in lib.leerOrden(["--recarga", "a.js"])).toBe(true);

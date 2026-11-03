@@ -47,6 +47,10 @@ export function leerOrden(argv) {
     } else if (a === "--") {
       orden.casos = argv.slice(i + 1);
       break;
+    } else if (a === "---") {
+      // El separador de CASOS abre también los casos: medido en la pasada 11, `--abrir X --- screen` salía con 2.
+      orden.casos = argv.slice(i);
+      break;
     } else if (a.startsWith("--")) {
       return { error: `opción desconocida: ${a} (las de xone-probar van delante: --recargar, --abrir, --captura, --serie, --puerto)` };
     } else {
