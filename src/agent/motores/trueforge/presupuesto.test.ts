@@ -91,3 +91,18 @@ describe("viaja por el procesador de notas, el que corre antes de CADA llamada",
     expect(e!.context[0]!.content).not.toContain("presupuesto");
   });
 });
+
+describe("el desarrollador continuo, al pasar de tarea", () => {
+  it("vuelve a tener su presupuesto entero; uno ya cortado sigue cortado", () => {
+    const p = crearControlDePresupuesto();
+    p.nacio("h", 3);
+    expect(p.antesDeLlamar("h")).toBeUndefined();
+    expect(p.antesDeLlamar("h")).toBeUndefined();
+    p.nuevaTarea("h");
+    expect(p.antesDeLlamar("h")).toBeUndefined();
+    expect(p.antesDeLlamar("h")).toBeUndefined();
+    expect(p.antesDeLlamar("h")).toBeDefined();
+    p.nuevaTarea("h");
+    expect(p.soloTexto("h")).toBe(true);
+  });
+});

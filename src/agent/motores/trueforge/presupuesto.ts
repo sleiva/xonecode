@@ -88,6 +88,15 @@ export function crearControlDePresupuesto() {
       limites.set(threadId, limite);
       llamadas.set(threadId, 0);
     },
+    /**
+     * El desarrollador CONTINUO pasa a otra tarea (`siguiente_tarea`): su cuenta de llamadas vuelve a cero, con el MISMO
+     * límite. Uno ya cortado sigue cortado: la orden de cerrar no se deshace.
+     */
+    nuevaTarea(threadId: string) {
+      if (!limites.has(threadId) || agotados.has(threadId)) return;
+      llamadas.set(threadId, 0);
+      cortesPedidos.delete(threadId);
+    },
     /** Antes de cada llamada de ESE hilo: la orden de cerrar, la vez que la llamada es la `limite`. */
     antesDeLlamar(threadId: string): string | undefined {
       const limite = limites.get(threadId);

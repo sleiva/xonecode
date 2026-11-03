@@ -4416,6 +4416,32 @@ describe("un encargo de un plan es UNA tarea, con su línea `TAREA:`", () => {
     expect(vistos).toHaveLength(4);
   }, 30_000);
 
+  it("CONTINUO: la siguiente tarea llega como resultado de `siguiente_tarea`, en la MISMA conversación del desarrollador", async () => {
+    const siguiente = (id: string) =>
+      new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id, name: "siguiente_tarea", args: JSON.stringify({ resumen: "hecha y probada" }) }] });
+    const { m, vistos, toolsPorLlamada } = modelosConGuion([
+      [delega("d1", "TAREA: 01\nDel plan /planes/calc/: la pantalla.")],
+      [siguiente("s1")],
+      [siguiente("s2")],
+      [new AIMessageChunk({ content: "las dos tareas hechas" })],
+      [new AIMessageChunk({ content: "Hecho." })],
+    ]);
+    const s = await abrirSesionTrueforge({ raiz: conPlan(), modelos: m, entorno: ENTORNO, skills: CATALOGO, bucleDelDesarrollador: true, developerContinuo: true });
+    await s.turno("haz la calculadora del plan calc", piel().p);
+    // El orquestador sabe que basta con la primera.
+    expect(vistos[0]!.join("\n")).toContain("DESARROLLADOR CONTINUO");
+    // El desarrollador tiene la tool y lo sabe; tras la primera llamada, recibe la ficha de la 02 COMO RESULTADO de la tool.
+    expect(toolsPorLlamada[1]).toContain("siguiente_tarea");
+    expect(vistos[1]!.join("\n")).toContain("TRABAJAS EL PLAN ENTERO EN ESTE ENCARGO");
+    const tras1 = vistos[2]!.join("\n");
+    expect(tras1).toContain("Tarea 01 cerrada. SIGUE en esta misma conversación");
+    expect(tras1).toContain("## 02 — El teclado");
+    // Y en la misma conversación: lo de antes sigue ahí.
+    expect(tras1).toContain("## 01 — La pantalla");
+    expect(vistos[3]!.join("\n")).toContain("No quedan tareas pendientes en /planes/calc/ (cerradas en este encargo: 01, 02)");
+    expect(vistos).toHaveLength(5);
+  }, 30_000);
+
   it("en una tarea de fondo no se exige: manda el tope de encargos", async () => {
     const { m, vistos } = modelosConGuion([[delega("d1", "Haz T1 y T2 del plan /planes/calc/.")], [new AIMessageChunk({ content: "las dos" })], [new AIMessageChunk({ content: "Hecho." })]]);
     const s = await abrirSesionTrueforge({ raiz: conPlan(), modelos: m, entorno: ENTORNO, skills: CATALOGO, bucleDelDesarrollador: true, trabajoSinPersona: true });

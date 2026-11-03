@@ -112,6 +112,19 @@ export const UMBRAL_DE_COMPACTACION_MINIMO = 32_000;
 export const UMBRAL_DE_COMPACTACION_MAXIMO = 128_000;
 export const FRACCION_DE_LA_VENTANA_PARA_COMPACTAR = 0.25;
 
+/**
+ * Hasta dónde crece el desarrollador CONTINUO antes de compactarse (`core/siguienteTarea.ts`): trabaja el plan entero en
+ * UNA conversación, y sin techo arrastraría todas las tareas en cada llamada. Más alto que el del raíz porque una tarea sola
+ * ya llega a ese tamaño y compactar a mitad de tarea le hace releer lo que tenía delante; nunca más del 80 % de la ventana.
+ * Como Codex, que compacta tarde (al 90 %). Provisional: sin medir.
+ */
+export const UMBRAL_DEL_DESARROLLADOR_CONTINUO = 160_000;
+
+export function umbralDelDesarrolladorContinuo(tope: number | undefined): number {
+  if (tope === undefined || !Number.isFinite(tope) || tope <= 0) return UMBRAL_DEL_DESARROLLADOR_CONTINUO;
+  return Math.min(UMBRAL_DEL_DESARROLLADOR_CONTINUO, Math.floor(tope * 0.8));
+}
+
 export function umbralDeCompactacion(tope: number | undefined): number {
   if (tope === undefined || !Number.isFinite(tope) || tope <= 0) return UMBRAL_DE_COMPACTACION_MINIMO;
   const cuarto = Math.floor(tope * FRACCION_DE_LA_VENTANA_PARA_COMPACTAR);
