@@ -730,6 +730,8 @@ export type MensajeAlCliente =
       clase: "modelos";
       actual?: string;
       porDefecto?: string;
+      /** El defecto de cada papel para las sesiones nuevas; ausente = no se afirma (redeclarado del host). */
+      porPapel?: Record<Papel, string>;
       proveedores: ProveedorDeModelos[];
       /**
        * Qué esfuerzo de razonamiento admite el modelo EN VIGOR, y cuál está puesto.
@@ -1519,7 +1521,7 @@ export type MensajeDelCliente =
    * manda comandos — ni se apunta actos de usuario que nadie tecleó, ni habla en la
    * sintaxis de otra piel. Cómo se aplica es cosa del servidor.
    */
-  | { clase: "modelo"; id: string }
+  | { clase: "modelo"; id: string; papel?: Papel }
   /**
    * Cuánto razona el modelo de esta sesión. `nivel` ausente = quitarlo.
    *
@@ -2123,3 +2125,6 @@ export interface FrameworksDelAparato {
   /** Medido, y NO tiene el framework. Sin esto ni `instalada`, no se pudo leer. */
   sinFramework?: true;
 }
+
+/** Los tres papeles de modelo (`core/modelos.ts#PAPELES`, redeclarado). */
+export type Papel = "rapido" | "trabajo" | "afilado";

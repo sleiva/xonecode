@@ -2176,8 +2176,10 @@ describe("Ajustes: el modelo por defecto", () => {
     // Es el dato que la ventana necesitaba: sin él diría «Elige modelo» sobre una máquina
     // que sí tiene un defecto escrito. Lo dice el servidor (`porDefecto`), no el cliente.
     abrir({ modeloPorDefecto: "anthropic/claude-x" });
-    expect(screen.getByText("Modelo por defecto")).toBeTruthy();
+    expect(screen.getByText("Modelos por defecto")).toBeTruthy();
+    // Un servidor sin `porPapel`: el de trabajo enseña `porDefecto` y los otros dos no afirman nada.
     expect(screen.getByRole("button", { name: "anthropic/claude-x" })).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: /elige modelo/i })).toHaveLength(2);
     // Y la sección se llama «Modelos» porque dejó de ser solo credenciales: su texto
     // remitía al compositor precisamente porque no había dónde fijar el defecto.
     expect(screen.getByRole("button", { name: "Modelos" })).toBeTruthy();
@@ -2193,8 +2195,19 @@ describe("Ajustes: el modelo por defecto", () => {
     // por proveedor, y pintarlas todas abiertas dejaría los cinco fuera de la vista.
     fireEvent.click(screen.getByRole("menuitem", { name: /Anthropic/i }));
     fireEvent.click(screen.getByRole("menuitemradio", { name: "Claude Y" }));
-    expect(alElegirModelo).toHaveBeenCalledWith("anthropic/claude-y");
+    expect(alElegirModelo).toHaveBeenCalledWith("anthropic/claude-y", "trabajo");
     expect(alElegirModelo).toHaveBeenCalledTimes(1);
+  });
+
+  it("un desplegable por PAPEL, cada uno con quién lo usa, y elegir en uno manda SOLO ese papel", () => {
+    const alElegirModelo = vi.fn();
+    abrir({ modelosPorPapel: { trabajo: "anthropic/claude-x", rapido: "anthropic/claude-r", afilado: "anthropic/claude-a" }, alElegirModelo });
+    expect(screen.getByText(/el analista \(escribe el plan\)/)).toBeTruthy();
+    expect(screen.getByText(/el crítico visual y el juez de cierre/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "anthropic/claude-r" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /Anthropic/i }));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "Claude Y" }));
+    expect(alElegirModelo).toHaveBeenCalledWith("anthropic/claude-y", "rapido");
   });
 
   it("pide el catálogo bajo demanda, igual que en el compositor: es la misma pastilla", () => {
@@ -2202,7 +2215,7 @@ describe("Ajustes: el modelo por defecto", () => {
     // caso usa el estado de una credencial puesta sin lista: el del primer despliegue.
     const alPedirCatalogo = vi.fn();
     abrir({ proveedores: PROVEEDORES, alPedirCatalogo });
-    fireEvent.click(screen.getByRole("button", { name: /elige modelo/i }));
+    fireEvent.click(screen.getAllByRole("button", { name: /elige modelo/i })[0]!);
     expect(alPedirCatalogo).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("menuitem", { name: /Anthropic/i }));
     expect(alPedirCatalogo).toHaveBeenCalledWith("anthropic");
@@ -2224,7 +2237,7 @@ describe("Ajustes: el modelo por defecto", () => {
   it("sin defecto conocido no lo inventa: dice que hay que elegirlo", () => {
     // Ausente ≠ «ninguno». Es la misma regla de las cuatro capas: lo que falta se ROTULA.
     abrir();
-    expect(screen.getByRole("button", { name: /elige modelo/i })).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: /elige modelo/i })).toHaveLength(3); // Truthy();
   });
 });
 

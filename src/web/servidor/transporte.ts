@@ -39,6 +39,7 @@ import type { OpcionDeEntorno, PasoDelVestibulo } from "./vestibulo.js";
 // este módulo, así que no hay ciclo ni siquiera en el grafo de tipos.
 import type { DispositivoElegido } from "./sesiones.js";
 import type { Esfuerzo } from "../../core/esfuerzo.js";
+import type { Papel } from "../../core/ports.js";
 import type { AutenticacionDeConector, ConectorDelCable, DefinicionDeConector, FilaDeCatalogo } from "../../core/conectores.js";
 import type { EstadoDeMotorLocal } from "../../core/motoresLocales.js";
 import type { DiagnosticoDeNode } from "../../core/diagnosticoDeNode.js";
@@ -282,6 +283,11 @@ export type MensajeAlCliente =
       clase: "modelos";
       actual?: string;
       porDefecto?: string;
+      /**
+       * El defecto de CADA papel para las sesiones nuevas (Ajustes → Modelos, un desplegable por papel). `porDefecto` es el
+       * de `trabajo`, que es el que enseña la pastilla. Ausente = no se afirma, como `porDefecto`.
+       */
+      porPapel?: Record<Papel, string>;
       proveedores: ProveedorDeModelos[];
       /**
        * Qué esfuerzo admite el modelo EN VIGOR y cuál está puesto en la sesión.
@@ -1529,7 +1535,10 @@ export type MensajeDelCliente =
    * CÓMO se aplica es cosa del servidor, y hoy es reusando el manejador de `COMANDOS` que
    * ya comparten el terminal y la TUI — la función se comparte, la sintaxis no se exporta.
    */
-  | { clase: "modelo"; id: string }
+  /**
+   * `papel` ausente = el defecto de los TRES papeles (lo de siempre); con él, solo ese. Lo valida el servidor.
+   */
+  | { clase: "modelo"; id: string; papel?: Papel }
   /**
    * Cuánto razona el modelo de esta sesión. `nivel` ausente = quitarlo.
    *

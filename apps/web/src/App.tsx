@@ -2706,10 +2706,11 @@ export function App({
       // pinta el de la sesión abierta y aquí el que usarán las nuevas. Los dos campos del
       // mismo mensaje, cada uno donde significa algo.
       {...(estado.modelos?.porDefecto === undefined ? {} : { modeloPorDefecto: estado.modelos.porDefecto })}
+      {...(estado.modelos?.porPapel === undefined ? {} : { modelosPorPapel: estado.modelos.porPapel })}
       // La MISMA intención que manda la pastilla del compositor, y no una segunda forma de
       // decir lo mismo: el servidor la guarda como defecto y, si hay sesión, la aplica
-      // también en caliente.
-      alElegirModelo={(id) => void enviar({ clase: "modelo", id })}
+      // también en caliente. Con `papel`, solo el de ese papel (un desplegable por papel).
+      alElegirModelo={(id, papel) => void enviar({ clase: "modelo", id, ...(papel === undefined ? {} : { papel }) })}
       // Ejecutar un paso de receta: viajan el nombre y el número, nunca un comando.
       {...(estado.instalacion === undefined ? {} : { instalacion: estado.instalacion })}
       alEjecutarPaso={(receta, numero) => void enviar({ clase: "receta", id: receta, paso: numero, accion: "ejecutar" })}

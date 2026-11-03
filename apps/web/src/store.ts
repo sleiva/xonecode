@@ -16,6 +16,7 @@
  * exactamente lo que la TUI ya evita en `cli/tui/store.ts` con la misma sustitución.
  */
 import { leerPlanesDelCable } from "./planesDelCable.js";
+import type { Papel } from "./tipos.js";
 import { leerGestorDelCable, type LecturaDelGestor } from "./gestorDelCable.js";
 import { leerCambiosDelModelo } from "./cambiosDelModelo.js";
 import { leerFotoDeColecciones } from "./fotoDeColecciones.js";
@@ -68,6 +69,9 @@ import type {
 import { FORMA_DE_NOMBRE_DE_AVD, FORMA_DE_SERIE } from "./reglasDeAvd.js";
 import { PLATAFORMAS_DE_DISPOSITIVO, FASES_DEL_LANZAMIENTO, ESTADOS_DEL_LANZAMIENTO, ESFUERZOS, esAutenticacionDeConector } from "./tipos.js";
 
+/** Los tres papeles de modelo (`core/modelos.ts#PAPELES`, redeclarado). */
+const PAPELES: readonly Papel[] = ["rapido", "trabajo", "afilado"];
+
 /** En qué va una mudanza del workspace. Sin rutas: el proyecto va por nombre y entorno. */
 export interface ProgresoDeMudanza {
   fase: "comprobar" | "copiar" | "verificar" | "borrar";
@@ -105,6 +109,8 @@ export interface EstadoDelCliente {
   modelos?: {
     actual?: string;
     porDefecto?: string;
+    /** El defecto de cada papel; solo si llegan los TRES como texto, si no ausente. */
+    porPapel?: Record<Papel, string>;
     proveedores: ProveedorDeModelos[];
     /** Lo que admite el modelo EN VIGOR. Ausente = no se pinta la pastilla de esfuerzo. */
     esfuerzo?: EsfuerzoDelCable;
@@ -1445,7 +1451,12 @@ export function crearStoreDelCliente(): {
           return;
         }
         case "modelos": {
-          const m = mensaje as { actual?: unknown; porDefecto?: unknown; proveedores?: unknown; esfuerzo?: unknown };
+          const m = mensaje as { actual?: unknown; porDefecto?: unknown; porPapel?: unknown; proveedores?: unknown; esfuerzo?: unknown };
+          const pp = m.porPapel as Partial<Record<Papel, unknown>> | null | undefined;
+          const porPapel =
+            typeof pp === "object" && pp !== null && PAPELES.every((p) => typeof pp[p] === "string" && pp[p] !== "")
+              ? (Object.fromEntries(PAPELES.map((p) => [p, pp[p]])) as Record<Papel, string>)
+              : undefined;
           if (!Array.isArray(m.proveedores)) return;
           /**
            * El esfuerzo, con la MISMA disciplina de lista blanca campo a campo.
@@ -1494,6 +1505,7 @@ export function crearStoreDelCliente(): {
               // elegir» sobre una máquina que sí tiene uno escrito — o peor, una cadena que
               // no es un modelo. Ausente se propaga como ausente.
               ...(typeof m.porDefecto === "string" ? { porDefecto: m.porDefecto } : {}),
+              ...(porPapel === undefined ? {} : { porPapel }),
               proveedores,
               // Ausente se propaga como ausente: «este modelo no admite esfuerzo» y «aún
               // no se sabe» se pintan igual —sin pastilla—, y un `{niveles: []}` aquí

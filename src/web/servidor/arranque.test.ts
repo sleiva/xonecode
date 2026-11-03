@@ -1055,6 +1055,29 @@ describe("montarRutas — el cable, por fin conectado", () => {
         expect(dichos.at(-1)).toContain("anthropic/claude-x");
       });
 
+      it("con `papel`, se escribe SOLO ese, y uno que no es papel no escribe nada", async () => {
+        const { servidor, escritos, dichos } = conEscritor();
+        const { accion } = await conectar(servidor);
+
+        await enviarMensaje(accion, { clase: "modelo", id: "anthropic/claude-haiku-5-5", papel: "rapido" });
+        await asentar();
+        expect(escritos).toEqual([{ papel: "rapido", id: "anthropic/claude-haiku-5-5" }]);
+        expect(dichos.at(-1)).toContain("papel rapido");
+
+        await enviarMensaje(accion, { clase: "modelo", id: "anthropic/claude-x", papel: "jefe" } as never);
+        await asentar();
+        expect(escritos).toHaveLength(1);
+        expect(dichos.at(-1)).toContain("papel desconocido: jefe");
+      });
+
+      it("y el estado dice el defecto de CADA papel cuando el servidor lo sabe", async () => {
+        const porPapel = { rapido: "anthropic/claude-haiku-5-5", trabajo: "anthropic/claude-sonnet-5-5", afilado: "anthropic/claude-sonnet-5-5" };
+        const { servidor } = conEscritor({ modelosPorPapel: () => porPapel });
+        const { cliente } = await conectar(servidor);
+        const modelos = cliente.recibidos.find((e) => e.clase === "modelos") as { porPapel?: unknown } | undefined;
+        expect(modelos?.porPapel).toEqual(porPapel);
+      });
+
       it("con sesión abierta, además se aplica EN CALIENTE: es una sola elección, no dos", async () => {
         const { servidor, vestibulo, escritos, encoladas } = conEscritor();
         const { accion } = await conectar(servidor);

@@ -100,7 +100,7 @@ import {
   actualizacionDisponible, eleccionServida, type EleccionDeFramework, type OpcionDeInstalacion, opcionesDeInstalacion,
   VIGENCIA_DEL_CATALOGO_MS,
 } from "../../core/frameworkLocal.js";
-import type { InstaladorDeFrameworkPort } from "../../core/ports.js";
+import type { InstaladorDeFrameworkPort, Papel } from "../../core/ports.js";
 import {
   asignarPuertosDeFisicos,
   asignarPuertosPendientes,
@@ -568,6 +568,8 @@ export interface OpcionesDeMontaje {
    * que decir que no hay ninguno.
    */
   modeloPorDefecto?: () => string | undefined;
+  /** El defecto de cada papel, resuelto como `modeloPorDefecto`. Ausente = no se afirma. */
+  modelosPorPapel?: () => Record<Papel, string> | undefined;
   /**
    * Borra la credencial de `auth.json`. Ausente = esta ejecución no puede borrar, y la
    * interfaz no ofrece el botón en vez de ofrecer uno que no hace nada.
@@ -2065,6 +2067,7 @@ export function montarRutas(
     // pueda leer el config global. Sin el segundo, Ajustes enseñaría «sin elegir» sobre una
     // máquina con un defecto escrito, justo en la pantalla donde se configura.
     const porDefecto = opciones.modeloPorDefecto?.();
+    const porPapel = opciones.modelosPorPapel?.();
     /**
      * El esfuerzo del modelo EN VIGOR, que es lo único de lo que se puede afirmar algo.
      *
@@ -2085,6 +2088,7 @@ export function montarRutas(
       clase: "modelos",
       ...(trabajo === undefined ? {} : { actual: `${trabajo.proveedor}/${trabajo.modelo}` }),
       ...(porDefecto === undefined ? {} : { porDefecto }),
+      ...(porPapel === undefined ? {} : { porPapel }),
       ...(niveles === undefined
         ? {}
         : {
@@ -4166,7 +4170,17 @@ export function montarRutas(
       .finally(() => capacidadesEnVuelo.delete(clave));
   };
 
-  const atenderModelo = (id: string): void => {
+  /**
+   * `papel` ausente = el defecto de los TRES (la pastilla de Ajustes de antes); con él, solo ese papel, desde su desplegable
+   * de Ajustes → Modelos. Solo `trabajo` se aplica además a la sesión abierta: `/modelo` cambia el de trabajo, y los otros
+   * dos los leen las sesiones NUEVAS.
+   */
+  const atenderModelo = (id: string, papel?: unknown): void => {
+    if (papel !== undefined && !PAPELES.includes(papel as Papel)) {
+      informar(`papel desconocido: ${String(papel)}`);
+      return;
+    }
+    const soloUno = papel as Papel | undefined;
     try {
       parsear(id);
     } catch (error) {
@@ -4174,6 +4188,21 @@ export function montarRutas(
       return;
     }
     const abierto = vestibulo.proyectoAbierto();
+    if (soloUno !== undefined && soloUno !== "trabajo") {
+      if (opciones.guardarModeloGlobal === undefined) {
+        informar("esta ejecución no puede guardar el modelo por defecto");
+        return;
+      }
+      try {
+        opciones.guardarModeloGlobal(soloUno, id);
+      } catch (error) {
+        informar(error instanceof Error ? error.message : String(error));
+        return;
+      }
+      informar(`modelo por defecto del papel ${soloUno}: ${id} · lo usarán las sesiones nuevas`);
+      emitirModelos();
+      return;
+    }
     if (opciones.guardarModeloGlobal === undefined) {
       if (abierto === undefined) {
         informar("esta ejecución no puede guardar el modelo por defecto");
@@ -4184,7 +4213,7 @@ export function montarRutas(
       return;
     }
     try {
-      for (const papel of PAPELES) opciones.guardarModeloGlobal(papel, id);
+      for (const p of soloUno === undefined ? PAPELES : [soloUno]) opciones.guardarModeloGlobal(p, id);
     } catch (error) {
       informar(error instanceof Error ? error.message : String(error));
       return;
@@ -9084,7 +9113,7 @@ export function montarRutas(
       return;
     }
     if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "modelo") {
-      atenderModelo(mensaje.id);
+      atenderModelo(mensaje.id, mensaje.papel);
       respuesta.writeHead(204);
       respuesta.end();
       return;
@@ -10961,6 +10990,10 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
         entorno: { XONECODE_MODELO: process.env.XONECODE_MODELO },
       }).trabajo;
       return `${proveedor}/${modelo}`;
+    },
+    modelosPorPapel: () => {
+      const r = resolver({ global: cargar(opciones.cwd).config.global, entorno: { XONECODE_MODELO: process.env.XONECODE_MODELO } });
+      return Object.fromEntries(PAPELES.map((p) => [p, `${r[p].proveedor}/${r[p].modelo}`])) as Record<Papel, string>;
     },
     cambiosDeSesion,
     parcheDeSesion,

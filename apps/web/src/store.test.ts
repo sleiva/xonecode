@@ -100,6 +100,15 @@ describe("store del cliente", () => {
     expect(s.leer().aprobacion).toBeUndefined();
   });
 
+  it("el defecto por papel entra solo con los TRES papeles como texto: a medias no se afirma", () => {
+    const s = crearStoreDelCliente();
+    const porPapel = { rapido: "anthropic/claude-haiku-5-5", trabajo: "anthropic/claude-sonnet-5-5", afilado: "anthropic/claude-sonnet-5-5" };
+    s.aplicar({ clase: "modelos", porPapel, proveedores: [] });
+    expect(s.leer().modelos?.porPapel).toEqual(porPapel);
+    s.aplicar({ clase: "modelos", porPapel: { rapido: "x/y", trabajo: "" }, proveedores: [] } as never);
+    expect(s.leer().modelos?.porPapel).toBeUndefined();
+  });
+
   it("el estado de modelos llega entero, y al desconectar se TIRA en vez de quedarse viejo", () => {
     const s = crearStoreDelCliente();
     s.aplicar({

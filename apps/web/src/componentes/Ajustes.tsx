@@ -33,6 +33,7 @@ import type {
   EstadoDeMotorLocal,
   EleccionDeFramework,
   FrameworksDelAparato,
+  Papel,
 } from "../tipos.js";
 import { PLATAFORMAS_DE_DISPOSITIVO, seMira, type ModoDeEscritura } from "../tipos.js";
 import { SelectorDeModo } from "./SelectorDeModo.js";
@@ -64,6 +65,16 @@ import { MotoresLocales, type AccionDeMotorLocal } from "./MotoresLocales.js";
 import { Pregunta } from "./Pregunta.js";
 import type { ProgresoDeMudanza, ResultadoDeMudanza } from "../store.js";
 import { urlDeEntornoAceptable, AVISO_DE_URL } from "./Wizard.js";
+
+/**
+ * Los tres papeles de modelo en Ajustes → Modelos, en el orden en que importan, con quién usa cada uno. El reparto es el de
+ * `agent/motores/trueforge/sesionTrueforge.ts` (`papel` de cada especialista) y los jueces (`PAPEL_DEL_JUEZ*`).
+ */
+const PAPELES_EN_AJUSTES: readonly { papel: Papel; titulo: string; quien: string }[] = [
+  { papel: "trabajo", titulo: "Trabajo", quien: "El orquestador, el desarrollador, el diseñador y quien prueba en el aparato." },
+  { papel: "rapido", titulo: "Rápido", quien: "Los de solo lectura: el analista (escribe el plan) y el consultor." },
+  { papel: "afilado", titulo: "Afilado", quien: "Los que juzgan: el crítico visual y el juez de cierre de una tarea." },
+];
 
 /** Lo que el servidor contesta a `planear`: qué copias se moverían, o por qué no se puede. */
 export interface PlanDeWorkspace {
@@ -461,6 +472,7 @@ export function Ajustes({
   alMotorLocal,
   alPedirCatalogo,
   modeloPorDefecto,
+  modelosPorPapel,
   alElegirModelo,
   instalacion,
   alEjecutarPaso,
@@ -704,6 +716,8 @@ export function Ajustes({
    * compositor es el de la SESIÓN abierta, y sin sesión no existe.
    */
   modeloPorDefecto?: string;
+  /** El defecto de cada papel (`rapido`, `trabajo`, `afilado`); ausente = no se afirma. */
+  modelosPorPapel?: Record<Papel, string>;
   /**
    * Fija el modelo por defecto. Viaja la INTENCIÓN —el id «proveedor/modelo»—, nunca una
    * línea de comando: la sintaxis no se exporta. Es el MISMO mensaje que manda la pastilla
@@ -712,7 +726,7 @@ export function Ajustes({
    * Ausente = esta ejecución no puede guardarlo, y no se pinta el control en vez de pintar
    * uno que no guarda nada.
    */
-  alElegirModelo?: (id: string) => void;
+  alElegirModelo?: (id: string, papel?: Papel) => void;
   /** El paso de receta que corre ahora, tal como lo dice el servidor. */
   instalacion?: EstadoDelCliente["instalacion"];
   /** Lanzar el paso `numero` de una receta, y cancelar el que corra. Ausentes = no se pinta
@@ -2362,11 +2376,12 @@ export function Ajustes({
                 copia es el sitio donde divergen. Lo único distinto es de qué pregunta
                 habla, y eso lo dice su `titulo`.
               */}
-              <h2 className={estilos.encabezado}>Modelo por defecto</h2>
+              <h2 className={estilos.encabezado}>Modelos por defecto</h2>
               <p className={estilos.nota}>
-                El que usarán las sesiones nuevas. Se guarda para los tres papeles —rápido,
-                trabajo y afilado— en el config global de tu cuenta, no en el proyecto, y
-                cada sesión puede cambiarlo en caliente sin tocar esto.
+                Los que usarán las sesiones nuevas, uno por papel. Se guardan en el config
+                global de tu cuenta, no en el proyecto; un subagente con su propio modelo
+                (Subagentes) manda sobre su papel, y cada sesión puede cambiar el de trabajo
+                en caliente sin tocar esto.
               </p>
               {alElegirModelo === undefined || alPedirCatalogo === undefined ? (
                 // Los dos hacen falta: sin el catálogo no hay lista de modelos que ofrecer, y
@@ -2374,16 +2389,29 @@ export function Ajustes({
                 // que se queda en «sin consultar» para siempre — el botón muerto de siempre.
                 <p className={estilos.vacio}>Esta ejecución no puede fijar el modelo por defecto.</p>
               ) : (
-                <div className={estilos.elegirModelo}>
-                  <PastillaDeModelo
-                    {...(modeloPorDefecto === undefined ? {} : { actual: modeloPorDefecto })}
-                    proveedores={proveedores}
-                    alPedirCatalogo={alPedirCatalogo}
-                    alElegir={alElegirModelo}
-                    titulo="Modelo por defecto"
-                    enLinea
-                  />
-                </div>
+                /*
+                  Un desplegable por papel, con QUIÉN lo usa: «rápido» suena a lo sencillo y lo
+                  lleva el analista, que escribe el plan. Sin `porPapel` (un servidor de antes),
+                  el de trabajo enseña `porDefecto` y los otros dos no afirman nada.
+                */
+                PAPELES_EN_AJUSTES.map(({ papel, titulo, quien }) => {
+                  const actual = modelosPorPapel?.[papel] ?? (papel === "trabajo" ? modeloPorDefecto : undefined);
+                  return (
+                    <div key={papel} className={estilos.elegirModelo}>
+                      <PastillaDeModelo
+                        {...(actual === undefined ? {} : { actual })}
+                        proveedores={proveedores}
+                        alPedirCatalogo={alPedirCatalogo}
+                        alElegir={(id) => alElegirModelo(id, papel)}
+                        titulo={titulo}
+                        enLinea
+                      />
+                      <p className={estilos.nota}>
+                        <strong>{titulo}.</strong> {quien}
+                      </p>
+                    </div>
+                  );
+                })
               )}
 
               <h3 className={estilos.subencabezado}>Proveedores</h3>
