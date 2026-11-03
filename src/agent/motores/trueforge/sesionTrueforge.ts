@@ -30,6 +30,7 @@ import { claseDeTrabajo } from "../../../core/esfuerzo.js";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { CARPETA_DE_PLANES } from "../../../core/planes.js";
+import { decidirEncargo } from "../../../core/encargoDeTarea.js";
 import winston from "winston";
 import { AgentThread, AgentThreadOrchestrator, EventType, NOOP_AGENT_TRACING, askUserQuestion, contextCompaction, dynamicSubAgents } from "./trueforge.js";
 import { TOPE_DE_LLAMADAS_DEL_CONDUCTOR, TOPE_DE_LLAMADAS_DEL_DESARROLLADOR, TOPE_DE_LLAMADAS_DEL_ESPECIALISTA } from "../../turno/resumenDeContexto.js";
@@ -226,6 +227,9 @@ export const PLAN_PRIMERO = [
   "leído tú los ficheros o que el encargo traiga un «Cómo empezar» NO lo sustituye: el plan es lo que el desarrollador marca y lo",
   "que queda para la tarea siguiente. Después, el diseñador si faltan recursos, y el desarrollador con el NOMBRE del plan. Solo un",
   "retoque (una línea, un color, un texto) va directo.",
+  // `core/encargoDeTarea.ts`: lo comprueba el harness, no este texto.
+  "Cada encargo de un plan al desarrollador o al diseñador es UNA tarea y empieza con la línea `TAREA: <número>`: el harness le",
+  "pone delante su ficha, y sin esa línea o con varias tareas el encargo NO arranca. Cuando vuelva, la siguiente al mismo.",
   // Medido en Maset (21-10-2026): el analista corre en Claude Code, no tiene Stitch, y escribió un DISENO.md deducido del
   // resumen del design system —«las 16 capturas NO están en el proyecto»—; las tareas lo siguieron como «fuente única».
   "Si el diseño está en Stitch, TRAE TÚ las pantallas ANTES de llamar al analista (traer_pantalla_de_stitch, una por pantalla) y",
@@ -1821,6 +1825,26 @@ export async function abrirSesionTrueforge(
       anotarPaso("trueforge.tope-de-vueltas", `${agente.nombre}: ${String(vueltasYaHechas)} vueltas en el turno, no arranca otro`)();
       diagnostico?.memoria?.(agente.nombre, "arranca-sin", "tope de vueltas del turno");
       return hiloQueNoArranca(agente.nombre, [], params, llm, logger, textoDeVueltasDelTurnoAgotadas(agente.nombre, vueltasYaHechas));
+    }
+    /**
+     * **Un encargo de un plan es UNA tarea, nombrada en su línea `TAREA:`** (`core/encargoDeTarea.ts`): lo que no la trae
+     * o trae varias no arranca, y lo que la trae lleva delante su ficha. Solo a quien marca el plan y del orquestador. En
+     * una TAREA DE FONDO no: allí manda el tope de encargos al desarrollador, y una tarea por encargo lo agotaría.
+     */
+    if (delRaiz && agente !== undefined && recibeMarcarCriterios(agente) && opciones.trabajoSinPersona !== true) {
+      const decision = decidirEncargo(agente.nombre, params.request.input, (plan) => {
+        try {
+          return readFileSync(join(raiz, CARPETA_DE_PLANES, plan, "TASKS.md"), "utf8");
+        } catch {
+          return undefined;
+        }
+      });
+      if (decision.tipo === "rechazo") {
+        anotarPaso("trueforge.no-arranca", `${agente.nombre}: ${decision.motivo.slice(0, 80)}`)();
+        diagnostico?.memoria?.(agente.nombre, "arranca-sin", "encargo sin UNA tarea del plan");
+        return hiloQueNoArranca(agente.nombre, [], params, llm, logger, decision.motivo);
+      }
+      if (decision.tipo === "tarea") params = { ...params, request: { ...params.request, input: decision.encargo } };
     }
     // Pasado el tope de encargos al desarrollador en una TAREA, no arranca: el orquestador recibe la orden de cerrar.
     if (opciones.trabajoSinPersona === true && agente?.nombre === "developer-xone" && delRaiz) {

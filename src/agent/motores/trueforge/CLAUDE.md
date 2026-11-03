@@ -115,6 +115,11 @@ Ante una discrepancia con el código, **el código manda**.
   `TOPE_DE_ENCARGOS_AL_DESARROLLADOR` encargos del orquestador a developer-xone por turno**: el siguiente no arranca
   (`hiloQueNoArranca` con `textoDeTopeDeEncargos`) y manda cerrar con lo que falta en «Por arreglar» / «No se puede en
   XOne». Medido: siete «últimas vueltas» persiguiendo un crítico en rojo. Con persona delante no aplica.
+- **Un encargo de un plan es UNA tarea, en su línea `TAREA: <número>`** (`core/encargoDeTarea.ts#decidirEncargo`, en
+  `crearHijo`): a quien marca el plan (`recibeMarcarCriterios`) y del orquestador, si el encargo nombra UN plan con tareas.
+  Sin la línea, con varias o con una que no existe, NO arranca y se le devuelve el motivo; con una, el encargo lleva delante
+  su ficha. Solo cuenta la LÍNEA, nunca la prosa («T1 ya está; ahora T2» es correcto). Como el `task_name` de Codex.
+  **Límites**: en una TAREA DE FONDO no se exige (lo agotaría el tope de encargos); dos planes en un encargo no se adivinan.
   Cada uno con un presupuesto alto (`presupuestoDeLlamadas`: quien lleva `scripts`, `TOPE_DE_LLAMADAS_DEL_DESARROLLADOR`):
   cada encargo nuevo volvía a leer y a entrar en la app desde cero.
   **Tampoco arrancan en una tarea** el analista con plan asignado (`PLAN DE ESTA TAREA` en el encargo) ni el

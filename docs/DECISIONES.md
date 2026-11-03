@@ -10422,3 +10422,14 @@ la diferencia de DISEÑO que cita uno entero (`sinDatosDeEjemplo`): el texto no 
 solo puede decir que falta. Por cita entera y no por palabras, para no bajar lo que menciona un «12» de pasada. Y el
 orquestador pasa lo que señala el crítico como estilo y sitio, nunca como valor; el desarrollador no lo escribe fijo aunque
 se lo pida el encargo. Sin medir todavía con modelo.
+
+**Y una tarea por encargo, por código (03-11-2026).** En la misma pasada, el orquestador mandó «haz T1, T2 y T3» en un
+encargo: 19,5 minutos, el `.xne` editado 15 veces, nada marcado hasta el final y una captura para las tres. Mirado cómo lo
+hace Codex: su código tampoco lo impide, pero su `spawn_agent` lleva un `task_name` obligatorio aparte del mensaje y
+`followup_task` da la siguiente al mismo agente. Aquí, la línea `TAREA: <número>` del encargo (`core/encargoDeTarea.ts`):
+sin ella o con varias, el encargo no arranca y el orquestador recibe el motivo y cuál mandar; con una, el harness le pone
+delante la ficha de esa tarea y el desarrollador no lee el `TASKS.md` entero. Se lee la LÍNEA y no la prosa: «la T1 ya está,
+ahora la T2» nombra dos y es correcto. Lo que NO arregla, medido en la misma traza: el tiempo. El contexto del desarrollador
+sube de 35 a 142 mil dentro del encargo pero con el 98 % en caché, y el siguiente encargo arranca ya con 86 mil porque
+conserva su memoria; lo que tarda es GENERAR (llamadas de 5 a 22 mil tokens de salida seguidas de un `grep`). Eso es el
+esfuerzo, que se mide aparte. Fuera de las tareas de fondo, donde manda el tope de encargos.

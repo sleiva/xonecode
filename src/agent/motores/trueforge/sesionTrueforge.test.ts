@@ -4369,3 +4369,43 @@ describe("instalar el framework desde una tarea del agente (`instalar_framework`
     expect(toolsPorLlamada.flat()).not.toContain("instalar_framework");
   }, 20_000);
 });
+
+/** Medido en la calculadora (03-11-2026): «haz T1, T2 y T3» en un encargo, 19,5 min y sin marcar tarea a tarea. */
+describe("un encargo de un plan es UNA tarea, con su línea `TAREA:`", () => {
+  const delega = (id: string, input: string) =>
+    new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id, name: "create_sub_agent", args: JSON.stringify({ name: "developer-xone", input }) }] });
+  const conPlan = (): string => {
+    const raiz = proyecto();
+    mkdirSync(join(raiz, ".xonecode", "planes", "calc"), { recursive: true });
+    writeFileSync(
+      join(raiz, ".xonecode", "planes", "calc", "TASKS.md"),
+      "# Calc\n\n## 01 — La pantalla\n**Estado:** pendiente\n- [ ] se ve\n\n## 02 — El teclado\n**Estado:** pendiente\n- [ ] las teclas\n"
+    );
+    return raiz;
+  };
+
+  it("varias tareas no arrancan; con UNA, el desarrollador la recibe con su ficha delante", async () => {
+    const { m, vistos } = modelosConGuion([
+      [delega("d1", "Haz T1 y T2 del plan /planes/calc/.")],
+      [delega("d2", "TAREA: 02\nDel plan /planes/calc/: el teclado.")],
+      [new AIMessageChunk({ content: "teclado hecho" })],
+      [new AIMessageChunk({ content: "Hecho." })],
+    ]);
+    const s = await abrirSesionTrueforge({ raiz: conPlan(), modelos: m, entorno: ENTORNO, skills: CATALOGO, bucleDelDesarrollador: true });
+    await s.turno("haz la calculadora del plan calc", piel().p);
+    expect(vistos[1]!.join("\n")).toContain("developer-xone NO HA ARRANCADO: el encargo es trabajo del plan /planes/calc/ y no dice qué tarea");
+    const delDesarrollador = vistos[2]!.join("\n");
+    expect(delDesarrollador).toContain("LA TAREA DE ESTE ENCARGO, de /planes/calc/TASKS.md");
+    expect(delDesarrollador).toContain("## 02 — El teclado");
+    expect(delDesarrollador).not.toContain("La pantalla");
+    expect(vistos).toHaveLength(4);
+  }, 30_000);
+
+  it("en una tarea de fondo no se exige: manda el tope de encargos", async () => {
+    const { m, vistos } = modelosConGuion([[delega("d1", "Haz T1 y T2 del plan /planes/calc/.")], [new AIMessageChunk({ content: "las dos" })], [new AIMessageChunk({ content: "Hecho." })]]);
+    const s = await abrirSesionTrueforge({ raiz: conPlan(), modelos: m, entorno: ENTORNO, skills: CATALOGO, bucleDelDesarrollador: true, trabajoSinPersona: true });
+    await s.turno("haz la calculadora", piel().p);
+    expect(vistos).toHaveLength(3);
+    expect(vistos.map((v) => v.join("\n")).some((t) => t.includes("no dice qué tarea"))).toBe(false);
+  }, 30_000);
+});
