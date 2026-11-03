@@ -4282,6 +4282,7 @@ describe("en una tarea: el plan asignado y la captura del desarrollador", () => 
     expect(t).toContain("separados por `---`");
     // Y el ciclo entero en UNA orden (medido en la pasada 9: 163 de 412 llamadas eran un script del aparato suelto).
     expect(t).toContain("PRUEBA CON `xone-probar`");
+    expect(t).toContain("VARIOS cambios a un fichero van en UN `edit_file` con `edits:");
     expect(t).toContain("`xone-probar --recargar calculadora.js --abrir Calculadora click name=K_7");
     expect(t).toContain("click name=K_EQ --- click name=K_AC");
     expect(t).toContain("va en `/artefactos/`, nunca en el proyecto");

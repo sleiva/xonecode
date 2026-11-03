@@ -50,6 +50,19 @@ function comprobar(ruta: string, texto: string): ResultadoXml {
   return comprobarXml(texto);
 }
 
+/**
+ * La validación de UN texto ya leído, en una línea para ir DETRÁS de una escritura (`edit_file`/`write_file` de
+ * TrueForge): sin ella, cada edición era otra vuelta de `validar_fichero_xone` (medido: 17 en la pasada 9). Lo que no
+ * es `.xne`/`.xml`/`.css`/`.js` no se valida: `undefined`.
+ */
+export function validacionDeTexto(ruta: string, texto: string): string | undefined {
+  if (!VALIDABLE.test(ruta)) return undefined;
+  const r = comprobar(ruta, texto);
+  if (r.ok) return `Validado: ${ruta} está bien.`;
+  const linea = texto.replace(/^\uFEFF/, "").split(/\r?\n/)[r.linea - 1] ?? "";
+  return `Validado: ${ruta}:${r.linea}:${r.columna}: ${r.motivo}\n    ${linea.trim().slice(0, 200)}\nCorrígelo antes de probar.`;
+}
+
 export function crearValidarFicheroXone(backend: BackendDeValidacion) {
   return tool(
     async (entrada: z.infer<typeof ESQUEMA>) => {
@@ -109,7 +122,8 @@ export function crearValidarFicheroXone(backend: BackendDeValidacion) {
         "su estructura —llaves, comentarios /* */ y //, declaraciones con «:»—; un .js que pueda leer Rhino, el motor " +
         "de Android (ES5 más arrow, let/const, destructuring y for…of; NO template literals, class, spread, valores " +
         "por defecto, ?. ni ??). Contesta «está bien» o fichero, línea, columna y motivo. Úsala ANTES de leer un " +
-        "fichero a ojo cuando alguien te pase un error de parsing, y después de escribir uno. Si dice que está bien, " +
+        "fichero a ojo cuando alguien te pase un error de parsing. Tras tu propio edit_file/write_file no hace falta: su " +
+        "resultado ya dice si el fichero sigue bien. Si dice que está bien, " +
         "el fichero del proyecto está bien: un error de parsing que alguien ha visto viene de OTRA copia (la de Studio " +
         "tras una subida, la del aparato); dilo así en vez de seguir releyendo. No comprueba qué atributos o " +
         "propiedades existen en XOne (para eso, xone_atributos).",

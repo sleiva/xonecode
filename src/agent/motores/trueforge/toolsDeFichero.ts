@@ -25,6 +25,8 @@ import { esDocumentoIlegible, esDocumentoLegible } from "../../../core/textoDeOf
 import { textoDeDocumento } from "./textoDeDocumento.js";
 import { datosDeFuente, esFuenteLegible, textoDeFuente } from "../../../core/datosDeFuente.js";
 import { NOMBRE_DESCRIBIR_IMAGEN } from "../../grafo/describirImagen.js";
+import { validacionDeTexto } from "../../grafo/validarFicheroXone.js";
+import { aplicarCambios, cambiosDeLaLlamada } from "../../../core/edicionMultiple.js";
 import { posix } from "node:path";
 import micromatch from "micromatch";
 import { toolResultResponse } from "./trueforge.js";
@@ -46,6 +48,22 @@ export interface BackendDeFicheros {
   grep(patron: string, ruta?: string | null, glob?: string | null): unknown;
   /** Los BYTES de un fichero, para sacar el texto de un documento (`textoDeDocumento.ts`). */
   downloadFiles?(rutas: string[]): unknown;
+  /** El TEXTO crudo (en su codificación, por las mismas guardas): para varios cambios en una llamada y validar tras escribir. */
+  readRaw?(ruta: string): unknown;
+}
+
+/** El texto crudo de un fichero, o `undefined` si el backend no lo da o no se pudo leer. */
+async function textoCrudo(backend: BackendDeFicheros, ruta: string): Promise<string | undefined> {
+  if (backend.readRaw === undefined) return undefined;
+  const r = (await backend.readRaw(ruta)) as { error?: unknown; data?: { content?: unknown } } | undefined;
+  return r?.error == null && typeof r?.data?.content === "string" ? r.data.content : undefined;
+}
+
+/** La validación de lo que acaba de quedar en disco, para ir DETRÁS del «hecho» (`validacionDeTexto`). */
+async function conValidacion(backend: BackendDeFicheros, ruta: string, hecho: string): Promise<string> {
+  const texto = await textoCrudo(backend, ruta);
+  const validado = texto === undefined ? undefined : validacionDeTexto(ruta, texto);
+  return validado === undefined ? hecho : `${hecho}\n${validado}`;
 }
 
 /**
@@ -105,9 +123,22 @@ const ESQUEMAS: Record<ToolDeFichero, { descripcion: string; propiedades: Record
     obligatorias: ["file_path", "content"],
   },
   edit_file: {
-    descripcion: `Replaces old_string with new_string in a file. old_string must match exactly. ${REGLA_DE_ESCRITURAS_EN_PARALELO}`,
-    propiedades: { file_path: cadena, old_string: cadena, new_string: cadena, replace_all: { type: "boolean" } },
-    obligatorias: ["file_path", "old_string", "new_string"],
+    descripcion:
+      "Replaces old_string with new_string in a file. old_string must match exactly. SEVERAL changes to the same file go in " +
+      "ONE call with `edits: [{old_string, new_string}, …]` (applied in order; if one does not match, none is applied and it " +
+      "says which). The result already says whether the file is still valid (.xne/.xml/.css/.js): do not re-read it nor call " +
+      `validar_fichero_xone after editing. ${REGLA_DE_ESCRITURAS_EN_PARALELO}`,
+    propiedades: {
+      file_path: cadena,
+      old_string: cadena,
+      new_string: cadena,
+      replace_all: { type: "boolean" },
+      edits: {
+        type: "array",
+        items: { type: "object", properties: { old_string: cadena, new_string: cadena, replace_all: { type: "boolean" } }, required: ["old_string", "new_string"] },
+      },
+    },
+    obligatorias: ["file_path"],
   },
   glob: { descripcion: "Finds files matching a glob pattern.", propiedades: { pattern: cadena, path: cadena }, obligatorias: ["pattern"] },
   grep: { descripcion: "Searches file contents for a literal pattern.", propiedades: { pattern: cadena, path: cadena, glob: cadena }, obligatorias: ["pattern"] },
@@ -341,16 +372,32 @@ async function ejecutar(
       if (typeof hecho !== "string") return hecho;
       const contenido = hecho;
       return {
-        texto: anadir ? `Successfully appended to ${s(args.file_path)} (${contenido.split("\n").length} lines now)` : `Successfully wrote to ${s(args.file_path)}`,
+        texto: anadir
+          ? `Successfully appended to ${s(args.file_path)} (${contenido.split("\n").length} lines now)`
+          : await conValidacion(backend, s(args.file_path), `Successfully wrote to ${s(args.file_path)}`),
         error: false,
       };
     }
     case "edit_file": {
-      const r = (await backend.edit(s(args.file_path), s(args.old_string), s(args.new_string), args.replace_all === true)) as Resultado & {
-        occurrences?: number;
-      };
+      const ruta = s(args.file_path);
+      const pedidos = cambiosDeLaLlamada(args);
+      if ("motivo" in pedidos) return { texto: pedidos.motivo, error: true };
+      const [unico] = pedidos.cambios;
+      if (pedidos.cambios.length === 1 && unico !== undefined) {
+        const r = (await backend.edit(ruta, unico.viejo, unico.nuevo, unico.todas)) as Resultado & { occurrences?: number };
+        if (r.error !== undefined) return { texto: r.error, error: true };
+        return { texto: await conValidacion(backend, ruta, `Successfully replaced ${r.occurrences ?? 1} occurrence(s) in ${ruta}`), error: false };
+      }
+      // VARIOS (`core/edicionMultiple.ts`): se calculan sobre el texto crudo y se escriben en UN `edit` del fichero entero, que
+      // pasa por las mismas guardas, la misma codificación y la misma cola. Si otro lo cambió entre medias, ese `edit` no
+      // encaja y lo dice: nada a medias.
+      const antes = await textoCrudo(backend, ruta);
+      if (antes === undefined) return { texto: `No se pudo leer ${ruta} para aplicar varios cambios: mándalos de uno en uno.`, error: true };
+      const aplicado = aplicarCambios(antes, pedidos.cambios);
+      if ("motivo" in aplicado) return { texto: aplicado.motivo, error: true };
+      const r = (await backend.edit(ruta, antes, aplicado.texto, false)) as Resultado;
       if (r.error !== undefined) return { texto: r.error, error: true };
-      return { texto: `Successfully replaced ${r.occurrences ?? 1} occurrence(s) in ${s(args.file_path)}`, error: false };
+      return { texto: await conValidacion(backend, ruta, `Successfully applied ${pedidos.cambios.length} changes (${aplicado.ocurrencias} occurrence(s)) in ${ruta}`), error: false };
     }
     case "glob": {
       const r = (await backend.glob(s(args.pattern), s(args.path) || "/")) as Resultado & { files?: { path: string }[] };

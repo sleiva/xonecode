@@ -133,6 +133,10 @@ Ante una discrepancia con el código, **el código manda**.
   estado de la maqueta. Medido en `docs/DECISIONES.md`: la mayoría del tope se iba en navegar y releer.
 - **UNA VENTANA por encargo y por tarea del plan** (`UNA_VENTANA_POR_ENCARGO`, `PLAN_DE_DESARROLLO`, `REPARTIR_EN_TAREAS`,
   skill `xone-plan-builder`): con varias, el developer agota su presupuesto a mitad. Es redacción, no guarda.
+- **Varios cambios a un fichero, UN `edit_file`** (`edits`, `core/edicionMultiple.ts`): en orden, todos o ninguno, escritos
+  en un solo `edit` del fichero entero (mismas guardas, codificación y cola); la tarjeta de aprobación hace el MISMO cálculo
+  (`interrupts.ts#cambioDe`). **Y lo escrito se VALIDA en el mismo resultado** (`validacionDeTexto`, `.xne`/`.xml`/`.css`/`.js`)
+  para que no haga falta otra vuelta de `validar_fichero_xone`.
 - **Traspasos acotados** (`toolsDeFichero.ts`, `informesDeHijos.ts`): `write_file` solo CREA un `.xne`/`.js`/`.css`
   (sobre uno existente, error → `edit_file`); `read_file` hasta `LINEAS_POR_LECTURA`/`CARACTERES_POR_LECTURA` y dice por
   dónde seguir; al terminar un hijo, quien lo llamó recibe en UN mensaje lo que ESCRIBIÓ (sin contenido; binarios

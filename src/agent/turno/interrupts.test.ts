@@ -122,6 +122,20 @@ describe("cambioDe", () => {
     ]);
   });
 
+  it("edit_file con VARIOS cambios (`edits`) difa el resultado de aplicarlos todos, en orden", () => {
+    const vista = cambioDe(
+      pendiente({ tool: "edit_file", args: { file_path: "app.xml", edits: [{ old_string: "uno", new_string: "UNO" }, { old_string: "dos", new_string: "DOS" }] } }),
+      disco({ "app.xml": "uno\nmedio\ndos" })
+    );
+    expect(vista?.lineas).toEqual([
+      { tipo: "quitado", texto: "uno" },
+      { tipo: "anadido", texto: "UNO" },
+      { tipo: "igual", texto: "medio" },
+      { tipo: "quitado", texto: "dos" },
+      { tipo: "anadido", texto: "DOS" },
+    ]);
+  });
+
   it("incorporar_adjunto: una línea que DICE qué binario se copia y adónde, sin leer el disco", () => {
     let leidas = 0;
     const vista = cambioDe(

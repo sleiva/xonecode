@@ -31,6 +31,46 @@ function proyecto() {
   return { raiz, llamar };
 }
 
+/** Medido en la pasada 9: 51 `edit_file` sueltos en rachas sobre el mismo fichero, y 17 vueltas de `validar_fichero_xone`. */
+describe("edit_file con varios cambios y la validación en su resultado, sobre el backend real", () => {
+  it("varios cambios en UNA llamada, en orden, y el resultado dice si el fichero sigue bien", async () => {
+    const { raiz, llamar } = proyecto();
+    const r = await llamar("edit_file", {
+      file_path: "/app.xml",
+      edits: [
+        { old_string: "<app>", new_string: '<app name="x">' },
+        { old_string: "<coll/>", new_string: '<coll name="Clientes"/>' },
+      ],
+    });
+    expect(r).toMatchObject({ error: false });
+    expect(r.texto).toContain("Successfully applied 2 changes");
+    expect(r.texto).toContain("Validado: /app.xml está bien.");
+    expect(readFileSync(join(raiz, "app.xml"), "utf8")).toBe('<app name="x">\n  <coll name="Clientes"/>\n</app>\n');
+  });
+
+  it("si uno no encaja no se escribe NINGUNO, y se dice cuál", async () => {
+    const { raiz, llamar } = proyecto();
+    const r = await llamar("edit_file", { file_path: "/app.xml", edits: [{ old_string: "<app>", new_string: "<app2>" }, { old_string: "no-esta", new_string: "x" }] });
+    expect(r.error).toBe(true);
+    expect(r.texto).toContain("El cambio 2 de 2 no encaja");
+    expect(readFileSync(join(raiz, "app.xml"), "utf8")).toBe("<app>\n  <coll/>\n</app>\n");
+  });
+
+  it("una edición que rompe el XML lo dice en el mismo resultado, con línea y columna", async () => {
+    const { llamar } = proyecto();
+    const r = await llamar("edit_file", { file_path: "/Clientes.xne", old_string: '<coll name="Clientes"/>', new_string: '<coll name="Clientes">' });
+    expect(r.error).toBe(false);
+    expect(r.texto).toMatch(/Validado: \/Clientes\.xne:\d+:\d+: /);
+    expect(r.texto).toContain("Corrígelo antes de probar.");
+  });
+
+  it("y write_file de un fichero nuevo también valida", async () => {
+    const { llamar } = proyecto();
+    expect((await llamar("write_file", { file_path: "/nuevo.js", content: "var a = `x`;\n" })).texto).toContain("Validado: /nuevo.js:");
+    expect((await llamar("write_file", { file_path: "/notas.md", content: "# x\n" })).texto).not.toContain("Validado");
+  });
+});
+
 describe("las tools de fichero de TrueForge, sobre el backend real", () => {
   // Medido en la prueba de la calculadora: el analista retocó su plan a pedacitos, 26 `edit_file` de ~100 mil de contexto.
   it("los retoques al PLAN tienen tope por encargo; pasado, se dice que se reescriba de una vez", async () => {

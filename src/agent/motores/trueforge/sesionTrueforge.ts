@@ -563,6 +563,9 @@ export function textoDelBucle(
           "  `xone-probar --recargar calculadora.js --abrir Calculadora click name=K_7 -- click name=K_EQ --- click name=K_AC -- click name=K_9 …`",
           "(las opciones delante; los casos con la sintaxis de `xone-hotswap`: `--` encadena pasos, `---` separa casos). Si la app no",
           "contesta, `xone-desplegar-android`. Junta los cambios antes de probar: no pruebes por cada línea.",
+          // Medido en la pasada 9: 51 `edit_file` sueltos en rachas de 2-5 sobre el mismo fichero, 17 `validar_fichero_xone`.
+          "VARIOS cambios a un fichero van en UN `edit_file` con `edits: [{old_string, new_string}, …]`. Su resultado ya dice si",
+          "el fichero sigue bien: no lo releas ni lo valides después. Lecturas y búsquedas independientes, en la MISMA llamada.",
           // Medido en Maset (21→22-10-2026): de 100 llamadas por vuelta, ~39 conducían el aparato —volviendo a navegar desde el
           // arranque en cada prueba— y ~35 releían: default.css 73 veces y la skill de hotswap 54. Solo ~14 escribían.
           "TUS LLAMADAS SE ACABAN (unas 100 por encargo): no las gastes en navegar ni en releer.",

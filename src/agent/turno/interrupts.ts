@@ -1,3 +1,4 @@
+import { aplicarCambios, cambiosDeLaLlamada } from "../../core/edicionMultiple.js";
 import { collectPending, buildResume, type Decision, type PendingInterrupt } from "../../vendor/hitl.js";
 import { conTrozoAnadido } from "../../core/anadirAFichero.js";
 import type { PendienteDeAprobacion } from "../../core/events.js";
@@ -94,16 +95,18 @@ export function cambioDe(
   }
 
   if (p.tool === "edit_file") {
-    const viejo = p.args.old_string;
-    const nuevo = p.args.new_string;
-    if (typeof viejo !== "string" || typeof nuevo !== "string") return undefined;
+    // Uno (`old_string`/`new_string`) o VARIOS (`edits`, `core/edicionMultiple.ts`): el después es el MISMO cálculo que
+    // hará la tool, así que lo que se aprueba es lo que se escribe.
+    const pedidos = cambiosDeLaLlamada(p.args);
+    if ("motivo" in pedidos) return undefined;
     const antes = leer(ruta);
-    if (!antes.includes(viejo)) {
-      // El reemplazo no calza con lo que hay en disco: enseñar un diff fingido sería
-      // peor que el crudo. Las dos piezas, tal cual.
-      return { ruta, lineas: [...diffDeLineas(viejo, nuevo)] };
+    const aplicado = aplicarCambios(antes, pedidos.cambios);
+    if ("motivo" in aplicado) {
+      // Algún reemplazo no calza con lo que hay en disco: enseñar un diff fingido sería
+      // peor que el crudo. Las piezas, tal cual.
+      return { ruta, lineas: pedidos.cambios.flatMap((c) => diffDeLineas(c.viejo, c.nuevo)) };
     }
-    return { ruta, lineas: diffDeLineas(antes, antes.split(viejo).join(nuevo)) };
+    return { ruta, lineas: diffDeLineas(antes, aplicado.texto) };
   }
 
   if (p.tool === NOMBRE_INCORPORAR_ADJUNTO) {
