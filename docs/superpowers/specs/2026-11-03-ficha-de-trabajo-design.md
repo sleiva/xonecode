@@ -130,3 +130,97 @@ persona pide otra cosa; un «continúa» sigue con la misma.
 - Los motores externos (Claude Code, Codex) no pasan por estas tools: sus evidencias son las que el harness ve al
   terminar (escrituras y verificador).
 - `npm test` sigue sin red, sin clave y sin aparato: los casos y capturas se prueban con salidas reales guardadas.
+
+## 8. F2 — La auditoría de cierre (diseño, 03-11-2026)
+
+### El caso que la motiva
+
+F1 comprueba que HAY una prueba de la versión actual; no que la prueba DIGA lo que el criterio pide. Medido:
+
+- **Pasada 2 (0.73.2): una sola captura respaldó 21 casillas de tres tareas** (T06, T07 y T08, evidencia `e29`), y la
+  captura ni siquiera guardaba su ruta. El código no puede saber si esa imagen enseña las 21.
+- **Pasada 3 (0.73.5): F1 hizo lo correcto, y por poco.** La casilla 1 de la T2 («el visor no arranca con valores de
+  ejemplo») se marcó a las 13:02 con una captura buena; el valor fijo `«4,850.50 ÷ 2.5»` entró en la ronda visual 2
+  (13:23), así que al cerrar esa marca estaba CADUCADA y la T2 quedó «en curso». Si el developer hubiera vuelto a marcar
+  tras la ronda 2 —con una captura nueva, vigente, que enseña el valor fijo—, F1 la habría aceptado.
+
+Decir si una prueba enseña lo que pide un criterio es un juicio, justo lo que F1 dejó fuera a propósito («lo determinista
+lo decide el código; el juez, lo ambiguo»).
+
+### Lo que ya hay, y lo que falta
+
+- **F1 decide lo determinista**: sin prueba vigente no se marca, y al cerrar el estado de cada tarea sale de la ficha.
+- **El juez del TURNO** (`core/juezDelTurno.ts`, consola y `run`) recibe dos hechos: verificador y escrituras sin resolver.
+- **El juez de una TAREA** (`agent/tareas/juezDeTarea.ts`) recibe más (comprobaciones visuales en texto, el plan con sus
+  casillas) y DICTA el estado de cada tarea del plan, que `corredorDeTareas.ts#actualizarElPlan` escribe en `TASKS.md`.
+  Choca con F1, que también lo escribe: dos autores del mismo dato.
+- **Ninguno ve una imagen**, y la captura no guarda de qué pantalla es.
+
+### La pieza nueva: un auditor de criterios, aparte de los jueces
+
+`auditarCriterios` (regla pura del caso en `core/`, llamada con modelo en `agent/`), papel `afilado`, UNA llamada por
+cierre y solo si hay algo que auditar. Lo que recibe:
+
+- **Solo los criterios MARCADOS con prueba VIGENTE** (los demás ya los decidió el código: sin prueba no hay nada que
+  juzgar). Cada uno con su texto, la ficha de su tarea (recortada) y la evidencia que lo respalda: los casos en texto
+  (`casosDeLaSalida`, pasos y lo que cambió) o la CAPTURA como imagen.
+- **Como mucho `TOPE_DE_IMAGENES_DE_AUDITORIA` capturas** (dos): las vigentes citadas por las marcas, la más reciente
+  primero. Lo que no cabe se dice («sin imagen: no se audita»), no se calla.
+
+Lo que contesta, por criterio: `si` (la prueba lo enseña), `no` (la prueba enseña lo contrario, con lo que se ve) o
+`no-se-ve` (la prueba no basta para decirlo). Lo que no se entiende es `no-se-ve`, nunca `si`.
+
+### Lo que hace el código con eso (el juez solo puede BAJAR)
+
+- `si`: nada cambia.
+- `no`: la casilla **no se desmarca** (`TASKS.md` nunca pierde una marca), pero el criterio pasa a **refutado** en la
+  ficha, la tarea baja a `implementada` y el cierre lo dice bajo `## CRITICAL`: «T2 · 1 marcado y la captura enseña lo
+  contrario: el visor arranca con «4,850.50 ÷ 2.5»».
+- `no-se-ve`: la tarea no puede pasar de `implementada`, y va en `## Observaciones`.
+- **Un estado JUZGADO nunca sube por encima del CALCULADO.** También para el juez de una tarea: su `plan` se acota con
+  el de la ficha (`min(calculado, juzgado)`), y la ficha es el único que escribe `TASKS.md`. Se acaba el doble autor.
+
+### Los dos jueces, con la auditoría delante
+
+- `HechosDelTurno` gana `auditoria` (líneas cortas: «T2: 5/6 con prueba vigente; 1 refutado: …») y la captura vigente
+  (ruta y pantalla). El prompt: un criterio marcado sin prueba vigente o refutado no cuenta como hecho.
+- `CasoDeJuez` (tareas) recibe lo mismo; `parrafoDelPlanDeLaTarea` deja de pedirle que invente el estado y le pide solo
+  bajarlo si ve un motivo que la auditoría no recoge.
+
+### La pantalla de la captura
+
+`xone-captura-android` (y `shot`) apuntan la colección en primer plano (`screen` del canal, que ya existe) junto a la
+captura (`<captura>.pantalla` en `/hotswap/`, el mismo reparto que la geometría), y la ficha la guarda en
+`Evidencia.pantalla`. El auditor la recibe con la imagen. **No se convierte en regla de código** («la pantalla equivocada
+no cuenta») porque una tarea no dice en un campo qué colección prueba: se le da al auditor, que sí lo puede leer en la ficha.
+
+### Cómo se mide ANTES de construirlo todo
+
+Con una captura REAL que enseñe el visor con el valor fijo y el criterio 1 de esa T2 (las de la pasada 3 se borraron al
+empezar la 4: se toma una de la 4 o se reproduce el estado), más una casilla que sí se cumple (el «=» da 1940.2, por
+casos): una llamada real del auditor tiene que contestar `no` y `si`. Si no caza el `no` con la imagen delante, F2 no
+merece su llamada y se para aquí. Después, tests puros con esa respuesta guardada.
+
+### Medido (03-11-2026, prototipo con Sonnet 5.5)
+
+Cinco criterios con respuesta conocida: el visor con «4,850.50 ÷ 2.5» y «1,240 × 15% + 450 = 636» fijos (captura real de
+la versión de la pasada 3), el mismo criterio sobre la pantalla limpia de la pasada 4, las píldoras COPY y Tape con el
+icono montado en el texto (defecto real de la pasada 4 que nadie había marcado), dos casos reales del aparato
+(`4850.5 ÷ 2.5 = 1940.2`, `5 ÷ 0 = Error`) y un criterio de persistencia que una captura no puede enseñar. Con el primer
+prompt refutó EN FALSO el de los casos dos de cada cuatro veces, escribiendo «no hay contradicción» y poniendo «no». Tres
+cambios lo dejaron en 30 de 30 aciertos salvo un «no-se-ve» donde tocaba refutar (la dirección segura):
+
+- **El porqué antes que el veredicto** en el JSON: decidía la etiqueta antes de razonar.
+- **Etiquetas que no chocan con el castellano**: `cumple`, `contradice`, `no-se-ve` (un «no» se confundía con la negación
+  del propio razonamiento).
+- **Un `contradice` exige `cita` literal**, y sin ella el código lo baja a `no-se-ve`. Y el prompt explica el formato de los
+  casos (`nuevos`/`quitados` respecto a la pantalla de ANTES del primer caso, que arrastra el historial) y pide juzgar SOLO
+  lo que dice el criterio.
+
+Coste: unos 15 mil de entrada con tres capturas, unos 450 de salida, unos 6 s por llamada.
+
+### Límites declarados
+
+- Audita lo que la prueba ENSEÑA: un criterio de lógica probado solo con una captura se queda en `no-se-ve`.
+- No relee el código: un valor fijo que la captura no enseña (porque se teclea encima) no se caza.
+- Cuesta una llamada de `afilado` con hasta dos imágenes por cierre con marcas; ninguna si no hay nada marcado.
