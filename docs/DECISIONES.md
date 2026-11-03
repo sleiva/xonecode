@@ -10449,3 +10449,11 @@ la pantalla entera; con una tarea por encargo cada tarea recarga para construir 
 de punta a punta) no arrancó. A igualdad de avance la pasada fue más corta que la 3 (23 frente a 32 minutos, −31 % de
 salida, −9 % de entrada efectiva). Decisión suya: subirlo a cuatro encargos llenos. Contar por tarea (`TAREA:`) quedó como
 alternativa si vuelve a chocar.
+
+**Y la auditoría de cierre, construida (03-11-2026, F2a).** Medido antes con un prototipo y capturas reales (spec §8): con
+el primer prompt refutaba en falso un criterio de casos la mitad de las veces; tres cambios (el porqué antes del veredicto,
+etiquetas `cumple`/`contradice`/`no-se-ve`, cita obligatoria para refutar) lo dejaron sin refutaciones falsas. Mirado Codex:
+su «completion audit» (`ext/goal`) es una instrucción al propio agente que nada comprueba; de ella se tomó una regla, que la
+prueba cubra TODO el criterio («una comprobación estrecha no prueba un criterio amplio»): con ella sigue sin refutar en falso
+y se vuelve algo más prudente (un defecto real salió dos de cinco veces como «no se ve» en vez de «contradice»). El auditor
+corre al cerrar el turno, solo sobre lo marcado con prueba vigente, y solo puede bajar el estado que calcula la ficha.

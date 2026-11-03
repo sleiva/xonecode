@@ -110,7 +110,11 @@ export function conRespaldo(f: FichaDeTrabajo, r: Respaldo): FichaDeTrabajo {
   return { ...f, respaldos: [...resto, r] };
 }
 
-export type EstadoDeCriterio = "vigente" | "caducado" | "sin-evidencia";
+/**
+ * `sin-sostener`: marcada con prueba vigente, pero la auditoría de cierre (`auditoriaDeCierre.ts`) dice que esa prueba no
+ * enseña lo que pide el criterio (lo contradice, o no basta). Como una caducada, no deja la tarea en «hecha».
+ */
+export type EstadoDeCriterio = "vigente" | "caducado" | "sin-evidencia" | "sin-sostener";
 
 /** El estado de un criterio de una tarea según la ficha: con qué se marcó y si eso sigue valiendo. */
 export function estadoDeCriterio(

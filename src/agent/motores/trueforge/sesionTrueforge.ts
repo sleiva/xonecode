@@ -31,6 +31,8 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSy
 import { dirname, join } from "node:path";
 import { CARPETA_DE_PLANES } from "../../../core/planes.js";
 import { decidirEncargo } from "../../../core/encargoDeTarea.js";
+import { lineasDeAuditoria } from "../../../core/auditoriaDeCierre.js";
+import { crearAuditorDeCierre } from "./auditorDeCierre.js";
 import winston from "winston";
 import { AgentThread, AgentThreadOrchestrator, EventType, NOOP_AGENT_TRACING, askUserQuestion, contextCompaction, dynamicSubAgents } from "./trueforge.js";
 import { TOPE_DE_LLAMADAS_DEL_CONDUCTOR, TOPE_DE_LLAMADAS_DEL_DESARROLLADOR, TOPE_DE_LLAMADAS_DEL_ESPECIALISTA } from "../../turno/resumenDeContexto.js";
@@ -212,6 +214,8 @@ const BUCLE_DE_CALIDAD = [
  */
 /** El ORIGEN con que el gasto del crítico visual va a la traza (`xonecode traza` lo agrega por origen). */
 export const ORIGEN_DEL_CRITICO = "xone_critica_visual";
+/** El origen del gasto de la auditoría de cierre en la traza (`auditorDeCierre.ts`). */
+export const ORIGEN_DE_LA_AUDITORIA = "auditoria_de_cierre";
 
 export const UNA_VENTANA_POR_ENCARGO = [
   "UNA VENTANA POR ENCARGO: cada encargo a developer-xone es, como MUCHO, UNA ventana de la app y DOS pantallas de su diseño",
@@ -1275,7 +1279,7 @@ export async function abrirSesionTrueforge(
    * aparte (`fueraDelMotor`) para quitarlo del contraste con las métricas de TrueForge, que no lo cuentan.
    */
   const fueraDelMotor = { input: 0, output: 0, cache: 0, calls: 0 };
-  const contarCritico = (uso: ConsumoVisual): void => {
+  const contarCritico = (uso: ConsumoVisual, origen: string = ORIGEN_DEL_CRITICO): void => {
     tracker.input += uso.entrada;
     tracker.output += uso.salida;
     tracker.cache += uso.cache;
@@ -1285,7 +1289,7 @@ export async function abrirSesionTrueforge(
     fueraDelMotor.cache += uso.cache;
     fueraDelMotor.calls += 1;
     apuntarModelo(idDelPapel(PAPEL_DEL_JUEZ_VISUAL), "modelo", { entrada: uso.entrada, salida: uso.salida, cache: uso.cache });
-    diagnostico?.modelo(ORIGEN_DEL_CRITICO, {
+    diagnostico?.modelo(origen, {
       input: uso.entrada,
       output: uso.salida,
       cache: uso.cache,
@@ -3005,7 +3009,25 @@ export async function abrirSesionTrueforge(
       // El estado de cada tarea con marcas lo CALCULA la ficha y lo escribe en su TASKS.md (`fichaEnSesion.ts#alCerrar`).
       // El veredicto se asigna dentro del generador de las pasadas: el compilador no ve ese cambio aquí.
       const veredictoFinal = veredicto as "verde" | "rojo" | "no-corrio";
-      const resumenDeLaFicha = fichaDeTrabajo.alCerrar(veredictoFinal === "no-corrio" ? undefined : veredictoFinal);
+      /**
+       * **La auditoría de cierre (F2)**: las casillas marcadas con prueba vigente, con su prueba delante de un modelo
+       * (`auditorDeCierre.ts`). Solo puede BAJAR el estado que calcula la ficha; no poder preguntar se dice y no baja nada.
+       * Un turno CANCELADO no se audita: es gastar una llamada contra la decisión de pararlo.
+       */
+      const aAuditar = cancelado ? [] : fichaDeTrabajo.paraAuditar();
+      const auditados =
+        aAuditar.length === 0
+          ? undefined
+          : await crearAuditorDeCierre({
+              modelos,
+              ...(carpeta === undefined ? {} : { artefactos: carpeta }),
+              alConsumir: (uso) => contarCritico(uso, ORIGEN_DE_LA_AUDITORIA),
+            })(aAuditar);
+      const resumenDeLaFicha = [
+        ...fichaDeTrabajo.alCerrar(veredictoFinal === "no-corrio" ? undefined : veredictoFinal, auditados),
+        ...(aAuditar.length > 0 && auditados === undefined ? ["auditoría de cierre: no se pudo consultar al auditor; los estados son los de la ficha"] : []),
+        ...(auditados === undefined ? [] : lineasDeAuditoria(auditados).map((l) => `auditoría: ${l}`)),
+      ];
       return {
         bitacora,
         cambios,

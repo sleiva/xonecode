@@ -21,8 +21,9 @@ import {
   type EstadoDeCriterio,
   type FichaDeTrabajo,
 } from "../../../core/fichaDeTrabajo.js";
+import { criteriosAAuditar, type CriterioAAuditar, type CriterioAuditado } from "../../../core/auditoriaDeCierre.js";
 import { CARPETA_DE_PLANES } from "../../../core/planes.js";
-import { conEstadoDeTarea, leerTareasDelPlan, type EstadoDeTarea } from "../../../core/tareasDelPlan.js";
+import { conEstadoDeTarea, leerTareasDelPlan, type EstadoDeTarea, type TareaDelPlan } from "../../../core/tareasDelPlan.js";
 
 /** Lo que el agente ve fuera del proyecto: no forma parte de la versión del trabajo. */
 const FUERA_DEL_PROYECTO = /^\/(artefactos|planes|hotswap|large_tool_results|conversation_history|adjuntos|skills|diseno)\//;
@@ -42,8 +43,13 @@ export interface FichaDeSesion {
   /** Para `marcar_criterios_del_plan`: la prueba vigente que respalda marcar AHORA, o por qué no se puede. */
   respaldo(): { evidencia: string } | { motivo: string };
   alMarcar(plan: string, tarea: string, criterios: readonly number[], evidencia: string): void;
-  /** Al cerrar el turno: el estado CALCULADO de cada tarea con marcas, escrito en su `TASKS.md`, y lo que se dice. */
-  alCerrar(verificador: "verde" | "rojo" | undefined): string[];
+  /** Las casillas marcadas con prueba VIGENTE, para la auditoría de cierre (`core/auditoriaDeCierre.ts`). */
+  paraAuditar(): CriterioAAuditar[];
+  /**
+   * Al cerrar el turno: el estado CALCULADO de cada tarea con marcas, escrito en su `TASKS.md`, y lo que se dice. Con la
+   * auditoría, una casilla que no la pasa (`contradice` o `no-se-ve`) cuenta como `sin-sostener`: solo puede BAJAR.
+   */
+  alCerrar(verificador: "verde" | "rojo" | undefined, auditados?: ReadonlyMap<string, CriterioAuditado>): string[];
   ficha(): FichaDeTrabajo;
 }
 
@@ -149,7 +155,19 @@ export function crearFichaDeSesion(opciones: {
       for (const criterio of criterios) ficha = conRespaldo(ficha, { plan, tarea, criterio, evidencia, cuando: ahora() });
       guardar();
     },
-    alCerrar(verificador) {
+    paraAuditar() {
+      sincronizar();
+      const tareasPorPlan = new Map<string, TareaDelPlan[]>();
+      for (const plan of new Set(ficha.respaldos.map((r) => r.plan))) {
+        try {
+          tareasPorPlan.set(plan, leerTareasDelPlan(readFileSync(join(opciones.raiz, CARPETA_DE_PLANES, plan, "TASKS.md"), "utf8")).tareas);
+        } catch {
+          // Sin TASKS.md no hay casilla que auditar.
+        }
+      }
+      return criteriosAAuditar(ficha, tareasPorPlan, huellasActuales());
+    },
+    alCerrar(verificador, auditados) {
       sincronizar();
       const huellas = huellasActuales();
       const lineas: string[] = [];
@@ -168,14 +186,18 @@ export function crearFichaDeSesion(opciones: {
         for (const numero of tareas) {
           const t = leido.tareas.find((x) => x.numero === numero);
           if (t === undefined) continue;
-          const criterios: EstadoDeCriterio[] = Array.from({ length: t.criterios.total }, (_, i) =>
-            estadoDeCriterio(ficha, { plan, tarea: numero, criterio: i + 1 }, huellas)
-          );
+          const criterios: EstadoDeCriterio[] = Array.from({ length: t.criterios.total }, (_, i) => {
+            const e = estadoDeCriterio(ficha, { plan, tarea: numero, criterio: i + 1 }, huellas);
+            const a = auditados?.get(`${plan}/${numero}/${String(i + 1)}`);
+            return e === "vigente" && a !== undefined && a.veredicto !== "cumple" ? "sin-sostener" : e;
+          });
           const estado: EstadoDeTarea = estadoDeTarea(criterios, t.criterios.hechos, verificador);
           const caducados = criterios.filter((c) => c === "caducado").length;
+          const sinSostener = criterios.filter((c) => c === "sin-sostener").length;
           lineas.push(
             `${plan} · tarea ${numero}: ${estado} (${String(t.criterios.hechos)}/${String(t.criterios.total)} marcados` +
-              `${caducados > 0 ? `, ${String(caducados)} comprobado(s) antes del último cambio` : ""})`
+              `${caducados > 0 ? `, ${String(caducados)} comprobado(s) antes del último cambio` : ""}` +
+              `${sinSostener > 0 ? `, ${String(sinSostener)} que su prueba no sostiene` : ""})`
           );
           // «en curso» no se escribe: no hay una palabra del juez para él y la que ponga el desarrollador vale.
           if (estado !== "en curso") cambiado = conEstadoDeTarea(cambiado, numero, estado === "pendiente" ? "pendiente" : estado) ?? cambiado;

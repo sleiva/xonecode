@@ -3574,7 +3574,7 @@ describe("`marcar_criterios_del_plan` en TrueForge: marca quien construye, no el
     alResultado: () => {},
     respaldo: () => ({ evidencia: "e1" }),
     alMarcar: () => {},
-    alCerrar: () => [],
+    paraAuditar: () => [], alCerrar: () => [],
     ficha: () => fichaNueva(),
   });
   it("el hijo que EJECUTA no la tiene; el raíz tampoco", async () => {
@@ -4445,4 +4445,62 @@ describe("el papel de modelo de cada especialista", () => {
     await s.turno("planifica y pregunta", piel().p);
     expect(papeles).toEqual(["trabajo", "afilado", "trabajo", "rapido", "trabajo"]);
   }, 30_000);
+});
+
+/** F2: la auditoría de cierre la compone la sesión con SUS modelos (papel afilado), y solo puede bajar lo de la ficha. */
+describe("la auditoría de cierre en un turno", () => {
+  const criterio = {
+    id: "calc/04/1", plan: "calc", tarea: "04", criterio: 1, texto: "7+8= da 15", ficha: "04 — La lógica",
+    evidencia: { id: "e9", tipo: "casos" as const, cuando: "2026-11-03T10:00:00Z", quien: "developer-xone", resumen: "1 caso(s): ac 7 add 8 eq → 16", version: {} },
+  };
+  const fichaQueAudita = (vistos: unknown[]) => ({
+    alEmpezarTurno: () => {}, alPedir: () => {}, alResultado: () => {}, respaldo: () => ({ evidencia: "e9" }), alMarcar: () => {},
+    paraAuditar: () => [criterio],
+    alCerrar: (_v: unknown, auditados?: unknown) => (vistos.push(auditados), ["calc · tarea 04: implementada"]),
+    ficha: () => fichaNueva(),
+  });
+
+  it("pregunta al papel AFILADO con la prueba delante y lleva al cierre lo que no se sostiene", async () => {
+    const { m } = modelosConGuion([[new AIMessageChunk({ content: "Hecho." })]]);
+    const papeles: string[] = [];
+    const preguntas: string[] = [];
+    const conAuditor = {
+      ...m,
+      paraPapel: (papel: string, ...resto: unknown[]) => {
+        papeles.push(papel);
+        if (papel !== "afilado") return (m.paraPapel as (...a: unknown[]) => unknown)(papel, ...resto);
+        return {
+          invoke: async (mensajes: { content: { type: string; text?: string }[] }[]) => {
+            preguntas.push(mensajes[0]!.content.map((c) => c.text ?? "").join("\n"));
+            return new AIMessageChunk({ content: '{"criterios":[{"id":"calc/04/1","porque":"sale 16","cita":"16","veredicto":"contradice"}]}' });
+          },
+        };
+      },
+    } as unknown as ModelosPort;
+    const vistos: unknown[] = [];
+    const s = await abrirSesionTrueforge({ raiz: proyecto(), modelos: conAuditor, entorno: ENTORNO, skills: CATALOGO, fichaDeTrabajo: fichaQueAudita(vistos) });
+    const r = (await s.turno("cierra la 04", piel().p)) as { ficha?: string[] };
+    expect(papeles).toContain("afilado");
+    expect(preguntas[0]).toContain("CRITERIO calc/04/1: 7+8= da 15");
+    expect(preguntas[0]).toContain("ac 7 add 8 eq → 16");
+    const auditados = vistos[0] as Map<string, { veredicto: string }>;
+    expect(auditados.get("calc/04/1")!.veredicto).toBe("contradice");
+    expect(r.ficha?.join("\n")).toContain("auditoría: calc/04/1 marcado, y su prueba enseña lo contrario: «16»");
+  }, 20_000);
+
+  it("si el auditor no se puede usar, se DICE y la ficha cierra con sus estados, sin bajar nada", async () => {
+    const { m } = modelosConGuion([[new AIMessageChunk({ content: "Hecho." })]]);
+    const sinAuditor = {
+      ...m,
+      paraPapel: (papel: string, ...resto: unknown[]) => {
+        if (papel === "afilado") throw new Error("sin clave");
+        return (m.paraPapel as (...a: unknown[]) => unknown)(papel, ...resto);
+      },
+    } as unknown as ModelosPort;
+    const vistos: unknown[] = [];
+    const s = await abrirSesionTrueforge({ raiz: proyecto(), modelos: sinAuditor, entorno: ENTORNO, skills: CATALOGO, fichaDeTrabajo: fichaQueAudita(vistos) });
+    const r = (await s.turno("cierra la 04", piel().p)) as { ficha?: string[] };
+    expect(vistos[0]).toBeUndefined();
+    expect(r.ficha?.join("\n")).toContain("no se pudo consultar al auditor");
+  }, 20_000);
 });

@@ -123,3 +123,45 @@ describe("una escritura que pasa por aprobación y no devuelve respuesta", () =>
     expect(Object.keys(f.ficha().escritos)).toEqual(["/icons/tecla.svg"]);
   });
 });
+
+/** F2: la auditoría de cierre solo puede BAJAR lo que calcula la ficha. */
+describe("con la auditoría de cierre", () => {
+  const preparada = () => {
+    const raiz = proyecto();
+    const f = crearFichaDeSesion({ raiz, continuar: true });
+    f.alResultado("write_file", { file_path: "/Calc.xne" }, "ok", "developer-xone");
+    f.alResultado("ejecutar_script", { command: "xone-captura-android" }, "guardada /artefactos/captura-1.png", "developer-xone");
+    const r = f.respaldo() as { evidencia: string };
+    writeFileSync(join(raiz, ".xonecode", "planes", "calc", "TASKS.md"), TASKS.replace(/- \[ \]/g, "- [x]"));
+    f.alMarcar("calc", "01", [1, 2], r.evidencia);
+    return { raiz, f };
+  };
+
+  it("entrega las casillas marcadas con prueba vigente, con su texto y su captura", () => {
+    const { f } = preparada();
+    const a = f.paraAuditar();
+    expect(a.map((c) => [c.id, c.texto, c.evidencia.resumen])).toEqual([
+      ["calc/01/1", "suma", "/artefactos/captura-1.png"],
+      ["calc/01/2", "resta", "/artefactos/captura-1.png"],
+    ]);
+  });
+
+  it("una casilla que su prueba no sostiene deja la tarea en «implementada», y lo dice", () => {
+    const { raiz, f } = preparada();
+    const cierre = f
+      .alCerrar("verde", new Map([
+        ["calc/01/1", { veredicto: "cumple" as const, porque: "ok" }],
+        ["calc/01/2", { veredicto: "contradice" as const, porque: "resta mal", cita: "7-8=15" }],
+      ]))
+      .join("\n");
+    expect(cierre).toContain("tarea 01: implementada");
+    expect(cierre).toContain("1 que su prueba no sostiene");
+    expect(tasks(raiz)).toContain("**Estado:** implementada");
+  });
+
+  it("si todo cumple, «hecha» como sin auditoría: no sube ni baja nada", () => {
+    const { f } = preparada();
+    const todo = new Map([["calc/01/1", { veredicto: "cumple" as const, porque: "" }], ["calc/01/2", { veredicto: "cumple" as const, porque: "" }]]);
+    expect(f.alCerrar("verde", todo).join("\n")).toContain("tarea 01: hecha");
+  });
+});

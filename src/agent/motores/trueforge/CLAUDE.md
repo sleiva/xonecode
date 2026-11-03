@@ -154,6 +154,12 @@ Ante una discrepancia con el código, **el código manda**.
   **Marcar un criterio exige una prueba en el aparato VIGENTE** (`marcar_criterios_del_plan` con `ficha`; sin ella, se
   devuelve el motivo y no se marca), y **el estado de la tarea lo calcula el código al cerrar** y lo escribe en su
   `TASKS.md`: `hecha` solo con todo respaldado vigente y el verificador en verde. El cierre de `run` la enseña.
+  **La AUDITORÍA de cierre** (F2: `core/auditoriaDeCierre.ts`, `auditorDeCierre.ts`): las casillas marcadas con prueba
+  vigente se preguntan al papel `afilado` con su prueba delante (casos en texto, capturas como imagen, como mucho
+  `TOPE_DE_IMAGENES_DE_AUDITORIA`), con el prompt MEDIDO (porqué antes que veredicto; `cumple`/`contradice`/`no-se-ve`;
+  refutar exige `cita`). Lo que no se sostiene queda `sin-sostener` y la tarea no pasa de `implementada`: **solo BAJA**.
+  No poder preguntar se dice y no baja nada. **Límites**: los jueces aún no la reciben, y en una tarea de fondo el juez
+  sigue escribiendo el estado del plan (F2b).
 - **`TASKS.md` con casillas o no se escribe** (`core/tareasDelPlan.ts#motivoDeTasksInaceptable`): solo al escribirlo ENTERO.
   **Y con topes** (también sumando partes con `append`): una tarjeta dice QUÉ, sin bloques de código y hasta
   `TOPE_DE_TARJETA` sin contar casillas, estado ni dependencias, con hasta `TOPE_DE_CRITERIOS_POR_TAREA` criterios de hasta

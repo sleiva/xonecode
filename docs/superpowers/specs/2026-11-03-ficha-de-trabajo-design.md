@@ -1,6 +1,6 @@
 # La ficha de trabajo
 
-Estado: **F1 construida** (03-11-2026, sin medir con modelo); F2–F5 propuestas. Recomendaciones §1 y §5 de `docs/RECOMENDACIONES-HARNESS-TRUEFORGE.md`,
+Estado: **F1 construida** (03-11-2026); **F2a construida** (el auditor al cerrar, 0.75.0); F2b (los jueces y el autor único del estado), F3–F5 propuestas. Recomendaciones §1 y §5 de `docs/RECOMENDACIONES-HARNESS-TRUEFORGE.md`,
 con la forma de los objetivos de Codex (`codex-rs/ext/goal`) y de su `update_plan` (`core/src/tools/handlers/plan_spec.rs`).
 Dentro de TrueForge; nada de un motor nuevo.
 
