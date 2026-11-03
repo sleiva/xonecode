@@ -195,3 +195,28 @@ export function textoDeMedidaAutomatica(opciones: {
       : []),
   ].join("\n");
 }
+
+/** La shell que reciben `ejecutar_script` y `execute` (`capacidades.ts`). */
+export interface ShellDeScripts {
+  execute(c: string): unknown;
+  write(ruta: string, contenido: string): unknown;
+}
+
+/**
+ * La shell de quien prueba él mismo, con la MEDIDA detrás de cada orden de captura: si la orden casa con `captura` y
+ * `medir` devuelve algo (hay maqueta y captura nueva), se añade a la salida. Lo demás pasa igual. Ver `crearHijo` en
+ * `sesionTrueforge.ts`, que es quien decide para qué agente se monta.
+ */
+export function shellConMedidaTrasCapturar(base: ShellDeScripts, captura: RegExp, medir: () => string | undefined): ShellDeScripts {
+  return {
+    execute: async (c: string): Promise<unknown> => {
+      const r = await base.execute(c);
+      if (!captura.test(c) || typeof r !== "object" || r === null) return r;
+      const medida = medir();
+      if (medida === undefined) return r;
+      const salida = (r as { output?: unknown }).output;
+      return { ...(r as object), output: `${typeof salida === "string" ? salida : ""}\n\n${medida}` };
+    },
+    write: (ruta: string, contenido: string) => base.write(ruta, contenido),
+  };
+}

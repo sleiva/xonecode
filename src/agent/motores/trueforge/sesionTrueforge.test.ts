@@ -4261,11 +4261,16 @@ describe("en una tarea: el plan asignado y la captura del desarrollador", () => 
     expect(vistos).toHaveLength(3);
   }, 30_000);
 
-  it("el bucle del desarrollador le dice cómo no gastar sus llamadas: ir directo, no releer, capturar en el estado de la maqueta", () => {
+  it("el bucle del desarrollador le dice cómo no gastar sus llamadas: ir directo, no releer, y que los datos de la maqueta no se inyectan", () => {
     const t = textoDelBucle(["designer-xone"], { conCritica: true, pruebaElMismo: true });
     expect(t).toContain("xone-hotswap abrir <Colección>");
     expect(t).toContain("No leas\n  `default.css` entero");
-    expect(t).toContain("Captura en el MISMO ESTADO que la maqueta");
+    // Medido en la pasada 8: «el mismo estado, con datos» le llevaba a inyectar los valores de ejemplo por JS.
+    expect(t).not.toContain("Captura en el MISMO ESTADO que la maqueta");
+    expect(t).toContain("son de ejemplo: no los inyectes ni los escribas");
+    // Y la captura de una ronda visual es la NATIVA, con el crítico nombrado (en la 8 capturó con `shot` y no midió nunca).
+    expect(t).toContain("UNA captura por ronda con `xone-captura-android`");
+    expect(t).toContain("pasa `xone_critica_visual`");
     expect(t).toContain("Tu respuesta final nombra la ÚLTIMA captura");
   });
 

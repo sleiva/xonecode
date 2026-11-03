@@ -10478,3 +10478,15 @@ estuvo 27,5 minutos abierta y devolvió 218 tokens. DeepSeek, con la petición e
 para que la conexión no se cierre; la vigilancia (`vigilanciaDeLlamada.ts`) los contaba como datos y cada uno reiniciaba el
 reloj, así que no cortaba nunca. Ahora los dos plazos —hasta el primer dato y de silencio— solo los mueve un trozo con
 contenido; los latidos pasan tal cual.
+
+**Y quien prueba él mismo recibe la medida de su captura (03-11-2026).** La pasada 8 de la calculadora con DeepSeek flash
+en los tres papeles iba a la mitad de ritmo que la 6 con Sonnet. No era la vista: medido aparte, flash copia literal los
+textos del visor de una captura a tamaño completo y a la mitad, y como auditor acierta cuatro de los cinco criterios (falla
+el solape fino del icono con el texto, que Sonnet sí ve). Era el CAMINO: el desarrollador capturó 16 veces con `xone-hotswap
+shot` y ninguna con la nativa, y no pasó NI UNA vez `xone_critica_visual` ni `comparar_capturas`; pulió el CSS a ciegas con
+`describe_image` e inyectó por JS los valores de ejemplo de la maqueta. Sonnet, en la 6, sí medía (13 nativas, 7
+comparaciones, 6 críticas). Tres causas: la medida automática contra la maqueta solo le llegaba a quien VOLVÍA del de
+pruebas (`ejecucion`), no al desarrollador que prueba él mismo; el prompt ponía `shot` primero; y «captura en el MISMO
+ESTADO que la maqueta, con datos» le empujaba a inyectar los de ejemplo. Ahora la medida va detrás de cada orden de captura
+de quien lleva `scripts`, la ronda visual pide la captura nativa y nombra el crítico, y los datos de la maqueta no se
+inyectan.

@@ -119,7 +119,7 @@ import { leerTareasDelPlan, RUTA_DE_TASKS } from "../../../core/tareasDelPlan.js
 import { casanConTitulo, esDeLaMaqueta } from "../../../core/stitch.js";
 import { recibeConectores } from "../../../core/conectores.js";
 import { crearConvertirAP, NOMBRE_CONVERTIR_A_P, recibeConvertirAP } from "./convertirAP.js";
-import { buscarMaquetas, medirContraLaMasParecida, RONDAS_VISUALES, resumenDeMedida, textoDeMedidaAutomatica, ultimaCaptura } from "./medidaAutomatica.js";
+import { buscarMaquetas, medirContraLaMasParecida, RONDAS_VISUALES, resumenDeMedida, shellConMedidaTrasCapturar, textoDeMedidaAutomatica, ultimaCaptura, type ShellDeScripts } from "./medidaAutomatica.js";
 import { anotarEscritura, capacidadDeInformesDeHijos, esEscrituraBinaria, escrituraConExito, textoDeLoApuntado, textoDelInforme, type Apunte, type CambioDeFichero } from "./informesDeHijos.js";
 import { crearDiagnosticoDeTools, type DiagnosticoDeTools } from "../../turno/diagnosticoDeTools.js";
 import { encenderTrazaDeErrores } from "../../trazaDeErroresEnDisco.js";
@@ -552,7 +552,7 @@ export function textoDelBucle(
           "TUS LLAMADAS SE ACABAN (unas 100 por encargo): no las gastes en navegar ni en releer.",
           "- Ve DIRECTO a la ventana: `xone-hotswap abrir <Colección>` (y `screen` tras un segundo). No repitas login y menús en cada prueba.",
           "- Los comandos que necesitas son estos y no hace falta releer la skill: `screen`, `abrir <Coll>`, `js 'return …;'`,",
-          "  `click name=X`, `fill name=X value=…`, `waitForElement name=X timeout=5000`, `shot` (varios en UNA llamada, separados por",
+          "  `click name=X`, `fill name=X value=…`, `waitForElement name=X timeout=5000`, `shot name=X` (varios en UNA llamada, separados por",
           "  `--`); `xone-log-android --limpiar` y `--app`; `xone-recargar-android`. `elements` solo para explorar: es enorme.",
           "- El CSS: busca la clase que vas a tocar con `xone_navegacion` (operación `estilos`) o un `grep` de su nombre. No leas",
           "  `default.css` entero, y lo que ya leíste en este encargo no lo vuelvas a leer.",
@@ -583,12 +583,18 @@ export function textoDelBucle(
           "  multiplica los viajes: medido, hasta 68 llamadas donde bastaban 2. Corrige todos los fallos juntos.",
           "- Lo que escribas SOLO para probar (un .js de ensayo, notas) va en `/artefactos/`, nunca en el proyecto: ahí se quedaría,",
           "  porque no hay forma de borrarlo.",
-          "- VISUAL, solo cuando lo funcional pasa: UNA captura por ronda (`xone-hotswap shot`, o `xone-captura-android` si hay un",
-          "  diálogo encima). Entre retoques mide con `comparar_capturas` (sin modelo, siempre la misma cifra para las mismas dos",
-          `  imágenes): arregla TODAS las diferencias en la misma ronda y solo entonces otra captura. ${String(RONDAS_VISUALES)} rondas como mucho.`,
+          // Medido en la pasada 8 de la calculadora (DeepSeek flash): con `shot` primero en esta línea capturó 16 veces con él, no
+          // pasó ni una vez el crítico ni la comparación, y pulió el CSS con `describe_image`. La nativa guarda la GEOMETRÍA
+          // que el crítico mide, y tras cada captura el harness ya le pone delante la medida.
+          "- VISUAL, solo cuando lo funcional pasa: UNA captura por ronda con `xone-captura-android` (la nativa: guarda la geometría",
+          "  que mide el crítico; `shot name=<control>` solo para un control suelto). Tras cada captura el harness te pone la MEDIDA",
+          "  contra la maqueta; con ella, pasa `xone_critica_visual` (pantalla = esa captura, referencia = la maqueta) y arregla TODAS",
+          `  las diferencias en la misma ronda antes de otra captura. ${String(RONDAS_VISUALES)} rondas como mucho. \`describe_image\` no mide: no lo uses para pulir.`,
           // Medido en Maset: la maqueta pinta el paso firmado y con filas; la captura era el paso vacío, y salía 24 % «distinta».
-          "- Captura en el MISMO ESTADO que la maqueta: con datos, con filas, firmado, con el campo relleno… Si la app no tiene ese",
-          "  estado a mano, dilo junto a la cifra («la maqueta tiene 3 filas, el aparato 0»): una distancia por eso no es un defecto.",
+          // Y en la pasada 8: «el mismo estado, con datos» le llevaba a inyectar por JS los valores de ejemplo de la maqueta.
+          "- Los DATOS que pinta la maqueta (cifras, historial, nombres) son de ejemplo: no los inyectes ni los escribas para que la",
+          "  captura se parezca. Si la maqueta pinta otro ESTADO (con filas, firmado, relleno) que la app no tiene a mano, dilo junto",
+          "  a la cifra («la maqueta tiene 3 filas, el aparato 0»): una distancia por eso no es un defecto.",
           "- Tu respuesta final nombra la ÚLTIMA captura (`/artefactos/…`) y lo que midió: es la que mira el juez al cerrar.",
         ]
       : [
@@ -1783,6 +1789,19 @@ export async function abrirSesionTrueforge(
       esperas.noArranco(nombre);
       return hiloQueNoArranca(nombre, esperados, params, llm, logger, razon);
     };
+    /**
+     * **Quien prueba él mismo recibe la medida de SU captura** (`scripts: true`, sin shell). La medida automática contra
+     * la maqueta solo llegaba cuando volvía el de pruebas (`ejecucion`), así que con el desarrollador probando él mismo
+     * medir quedaba en manos del modelo. Medido en la pasada 8 de la calculadora (DeepSeek flash): 16 capturas, ninguna
+     * medida ni crítica, y el CSS editado a ciegas con `describe_image`; Sonnet, en la 6, sí medía por su cuenta. Ahora
+     * cada orden de captura vuelve con la medida detrás (y la orden de pasar el crítico si no lo ha pasado desde su
+     * última escritura), sea cual sea el modelo.
+     */
+    const conMedidaTrasCapturar = (base: ShellDeScripts): ShellDeScripts => {
+      const quien = especialistas().find((a) => a.nombre === params.request.name);
+      if (quien?.scripts !== true || quien.ejecucion === true) return base;
+      return shellConMedidaTrasCapturar(base, COMANDO_DE_CAPTURA, () => medidaTrasProbar(params.threadId, params.threadId, quien, true));
+    };
     // Quién lo pide: el raíz, o un especialista que llama a otro. Un especialista solo puede llamar a los que su
     // `.md` declara en `llama` y con el interruptor puesto; lo demás cae al ayudante genérico de solo lectura,
     // el mismo de un nombre inventado, y se anota en la traza.
@@ -1912,7 +1931,7 @@ export async function abrirSesionTrueforge(
       // En Windows, cada script con el Node del servidor y su ruta: por su shebang desde el Git Bash no arrancaban.
       lanzadorDeScripts: (a) => lanzadorDeScriptsEn(process.platform, scriptsConRuta(raiz, a.skills), process.execPath),
       conShell: () =>
-        conGuardaDelProyecto(montarBackend({
+        conMedidaTrasCapturar(conGuardaDelProyecto(montarBackend({
           entorno: conTrazaDelEntorno(entornoDeLaShellDelProyecto(raiz, opciones.artefactos)),
           // Cada orden, con la traza encendida (IXCODE-72): qué shell la corrió y qué ficheros dejó en la raíz.
           ...(diagnostico?.orden === undefined ? {} : { traza: (orden) => diagnostico.orden?.("shell propia", orden) }),
@@ -1923,7 +1942,7 @@ export async function abrirSesionTrueforge(
         }) as unknown as {
           execute(c: string): unknown;
           write(ruta: string, contenido: string): unknown;
-        }, guardaDelProyecto),
+        }, guardaDelProyecto)),
     });
     const nombres = toolsDe(piezas);
     const nota = [
@@ -2196,8 +2215,8 @@ export async function abrirSesionTrueforge(
    * (`medidaAutomatica.ts`). Sin carpeta de artefactos, sin maqueta o sin captura nueva, nada. Un fallo al abrir o
    * decodificar se anota y no tumba el turno.
    */
-  function medidaTrasProbar(deHilo: string, hiloPadre: string, quien: Agente | undefined): string | undefined {
-    if (carpeta === undefined || quien?.ejecucion !== true) return undefined;
+  function medidaTrasProbar(deHilo: string, hiloPadre: string, quien: Agente | undefined, propia = false): string | undefined {
+    if (carpeta === undefined || quien === undefined || (!propia && quien.ejecucion !== true)) return undefined;
     // TODAS las maquetas de la sesión (IXCODE-63: varias pantallas elegidas), y la captura contra la más parecida.
     const maquetas = buscarMaquetas(raiz, opciones.adjuntos, carpeta);
     const captura = ultimaCaptura(carpeta, nacimientoDeHilo.get(deHilo) ?? Date.now());

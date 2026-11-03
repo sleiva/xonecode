@@ -139,6 +139,9 @@ Ante una discrepancia con el código, **el código manda**.
   apuntar con otro tema y salía duplicado.
 - **La pantalla la MIDE el harness tras cada prueba** (`medidaAutomatica.ts`): última captura contra la maqueta
   (`/diseno/`, `/adjuntos/`), sin modelo, con `CRITERIO_DE_DISTANCIA` y recordatorio del crítico; viaja al orquestador.
+  **Y a quien prueba ÉL MISMO** (`scripts: true`), detrás de la salida de cada orden de captura
+  (`shellConMedidaTrasCapturar`, montada en `crearHijo`): sin eso medir quedaba en manos del modelo. **Límite**: el
+  montaje en `crearHijo` no lo recorre un test (haría falta un `xone-captura-android` falso en el `PATH`).
   **Incluye el ENCAJE** (`TOLERANCIA_DE_ENCAJE`, `compararCapturas.ts#desajusteDeEncaje`, mediana de franjas a los lados)
   y **quita antes el MARCO lateral de la maqueta** (`sinMarcoLateral`, `ANCHO_MAXIMO_DEL_MARCO`).
 - **El diseñador hace RECURSOS, no pantallas** (`designer-xone`, `escribeEn: [/icons/, /fonts/]`): lo confina el PERMISO.

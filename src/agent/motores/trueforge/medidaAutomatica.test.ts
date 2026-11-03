@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PNG } from "pngjs";
-import { buscarMaqueta, buscarMaquetas, cumpleElCriterio, medirContraLaMasParecida, medirContraMaqueta, RONDAS_VISUALES, resumenDeMedida, textoDeMedidaAutomatica, ultimaCaptura } from "./medidaAutomatica.js";
+import { buscarMaqueta, buscarMaquetas, cumpleElCriterio, medirContraLaMasParecida, medirContraMaqueta, RONDAS_VISUALES, resumenDeMedida, shellConMedidaTrasCapturar, textoDeMedidaAutomatica, ultimaCaptura } from "./medidaAutomatica.js";
 
 /** Un PNG oscuro con un bloque claro entre `desde` y `hasta` (fracciones del alto). */
 function pngConBloque(desde: number, hasta: number, ancho = 108, alto = 240, derecha = 0.9): Buffer {
@@ -138,5 +138,30 @@ describe("la medida automática de una LISTA", () => {
     const lista = medirContraMaqueta(join(dir, "larga.png"), join(dir, "maqueta.png"), 5);
     expect(cumpleElCriterio(lista)).toBe(true);
     expect(resumenDeMedida(lista, "l.png")).toMatch(/lista de 5 filas: la vertical no cuenta/);
+  });
+});
+
+/** Medido en la pasada 8 (DeepSeek flash): el desarrollador que prueba él mismo no recibía la medida y no medía nunca. */
+describe("la shell de quien prueba él mismo, con la medida detrás de cada captura", () => {
+  const CAPTURA = /xone-captura-android|xone-hotswap\s+shot\b/;
+  const base = () => {
+    const ordenes: string[] = [];
+    return { ordenes, shell: { execute: async (c: string) => (ordenes.push(c), { output: "captura guardada como captura-1.png", exitCode: 0 }), write: () => ({}) } };
+  };
+
+  it("una orden de captura vuelve con su salida y la medida detrás", async () => {
+    const { shell } = base();
+    const s = shellConMedidaTrasCapturar(shell, CAPTURA, () => "[harness] Medida AUTOMÁTICA de la última captura");
+    expect(await s.execute("xone-captura-android")).toEqual({ output: "captura guardada como captura-1.png\n\n[harness] Medida AUTOMÁTICA de la última captura", exitCode: 0 });
+  });
+
+  it("cualquier otra orden, o una captura sin nada que medir, pasa tal cual y no mide", async () => {
+    const { shell } = base();
+    let medidas = 0;
+    const s = shellConMedidaTrasCapturar(shell, CAPTURA, () => (medidas++, undefined));
+    expect(await s.execute("xone-recargar-android A.xne")).toEqual({ output: "captura guardada como captura-1.png", exitCode: 0 });
+    expect(medidas).toBe(0);
+    expect(await s.execute("xone-hotswap shot")).toEqual({ output: "captura guardada como captura-1.png", exitCode: 0 });
+    expect(medidas).toBe(1);
   });
 });
