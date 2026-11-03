@@ -10401,3 +10401,13 @@ Eso además choca con la ficha: un criterio de construcción no se respalda con 
 `TOPE_DE_CRITERIOS_POR_TAREA` por tarea y `TOPE_DE_CRITERIO` caracteres cada uno, y la skill dice que un criterio es lo que se
 ve o se mide en el aparato; si una tarea necesita más, son dos. Ese mismo plan, con las reglas nuevas, se reescribiría
 (`TASKS.md` y su `DISENO.md` de 9 mil); su `PLAN.md` de 10,4 mil pasa.
+
+**Y el que prueba no trabaja el plan (03-11-2026).** En la pasada con la ficha, el analista hizo de la tarea 01 «mide el
+aparato» con la entrega `/planes/calculadora/MEDIDAS.md`, y el orquestador se la encargó al device-controller. Este no
+tiene `write_file` y su shell no ve `/planes/`: buscó el plan con `ls ..` y `find`, lo escribió con `python3` por debajo de
+las guardas y los topes del plan (la shell puede escribir en `.xonecode/`) y llamó cinco veces a marcar; la ficha rechazó
+cuatro hasta que capturó. Las skills del plan pedían justo eso: «cada hito cierra con una tarea de comprobación en el
+aparato (`device-controller`)». Ahora `recibeMarcarCriterios` excluye a quien lleva `ejecucion`, su prompt dice que los
+planes no son suyos y que devuelva lo que ve, y las skills (`xone-plan-builder`, `xone-spec-builder`) y el analista dicen
+que cada tarea CONSTRUYE y la prueba quien la construye: ni tareas de solo comprobar o medir, ni entregas que sean un
+documento del plan.

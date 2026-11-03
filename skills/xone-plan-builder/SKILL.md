@@ -1,6 +1,6 @@
 ---
 name: xone-plan-builder
-description: "Descomponer el PLAN.md (spec) de xone-spec-builder en un plan de ejecución (TASKS.md): tareas tracer-bullet verticales con dependencias explícitas. Valida el spec, descompone en cortes verticales (coll + pantalla + eventos + estilo), cada uno demoable y comprobable en el aparato. Dependencias naturales XOne: mappings.xne → colls base → colls negocio → pantallas entidad → pantallas especiales → integraciones dispositivo (GPS, cámara, firma DR, escáner, biometría) → estilo → sincronización → validación. Prefactoring: reestructuras que facilitan el cambio. Refactors amplios: expand-contract. Quiz al usuario: granularidad, dependencias, partición. Tareas: una por context window, qué entrega (no cómo), bloqueada por, criterios verificables. Hitos que cierran con una comprobación en el aparato. Es análisis, no entrevista: no toma decisiones de diseño, si el spec tiene huecos lo devuelve a xone-spec-builder."
+description: "Descomponer el PLAN.md (spec) de xone-spec-builder en un plan de ejecución (TASKS.md): tareas tracer-bullet verticales con dependencias explícitas. Valida el spec, descompone en cortes verticales (coll + pantalla + eventos + estilo), cada uno demoable y comprobable en el aparato. Dependencias naturales XOne: mappings.xne → colls base → colls negocio → pantallas entidad → pantallas especiales → integraciones dispositivo (GPS, cámara, firma DR, escáner, biometría) → estilo → sincronización. Prefactoring: reestructuras que facilitan el cambio. Refactors amplios: expand-contract. Quiz al usuario: granularidad, dependencias, partición. Tareas: una por context window, qué entrega (no cómo), bloqueada por, criterios verificables. Cada tarea construye y se prueba en el aparato; sin tareas de solo comprobar o medir. Es análisis, no entrevista: no toma decisiones de diseño, si el spec tiene huecos lo devuelve a xone-spec-builder."
 ---
 
 # XOne Plan Builder
@@ -17,7 +17,7 @@ Esta skill es **análisis y descomposición**, no entrevista. No afina el domini
 xone-spec-builder  →  PLAN.md (el spec)
 xone-plan-builder   →  TASKS.md (el plan de ejecución)  ← esta skill
 xone-project-generator  /  xone-development  →  ejecutan una tarea cada vez
-arnés + device-controller →  valida: el verificador al cerrar el turno, el aparato con toques reales
+quien construye la tarea →  la prueba en el aparato; el verificador del arnés valida al cerrar el turno
 ```
 
 ## Estructura de archivos
@@ -45,7 +45,7 @@ Si no existe `PLAN.md`, **detente y pide al usuario que ejecute `xone-spec-build
 código está escrito) o `hecha` (y además comprobado)— y lo mantiene **quien ejecuta la tarea**, en
 este mismo fichero y en esta misma carpeta. Las casillas de los criterios se marcan `- [x]`
 cuando ese criterio está comprobado, no cuando se escribió el código que debería cumplirlo; lo
-que se comprueba en el aparato lo marca `device-controller`. Una tarea está **finalizada** cuando
+marca quien construye la tarea, tras probarla en el aparato. Una tarea está **finalizada** cuando
 todas sus casillas están marcadas, y es lo que la pestaña Planes resume.
 
 Cada tarea es una cabecera `### NN — Título` (no `## T1`), con sus casillas debajo.
@@ -79,7 +79,7 @@ Si algo falta, no lo inventes: devuelve a `xone-spec-builder` con una nota espec
 Una tarea es un **corte vertical** que atraviesa todas las capas que necesite para entregar un comportamiento completo y verificable:
 
 - **Vertical, no horizontal.** «Crear coll Clientes + su pantalla de lista + su pantalla de edición + su estilo» es vertical. «Crear todas las colls» es horizontal —no es una tarea, es una capa.
-- **Demoable o verificable por sí sola.** Al cerrar la tarea, hay algo que funciona de principio a fin y se puede comprobar: el verificador del arnés (corre `xone-simulator validate` solo, al cerrar cada turno que escribió) y la comprobación en el aparato de `device-controller`.
+- **Demoable o verificable por sí sola.** Al cerrar la tarea, hay algo que funciona de principio a fin y se puede comprobar: el verificador del arnés (corre `xone-simulator validate` solo, al cerrar cada turno que escribió) y la prueba en el aparato que hace quien la construye.
 - **Cabe en una sesión de agente.** Si una tarea es tan grande que no cabe en un context window, pártela.
 - **Declara sus dependencias.** Qué tareas deben cerrarse antes de que ésta pueda empezar.
 
@@ -104,7 +104,6 @@ El orden de ejecución sigue las dependencias del framework:
    ↓  — puede ir en paralelo desde el principio; ajuste fino al final
 8. Sincronización y seguridad               (réplica, OAuth2, tokens…)
    ↓  — si el desarrollo la toca
-9. Comprobación en el aparato               (device-controller; el verificador del arnés corre solo)
 ```
 
 ### Tamaño de una tarea: como MUCHO una ventana y dos pantallas
@@ -119,7 +118,7 @@ Cada tarea de `TASKS.md` cubre, como mucho, **una ventana** de la app (una colec
 - **El comportamiento se comprueba ANTES que el pulido.** En una pantalla interactiva, la tarea «la app reacciona a un toque» —una captura antes y otra después de la zona que debe cambiar— va justo detrás del esqueleto visual y antes de cualquier tarea de aspecto fino. Si no, se pule algo que no funciona: medido, un display que no se repintaba vivió siete pasadas de retoques visuales.
 - **Estilo en paralelo.** `default.css` con las clases base puede empezar desde la tarea 1, pero el ajuste fino de pantallas específicas va después de que la pantalla exista.
 - **Integraciones después de su contenedor.** La firma DR en Pedidos va en una tarea que depende de que Pedidos (coll + pantalla de edición) ya exista.
-- **Comprobación al final de cada hito.** Si el plan tiene varios hitos, cada uno cierra con una tarea de comprobación en el aparato (`device-controller`); la validación estática la hace el verificador del arnés solo.
+- **Cada tarea se prueba en el aparato dentro de ella misma**, por quien la construye: no hay tareas de «comprobar», «medir» ni «validar» aparte. Lo que haya que medir en el aparato para construir (escalas, tamaños) es un paso de la tarea que lo usa, y su resultado no es un fichero del plan. Si un hito necesita probar un recorrido entero, son criterios de su ÚLTIMA tarea.
 
 ### Prefactoring
 
@@ -223,7 +222,7 @@ relee entero cada vez que alguien lo retoma.
 - **Nombres consistentes con el spec**, y el `MAP_` según `xone-development`.
 - **No inventes lo que el spec no dice.** Si falta algo para descomponer, devuelve a `xone-spec-builder`.
 - **Evita rutas de archivo o snippets de código específicos** —envejecen rápido. Excepción: si un prototipo o el spec produjo un snippet que codifica una decisión más preciso que prosa (esquema, state machine), inclúyelo y nota su origen.
-- **La comprobación es una tarea.** Si el plan tiene hitos, cada hito cierra con una tarea de comprobación en el aparato. Si no, al menos una al final. No nombres herramientas que no estén en las skills de los especialistas: quien ejecuta las buscará.
+- **Toda tarea CONSTRUYE algo que se ve en el aparato.** Ni tareas de solo comprobar o medir, ni una tarea cuya entrega sea un documento del plan (`MEDIDAS.md` y parecidos): medido, una tarea «mide el aparato» mandó al device-controller a buscar el plan con la shell y escribirlo por debajo de las guardas. No nombres herramientas que no estén en las skills de los especialistas: quien ejecuta las buscará.
 
 ## Cierre
 
@@ -232,12 +231,12 @@ Antes de entregar `TASKS.md`:
 - [ ] Cada tarea es un corte vertical completo y verificable.
 - [ ] Ninguna tarea cubre más de UNA ventana ni más de DOS pantallas del diseño.
 - [ ] Cada tarea declara sus dependencias correctamente.
-- [ ] El orden de ejecución respeta las dependencias naturales de XOne (mappings → colls → pantallas → integraciones → estilo → validación).
+- [ ] El orden de ejecución respeta las dependencias naturales de XOne (mappings → colls → pantallas → integraciones → estilo).
 - [ ] No hay tareas que dependan de cosas que el spec no especifica —o están marcadas como notas.
 - [ ] El usuario aprobó el desglose.
-- [ ] Las tareas de comprobación en el aparato están en su sitio.
+- [ ] Ninguna tarea es solo de comprobar o medir, ni entrega un documento: cada una construye y se prueba en el aparato.
 
-Al entregar, señala el siguiente paso: `xone-project-generator` (app nueva) o `xone-development` (sobre existente) ejecutan una tarea cada vez, y el verificador del arnés (al cerrar cada turno) y device-controller en el aparato validan los hitos.
+Al entregar, señala el siguiente paso: `xone-project-generator` (app nueva) o `xone-development` (sobre existente) ejecutan una tarea cada vez, y quien construye cada tarea la prueba en el aparato; el verificador del arnés valida al cerrar cada turno.
 
 ## Referencias
 

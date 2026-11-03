@@ -238,8 +238,11 @@ export function recibeNucleoDeTrabajo(a: Pick<Agente, "soloLectura" | "ejecucion
 }
 
 /**
- * ¿Recibe `marcar_criterios_del_plan`? Quien TRABAJA las tareas de un plan: el mismo reparto que el
- * núcleo de trabajo —de los de serie, `developer-xone`, `designer-xone` y `device-controller`—.
+ * ¿Recibe `marcar_criterios_del_plan`? Quien TRABAJA las tareas de un plan: el que escribe el proyecto
+ * —de los de serie, `developer-xone` y `designer-xone`—. Quien EJECUTA (`device-controller`) no: prueba
+ * lo que le encargan y devuelve lo que vio, y el plan lo marca quien lo llamó. Medido con la ficha: una
+ * tarea «mide el aparato» lo puso a buscar el plan con la shell, a escribirlo con `python3` y a marcar
+ * cinco veces seguidas.
  *
  * Solo la llevaba quien ejecuta, y medido en una sesión real el plan no se movió en todo el turno: el
  * desarrollador llamó tres veces al conductor sin nombrarle el plan, así que el conductor no marcó
@@ -248,7 +251,7 @@ export function recibeNucleoDeTrabajo(a: Pick<Agente, "soloLectura" | "ejecucion
  * (`permisosDe`), y la tool solo cambia `- [ ]` por `- [x]`. Vive en `core/` porque la usan los DOS motores.
  */
 export function recibeMarcarCriterios(a: Pick<Agente, "soloLectura" | "ejecucion" | "escribeEn">): boolean {
-  return recibeNucleoDeTrabajo(a);
+  return recibeNucleoDeTrabajo(a) && a.ejecucion !== true;
 }
 
 /**

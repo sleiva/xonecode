@@ -3540,11 +3540,11 @@ describe("las fuentes de Google Fonts en TrueForge: el diseñador las trae a fon
 });
 
 /**
- * `marcar_criterios_del_plan` en TrueForge, con el orquestador REAL: quien comprueba en el aparato
- * (`device-controller`) marca en el plan lo que vio. Compuesto dentro de `propiasDe`, sin esto el
- * reparto quedaría escrito y sin probar.
+ * `marcar_criterios_del_plan` en TrueForge, con el orquestador REAL: quien CONSTRUYE la tarea marca lo que
+ * probó; el que ejecuta (`device-controller`) no, devuelve lo que vio. Compuesto dentro de `propiasDe`, sin
+ * esto el reparto quedaría escrito y sin probar.
  */
-describe("`marcar_criterios_del_plan` en TrueForge: el conductor marca lo que comprobó", () => {
+describe("`marcar_criterios_del_plan` en TrueForge: marca quien construye, no el conductor", () => {
   /** Una ficha con una prueba en el aparato vigente: sin ella la marca se rechaza (ver «marcar un criterio sin prueba»). */
   const conPrueba = () => ({
     alEmpezarTurno: () => {},
@@ -3554,22 +3554,16 @@ describe("`marcar_criterios_del_plan` en TrueForge: el conductor marca lo que co
     alCerrar: () => [],
     ficha: () => fichaNueva(),
   });
-  it("el hijo que EJECUTA la tiene y el TASKS.md cambia; el raíz no la tiene", async () => {
-    const raiz = proyecto();
-    const dir = join(raiz, ".xonecode", "planes", "hoteles");
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, "TASKS.md"), "# T\n\n## T1 — Uno\n\n- [ ] abre\n- [ ] vuelve\n");
+  it("el hijo que EJECUTA no la tiene; el raíz tampoco", async () => {
     const { m, toolsPorLlamada } = modelosConGuion([
-      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "device-controller", input: "comprueba T1 del plan hoteles" }) }] })],
-      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "m1", name: "marcar_criterios_del_plan", args: JSON.stringify({ plan: "hoteles", tarea: "T1", criterios: [1] }) }] })],
-      [new AIMessageChunk({ content: "Comprobado el 1." })],
+      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "device-controller", input: "abre Hoteles y dime qué sale" }) }] })],
+      [new AIMessageChunk({ content: "Sale la lista con 3 hoteles." })],
       [new AIMessageChunk({ content: "Listo." })],
     ]);
-    const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, sinAprobacion: () => true, fichaDeTrabajo: conPrueba() });
-    await s.turno("comprueba la T1", piel().p);
-    expect(toolsPorLlamada[1]).toContain("marcar_criterios_del_plan");
+    const s = await abrirSesionTrueforge({ raiz: proyecto(), modelos: m, entorno: ENTORNO, skills: CATALOGO, sinAprobacion: () => true, fichaDeTrabajo: conPrueba() });
+    await s.turno("mira Hoteles", piel().p);
+    expect(toolsPorLlamada[1]).not.toContain("marcar_criterios_del_plan");
     expect(toolsPorLlamada[0]).not.toContain("marcar_criterios_del_plan");
-    expect(readFileSync(join(dir, "TASKS.md"), "utf8")).toBe("# T\n\n## T1 — Uno\n\n- [x] abre\n- [ ] vuelve\n");
   }, 20_000);
 
   it("el DESARROLLADOR también la tiene y marca al cerrar la tarea; quien solo lee, no", async () => {
