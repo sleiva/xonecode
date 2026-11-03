@@ -88,3 +88,23 @@ describe("la ficha viva de una sesión", () => {
     expect(crearFichaDeSesion({ raiz, ruta, continuar: false }).ficha().objetivo).toBeUndefined();
   });
 });
+
+/** Medido en una pasada real: la escritura por la cola de aprobación llega DESPUÉS de la respuesta de la tool. */
+describe("una escritura que se aplica después de contestar la tool", () => {
+  it("se recoge cuando llega al disco: la prueba siguiente va con su versión, y editar después la caduca", () => {
+    const raiz = proyecto();
+    const f = crearFichaDeSesion({ raiz, continuar: true });
+    // La tool contesta y el fichero aún no está.
+    f.alResultado("write_file", { file_path: "/icons/nuevo.svg" }, "pendiente de aplicar", "designer-xone");
+    expect(f.ficha().escritos).toEqual({});
+    // Llega al disco; la siguiente evidencia ya lo incluye en su versión.
+    mkdirSync(join(raiz, "icons"), { recursive: true });
+    writeFileSync(join(raiz, "icons", "nuevo.svg"), "<svg/>");
+    f.alResultado("ejecutar_script", { command: "xone-captura-android" }, "guardada /artefactos/c.png", "developer-xone");
+    expect(Object.keys(f.ficha().escritos)).toEqual(["/icons/nuevo.svg"]);
+    expect("evidencia" in f.respaldo()).toBe(true);
+    // Y cambiarlo después deja esa captura sin valer.
+    writeFileSync(join(raiz, "icons", "nuevo.svg"), "<svg otro/>");
+    expect("motivo" in f.respaldo()).toBe(true);
+  });
+});

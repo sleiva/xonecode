@@ -60,6 +60,19 @@ export function crearFichaDeSesion(opciones: {
       return undefined;
     }
   };
+  /**
+   * Los ficheros que el trabajo ha pedido escribir, aplicados o no todavía. Una escritura que pasa por la cola de
+   * aprobación se aplica DESPUÉS de que la tool conteste (medido en una pasada real: doce iconos escritos y la ficha
+   * vacía), así que la huella se vuelve a mirar en el disco antes de registrar cada evidencia, de respaldar una marca y
+   * de cerrar (`sincronizar`): recoge la escritura cuando de verdad llegó.
+   */
+  const pedidos = new Set<string>(Object.keys(ficha.escritos));
+  const sincronizar = (quien = "harness"): void => {
+    for (const ruta of pedidos) {
+      const h = huella(ruta);
+      if (h !== undefined && ficha.escritos[ruta] !== h) ficha = conEscritura(ficha, ruta, h, quien, ahora());
+    }
+  };
   const huellasActuales = (): Record<string, string | undefined> =>
     Object.fromEntries(Object.keys(ficha.escritos).map((r) => [r, huella(r)]));
   const guardar = (): void => {
@@ -87,10 +100,14 @@ export function crearFichaDeSesion(opciones: {
       if (nombre === "write_file" || nombre === "edit_file") {
         const ruta = typeof args["file_path"] === "string" ? args["file_path"] : undefined;
         if (ruta === undefined || FUERA_DEL_PROYECTO.test(ruta)) return;
-        const h = huella(ruta);
-        if (h === undefined || ficha.escritos[ruta] === h) return;
-        ficha = conEscritura(ficha, ruta, h, quien, cuando);
-      } else if (nombre === "validar_fichero_xone") {
+        pedidos.add(ruta);
+        sincronizar(quien);
+        guardar();
+        return;
+      }
+      // Antes de cualquier otra evidencia: las escrituras que ya llegaron al disco forman parte de su versión.
+      sincronizar();
+      if (nombre === "validar_fichero_xone") {
         const primera = contenido.split("\n")[0]?.slice(0, 160) ?? "";
         ficha = conEvidencia(ficha, { tipo: "validacion", resumen: primera, quien, cuando }).ficha;
       } else if ((nombre === "ejecutar_script" || nombre === "execute") && ORDEN_DE_CAPTURA.test(orden)) {
@@ -107,6 +124,7 @@ export function crearFichaDeSesion(opciones: {
       guardar();
     },
     respaldo() {
+      sincronizar();
       const e = pruebaVigente(ficha, huellasActuales());
       return e === undefined
         ? {
@@ -121,6 +139,7 @@ export function crearFichaDeSesion(opciones: {
       guardar();
     },
     alCerrar(verificador) {
+      sincronizar();
       const huellas = huellasActuales();
       const lineas: string[] = [];
       const porPlan = new Map<string, Set<string>>();
