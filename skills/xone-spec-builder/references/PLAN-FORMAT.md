@@ -101,6 +101,12 @@ Preguntas aún no resueltas por el usuario. El siguiente paso no puede resolverl
 - **Modificaciones, no repeticiones.** En trabajo sobre existente, no repitas el modelo o las pantallas que no se tocan. Lista solo qué cambia y qué se conserva.
 - **Pendientes explícitos.** Lo que no se resolvió va en §Pendientes, no se rellena por intuición.
 - **Sin detalles de implementación irrelevantes.** No enumeres cada atributo de cada prop; el siguiente paso los infiere. Solo lo que es decisión de diseño: tipos, relaciones, eventos clave, viewmodes, integraciones.
+- **Como mucho 12.000 caracteres.** El harness no escribe un `PLAN.md` que lo pase (también sumando partes con `append`) y
+  te devuelve el motivo. Lo que se queda es lo que solo sabe un análisis: el scope y los criterios de éxito, los **hechos
+  verificados** (con dónde se comprobó cada uno), las decisiones tomadas y las **pendientes**, **qué no tocar** y los
+  riesgos. Medido: un rediseño de UNA pantalla llegó a 42 mil caracteres entre sus documentos, y cada agente los relee.
+- **Con maqueta, la pantalla NO se escribe a mano.** Si el diseño trae su `code.html` (Stitch), su geometría exacta la da
+  `medir_maqueta` cuando haga falta: el plan dice QUÉ pantalla y qué decisiones, no cada frame con su ancho y su color.
 
 ## Checklist de cierre
 

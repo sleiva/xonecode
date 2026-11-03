@@ -245,6 +245,21 @@ export const RUTA_DE_TASKS = /^\/planes\/[^/]+\/TASKS\.md$/;
  * prompt ya pedía el formato; era texto. Se aplica al ESCRIBIR el fichero entero, no al editarlo: un plan viejo sin
  * casillas se puede seguir anotando.
  */
+/**
+ * Lo que puede ocupar una TARJETA de tarea sin contar su cabecera, su `**Estado:**`, su «Bloqueada por» ni sus casillas: el
+ * «qué entrega» y unas notas. Medido en Maset: la tarjeta 01 de un rediseño llevaba unos 1.000 caracteres de CÓMO
+ * —atributos exactos, anchos en %, el SQL, líneas de otro fichero que copiar—, que es el trabajo del desarrollador escrito
+ * por adelantado y repetido del PLAN. La skill ya pedía «decisiones, no código»; era texto.
+ */
+export const TOPE_DE_TARJETA = 700;
+/** El cuerpo de una tarjeta que cuenta para `TOPE_DE_TARJETA`: sin casillas, estado ni dependencias. */
+function textoDeTarjeta(cuerpo: string): string {
+  return cuerpo
+    .split("\n")
+    .filter((l) => !CASILLA.test(l) && !ESTADO.test(l) && !/^\s*\*\*Bloqueada por/i.test(l) && l.trim() !== "")
+    .join("\n");
+}
+
 export function motivoDeTasksInaceptable(texto: string): string | undefined {
   const { tareas } = leerTareasDelPlan(texto);
   const formato =
@@ -252,7 +267,15 @@ export function motivoDeTasksInaceptable(texto: string): string | undefined {
     "son las que se marcan `- [x]` al comprobarlas en el aparato.";
   if (tareas.length === 0) return `No reconozco ninguna tarea en este TASKS.md. ${formato}`;
   const sin = tareas.filter((t) => t.criterios.total === 0).map((t) => t.numero);
-  if (sin.length === 0) return undefined;
+  if (sin.length === 0) {
+    const largas = tareas.filter((t) => textoDeTarjeta(t.cuerpo).length > TOPE_DE_TARJETA || /^```/m.test(t.cuerpo));
+    if (largas.length === 0) return undefined;
+    return (
+      `El TASKS.md no se ha escrito: las tareas ${largas.map((t) => t.numero).join(", ")} explican el CÓMO. Cada tarjeta dice ` +
+      `QUÉ entrega en una o dos líneas (sin contar sus casillas, como mucho ${String(TOPE_DE_TARJETA)} caracteres y sin bloques ` +
+      "de código): atributos, anchos, SQL o líneas de otro fichero van en el PLAN, y la tarea lo cita («ver PLAN §4.2»). Reescríbelo así."
+    );
+  }
   const lista = sin.length > 8 ? `${sin.slice(0, 8).join(", ")} y ${sin.length - 8} más` : sin.join(", ");
   return `El TASKS.md no se ha escrito: ${sin.length === tareas.length ? "ninguna tarea trae" : `las tareas ${lista} no traen`} sus criterios como casillas. ${formato} Reescríbelo con ellas.`;
 }

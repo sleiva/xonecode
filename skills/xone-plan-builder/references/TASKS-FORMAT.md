@@ -15,9 +15,9 @@
 
 ### 01 — {Título}
 
-**Qué entrega:** {comportamiento end-to-end, desde la perspectiva del usuario — no una lista de capas. Qué se puede demostrar o verificar al cerrar esta tarea.}
+**Qué entrega:** {UNA o DOS líneas: el comportamiento end-to-end, desde la perspectiva del usuario — no una lista de capas ni cómo se hace.}
 **Bloqueada por:** Ninguna — puede empezar ya
-**Notas:** {opcional: si el spec dejó algo pendiente que afecta a esta tarea, o si hay una decisión de prefactor que conviene señalar}
+**Notas:** {opcional, una línea: un pendiente del spec que la afecta, o «ver PLAN §N» para el detalle}
 
 - [ ] Criterio de aceptación 1
 - [ ] Criterio de aceptación 2

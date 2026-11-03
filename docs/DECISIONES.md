@@ -10378,3 +10378,18 @@ exige una prueba en el aparato vigente (casos o captura), y al cerrar el código
 lo escribe en su `TASKS.md`; `hecha` solo con todo respaldado vigente y el verificador en verde. El test del ejecutor cazó
 que `crearEjecutorReal` no reenviaba el campo nuevo (el patrón de siempre). Límite: la vigencia caduca de más (todos los
 ficheros del trabajo), y está sin medir con modelo cuántas marcas rechaza ni si obliga a repetir pruebas.
+
+## Los planes, con topes en código (03-11-2026)
+
+Medido en los dos planes reales de Maset: un rediseño de UNA pantalla eran 42–44 mil caracteres entre `PLAN.md`,
+`TASKS.md`, `DISENO.md` y `CONTEXT.md`, releídos por cada agente varias veces por pasada. El contenido era bueno (criterios
+comprobables, hechos verificados, decisiones pendientes, qué no tocar), pero mezclaba niveles: la tarjeta 01 llevaba unos
+1.000 caracteres de CÓMO (atributos, anchos, SQL, líneas que copiar) y el `PLAN.md` la pantalla entera frame a frame. Las
+dos skills ya decían «decisiones, no código» y «no enumeres cada atributo»; no lo vigilaba nadie, y las instrucciones del
+analista (`PLAN_DE_DESARROLLO`) pedían lo contrario para `DISENO.md` («el esqueleto del layout con sus proporciones»).
+Comparado con Codex: su modo plan entrega un plan sin decisiones pendientes y el progreso va aparte, en pasos de 5–7
+palabras (`update_plan`). Ahora, al escribir (también por partes): una tarjeta sin bloques de código y hasta
+`TOPE_DE_TARJETA` fuera de sus casillas, `PLAN.md` hasta `TOPE_DE_PLAN` y `DISENO.md` hasta `TOPE_DE_DISENO`; lo que pasa
+se devuelve diciendo qué se queda y dónde va lo demás. Las skills dicen la forma corta y los mismos números (un test lo ata),
+y `DISENO.md` pasa a tokens y piezas: la geometría la da `medir_maqueta`. Sin medir todavía con modelo cuántos rechazos
+provoca ni si el plan pierde algo que el developer necesitaba.

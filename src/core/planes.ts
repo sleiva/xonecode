@@ -101,3 +101,30 @@ export function rutaPublicaDelPlan(nombre: string): string | undefined {
     ? `${CARPETA_PUBLICA_DE_PLANES}/${nombre}`
     : undefined;
 }
+
+
+/**
+ * Los TOPES de los documentos de un plan, que se aplican al ESCRIBIRLOS (`write_file`, también por partes con `append`).
+ * Medido en Maset: un rediseño de UNA pantalla eran 42 mil caracteres de plan —un `PLAN.md` de 25 mil con la pantalla
+ * entera escrita a mano, frame a frame y color a color—, y cada agente los relee varias veces por pasada (50–80 mil
+ * caracteres en el contexto). La skill ya pedía «sin detalles de implementación»; era texto.
+ */
+export const TOPE_DE_PLAN = 12_000;
+/** `DISENO.md` dice tokens y piezas; la geometría exacta la da `medir_maqueta`, no se reescribe a mano. */
+export const TOPE_DE_DISENO = 4_000;
+const DOCUMENTO_CON_TOPE = /^\/planes\/[^/]+\/(PLAN|DISENO)\.md$/;
+
+/** Por qué no se escribe un `PLAN.md` o `DISENO.md` así, o `undefined` si cabe. */
+export function motivoDeDocumentoDelPlanLargo(ruta: string, texto: string): string | undefined {
+  const m = DOCUMENTO_CON_TOPE.exec(ruta);
+  if (m === null) return undefined;
+  const tope = m[1] === "PLAN" ? TOPE_DE_PLAN : TOPE_DE_DISENO;
+  if (texto.length <= tope) return undefined;
+  return m[1] === "PLAN"
+    ? `El PLAN.md no se ha escrito: ocupa ${String(texto.length)} caracteres y el tope es ${String(tope)}. Deja lo que solo sabe ` +
+        "un análisis: objetivo y criterios de éxito, hechos verificados (con dónde se comprobó), decisiones tomadas y pendientes, qué " +
+        "no tocar y riesgos. La estructura de la pantalla no se escribe a mano (con maqueta, `medir_maqueta` la da exacta), ni los " +
+        "atributos de cada control: eso lo decide quien desarrolla."
+    : `El DISENO.md no se ha escrito: ocupa ${String(texto.length)} caracteres y el tope es ${String(tope)}. Solo tokens (colores, ` +
+        "tipografías, radios) y la lista de piezas; la geometría exacta de la maqueta la da `medir_maqueta`.";
+}

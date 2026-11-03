@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   CARPETA_DE_PLANES,
+  motivoDeDocumentoDelPlanLargo,
+  TOPE_DE_DISENO,
+  TOPE_DE_PLAN,
   esRutaDePlan,
   motivoDePlanInaceptable,
   rutaDelPlan,
@@ -113,5 +116,20 @@ describe("publicar un plan", () => {
     // Si coincidieran, planificar publicaría solo, que es justo lo que se decidió no hacer.
     expect(rutaPublicaDelPlan("x")).not.toContain(CARPETA_DE_PLANES);
     expect(rutaPublicaDelPlan("x")!.startsWith("doc/")).toBe(true);
+  });
+});
+
+/** Medido en Maset: 42 mil caracteres de plan para rediseñar UNA pantalla, releídos por cada agente varias veces. */
+describe("los topes de los documentos de un plan", () => {
+  it("un PLAN.md que cabe se escribe; uno que pasa del tope se devuelve con lo que debe quedarse", () => {
+    expect(motivoDeDocumentoDelPlanLargo("/planes/calc/PLAN.md", "x".repeat(TOPE_DE_PLAN))).toBeUndefined();
+    const m = motivoDeDocumentoDelPlanLargo("/planes/calc/PLAN.md", "x".repeat(TOPE_DE_PLAN + 1));
+    expect(m).toContain("hechos verificados");
+    expect(m).toContain("medir_maqueta");
+  });
+  it("DISENO.md tiene el suyo, más corto; el resto de documentos del plan no tienen tope", () => {
+    expect(motivoDeDocumentoDelPlanLargo("/planes/calc/DISENO.md", "x".repeat(TOPE_DE_DISENO + 1))).toContain("tokens");
+    expect(motivoDeDocumentoDelPlanLargo("/planes/calc/CONTEXT.md", "x".repeat(TOPE_DE_PLAN * 2))).toBeUndefined();
+    expect(motivoDeDocumentoDelPlanLargo("/doc/PLAN.md", "x".repeat(TOPE_DE_PLAN * 2))).toBeUndefined();
   });
 });

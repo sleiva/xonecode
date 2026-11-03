@@ -19,6 +19,7 @@
  * Un rechazo se DEVUELVE como resultado de error y nunca se lanza: el modelo lo lee y reintenta,
  * que es la regla de las guardas del backend.
  */
+import { motivoDeDocumentoDelPlanLargo } from "../../../core/planes.js";
 import { carpetaDeExtraccion, esZip } from "../../../core/zipDeAdjunto.js";
 import { esDocumentoIlegible, esDocumentoLegible } from "../../../core/textoDeOffice.js";
 import { textoDeDocumento } from "./textoDeDocumento.js";
@@ -329,6 +330,9 @@ async function ejecutar(
           const motivo = motivoDeTasksInaceptable(contenido);
           if (motivo !== undefined) return { texto: motivo, error: true };
         }
+        // Un PLAN.md o DISENO.md que pasa de su tope tampoco (`motivoDeDocumentoDelPlanLargo`): se relee entero cada vez.
+        const largo = motivoDeDocumentoDelPlanLargo(s(args.file_path), contenido);
+        if (largo !== undefined) return { texto: largo, error: true };
         const r = (await backend.write(s(args.file_path), contenido)) as Resultado;
         if (r.error !== undefined) return { texto: r.error, error: true };
         return contenido;

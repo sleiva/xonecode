@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { conEstadoDeTarea, dependenciasDe, estadoReconocido, leerTareasDelPlan, marcarCriterios, progresoDeTarea, motivoDeTasksInaceptable } from "./tareasDelPlan.js";
+import { conEstadoDeTarea, dependenciasDe, estadoReconocido, leerTareasDelPlan, marcarCriterios, progresoDeTarea, motivoDeTasksInaceptable, TOPE_DE_TARJETA } from "./tareasDelPlan.js";
 
 const TASKS = `# Plan de ejecución — Visitas
 
@@ -299,5 +299,40 @@ describe("un TASKS.md escrito por FASES (xone-plan-builder)", () => {
     expect(tareas.map((t) => [t.numero, t.bloqueadaPor, t.criterios.total])).toEqual([["01", [], 1], ["02", ["01"], 1]]);
     expect(tareas[0]!.cuerpo).not.toContain("Fase 2");
     expect(tareas[1]!.cuerpo).not.toContain("Hitos");
+  });
+});
+
+/** Medido en Maset: una tarjeta de 1.000 caracteres de CÓMO (atributos, anchos, SQL), repetido del PLAN. */
+describe("una tarjeta de tarea dice QUÉ, no cómo", () => {
+  const tarjeta = (cuerpo: string) => `# Plan\n\n### 01 — Lista\n**Estado:** pendiente\n**Bloqueada por:** Ninguna\n${cuerpo}\n- [ ] carga\n- [ ] muestra el importe\n`;
+  it("una tarjeta corta se escribe; las casillas, el estado y las dependencias no cuentan para el tope", () => {
+    expect(motivoDeTasksInaceptable(tarjeta("**Qué entrega:** la lista de liquidaciones con su importe."))).toBeUndefined();
+  });
+  it("una que explica el cómo pasa del tope y se devuelve diciendo dónde va eso", () => {
+    const como = `**Qué entrega:** ${"el frame grid lleva CODIGO al 45 %, FECHA D al 20 % con date-format, el SQL con SUM(IMPORTETOTAL)… ".repeat(8)}`;
+    const m = motivoDeTasksInaceptable(tarjeta(como));
+    expect(m).toContain("explican el CÓMO");
+    expect(m).toContain(`${String(TOPE_DE_TARJETA)} caracteres`);
+    expect(m).toContain("ver PLAN §4.2");
+  });
+  it("un bloque de código en una tarjeta tampoco", () => {
+    expect(motivoDeTasksInaceptable(tarjeta("**Qué entrega:** la lista.\n```xml\n<prop name=\"X\"/>\n```"))).toContain("sin bloques de código");
+  });
+});
+
+/** La skill y las instrucciones del analista dicen los MISMOS topes que el código: si uno cambia, esto lo dice. */
+describe("los topes del plan escritos en la skill son los del código", () => {
+  it("la skill de tareas, la de spec y las instrucciones del analista citan los números que aplica el harness", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const { TOPE_DE_PLAN, TOPE_DE_DISENO } = await import("./planes.js");
+    // Con el punto de miles también en cuatro cifras («4.000»), como se escribe en los textos: `es-ES` no lo pone.
+    const miles = (n: number) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+    const leer = (r: string) => readFileSync(join(__dirname, "../..", r), "utf8");
+    expect(leer("skills/xone-plan-builder/SKILL.md")).toContain(`${String(TOPE_DE_TARJETA)} caracteres`);
+    expect(leer("skills/xone-spec-builder/references/PLAN-FORMAT.md")).toContain(`${miles(TOPE_DE_PLAN)} caracteres`);
+    const analista = leer("src/agent/subagentes/agentesEnDisco.ts");
+    expect(analista).toContain(`${miles(TOPE_DE_DISENO)} caracteres`);
+    expect(analista).toContain(miles(TOPE_DE_PLAN));
   });
 });

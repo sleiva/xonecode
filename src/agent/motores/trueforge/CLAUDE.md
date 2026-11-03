@@ -150,6 +150,10 @@ Ante una discrepancia con el código, **el código manda**.
   devuelve el motivo y no se marca), y **el estado de la tarea lo calcula el código al cerrar** y lo escribe en su
   `TASKS.md`: `hecha` solo con todo respaldado vigente y el verificador en verde. El cierre de `run` la enseña.
 - **`TASKS.md` con casillas o no se escribe** (`core/tareasDelPlan.ts#motivoDeTasksInaceptable`): solo al escribirlo ENTERO.
+  **Y con topes** (también sumando partes con `append`): una tarjeta dice QUÉ, sin bloques de código y hasta
+  `TOPE_DE_TARJETA` sin contar casillas, estado ni dependencias; `PLAN.md` hasta `TOPE_DE_PLAN` y `DISENO.md` hasta
+  `TOPE_DE_DISENO` (`core/planes.ts#motivoDeDocumentoDelPlanLargo`). La skill y el analista citan los mismos números, y un
+  test lo ata.
 - **El ajuste visual TERMINA** (petición suya): otra vuelta solo si el último `xone_critica_visual` dio ROJO (prompt de
   orquestador y desarrollador), y por CÓDIGO un tope de vueltas (recargas/despliegues o llamadas al de pruebas):
   `TOPE_DE_VUELTAS_POR_ENCARGO` (`RONDAS_VISUALES` + 1) y `TOPE_DE_VUELTAS_DEL_TURNO` por agente sumando encargos

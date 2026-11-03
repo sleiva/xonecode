@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { TOPE_DE_PLAN } from "../../../core/planes.js";
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -144,6 +145,20 @@ describe("las tools de fichero de TrueForge, sobre el backend real", () => {
     expect(r.texto).toContain("`- [ ] criterio comprobable`");
     expect(existsSync(join(raiz, ".xonecode", "planes", "demo", "TASKS.md"))).toBe(false);
     expect(await llamar("write_file", { file_path: "/planes/demo/TASKS.md", content: "### 01 — Uno\n- [ ] el display dice 14\n" })).toMatchObject({ error: false });
+  });
+
+  /** Medido en Maset: 42 mil caracteres de plan para UNA pantalla, releídos por cada agente varias veces por pasada. */
+  it("un PLAN.md que pasa de su tope NO se escribe, ni de golpe ni sumando partes con append", async () => {
+    const { raiz, llamar } = proyecto();
+    const fichero = join(raiz, ".xonecode", "planes", "demo", "PLAN.md");
+    const r = await llamar("write_file", { file_path: "/planes/demo/PLAN.md", content: "x".repeat(TOPE_DE_PLAN + 1) });
+    expect(r.error).toBe(true);
+    expect(r.texto).toContain("hechos verificados");
+    expect(existsSync(fichero)).toBe(false);
+    // Por partes: lo que cuenta es el resultado, así que la parte que lo pasa se rechaza y lo de antes se queda.
+    expect(await llamar("write_file", { file_path: "/planes/demo/PLAN.md", content: "x".repeat(TOPE_DE_PLAN - 10) })).toMatchObject({ error: false });
+    expect((await llamar("write_file", { file_path: "/planes/demo/PLAN.md", content: "y".repeat(20), append: true })).error).toBe(true);
+    expect(readFileSync(fichero, "utf8")).toBe("x".repeat(TOPE_DE_PLAN - 10));
   });
 
   describe("write_file con append: un documento largo por partes (Maset, 27-10-2026)", () => {

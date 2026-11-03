@@ -210,6 +210,14 @@ relee entero cada vez que alguien lo retoma.
 
 - **Una tarea = un context window.** Si no cabe, pártela.
 - **Decisiones, no código.** No pegues XML/JS/CSS en las tareas. Describe el comportamiento y qué se logra.
+- **Una tarjeta dice QUÉ, en una o dos líneas.** Sin contar su cabecera, su estado, su «Bloqueada por» y sus casillas,
+  como mucho **700 caracteres** y sin bloques de código: el harness NO escribe un `TASKS.md` que lo pase y te devuelve qué
+  tareas reescribir. Atributos, anchos, SQL o líneas de otro fichero que copiar son el CÓMO: van en el `PLAN.md` y la
+  tarea lo cita («ver PLAN §4.2»). Medido: una tarjeta de 1.000 caracteres de cómo era el trabajo del desarrollador escrito
+  por adelantado, y cada agente la releía.
+- **Los criterios, comprobables en el aparato**, uno por casilla: «con 3 liquidaciones, el KPI suma las tres filas y sale
+  `1.553,10 €`». Marcar uno exige una prueba en el aparato posterior al último cambio, así que un criterio que no se puede
+  probar allí no se podrá marcar nunca.
 - **Nombres consistentes con el spec**, y el `MAP_` según `xone-development`.
 - **No inventes lo que el spec no dice.** Si falta algo para descomponer, devuelve a `xone-spec-builder`.
 - **Evita rutas de archivo o snippets de código específicos** —envejecen rápido. Excepción: si un prototipo o el spec produjo un snippet que codifica una decisión más preciso que prosa (esquema, state machine), inclúyelo y nota su origen.
