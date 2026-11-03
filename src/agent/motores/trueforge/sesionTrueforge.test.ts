@@ -1782,6 +1782,8 @@ describe("una sesión con el motor TrueForge", () => {
     it.each([
       [true, true],
       [false, false],
+      // Por omisión, APAGADA: medida, sale más cara (`vistaDelEncargo.ts`).
+      [undefined, false],
     ])("tras recargar, la lectura de un fichero ya editado llega recortada (vista del encargo: %s)", async (vista, recortada) => {
       const raiz = proyecto();
       writeFileSync(join(raiz, "Grande.xne"), `A${"Z".repeat(2000)}\n`);
@@ -1794,7 +1796,7 @@ describe("una sesión con el motor TrueForge", () => {
         [new AIMessageChunk({ content: "Hecho." })],
         [new AIMessageChunk({ content: "Fin." })],
       ]);
-      const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, trabajoSinPersona: true, vistaDelEncargo: vista });
+      const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, trabajoSinPersona: true, ...(vista === undefined ? {} : { vistaDelEncargo: vista }) });
       await s.turno("haz", piel().p);
       // La llamada del developer DESPUÉS de recargar (la 5.ª de todas).
       const tras = vistos[4]!.join("\n");

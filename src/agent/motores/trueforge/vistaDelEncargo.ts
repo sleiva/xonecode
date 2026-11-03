@@ -17,6 +17,11 @@
  * devolvió cada tool, salvo la lectura de un fichero que NO cambió después (sigue siendo su versión vigente, y recortarla
  * obligaría a releerla). Los argumentos de las llamadas no se tocan: el modelo copia la forma de sus llamadas, y una nota
  * en un argumento acabó escrita dentro de un fichero (medido en Maset). Los ids tampoco. Puro.
+ *
+ * **Apagada por omisión, y medido por qué** (`XONECODE_VISTA_DEL_ENCARGO=1` la enciende): en una pasada real con Sonnet 5.5
+ * recortaba en cada vuelta, sin errores ni relecturas, pero solo de 3 a 11 mil tokens —lo que crece es el razonamiento y
+ * lo que escribe el propio hijo, no lo devuelto por las tools—, y cada recorte paga entera una llamada de 70–100 mil que
+ * con caché costaría la décima parte. Estimado sobre esa traza: unos 300 mil más de entrada efectiva (+36 %).
  */
 
 /** La orden que abre una vuelta: recargar, desplegar o reiniciar la app en el aparato. */

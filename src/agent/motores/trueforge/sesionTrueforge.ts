@@ -903,7 +903,8 @@ export interface OpcionesDeSesionTrueforge {
   memoriaDeEspecialistas?: boolean;
   /**
    * Que quien da vueltas (recarga, prueba, corrige) no arrastre las vueltas pasadas enteras en cada llamada
-   * (`vistaDelEncargo.ts`). Por omisión SÍ; `XONECODE_SIN_VISTA_DEL_ENCARGO=1` lo apaga, para comparar.
+   * (`vistaDelEncargo.ts`). Por omisión NO: medido con Sonnet, cada recorte rompe la caché de una llamada y lo recortado
+   * es poco, así que sale más cara. `XONECODE_VISTA_DEL_ENCARGO=1` la enciende, para medir.
    */
   vistaDelEncargo?: boolean;
   /**
@@ -1030,7 +1031,7 @@ export async function abrirSesionTrueforge(
    */
   const especialistaDeHilo = new Map<string, string>();
   const conMemoriaDeEspecialistas = opciones.memoriaDeEspecialistas ?? process.env.XONECODE_SIN_MEMORIA_DE_ESPECIALISTAS !== "1";
-  const conVistaDelEncargo = opciones.vistaDelEncargo ?? process.env.XONECODE_SIN_VISTA_DEL_ENCARGO !== "1";
+  const conVistaDelEncargo = opciones.vistaDelEncargo ?? process.env.XONECODE_VISTA_DEL_ENCARGO === "1";
   // Encendido por omisión desde que se midió (calc9-calc15); `XONECODE_BUCLE_DEL_DEVELOPER=0` lo apaga para comparar.
   const conBucleDelDesarrollador = opciones.bucleDelDesarrollador ?? process.env.XONECODE_BUCLE_DEL_DEVELOPER !== "0";
   const conEsperas = opciones.esperasEntreHijos ?? true;

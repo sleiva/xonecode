@@ -10339,3 +10339,13 @@ había montado UNA vez al abrir la sesión, con un `Modelos` propio hecho con la
 preguntando a DeepSeek, saturado; la traza enseñaba la única conexión abierta, a DeepSeek. El crítico visual no tenía el
 fallo porque ya construía su `Modelos` en cada llamada. Ahora el juez también (`ejecutorReal.test.ts` lo ata: abrir con
 uno, cambiar `estado.fuentes`, preguntar con el otro; sin el arreglo el test da el modelo viejo).
+
+**Medida con modelo (03-11-2026, Sonnet 5.5, una pasada con la vista, parada a mitad): sale más CARA, y queda apagada
+por omisión** (`XONECODE_VISTA_DEL_ENCARGO=1` la enciende). Funcionó como se diseñó —recortó en cada una de las seis vueltas,
+la caché volvió en la llamada siguiente, sin errores y sin relecturas salvo dos ficheros que se editaban—, pero los recortes
+fueron de 3 a 11 mil tokens y menguando, mientras el contexto del desarrollador seguía creciendo de 35 a 103 mil: lo que
+crece es su razonamiento y lo que escribe, no lo que devuelven las tools. Cada recorte paga entera una llamada de 70–100 mil,
+y lo quitado solo ahorra la décima parte de su tamaño en cada llamada siguiente. Estimado sobre la traza, frente al mismo
+trabajo con la caché intacta: unos 1.129 mil de entrada efectiva frente a 829 mil (+36 %). La cuenta de papel daba un 25 % de
+ahorro porque suponía que lo viejo era sobre todo resultado de tools. Lo que queda: que entre menos desde el principio
+(paquetes de contexto) y medir aparte el razonamiento viejo.
