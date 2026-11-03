@@ -255,8 +255,27 @@ const RAZONAMIENTO_DEL_DELTA = "__xonecode_thinking_tokens";
  * que es como llaman los dos motores.
  */
 class ChatAnthropicConRazonamiento extends ChatAnthropic {
-  override async createStreamWithRetry(...args: Parameters<ChatAnthropic["createStreamWithRetry"]>) {
-    const stream = await super.createStreamWithRetry(...args);
+  /**
+   * **Un corte de caché al final del SISTEMA**, además del automático del final. Una lectura de caché solo cae donde una
+   * petición ANTERIOR escribió un corte, y el automático solo escribe al final de la conversación: el encargo nuevo de un
+   * hijo —otra conversación con las mismas tools y el mismo sistema— no encontraba nada que leer. Medido en la calculadora
+   * con Sonnet 5.5 (03-11-2026): caché 0 en la primera llamada de los siete encargos del desarrollador, base de 32 mil
+   * reescrita cada vez, mientras DeepSeek (caché por prefijo, sin cortes) sí la leía. Mismo `cache_control` que el de primer
+   * nivel: un TTL más largo detrás de uno corto es un 400 (los largos van primero).
+   */
+  private conCorteEnElSistema<T>(peticion: T): T {
+    const corte = (this.invocationKwargs as { cache_control?: unknown } | undefined)?.cache_control;
+    const sistema = (peticion as { system?: unknown }).system;
+    if (corte === undefined || typeof sistema !== "string" || sistema === "") return peticion;
+    return { ...peticion, system: [{ type: "text", text: sistema, cache_control: corte }] };
+  }
+
+  override async completionWithRetry(...[peticion, opciones]: Parameters<ChatAnthropic["completionWithRetry"]>) {
+    return super.completionWithRetry(this.conCorteEnElSistema(peticion), opciones);
+  }
+
+  override async createStreamWithRetry(...[peticion, opciones]: Parameters<ChatAnthropic["createStreamWithRetry"]>) {
+    const stream = await super.createStreamWithRetry(this.conCorteEnElSistema(peticion), opciones);
     return new Proxy(stream, {
       get(objetivo, clave, receptor) {
         if (clave !== Symbol.asyncIterator) return Reflect.get(objetivo, clave, receptor);

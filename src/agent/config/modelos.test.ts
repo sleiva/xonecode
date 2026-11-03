@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Modelos } from "./modelos.js";
+import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 
 /**
  * La COSTURA con `@langchain/anthropic`, que es lo que este repo exige de un contrato ajeno:
@@ -165,6 +166,28 @@ describe("la caché de Anthropic viaja en la petición", () => {
       await (cliente as { invoke: (m: unknown) => Promise<unknown> }).invoke([{ role: "user", content: "hola" }]).catch(() => undefined);
     }
     expect(cuerpos.map((c) => c["cache_control"])).toEqual([{ type: "ephemeral", ttl: "1h" }, { type: "ephemeral" }]);
+  });
+
+  it("y con un corte al final del SISTEMA, con el mismo TTL: el encargo nuevo de un hijo lee su base de caché", async () => {
+    const cuerpos: Record<string, unknown>[] = [];
+    globalThis.fetch = (async (_url: unknown, init?: { body?: unknown }) => {
+      cuerpos.push(JSON.parse(String(init?.body)));
+      return new Response(
+        JSON.stringify({ id: "msg_1", type: "message", role: "assistant", model: "claude-sonnet-5-5", content: [{ type: "text", text: "ok" }], stop_reason: "end_turn", stop_sequence: null, usage: { input_tokens: 1, output_tokens: 1 } }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      );
+    }) as typeof fetch;
+    const modelos = new Modelos({ bandera: "anthropic/claude-sonnet-5-5" });
+    for (const cliente of [modelos.paraPapel("trabajo", undefined, undefined, undefined, "1h"), modelos.paraPapel("trabajo")]) {
+      await (cliente as { invoke: (m: unknown) => Promise<unknown> }).invoke([new SystemMessage("reglas del especialista"), new HumanMessage("hola")]).catch(() => undefined);
+    }
+    // Sin sistema no se inventa ninguno.
+    await (modelos.paraPapel("trabajo") as { invoke: (m: unknown) => Promise<unknown> }).invoke([new HumanMessage("hola")]).catch(() => undefined);
+    expect(cuerpos.map((c) => c["system"])).toEqual([
+      [{ type: "text", text: "reglas del especialista", cache_control: { type: "ephemeral", ttl: "1h" } }],
+      [{ type: "text", text: "reglas del especialista", cache_control: { type: "ephemeral" } }],
+      undefined,
+    ]);
   });
 });
 
