@@ -88,7 +88,11 @@ export function decidirEncargo(
   anterior?: TareaYaEncargada,
 ): DecisionDeEncargo {
   const porRuta = planesNombrados(encargo);
-  const conTareas = (porRuta.length > 0 ? porRuta : planesPorSuNombre(encargo))
+  const porNombre = porRuta.length > 0 ? porRuta : planesPorSuNombre(encargo);
+  // Sin plan nombrado pero con su línea `TAREA:`, es del plan de la última tarea que se le encargó. Medido en Maset: «TAREA: 01
+  // Vuelta de ajuste visual…» no nombraba el plan, pasaba por trabajo libre y no contaba como intento (`INTENTOS_POR_TAREA`).
+  const planes = porNombre.length === 0 && anterior !== undefined && LINEA_DE_TAREA.test(encargo) ? [anterior.plan] : porNombre;
+  const conTareas = planes
     .map((plan) => ({ plan, texto: leerTasks(plan) }))
     .filter((p): p is { plan: string; texto: string } => p.texto !== undefined)
     .map((p) => ({ plan: p.plan, tareas: leerTareasDelPlan(p.texto).tareas }))

@@ -2060,7 +2060,7 @@ export async function abrirSesionTrueforge(
       }, agente.scripts === true ? tareaEncargadaDe.get(agente.nombre) : undefined);
       if (decision.tipo === "rechazo") {
         anotarPaso("trueforge.no-arranca", `${agente.nombre}: ${decision.motivo.slice(0, 80)}`)();
-        diagnostico?.memoria?.(agente.nombre, "arranca-sin", "encargo sin UNA tarea del plan");
+        diagnostico?.memoria?.(agente.nombre, "arranca-sin", decision.motivo.includes("SIN CERRAR") ? "tarea anterior sin cerrar" : "encargo sin UNA tarea del plan");
         return devolverSinArrancar(agente.nombre, [], decision.motivo);
       }
       if (decision.tipo === "tarea") params = { ...params, request: { ...params.request, input: decision.encargo } };

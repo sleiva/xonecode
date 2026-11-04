@@ -4905,6 +4905,25 @@ describe("un encargo de un plan es UNA tarea, con su línea `TAREA:`", () => {
     expect(vistos).toHaveLength(7);
   }, 30_000);
 
+  /** Maset: «TAREA: 01\nVuelta de ajuste…» no nombraba el plan, no contaba como intento y el tercero arrancó. */
+  it("un reencargo con `TAREA:` que no nombra el plan cuenta como intento: el tercero no arranca", async () => {
+    const { m, vistos } = modelosConGuion([
+      [delega("d1", "TAREA: 01\nDel plan /planes/calc/: la pantalla.")],
+      [new AIMessageChunk({ content: "rojo 1" })],
+      [delega("d2", "TAREA: 01\nVuelta de ajuste visual: el crítico dio rojo.")],
+      [new AIMessageChunk({ content: "rojo 2" })],
+      [delega("d3", "TAREA: 01\nSolo falta un criterio.")],
+      [new AIMessageChunk({ content: "Falta la 01." })],
+    ]);
+    const s = await abrirSesionTrueforge({ raiz: conPlan(), modelos: m, entorno: ENTORNO, skills: CATALOGO, bucleDelDesarrollador: true, developerContinuo: true });
+    await s.turno("haz la calculadora del plan calc", piel().p);
+    // El segundo lleva la ficha aunque no nombre el plan…
+    expect(vistos[3]!.join("\n")).toContain("LA TAREA DE ESTE ENCARGO, de /planes/calc/TASKS.md");
+    // …y el tercero no arranca.
+    expect(vistos[5]!.join("\n")).toContain("developer-xone NO HA ARRANCADO: la tarea 01 sigue SIN CERRAR");
+    expect(vistos).toHaveLength(6);
+  }, 30_000);
+
   it("CONTINUO: lo heredado va en el CONTEXTO del hilo (compactable) y no se duplica al cerrar y volver a abrir", async () => {
     const { m, vistos } = modelosConGuion([
       [delega("d1", "TAREA: 01\nDel plan /planes/calc/: la pantalla.")],

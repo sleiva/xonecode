@@ -107,3 +107,23 @@ describe("no se pasa de una tarea ABIERTA a otra (pasada 21: la 02 volvió en ro
     expect(decidirEncargo("developer-xone", "TAREA: 03\n/planes/calculadora/", leer, { plan: "otro", numero: "02", intentos: 1 }).tipo).toBe("tarea");
   });
 });
+
+describe("un encargo con `TAREA:` que no nombra el plan es del plan de la última tarea (Maset: el tercer intento se coló)", () => {
+  const abierta = { plan: "calculadora", numero: "02", intentos: 2 };
+
+  it("cuenta como intento: con el tope agotado, no arranca", () => {
+    const d = decidirEncargo("developer-xone", "TAREA: 02\nVuelta de ajuste visual: solo falta un criterio.", leer, abierta);
+    expect(d.tipo).toBe("rechazo");
+    if (d.tipo === "rechazo") expect(d.motivo).toContain("Termina el turno");
+  });
+
+  it("y lleva su ficha delante, como uno que sí lo nombra", () => {
+    const d = decidirEncargo("developer-xone", "TAREA: 02\nOtra vuelta.", leer, { ...abierta, intentos: 1 });
+    expect(d.tipo).toBe("tarea");
+    if (d.tipo === "tarea") expect(d.encargo).toContain("## 02 — El teclado");
+  });
+
+  it("sin `TAREA:` ni plan nombrado sigue siendo trabajo libre", () => {
+    expect(decidirEncargo("developer-xone", "Mira por qué falla el login", leer, abierta)).toEqual({ tipo: "libre" });
+  });
+});
