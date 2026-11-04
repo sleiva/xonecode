@@ -4520,6 +4520,25 @@ describe("un encargo de un plan es UNA tarea, con su línea `TAREA:`", () => {
   }, 30_000);
 });
 
+/** La fidelidad a la maqueta va en el SISTEMA del analista (calculadora con Codex, 04-11-2026). */
+describe("el analista y la fidelidad a la maqueta", () => {
+  it("el analista la lleva en su sistema; quien no escribe el plan, no", async () => {
+    const delega = (id: string, nombre: string) =>
+      new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id, name: "create_sub_agent", args: JSON.stringify({ name: nombre, input: "mira" }) }] });
+    const { m, vistos } = modelosConGuion([
+      [delega("a1", "analyst-xone")],
+      [new AIMessageChunk({ content: "plan" })],
+      [delega("c1", "consultant-xone")],
+      [new AIMessageChunk({ content: "respuesta" })],
+      [new AIMessageChunk({ content: "Hecho." })],
+    ]);
+    const s = await abrirSesionTrueforge({ raiz: proyecto(), modelos: m, entorno: ENTORNO, skills: CATALOGO });
+    await s.turno("planifica y pregunta", piel().p);
+    expect(vistos[1]!.join("\n")).toContain("FIDELIDAD A LA MAQUETA");
+    expect(vistos[3]!.join("\n")).not.toContain("FIDELIDAD A LA MAQUETA");
+  }, 30_000);
+});
+
 /** Decisión suya (03-11-2026): el analista escribe el plan, y con «solo lectura → rápido» lo hacía el modelo barato. */
 describe("el papel de modelo de cada especialista", () => {
   it("el analista de serie corre con AFILADO y el consultor con RÁPIDO; el raíz, con trabajo", async () => {

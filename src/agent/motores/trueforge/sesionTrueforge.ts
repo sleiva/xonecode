@@ -226,6 +226,19 @@ export const UNA_VENTANA_POR_ENCARGO = [
   "las agrupe en una tarea: con más, se le acaba el presupuesto de llamadas a mitad y devuelve el trabajo a medias.",
 ].join("\n");
 
+/**
+ * **Con maqueta, el plan es FIEL a ella**, en el sistema del analista. Medido sobre la calculadora (04-11-2026), mismo
+ * modelo: Codex llevaba la regla en su `AGENTS.md`, que ven TODOS sus agentes, y su analista enumeró cabecera, display y
+ * banda; el nuestro, con la regla solo en el bucle del desarrollador, planificó «20 teclas y un 0» y la pantalla salió
+ * sin la mitad de las piezas, aunque el desarrollador mirara la maqueta: construye lo que dice el plan.
+ */
+export const FIDELIDAD_DEL_PLAN = [
+  "FIDELIDAD A LA MAQUETA: si el trabajo parte de una maqueta, el plan es FIEL a ella. La tarea que construye la pantalla",
+  "ENUMERA todas sus piezas —la cabecera con sus iconos, cada línea y chip de cada panel, las bandas, las teclas— y su",
+  "criterio visual es que estén TODAS y se parezcan: estructura, colores, tipografías y proporciones. Un icono que XOne no",
+  "trae es trabajo del diseñador. Los datos de ejemplo de la maqueta no son piezas: no se copian.",
+].join("\n");
+
 export const PLAN_PRIMERO = [
   "PLAN PRIMERO: un desarrollo LARGO (varias pantallas o ficheros, una funcionalidad nueva) y CREAR o REDISEÑAR una pantalla a",
   "partir de un DISEÑO (una pantalla de Stitch, una maqueta adjunta) empiezan por `analyst-xone` con el PLAN. Dile qué hay que",
@@ -2095,6 +2108,8 @@ export async function abrirSesionTrueforge(
             anuncioDeSkills(agente, catalogo),
             ...(conBucleDelDesarrollador && (agente.llama?.length ?? 0) > 0 ? ["", textoDelBucle(agente.llama ?? [], { conCritica: carpeta !== undefined, conFuentes: opciones.fuentes !== undefined, pruebaElMismo: nombres.includes(NOMBRE_EJECUTAR_SCRIPT) })] : []),
             ...(continuoDelHilo ? ["", siguienteTareaDelDesarrollador ? TEXTO_DEL_DEVELOPER_CONTINUO_CON_SIGUIENTE : TEXTO_DEL_DEVELOPER_CONTINUO] : []),
+            // A quien escribe el plan, en su SISTEMA: no depende de que abra la skill ni de lo que le diga el encargo.
+            ...(agente.nombre === "analyst-xone" ? ["", FIDELIDAD_DEL_PLAN] : []),
           ]
             .filter((l) => l !== undefined)
             .join("\n")
