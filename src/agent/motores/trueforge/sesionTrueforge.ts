@@ -2134,7 +2134,7 @@ export async function abrirSesionTrueforge(
         }) as unknown as {
           execute(c: string): unknown;
           write(ruta: string, contenido: string): unknown;
-        }, guardaDelProyecto)), colaDelAparato, () => aparatoDeLaSesion()?.id),
+        }, guardaDelProyecto)), colaDelAparato, () => aparatoDeLaSesion()?.id, () => aborto?.signal),
     });
     const nombres = toolsDe(piezas);
     const nota = [

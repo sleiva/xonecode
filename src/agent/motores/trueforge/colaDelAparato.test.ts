@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { crearSerieDeEscrituras } from "../../../core/serieDeEscrituras.js";
-import { conColaDelAparato } from "./colaDelAparato.js";
+import { conColaDelAparato, ORDEN_CANCELADA_EN_COLA } from "./colaDelAparato.js";
 
 /** Una shell cuyas órdenes no acaban hasta que se las suelta: se ve quién ENTRÓ sin esperar a nadie. */
 function shellConBarreras() {
@@ -49,6 +49,29 @@ describe("la cola del aparato (docs/PARALELISMO-TRUEFORGE.md §5.2)", () => {
     await vuelta();
     expect(entradas).toEqual(["falla", "otra"]);
     soltar("otra");
+    await otra;
+  });
+
+  it("cancelar el turno: la que ESPERABA en la cola no arranca nunca, ni al liberarse; la del turno siguiente sí", async () => {
+    const { shell, entradas, soltar } = shellConBarreras();
+    const cola = crearSerieDeEscrituras();
+    let aborto = new AbortController();
+    const a = conColaDelAparato(shell, cola, () => "x", () => aborto.signal);
+    const primera = a.execute("primera") as Promise<unknown>;
+    const segunda = a.execute("segunda") as Promise<unknown>;
+    await vuelta();
+    expect(entradas).toEqual(["primera"]);
+    aborto.abort();
+    soltar("primera");
+    await primera;
+    expect(await segunda).toEqual(ORDEN_CANCELADA_EN_COLA);
+    expect(entradas).toEqual(["primera"]);
+    // El turno siguiente tiene su señal nueva: su orden corre.
+    aborto = new AbortController();
+    const otra = a.execute("del-siguiente") as Promise<unknown>;
+    await vuelta();
+    expect(entradas).toEqual(["primera", "del-siguiente"]);
+    soltar("del-siguiente");
     await otra;
   });
 
