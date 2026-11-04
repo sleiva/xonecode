@@ -273,6 +273,13 @@ export const PLAN_PRIMERO = [
   // `core/encargoDeTarea.ts`: lo comprueba el harness, no este texto.
   "Cada encargo de un plan al desarrollador o al diseñador es UNA tarea y empieza con la línea `TAREA: <número>`: el harness le",
   "pone delante su ficha, y sin esa línea o con varias tareas el encargo NO arranca. Cuando vuelva, la siguiente al mismo.",
+  // Medido con Codex sobre Maset (04-11-2026): su orquestador miraba la captura de la tarea que volvía y abría el encargo
+  // siguiente con lo que le faltaba, y dejaba decididos textos, colores, proporciones y cómo probar; su desarrollador cerró
+  // la primera tarea en una vuelta. El nuestro, con el mismo plan delante, dejaba esas decisiones al desarrollador.
+  "EL ENCARGO DE CADA TAREA: antes de mandarla, mira la última captura de la anterior junto a la maqueta y ábrelo con lo que le",
+  "quedó por corregir. Deja TOMADAS las decisiones que el plan no fija —el texto exacto, el color, la proporción de cada zona, qué",
+  "hacer con lo que el proyecto no tiene— para que no las elija él, y di cómo se prueba (desplegar entero si hay recursos nuevos,",
+  "cómo entrar en la app). Si la anterior volvió abierta y la mandas igualmente, el harness le arrastra sus criterios sin marcar.",
   // Medido en Maset (21-10-2026): el analista corre en Claude Code, no tiene Stitch, y escribió un DISENO.md deducido del
   // resumen del design system —«las 16 capturas NO están en el proyecto»—; las tareas lo siguieron como «fuente única».
   "Si el diseño está en Stitch, TRAE TÚ las pantallas ANTES de llamar al analista (traer_pantalla_de_stitch, una por pantalla) y",
