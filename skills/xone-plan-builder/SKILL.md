@@ -221,7 +221,11 @@ relee entero cada vez que alguien lo retoma.
   sobre la calculadora: con criterios así el desarrollador cerró la tarea criterio a criterio, con la prueba de cada uno.
   **Sin coordenadas ni píxeles** («la tecla está en x≈43 y mide 142×110»): un retoque legítimo los rompe y el criterio
   ya no se puede marcar; las medidas van en el `PLAN.md`. Y **el alcance es el del ENCARGO**: lo que la maqueta enseña y el
-  encargo no pide va, como mucho, en una línea de una tarea, nunca en una tarea propia. Marcar uno exige una prueba en el aparato posterior al último cambio, así que un criterio que no se puede
+  encargo no pide va, como mucho, en una línea de una tarea, nunca en una tarea propia. **Con maqueta, el plan es FIEL a
+  ella**: la tarea que construye la pantalla ENUMERA sus piezas (cabecera con sus iconos, cada línea y chip del panel,
+  bandas, teclas…) y su criterio visual es que estén TODAS y se parezcan —estructura, colores, tipografías, proporciones—;
+  medido con Codex sobre la calculadora, sin esa exigencia en el plan la pantalla salió «inspirada» y sin la mitad de las
+  piezas. Marcar uno exige una prueba en el aparato posterior al último cambio, así que un criterio que no se puede
   probar allí no se podrá marcar nunca. Dicen lo que se VE o se MIDE, no cómo está hecho: «el `rx` del SVG vale 41» o «no
   se crean `.ttf`» no son criterios (lo comprueban el verificador y `validar_fichero_xone`). **Como mucho 8 por tarea y
   200 caracteres cada uno**: el harness no escribe un `TASKS.md` que lo pase. Si una tarea necesita más, son dos tareas.

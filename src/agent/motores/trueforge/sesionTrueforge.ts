@@ -239,7 +239,8 @@ export const PLAN_PRIMERO = [
   // volcó 7.100 caracteres de píxeles y alcance añadido, y el plan tardó 6,5 min con 5 tareas y criterios de coordenadas.
   "EL ENCARGO AL ANALISTA, CORTO: el OBJETIVO con las palabras de la persona, sin añadirle alcance; lo que ya averiguaste,",
   "con fichero:línea, para que no lo redescubra; y el ENTREGABLE (`PLAN.md`, `CONTEXT.md`, `TASKS.md` con pocas tareas, cada",
-  "criterio una prueba en el aparato). No le pases medidas de la maqueta: la mira él.",
+  "criterio una prueba en el aparato). No le pases medidas de la maqueta: la mira él. Con maqueta, pídele un plan FIEL a",
+  "ella: que la tarea visual enumere TODAS sus piezas y que se parezcan.",
   // `core/encargoDeTarea.ts`: lo comprueba el harness, no este texto.
   "Cada encargo de un plan al desarrollador o al diseñador es UNA tarea y empieza con la línea `TAREA: <número>`: el harness le",
   "pone delante su ficha, y sin esa línea o con varias tareas el encargo NO arranca. Cuando vuelva, la siguiente al mismo.",
