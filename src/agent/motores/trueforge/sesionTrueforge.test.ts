@@ -2949,6 +2949,36 @@ describe("Claude Code, Codex y OpenCode como hijos de TrueForge", () => {
     expect(sin.vistos[0]!.join("\n")).not.toContain("refactor-ext");
   }, 30_000);
 
+  /** Medido en la calculadora (04-11-2026): con `ejecucion`, `recibeMarcarCriterios` lo dejaba fuera de la regla de tareas. */
+  it("el desarrollador en Claude Code con `ejecucion` también va por tareas: una por encargo, con su ficha y el arrastre", async () => {
+    const raiz = proyecto();
+    mkdirSync(join(raiz, ".xonecode", "agentes"), { recursive: true });
+    writeFileSync(
+      join(raiz, ".xonecode", "agentes", "developer-xone.md"),
+      "---\ndescripcion: Escribe la app\nmotor: claude-code\nmodelo: opus\nsoloLectura: false\nejecucion: true\nskills: [xone-development]\n---\nDesarrolla.\n"
+    );
+    mkdirSync(join(raiz, ".xonecode", "planes", "calc"), { recursive: true });
+    writeFileSync(
+      join(raiz, ".xonecode", "planes", "calc", "TASKS.md"),
+      "# Calc\n\n## 01 — La pantalla\n**Estado:** pendiente\n- [ ] se ve\n\n## 02 — El teclado\n**Estado:** pendiente\n- [ ] las teclas\n"
+    );
+    const f = fabrica(["claude-code"], async () => "devuelto, sin cerrar");
+    const delega = (id: string, input: string) =>
+      new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id, name: "create_sub_agent", args: JSON.stringify({ name: "developer-xone", input }) }] });
+    const { m, vistos } = modelosConGuion([
+      [delega("d1", "Haz T1 y T2 del plan /planes/calc/.")],
+      [delega("d2", "TAREA: 01\nDel plan /planes/calc/: la pantalla.")],
+      [delega("d3", "TAREA: 02\nDel plan /planes/calc/: el teclado.")],
+      [new AIMessageChunk({ content: "Listo." })],
+    ]);
+    const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, subagenteExterno: f.subagenteExterno });
+    await s.turno("haz la calculadora", piel().p);
+    expect(vistos[1]!.join("\n")).toContain("developer-xone NO HA ARRANCADO: el encargo es trabajo del plan /planes/calc/ y no dice qué tarea");
+    expect(f.peticiones).toHaveLength(2);
+    expect(f.peticiones[0]!.tarea).toContain("LA TAREA DE ESTE ENCARGO, de /planes/calc/TASKS.md");
+    expect(f.peticiones[1]!.tarea).toContain("ARRASTRAS LA TAREA 01 (La pantalla)");
+  }, 30_000);
+
   it("se delega por el nombre del `.md`: la petición es la de deepagents y la respuesta vuelve al orquestador", async () => {
     const raiz = conExterno();
     const f = fabrica(["codex"], async () => "hecho por codex");

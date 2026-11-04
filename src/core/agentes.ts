@@ -263,6 +263,16 @@ export function recibeMarcarCriterios(a: Pick<Agente, "soloLectura" | "ejecucion
 }
 
 /**
+ * **Quien PRUEBA en el aparato**: el de `scripts` (nuestro motor) o el de `ejecucion` (Claude Code con su shell). A los dos
+ * les toca la regla de una tarea por encargo y la de no dejar atrás una tarea abierta (`core/encargoDeTarea.ts`). Medido en
+ * la calculadora (04-11-2026): con el desarrollador en Claude Code, `recibeMarcarCriterios` lo dejaba fuera por su
+ * `ejecucion`, y sus encargos iban sin ficha, sin intentos y sin arrastre.
+ */
+export function pruebaEnElAparato(a: Pick<Agente, "soloLectura" | "ejecucion" | "scripts">): boolean {
+  return a.scripts === true || (a.ejecucion === true && !a.soloLectura);
+}
+
+/**
  * El prompt completo de un subagente: sus reglas, su descripción y sus instrucciones.
  *
  * Las reglas van PRIMERO y las instrucciones al final, en ese orden a propósito: lo último

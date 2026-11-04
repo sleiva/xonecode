@@ -82,7 +82,7 @@ import { carpetaDeHotswap } from "../../../core/hotswap.js";
 import { cargarAgentes } from "../../subagentes/agentesEnDisco.js";
 import { bloqueDeAprendido, NOMBRE_APUNTAR_APRENDIZAJE, USO_DE_APRENDIDO_EXTERNO, USO_DE_APUNTAR_APRENDIZAJE } from "../../../core/aprendido.js";
 import { crearApuntarAprendizaje, leerAprendido, leerAprendidoDeXone } from "../../grafo/aprendido.js";
-import { fichaDeAgente, papelDe, promptDeAgente, recibeMarcarCriterios, recibeNucleoDeTrabajo, repartirSkills, skillsConLasDeQuienLlama, textoDeCarpetaDePlanes, textoDeCarpetasDeLaSesion, textoDeTrabajoSinLlamar, type Agente } from "../../../core/agentes.js";
+import { fichaDeAgente, papelDe, promptDeAgente, pruebaEnElAparato, recibeMarcarCriterios, recibeNucleoDeTrabajo, repartirSkills, skillsConLasDeQuienLlama, textoDeCarpetaDePlanes, textoDeCarpetasDeLaSesion, textoDeTrabajoSinLlamar, type Agente } from "../../../core/agentes.js";
 import { PERFIL_DEL_ORQUESTADOR, promptOrquestador } from "../../grafo/xoneAgent.js";
 import { permisosDe, seDetieneEn, TEXTO_HITL } from "../../grafo/perfiles.js";
 import { cambioDe } from "../../turno/interrupts.js";
@@ -2075,16 +2075,16 @@ export async function abrirSesionTrueforge(
      * o trae varias no arranca, y lo que la trae lleva delante su ficha. Solo a quien marca el plan y del orquestador. En
      * una TAREA DE FONDO no: allí manda el tope de encargos al desarrollador, y una tarea por encargo lo agotaría.
      */
-    if (delRaiz && agente !== undefined && recibeMarcarCriterios(agente) && opciones.trabajoSinPersona !== true) {
+    if (delRaiz && agente !== undefined && (recibeMarcarCriterios(agente) || pruebaEnElAparato(agente)) && opciones.trabajoSinPersona !== true) {
       const decision = decidirEncargo(agente.nombre, params.request.input, (plan) => {
         try {
           return readFileSync(join(raiz, CARPETA_DE_PLANES, plan, "TASKS.md"), "utf8");
         } catch {
           return undefined;
         }
-      }, agente.scripts === true ? tareaEncargadaDe.get(agente.nombre) : undefined);
+      }, pruebaEnElAparato(agente) ? tareaEncargadaDe.get(agente.nombre) : undefined);
       // Qué decidió y con qué tarea anterior, en la traza: sin esto, una tarea abierta que se saltaba no dejaba rastro.
-      const previa = agente.scripts === true ? tareaEncargadaDe.get(agente.nombre) : undefined;
+      const previa = pruebaEnElAparato(agente) ? tareaEncargadaDe.get(agente.nombre) : undefined;
       diagnostico?.memoria?.(
         agente.nombre,
         "tarea",
@@ -2096,7 +2096,7 @@ export async function abrirSesionTrueforge(
         return devolverSinArrancar(agente.nombre, [], decision.motivo);
       }
       if (decision.tipo === "tarea") params = { ...params, request: { ...params.request, input: decision.encargo } };
-      if (decision.tipo === "tarea" && agente.scripts === true) {
+      if (decision.tipo === "tarea" && pruebaEnElAparato(agente)) {
         const antes = tareaEncargadaDe.get(agente.nombre);
         const misma = antes?.plan === decision.plan && Number.parseInt(antes.numero.replace(/^T/i, ""), 10) === Number.parseInt(decision.tarea.numero.replace(/^T/i, ""), 10);
         tareaEncargadaDe.set(agente.nombre, {

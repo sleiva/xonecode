@@ -147,11 +147,11 @@ Ante una discrepancia con el código, **el código manda**.
   (`hiloQueNoArranca` con `textoDeTopeDeEncargos`) y manda cerrar con lo que falta en «Por arreglar» / «No se puede en
   XOne». Medido: siete «últimas vueltas» persiguiendo un crítico en rojo. Con persona delante no aplica.
 - **Un encargo de un plan es UNA tarea, en su línea `TAREA: <número>`** (`core/encargoDeTarea.ts#decidirEncargo`, en
-  `crearHijo`): a quien marca el plan (`recibeMarcarCriterios`) y del orquestador, si el encargo nombra UN plan con tareas.
+  `crearHijo`): a quien marca el plan (`recibeMarcarCriterios`) o prueba en el aparato, y del orquestador, si nombra UN plan con tareas.
   Sin la línea, con varias o con una que no existe, NO arranca y se le devuelve el motivo; con una, el encargo lleva delante
   su ficha. Solo cuenta la LÍNEA, nunca la prosa («T1 ya está; ahora T2» es correcto). Como el `task_name` de Codex.
   **Límites**: en una TAREA DE FONDO no se exige (lo agotaría el tope de encargos); dos planes en un encargo no se adivinan.
-- **Una tarea ABIERTA no se deja atrás en silencio** (`INTENTOS_POR_TAREA`, `tareaEncargadaDe`): a quien PRUEBA (`scripts`),
+- **Una tarea ABIERTA no se deja atrás en silencio** (`INTENTOS_POR_TAREA`, `tareaEncargadaDe`): a quien PRUEBA (`pruebaEnElAparato`: `scripts` o el `ejecucion` de Claude Code),
   pasar a otra con la última sin TODAS sus casillas la ARRASTRA: el encargo nuevo lleva sus criterios sin marcar, para
   cerrarlos en esa vuelta (como Codex). Lo arrastrado que sigue abierto al pasar OTRA vez no arranca, ni la misma tarea con
   los intentos agotados: que cierre el turno diciéndole a la persona lo que falta. Vale dentro del turno. Un encargo con
