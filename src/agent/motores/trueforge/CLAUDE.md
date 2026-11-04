@@ -150,7 +150,8 @@ Ante una discrepancia con el código, **el código manda**.
   `crearHijo`): a quien marca el plan (`recibeMarcarCriterios`) o prueba en el aparato, y del orquestador, si nombra UN plan con tareas.
   Sin la línea, con varias o con una que no existe, NO arranca y se le devuelve el motivo; con una, el encargo lleva delante
   su ficha. Solo cuenta la LÍNEA, nunca la prosa («T1 ya está; ahora T2» es correcto). Como el `task_name` de Codex.
-  **Límites**: en una TAREA DE FONDO no se exige (lo agotaría el tope de encargos); dos planes en un encargo no se adivinan.
+  También en una TAREA DE FONDO: sin ella el continuo no tiene tarea apuntada y hace el plan de golpe; lo que no arranca no
+  gasta `TOPE_DE_ENCARGOS_AL_DESARROLLADOR`. **Límite**: dos planes en un encargo no se adivinan.
 - **Una tarea ABIERTA no se deja atrás en silencio** (`INTENTOS_POR_TAREA`, `tareaEncargadaDe`): a quien PRUEBA (`pruebaEnElAparato`: `scripts` o el `ejecucion` de Claude Code),
   pasar a otra con la última sin TODAS sus casillas la ARRASTRA: el encargo nuevo lleva sus criterios sin marcar, para
   cerrarlos en esa vuelta (como Codex). Lo arrastrado que sigue abierto al pasar OTRA vez no arranca, ni la misma tarea con

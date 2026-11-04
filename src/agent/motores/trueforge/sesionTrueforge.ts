@@ -2072,10 +2072,11 @@ export async function abrirSesionTrueforge(
     }
     /**
      * **Un encargo de un plan es UNA tarea, nombrada en su línea `TAREA:`** (`core/encargoDeTarea.ts`): lo que no la trae
-     * o trae varias no arranca, y lo que la trae lleva delante su ficha. Solo a quien marca el plan y del orquestador. En
-     * una TAREA DE FONDO no: allí manda el tope de encargos al desarrollador, y una tarea por encargo lo agotaría.
+     * o trae varias no arranca, y lo que la trae lleva delante su ficha. Solo a quien marca el plan y del orquestador.
+     * También en una TAREA DE FONDO: sin la tarea apuntada, el continuo no pasaba de una a otra y hacía el plan de golpe,
+     * marcando al final (Maset). Un encargo que no arranca no gasta el tope de encargos, que se cuenta después.
      */
-    if (delRaiz && agente !== undefined && (recibeMarcarCriterios(agente) || pruebaEnElAparato(agente)) && opciones.trabajoSinPersona !== true) {
+    if (delRaiz && agente !== undefined && (recibeMarcarCriterios(agente) || pruebaEnElAparato(agente))) {
       const decision = decidirEncargo(agente.nombre, params.request.input, (plan) => {
         try {
           return readFileSync(join(raiz, CARPETA_DE_PLANES, plan, "TASKS.md"), "utf8");

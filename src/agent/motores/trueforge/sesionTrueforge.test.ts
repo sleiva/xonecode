@@ -2188,7 +2188,7 @@ describe("una sesión con el motor TrueForge", () => {
       writeFileSync(join(plan, "TASKS.md"), tasks);
       const pide = (id: string, name: string, args: Record<string, unknown>) => [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id, name, args: JSON.stringify(args) }] })];
       const { m, vistos } = modelosConGuion([
-        pide("d1", "create_sub_agent", { name: "developer-xone", input: "haz la tarea 01 del plan calc" }),
+        pide("d1", "create_sub_agent", { name: "developer-xone", input: "TAREA: 01\nDel plan /planes/calc/: la calculadora." }),
         pide("k1", "marcar_criterios_del_plan", { plan: "calc", tarea: "01", criterios: [1] }),
         [new AIMessageChunk({ content: "Hecho." })],
         [new AIMessageChunk({ content: "Fin." })],
@@ -5002,12 +5002,20 @@ describe("un encargo de un plan es UNA tarea, con su línea `TAREA:`", () => {
     expect(tras).not.toContain("T1 hecha: [x] se ve");
   }, 30_000);
 
-  it("en una tarea de fondo no se exige: manda el tope de encargos", async () => {
-    const { m, vistos } = modelosConGuion([[delega("d1", "Haz T1 y T2 del plan /planes/calc/.")], [new AIMessageChunk({ content: "las dos" })], [new AIMessageChunk({ content: "Hecho." })]]);
-    const s = await abrirSesionTrueforge({ raiz: conPlan(), modelos: m, entorno: ENTORNO, skills: CATALOGO, bucleDelDesarrollador: true, trabajoSinPersona: true });
+  /** Maset: en una tarea de fondo el orquestador mandó T01–T05 en un encargo y el continuo lo marcó todo al final. */
+  it("en una tarea de fondo TAMBIÉN se exige, y el encargo que no arranca no gasta el tope de encargos", async () => {
+    const { m, vistos } = modelosConGuion([
+      [delega("d1", "Haz T1 y T2 del plan /planes/calc/.")],
+      [delega("d2", "TAREA: 01\nDel plan /planes/calc/: la pantalla.")],
+      [new AIMessageChunk({ content: "T1 hecha" })],
+      [new AIMessageChunk({ content: "Hecho." })],
+    ]);
+    const s = await abrirSesionTrueforge({ raiz: conPlan(), modelos: m, entorno: ENTORNO, skills: CATALOGO, bucleDelDesarrollador: true, developerContinuo: true, trabajoSinPersona: true });
     await s.turno("haz la calculadora", piel().p);
-    expect(vistos).toHaveLength(3);
-    expect(vistos.map((v) => v.join("\n")).some((t) => t.includes("no dice qué tarea"))).toBe(false);
+    expect(vistos[1]!.join("\n")).toContain("developer-xone NO HA ARRANCADO");
+    expect(vistos[2]!.join("\n")).toContain("LA TAREA DE ESTE ENCARGO, de /planes/calc/TASKS.md");
+    expect(vistos.at(-1)!.join("\n")).not.toContain("encargos suyos en esta tarea");
+    expect(vistos).toHaveLength(4);
   }, 30_000);
 });
 
