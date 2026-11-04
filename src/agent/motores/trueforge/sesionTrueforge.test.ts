@@ -690,6 +690,123 @@ describe("una sesión con el motor TrueForge", () => {
     expect(llamadasDelRaiz).toBe(2);
   }, 30_000);
 
+  /**
+   * CONTRATO 4 (`docs/PARALELISMO-TRUEFORGE.md` §4): la aprobación de un hijo llega a quien decide MIENTRAS su hermano
+   * sigue trabajando. El hermano espera (barrera) a que se pida la aprobación.
+   *
+   * **HUECO MEDIDO, marcado `it.fails`**: hoy NO llega. El motor sigue ejecutando a los hermanos vivos hasta que ninguno
+   * puede avanzar, y `paso()` junta las aprobaciones y solo pregunta cuando acaba `orquestador.execute`: el hermano agota su
+   * barrera («sin aprobación») y solo después se pide. Arreglarlo es preguntar a mitad de la ejecución (entrega E del plan).
+   * Cuando se arregle, este test pasará y `it.fails` lo pondrá en ROJO: quitar la marca.
+   */
+  it.fails("CONTRATO: la aprobación de un hijo llega mientras su hermano sigue trabajando", async () => {
+    const raiz = proyecto();
+    let pedida: (() => void) | undefined;
+    const aprobacionPedida = new Promise<void>((r) => (pedida = r));
+    let hermanoTrabajando = false;
+    const vistoPorElHermano: string[] = [];
+    let llamadasDelDev = 0;
+    let llamadasDelRaiz = 0;
+    const delega = (index: number, id: string, nombre: string, input: string) => ({ index, id, name: "create_sub_agent", args: JSON.stringify({ name: nombre, input }) });
+    const modelo = {
+      bindTools: () => modelo,
+      stream: async (mensajes: { content: unknown }[]) => {
+        const texto = mensajes.map((m) => String(m.content)).join("\n");
+        let salida: AIMessageChunk;
+        if (texto.includes("ESCRIBE-NOTA")) {
+          llamadasDelDev++;
+          salida =
+            llamadasDelDev === 1
+              ? new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "w1", name: "write_file", args: JSON.stringify({ file_path: "/nota.txt", content: "hola\n" }) }] })
+              : new AIMessageChunk({ content: "Nota escrita." });
+        } else if (texto.includes("CONSULTA-B")) {
+          hermanoTrabajando = true;
+          const visto = await Promise.race([aprobacionPedida.then(() => "vio la aprobación"), new Promise<string>((r) => setTimeout(() => r("sin aprobación"), 1_500))]);
+          vistoPorElHermano.push(visto);
+          hermanoTrabajando = false;
+          salida = new AIMessageChunk({ content: `B: ${visto}` });
+        } else {
+          llamadasDelRaiz++;
+          salida =
+            llamadasDelRaiz === 1
+              ? new AIMessageChunk({ content: "", tool_call_chunks: [delega(0, "d1", "developer-xone", "ESCRIBE-NOTA"), delega(1, "d2", "consultant-xone", "CONSULTA-B")] })
+              : new AIMessageChunk({ content: "Hecho." });
+        }
+        return (async function* () {
+          yield salida;
+        })();
+      },
+    };
+    const m = { paraPapel: () => modelo, paraModelo: () => modelo, descripcion: () => ({}) } as unknown as ModelosPort;
+    const hermanoAlPedir: boolean[] = [];
+    const s = await abrirSesionTrueforge({
+      raiz,
+      modelos: m,
+      entorno: ENTORNO,
+      skills: CATALOGO,
+      pedirAprobacion: async (pendientes) => {
+        hermanoAlPedir.push(hermanoTrabajando);
+        pedida?.();
+        return new Map(pendientes.map((p) => [p.id, { type: "approve" as const }]));
+      },
+    });
+    await s.turno("escribe y consulta a la vez", piel().p);
+    expect(readFileSync(join(raiz, "nota.txt"), "utf8")).toBe("hola\n");
+    expect(hermanoAlPedir).toEqual([true]);
+    expect(vistoPorElHermano).toEqual(["vio la aprobación"]);
+  }, 30_000);
+
+  /** CONTRATO 5 (`docs/PARALELISMO-TRUEFORGE.md` §4): cancelar el turno alcanza la llamada en curso de TODOS los hijos vivos. */
+  it("CONTRATO: cancelar el turno aborta la llamada al modelo de los DOS hermanos que trabajan", async () => {
+    const abortados: string[] = [];
+    const dentro = new Set<string>();
+    let losDos: (() => void) | undefined;
+    const ambosDentro = new Promise<void>((r) => (losDos = r));
+    let llamadasDelRaiz = 0;
+    const delega = (index: number, id: string, nombre: string, input: string) => ({ index, id, name: "create_sub_agent", args: JSON.stringify({ name: nombre, input }) });
+    const modelo = {
+      bindTools: () => modelo,
+      stream: async (mensajes: { content: unknown }[], opciones?: { signal?: AbortSignal }) => {
+        const texto = mensajes.map((m) => String(m.content)).join("\n");
+        const hijo = texto.includes("ENCARGO-A") ? "A" : texto.includes("ENCARGO-B") ? "B" : undefined;
+        if (hijo === undefined) {
+          llamadasDelRaiz++;
+          const salida =
+            llamadasDelRaiz === 1
+              ? new AIMessageChunk({ content: "", tool_call_chunks: [delega(0, "d1", "analyst-xone", "ENCARGO-A"), delega(1, "d2", "consultant-xone", "ENCARGO-B")] })
+              : new AIMessageChunk({ content: "Hecho." });
+          return (async function* () {
+            yield salida;
+          })();
+        }
+        dentro.add(hijo);
+        if (dentro.size === 2) losDos?.();
+        const senal = opciones?.signal;
+        // Se queda DENTRO de su llamada hasta que la aborten (o hasta un tope que delataría que no llegó).
+        const abortada = await new Promise<boolean>((r) => {
+          if (senal?.aborted === true) return r(true);
+          senal?.addEventListener("abort", () => r(true), { once: true });
+          setTimeout(() => r(false), 5_000);
+        });
+        if (abortada) abortados.push(hijo);
+        if (abortada) throw Object.assign(new Error("abortada"), { name: "AbortError" });
+        return (async function* () {
+          yield new AIMessageChunk({ content: `${hijo} sin abortar` });
+        })();
+      },
+    };
+    const m = { paraPapel: () => modelo, paraModelo: () => modelo, descripcion: () => ({}) } as unknown as ModelosPort;
+    const s = await abrirSesionTrueforge({ raiz: proyecto(), modelos: m, entorno: ENTORNO, skills: CATALOGO });
+    const t0 = Date.now();
+    const turno = s.turno("dos cosas a la vez", piel().p).catch(() => undefined);
+    await ambosDentro;
+    s.cancelar();
+    await turno;
+    expect(abortados.sort()).toEqual(["A", "B"]);
+    // Y sin agotar el tope de nadie: la cancelación llegó, no se esperó a que terminaran.
+    expect(Date.now() - t0).toBeLessThan(4_000);
+  }, 30_000);
+
   /** `docs/PARALELISMO-TRUEFORGE.md` §5.2: dos órdenes de UNA respuesta corren con `Promise.all`, y el hotswap admite una conexión. */
   it("dos órdenes al aparato en la MISMA respuesta no se solapan: la cola del aparato las pone en fila", async () => {
     const raiz = proyecto();
