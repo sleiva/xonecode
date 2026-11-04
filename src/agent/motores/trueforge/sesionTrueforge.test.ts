@@ -3761,8 +3761,8 @@ describe("`comparar_capturas` en TrueForge (IXCODE-18): con el raíz, como la cr
     await s.turno("hola", piel().p).catch(() => undefined);
     expect(toolsPorLlamada[0]).toContain("comparar_capturas");
     expect(toolsPorLlamada[0]).toContain("xone_critica_visual");
-    // Y la medida de la maqueta: sin ella el raíz encargaba medir las bandas «recortando con PIL» (prueba de la calculadora).
-    expect(toolsPorLlamada[0]).toContain("medir_maqueta");
+    // Pero NO la medida de la maqueta: con ella volcaba los píxeles en el encargo del plan (calculadora, 04-11-2026).
+    expect(toolsPorLlamada[0]).not.toContain("medir_maqueta");
   }, 20_000);
 
   it("sin carpeta no se monta", async () => {

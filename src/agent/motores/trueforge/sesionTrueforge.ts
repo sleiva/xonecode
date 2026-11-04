@@ -157,7 +157,7 @@ import { crearFichaDeSesion, type FichaDeSesion } from "./fichaEnSesion.js";
 import { crearUnirSecciones } from "../../grafo/unirSecciones.js";
 import { crearIncorporarAdjunto, recibeIncorporarAdjunto } from "../../grafo/incorporarAdjunto.js";
 import { crearCriticaVisual } from "../../grafo/criticaVisual.js";
-import { crearMedirMaqueta } from "../../grafo/medirMaqueta.js";
+import { crearMedirMaqueta, NOMBRE_MEDIR_MAQUETA } from "../../grafo/medirMaqueta.js";
 import { crearCompararCapturas, NOMBRE_COMPARAR_CAPTURAS } from "../../grafo/compararCapturas.js";
 import { crearAtributosXone, NOMBRE_ATRIBUTOS_XONE } from "../../grafo/atributosXone.js";
 import { crearDiferenciaDeCapturas } from "../../grafo/diferenciaDeCapturas.js";
@@ -238,7 +238,7 @@ export const PLAN_PRIMERO = [
   // volcó 7.100 caracteres de píxeles y alcance añadido, y el plan tardó 6,5 min con 5 tareas y criterios de coordenadas.
   "EL ENCARGO AL ANALISTA, CORTO: el OBJETIVO con las palabras de la persona, sin añadirle alcance; lo que ya averiguaste,",
   "con fichero:línea, para que no lo redescubra; y el ENTREGABLE (`PLAN.md`, `CONTEXT.md`, `TASKS.md` con pocas tareas, cada",
-  "criterio una prueba en el aparato). NO midas tú la maqueta ni le pases medidas: la mira él.",
+  "criterio una prueba en el aparato). No le pases medidas de la maqueta: la mira él.",
   // `core/encargoDeTarea.ts`: lo comprueba el harness, no este texto.
   "Cada encargo de un plan al desarrollador o al diseñador es UNA tarea y empieza con la línea `TAREA: <número>`: el harness le",
   "pone delante su ficha, y sin esa línea o con varias tareas el encargo NO arranca. Cuando vuelva, la siguiente al mismo.",
@@ -1567,7 +1567,12 @@ export async function abrirSesionTrueforge(
     validarFichero(),
     atributos,
     describirImagen(),
-    ...herramientasDeJuicio(),
+    /**
+     * **Sin `medir_maqueta`**: medido en la calculadora (04-11-2026), el raíz medía la maqueta ANTES de llamar al analista
+     * y le volcaba los píxeles en el encargo (7.100 caracteres), y de ahí salían criterios de coordenadas. Con la regla en
+     * su prompt lo siguió haciendo; Codex, sin esa tool, encargaba el plan en ~2.000. La medida la toma quien construye.
+     */
+    ...herramientasDeJuicio().filter((t) => (t as { name?: string }).name !== NOMBRE_MEDIR_MAQUETA),
     ...(carpeta === undefined ? [] : ([crearTraerDeLaMaquina({ carpeta, alEscribir: anotarArtefacto })] as unknown as ToolDeLangchain[])),
     ...traerDeStitch(),
     // Lo aprendido: el orquestador también apunta, sobre todo lo que le cuenta un hijo de motor externo (que no tiene la tool).
