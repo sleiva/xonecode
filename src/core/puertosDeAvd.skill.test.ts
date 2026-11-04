@@ -1,8 +1,9 @@
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { mkdtempSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { argsDeArranque, puertoDeAvd, puertoDeFisico } from "./puertosDeAvd.js";
 import { validarSettings } from "./settings.js";
 
@@ -213,6 +214,8 @@ describe("el script xone-hotswap real, con --dry-run", () => {
     // Acabar pulsando (también «atrás») añade la lectura de los textos: ver «una cadena que ACABA pulsando».
     [["--dry-run", "atras"], '{"command":"pressKey","keyCode":4}\n{"command":"getAllElements","format":"uiautomator"}'],
     [["--dry-run", "textos"], '{"command":"getAllElements","format":"uiautomator"}'],
+    // Antes de cada captura, la pantalla en la que está (pasada 18 de la calculadora).
+    [["--dry-run", "shot", "name=A"], '{"command":"getCurrentScreen"}\n{"command":"getScreenshot","name":"A"}'],
     [["--dry-run", "esperar", "Elige", "antes", "timeout=800"], '{"command":"getAllElements","format":"uiautomator"}'],
     // Varios casos con `---`: la lectura de antes, y detrás de cada caso que acaba pulsando, la suya; el que acaba leyendo, no.
     [
@@ -260,6 +263,25 @@ describe("el script xone-hotswap real, contra un servidor de mentira", () => {
     result: true,
     status: `<hierarchy>${textos.map((t) => `<node index="0" text="${t}" bounds="[0,0][1,1]"/>`).join("")}<node text="" /></hierarchy>`,
   });
+
+  /** Medido en la calculadora (pasada 18): capturó con `shot` sin abrir su pantalla y el aparato estaba en otra. */
+  it("una captura dice de QUÉ pantalla es, y avisa si no es la última que se abrió; sin `getCurrentScreen`, se calla", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "xc-hotswap-"));
+    vi.stubEnv("XONECODE_HOTSWAP", dir);
+    try {
+      expect((await correrContra({ result: true, status: "abierta DemoCalculadora" }, "abrir", "DemoCalculadora")).codigo).toBe(0);
+      const r = await correrContra([{ result: true, status: '{"collection":"EspecialBrillo","dialogs":[]}' }, { result: true, status: "x" }], "shot");
+      expect(r.codigo).toBe(0);
+      const primera = JSON.parse(r.out.trim().split("\n")[0]!);
+      expect(primera).toMatchObject({ comando: "pantalla-de-la-captura", coleccion: "EspecialBrillo" });
+      expect(primera.aviso).toContain("no de «DemoCalculadora»");
+      const sin = await correrContra([{ result: false, status: "Unknown command" }, { result: true, status: "x" }], "shot");
+      expect(sin.codigo).toBe(0);
+      expect(sin.out).not.toContain("pantalla-de-la-captura");
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  }, 20_000);
 
   it("textos: los pintados en una línea, sin vacíos ni repetidos y con las entidades deshechas", async () => {
     const r = await correrContra(volcado("¿Cuándo?", "Más tarde &amp; ahora", "¿Cuándo?"), "textos");

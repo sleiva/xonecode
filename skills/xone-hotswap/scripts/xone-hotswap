@@ -53,7 +53,7 @@ process.on("warning", (aviso) => {
   if (!String(aviso.message).includes("NODE_TLS_REJECT_UNAUTHORIZED")) console.warn(aviso);
 });
 
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { guardarGeometria } from "../lib/geometria.mjs";
 import { ponerCarpetasPorOmision, rutaParaAbrir, RUTAS_REALES } from "../lib/carpetas.mjs";
@@ -235,6 +235,7 @@ const ATAJOS = {
   },
   // Ir DIRECTO a una ventana por su colección, sin repetir login y menús en cada prueba (`ui.openMenu`).
   abrir: (resto) => ({
+    [ABRE]: String(resto[0] ?? ""),
     command: "runScript",
     scriptLanguage: "javascript",
     scriptText: Buffer.from(`ui.openMenu(${JSON.stringify(resto[0] ?? "")}); return "abierta ${String(resto[0] ?? "").replace(/"/g, "")}";`, "utf8").toString("base64"),
@@ -246,6 +247,16 @@ const ATAJOS = {
  * `JSON.stringify` no la mande: el servidor solo ve el `getAllElements`.
  */
 const ATAJO = Symbol("atajo");
+/**
+ * **Una captura dice DE QUÉ pantalla es**, sin mirarla. Medido en la calculadora (pasada 18): el desarrollador
+ * capturó con `shot` sin abrir antes su pantalla, el aparato estaba en otra («BRILLO») y gastó la captura y su
+ * imagen en descubrirlo. Antes de cada `getScreenshot` se pregunta la pantalla (`getCurrentScreen`, una línea) y, si
+ * no es la última que se abrió con `abrir`, se avisa. Si el framework no tiene `getCurrentScreen`, se calla.
+ */
+const ANTES_DE_CAPTURA = Symbol("antes de capturar");
+/** La colección que abre un `abrir`: se apunta en `$XONECODE_HOTSWAP/ultima-abierta.txt` para el aviso de arriba. */
+const ABRE = Symbol("abre");
+const ULTIMA_ABIERTA = "ultima-abierta.txt";
 const ESPERA_POR_OMISION_MS = 5_000;
 /** Cada cuánto se vuelve a mirar mientras se espera: el `waitForElement` del framework sondea cada 250 ms. */
 const CADENCIA_MS = 300;
@@ -381,6 +392,11 @@ casos.forEach((caso, i) => {
   const acabaPulsando = deEste.length > 0 && ACCIONES.has(deEste[deEste.length - 1].command);
   if (acabaPulsando) comandos.push(lecturaEstable(variosCasos ? { caso: i + 1, pasos: pasosDelCaso(deEste) } : {}));
 });
+
+// Antes de cada captura, la pantalla en la que está (`ANTES_DE_CAPTURA`).
+for (let i = comandos.length - 1; i >= 0; i--) {
+  if (comandos[i].command === "getScreenshot") comandos.splice(i, 0, { command: "getCurrentScreen", [ANTES_DE_CAPTURA]: true });
+}
 
 if (seco) {
   for (const c of comandos) console.log(JSON.stringify(c));
@@ -561,6 +577,31 @@ ws.onmessage = (ev) => {
     siguiente();
     return;
   }
+  if (pendiente?.[ANTES_DE_CAPTURA] === true) {
+    const coleccion = mensaje.result === false ? undefined : coleccionDe(mensaje);
+    if (coleccion !== undefined) {
+      const abierta = ultimaAbierta();
+      const otra = abierta !== undefined && abierta !== "" && abierta !== coleccion;
+      console.log(
+        JSON.stringify({
+          comando: "pantalla-de-la-captura",
+          coleccion,
+          ...(otra ? { aviso: `la captura es de «${coleccion}», no de «${abierta}», la última que abriste: xone-probar --abrir ${abierta} --captura` } : {}),
+        }),
+      );
+    }
+    pendiente = undefined;
+    siguiente();
+    return;
+  }
+  if (pendiente?.[ABRE] !== undefined && mensaje.result !== false && HOTSWAP !== undefined) {
+    try {
+      mkdirSync(HOTSWAP, { recursive: true });
+      writeFileSync(join(HOTSWAP, ULTIMA_ABIERTA), pendiente[ABRE]);
+    } catch {
+      // Sin donde apuntarlo, el aviso de la captura simplemente no sale.
+    }
+  }
   if (mensaje.result === false) rechazados.push(pendiente?.command ?? "?");
   // Con varios casos, una pulsación ACEPTADA y sin nada que decir no se imprime: lo que cuenta es la línea de su caso.
   const pulsacionMuda = variosCasos && mensaje.result !== false && ACCIONES.has(pendiente?.command) && (mensaje.status ?? "") === "";
@@ -626,3 +667,19 @@ function resolverAtajo(atajo, textos) {
   }
   return false;
 }
+
+/** La colección de una respuesta de `getCurrentScreen`, venga como objeto o como JSON en `status`. */
+function coleccionDe(mensaje) {
+  const m = /"(?:collection|coll)"\s*:\s*"([^"]+)"/.exec(JSON.stringify(mensaje).replace(/\\"/g, '"'));
+  return m?.[1];
+}
+
+function ultimaAbierta() {
+  if (HOTSWAP === undefined) return undefined;
+  try {
+    return readFileSync(join(HOTSWAP, ULTIMA_ABIERTA), "utf8").trim();
+  } catch {
+    return undefined;
+  }
+}
+
