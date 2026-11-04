@@ -75,7 +75,7 @@ export interface DiagnosticoDeTools {
    * conversación anterior arrancó una encarnación, o por qué arrancó sin memoria, y qué se hizo con la
    * suya al terminar. Opcional, como `corte`. Es lo que permite comparar una pasada con y sin ella.
    */
-  memoria?(agente: string, evento: "arranca-con" | "arranca-sin" | "cierra", dato: string, tokens?: number): void;
+  memoria?(agente: string, evento: "arranca-con" | "arranca-sin" | "cierra" | "tarea", dato: string, tokens?: number): void;
   /**
    * **Cuánto METIÓ en el contexto lo que devolvió una tool.** Opcional, como `corte`.
    *

@@ -127,3 +127,10 @@ describe("un encargo con `TAREA:` que no nombra el plan es del plan de la últim
     expect(decidirEncargo("developer-xone", "Mira por qué falla el login", leer, abierta)).toEqual({ tipo: "libre" });
   });
 });
+
+describe("un plan nombrado que NO existe no saca el encargo de la tarea abierta (Maset: «aplica el plan B de PLAN §2.4»)", () => {
+  it("con `TAREA:` y la anterior abierta, «plan B» no lo hace trabajo libre: no arranca", () => {
+    const d = decidirEncargo("developer-xone", "TAREA: 03\nSi una zona no responde, aplica el plan B de PLAN §2.4.", leer, { plan: "calculadora", numero: "02", intentos: 1 });
+    expect(d.tipo).toBe("rechazo");
+  });
+});

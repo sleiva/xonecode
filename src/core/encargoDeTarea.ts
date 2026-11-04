@@ -88,15 +88,17 @@ export function decidirEncargo(
   anterior?: TareaYaEncargada,
 ): DecisionDeEncargo {
   const porRuta = planesNombrados(encargo);
-  const porNombre = porRuta.length > 0 ? porRuta : planesPorSuNombre(encargo);
-  // Sin plan nombrado pero con su línea `TAREA:`, es del plan de la última tarea que se le encargó. Medido en Maset: «TAREA: 01
-  // Vuelta de ajuste visual…» no nombraba el plan, pasaba por trabajo libre y no contaba como intento (`INTENTOS_POR_TAREA`).
-  const planes = porNombre.length === 0 && anterior !== undefined && LINEA_DE_TAREA.test(encargo) ? [anterior.plan] : porNombre;
-  const conTareas = planes
-    .map((plan) => ({ plan, texto: leerTasks(plan) }))
-    .filter((p): p is { plan: string; texto: string } => p.texto !== undefined)
-    .map((p) => ({ plan: p.plan, tareas: leerTareasDelPlan(p.texto).tareas }))
-    .filter((p) => p.tareas.length > 0);
+  const conTareasDe = (planes: readonly string[]) =>
+    planes
+      .map((plan) => ({ plan, texto: leerTasks(plan) }))
+      .filter((p): p is { plan: string; texto: string } => p.texto !== undefined)
+      .map((p) => ({ plan: p.plan, tareas: leerTareasDelPlan(p.texto).tareas }))
+      .filter((p) => p.tareas.length > 0);
+  const nombrados = conTareasDe(porRuta.length > 0 ? porRuta : planesPorSuNombre(encargo));
+  // Sin un plan CON TAREAS nombrado pero con su línea `TAREA:`, es del plan de la última tarea que se le encargó. Medido en
+  // Maset: «TAREA: 01 / Vuelta de ajuste visual…» no nombraba plan, y «TAREA: 02 … aplica el plan B de PLAN §2.4» nombraba
+  // uno que no existe («B»); los dos pasaban por trabajo libre y se saltaban la tarea abierta (`INTENTOS_POR_TAREA`).
+  const conTareas = nombrados.length === 0 && anterior !== undefined && LINEA_DE_TAREA.test(encargo) ? conTareasDe([anterior.plan]) : nombrados;
   if (conTareas.length !== 1) return { tipo: "libre" };
   const { plan, tareas } = conTareas[0]!;
   const forma = `Empieza el encargo con la línea \`TAREA: <número>\` y UNA sola tarea: la prueba en el aparato y la marca del plan van por tarea.`;

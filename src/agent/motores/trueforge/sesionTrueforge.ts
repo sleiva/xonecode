@@ -2058,9 +2058,16 @@ export async function abrirSesionTrueforge(
           return undefined;
         }
       }, agente.scripts === true ? tareaEncargadaDe.get(agente.nombre) : undefined);
+      // Qué decidió y con qué tarea anterior, en la traza: sin esto, una tarea abierta que se saltaba no dejaba rastro.
+      const previa = agente.scripts === true ? tareaEncargadaDe.get(agente.nombre) : undefined;
+      diagnostico?.memoria?.(
+        agente.nombre,
+        "tarea",
+        `${decision.tipo === "tarea" ? `tarea ${decision.plan}#${decision.tarea.numero}` : decision.tipo} · anterior ${previa === undefined ? "—" : `${previa.plan}#${previa.numero} ×${String(previa.intentos)}`}`,
+      );
       if (decision.tipo === "rechazo") {
         anotarPaso("trueforge.no-arranca", `${agente.nombre}: ${decision.motivo.slice(0, 80)}`)();
-        diagnostico?.memoria?.(agente.nombre, "arranca-sin", decision.motivo.includes("SIN CERRAR") ? "tarea anterior sin cerrar" : "encargo sin UNA tarea del plan");
+        diagnostico?.memoria?.(agente.nombre, "arranca-sin", `${decision.motivo.includes("SIN CERRAR") ? "tarea anterior sin cerrar" : "encargo sin UNA tarea del plan"}: ${decision.motivo.slice(0, 240)}`);
         return devolverSinArrancar(agente.nombre, [], decision.motivo);
       }
       if (decision.tipo === "tarea") params = { ...params, request: { ...params.request, input: decision.encargo } };

@@ -4919,8 +4919,14 @@ describe("un encargo de un plan es UNA tarea, con su línea `TAREA:`", () => {
       [delega("d4", "TAREA: 01\nOtra vez.")],
       [new AIMessageChunk({ content: "Falta la 01." })],
     ]);
-    const s = await abrirSesionTrueforge({ raiz: conPlan(), modelos: m, entorno: ENTORNO, skills: CATALOGO, bucleDelDesarrollador: true, developerContinuo: true });
+    const decisiones: string[] = [];
+    const s = await abrirSesionTrueforge({
+      raiz: conPlan(), modelos: m, entorno: ENTORNO, skills: CATALOGO, bucleDelDesarrollador: true, developerContinuo: true,
+      diagnostico: { modelo: () => {}, herramienta: () => {}, memoria: (_n, que, dato) => void (que === "tarea" && decisiones.push(dato)) },
+    });
     await s.turno("haz la calculadora del plan calc", piel().p);
+    // La traza dice qué decidió cada encargo y con qué tarea anterior: sin esto, la que se saltaba no dejaba rastro.
+    expect(decisiones).toEqual(["tarea calc#01 · anterior —", "tarea calc#01 · anterior calc#01 ×1", "tarea calc#01 · anterior calc#01 ×2", "rechazo · anterior calc#01 ×3"]);
     // El segundo lleva la ficha aunque no nombre el plan…
     expect(vistos[3]!.join("\n")).toContain("LA TAREA DE ESTE ENCARGO, de /planes/calc/TASKS.md");
     // …y el cuarto no arranca.
