@@ -222,6 +222,9 @@ Ante una discrepancia con el código, **el código manda**.
 - **Un plan no se pule a trozos** (`toolsDeFichero.ts#TOPE_DE_RETOQUES_DEL_PLAN`): pasado ese número de `edit_file` sobre
   `/planes/` en un encargo, se devuelve error y se pide reescribirlo de una vez (`write_file` vale en `/planes/`).
 - **Los valores de una maqueta son DE EJEMPLO**: ni el plan los manda escribir fijos ni el desarrollador los copia.
+- **Con maqueta, la pantalla ENTERA es UNA tarea** (`FIDELIDAD_DEL_PLAN`, skill `xone-plan-builder`): sus piezas las enumera el
+  `DISENO.md`, y la lógica y la entrada desde el menú van aparte. Partida por piezas, la primera tarea no se cierra: quien
+  construye hace la pantalla de una vez (medido con el mismo modelo que Codex, `docs/DECISIONES.md`).
 - **La shell no escribe el proyecto** (`proyectoSinShell.ts`, `conGuardaDelProyecto` sobre el backend que ejecuta, en
   `execute` y en `ejecutar_script`): tras cada orden se compara el proyecto fuera de `.xonecode/` y `.git/` con su copia, y
   lo cambiado, creado o borrado se DESHACE y se añade a la salida con código ≠ 0. Las escrituras del backend de los agentes

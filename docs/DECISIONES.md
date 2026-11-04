@@ -10497,3 +10497,19 @@ el desarrollador probando él mismo eso pesa: en la pasada 9 de la calculadora D
 en tres minutos —casi una por edición— y la tarea 01 se cortó con tres de cinco casillas. Decisión suya: subirlo bastante, a
 veinte; el del turno sigue siendo cuatro encargos llenos (ochenta). Las rondas visuales siguen en `RONDAS_VISUALES`, que es
 lo que dicen el prompt y la medida automática.
+
+## Con maqueta, la pantalla ENTERA es una tarea (04-11-2026)
+
+Mismo modelo (DeepSeek flash por Ollama), misma calculadora desde cero. Codex: tres tareas —la estructura visual entera, la
+lógica, la entrada en el drawer— y 24 de 24 criterios en 18 minutos. Nuestra `prueba-ollama-18` (10:03): otras tres, 20 de
+20. Con `dc26d77e` (13:22) el analista recibió «una tarea que construye una PARTE de la pantalla se cierra con lo suyo… el
+parecido de la pantalla entera es la ÚLTIMA tarea» y, junto al tope de ocho criterios, partió la pantalla por piezas: seis o
+siete tareas, y en la consola la primera seguía abierta a los diez minutos porque el desarrollador hace la pantalla de una vez
+y se sale del alcance de la pieza. La regla salió de leer la pasada de Codex en Maset, donde sus «partes» eran grandes, y se
+generalizó sin medirla en la calculadora.
+
+Reescrita (`FIDELIDAD_DEL_PLAN`, skill `xone-plan-builder`): la pantalla se construye ENTERA en una tarea, con sus piezas
+enumeradas en el `DISENO.md`; sin tarea de «estuche» (la colección vacía con su fondo: en la pasada `calc3-1`, siete minutos
+sin cerrarla y con el crítico visual dentro); como mucho tres tareas por pantalla, y lo que la maqueta enseña y el encargo no
+pide se pinta sin tarea propia. Medido en `calc3-2`: plan de tres tareas, la T1 (la pantalla entera) 7 de 7 en 24 minutos y
+la T2 encargada al mismo desarrollador. De `dc26d77e` se queda que ningún criterio es un porcentaje.
