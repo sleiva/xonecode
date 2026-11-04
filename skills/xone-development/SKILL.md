@@ -42,6 +42,7 @@ Las cinco familias del detalle están en `references/`: `fundamentos/`, `xml-ui/
 4. **No mezcles patrones de React, Angular, Vue** ni de ningún framework web.
 5. **No repitas nombres de nodos dentro de la misma colección.**
 6. **No uses `<load>`** para inicializar una pantalla: produce bugs silenciosos.
+7. **No cambies la resolución del emulador** (`wm size`) para probar: `resolution-width`/`resolution-height` del `app.xml` son la resolución de DISEÑO y XOne escala desde ella. Se prueba en el aparato tal cual.
 
 ## Sintaxis JavaScript que soporta el motor
 

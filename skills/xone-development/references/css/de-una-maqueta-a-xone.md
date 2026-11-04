@@ -32,6 +32,12 @@ clases (`rounded-lg`, `text-key-numeric`, `bg-surface-container-high`) son de ES
 `alto_útil / resolution-height` (el alto útil es la pantalla sin las barras de estado y de navegación). Lee los
 dos valores en el `app.xml` del proyecto.
 
+`resolution-width` × `resolution-height` es la resolución de DISEÑO, no una pantalla en la que probar: XOne escala a
+partir de ella en cualquier aparato. **No cambies la resolución del emulador** (`adb shell wm size`) para comprobar
+que algo cabe en esos números: se prueba en el aparato tal cual, y un criterio «sin recortes en 1080 × 1920» se cumple
+con lo que se ve ahí (medido con Codex en Maset: forzó `wm size 1080x1920` por ese criterio y rehízo alturas que ya
+estaban bien en el aparato real).
+
 ## 3. Forma, bordes y fondos
 
 | En la maqueta | En XOne | De dónde |

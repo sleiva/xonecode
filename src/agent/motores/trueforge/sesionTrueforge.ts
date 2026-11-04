@@ -243,6 +243,7 @@ export const UNA_VENTANA_POR_ENCARGO = [
  * no se cumple con piezas por hacer (ni con una maqueta que trae un marco oscuro); la tarea quedó abierta tres vueltas y el
  * turno se cortó sin los contadores. El de Codex, con el MISMO analista y la misma skill, cerraba cada parte con lo suyo
  * («captura guardada para comparar»), separaba construir, navegar y datos, y dejaba la comparación lado a lado para el final.
+ * Y la versión: nuestro plan pidió el pie con el «v2.4» de la maqueta como texto fijo; Codex usó la macro (`v10.09.2026-1`).
  */
 export const FIDELIDAD_DEL_PLAN = [
   "FIDELIDAD A LA MAQUETA: si el trabajo parte de una maqueta, el plan es FIEL a ella: entre sus tareas están TODAS sus piezas",
@@ -252,7 +253,8 @@ export const FIDELIDAD_DEL_PLAN = [
   "—estructura, colores, tipografías y proporciones, mirando la captura junto a la maqueta— es la ÚLTIMA tarea, de fidelidad,",
   "que además vuelve a comprobar lo de las anteriores. Ningún criterio es un porcentaje de una medida: se juzga mirando.",
   "Construir la pantalla, la navegación y los datos van en tareas separadas. Un icono que XOne no trae es trabajo del",
-  "diseñador. Los datos de ejemplo de la maqueta no son piezas: no se copian.",
+  "diseñador. Los datos de ejemplo de la maqueta no son piezas: no se copian. Tampoco la VERSIÓN de la app que pinta la",
+  "maqueta («v2.4»): sale de la macro `##VERSION##` (`appData.getGlobalMacro(\"##VERSION##\")`), como cualquier dato que la app ya tiene.",
 ].join("\n");
 
 export const PLAN_PRIMERO = [
