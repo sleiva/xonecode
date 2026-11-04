@@ -18,8 +18,12 @@ import {
   NOMBRE_SIGUIENTE_TAREA,
   siguienteTareaPendiente,
   textoDeSiguienteTarea,
+  textoSinEvidencia,
   textoSinMasTareas,
 } from "../../../core/siguienteTarea.js";
+
+/** `01`, `T1` y `1` son la misma tarea. */
+const clave = (numero: string): string => String(Number.parseInt(numero.replace(/^T/i, ""), 10));
 
 export interface EstadoDelContinuo {
   plan: string;
@@ -43,6 +47,8 @@ export function crearSiguienteTarea(opciones: {
       return undefined;
     }
   };
+  /** Las tareas (`hilo|tarea`) a las que ya se les pidió la evidencia: se pide UNA vez, y la segunda se pasa igual. */
+  const pedidas = new Set<string>();
   return tool(
     async ({ resumen }: { resumen: string }) => {
       const vivo = opciones.estado();
@@ -50,8 +56,16 @@ export function crearSiguienteTarea(opciones: {
       const { hilo, estado } = vivo;
       const texto = leerTasks(estado.plan);
       if (texto === undefined) return `No se pudo leer /planes/${estado.plan}/TASKS.md: termina con tu informe.`;
+      const tareas = leerTareasDelPlan(texto).tareas;
+      // Sin NINGÚN criterio marcado no se pasa a la siguiente a la primera: como el «completion audit» de Codex, pero
+      // comprobado en el plan y no pedido en el prompt. Medido en la pasada 13: 26 min, dos tareas mezcladas y 0 marcas.
+      const actual = tareas.find((t) => clave(t.numero) === clave(estado.tarea));
+      if (actual !== undefined && actual.criterios.total > 0 && actual.criterios.hechos === 0 && !pedidas.has(`${hilo}|${estado.tarea}`)) {
+        pedidas.add(`${hilo}|${estado.tarea}`);
+        return textoSinEvidencia(estado.tarea, actual.criterios.total);
+      }
       const cerradas = [...estado.cerradas, estado.tarea];
-      const siguiente = siguienteTareaPendiente(leerTareasDelPlan(texto).tareas, estado.tarea, new Set(cerradas));
+      const siguiente = siguienteTareaPendiente(tareas, estado.tarea, new Set(cerradas));
       if (siguiente === undefined) {
         opciones.alPasar(hilo, { ...estado, cerradas });
         return textoSinMasTareas(estado.plan, cerradas);

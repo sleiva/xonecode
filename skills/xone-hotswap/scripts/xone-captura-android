@@ -28,6 +28,7 @@ import { join, basename } from "node:path";
 import { canalDeGranja, serieAndroid, rutaDeAdb, NODE } from "../lib/dispositivo.mjs";
 import { capturaDeGranja, comandoEnGranja } from "../lib/granja.mjs";
 import { guardarGeometria } from "../lib/geometria.mjs";
+import { ponerCarpetasPorOmision, rutaParaAbrir } from "../lib/carpetas.mjs";
 
 const args = process.argv.slice(2);
 if (args.includes("--help") || args.includes("-h")) {
@@ -44,6 +45,8 @@ proyecto del usuario y ahí no se escribe.`);
   process.exit(0);
 }
 
+// Sin harness, las carpetas por omisión (`../lib/carpetas.mjs`): nunca el `cwd`.
+ponerCarpetasPorOmision();
 const ARTEFACTOS = process.env.XONECODE_ARTEFACTOS;
 if (ARTEFACTOS === undefined) {
   // Sin sitio donde dejarla no se inventa uno: escribir en el `cwd` es exactamente el fallo
@@ -220,4 +223,4 @@ console.log(
 // Y su GEOMETRÍA, en el mismo momento: el árbol de controles y las barras del sistema, para que el
 // crítico visual compare tecla a tecla con la pantalla que ESTA captura enseña (`../lib/geometria.mjs`).
 const geometria = guardarGeometria({ nombreDeCaptura: nombre, bytes, serie });
-if (geometria !== undefined) console.log(`(con su geometría para el crítico: /hotswap/${geometria})`);
+if (geometria !== undefined) console.log(`(con su geometría para el crítico: ${rutaParaAbrir("hotswap")}${geometria})`);

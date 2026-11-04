@@ -44,6 +44,15 @@ export function textoSinMasTareas(plan: string, cerradas: readonly string[]): st
   );
 }
 
+/** Lo que devuelve `siguiente_tarea` la primera vez que se pide sin ningún criterio de la tarea marcado. */
+export function textoSinEvidencia(tarea: string, total: number): string {
+  return (
+    `La tarea ${tarea} NO se cierra todavía: tiene ${String(total)} criterio(s) y no hay ninguno marcado. Prueba en el aparato ` +
+    "cada uno (con `xone-probar`, varios casos en una orden), marca con `marcar_criterios_del_plan` los comprobados y, de los " +
+    `que no se puedan comprobar, di por qué. Después vuelve a llamar a \`${NOMBRE_SIGUIENTE_TAREA}\`.`
+  );
+}
+
 export const DESCRIPCION_DE_SIGUIENTE_TAREA =
   "Cierra la tarea del plan en la que estás y te da la ficha de la SIGUIENTE, para seguir en esta misma conversación. " +
   "Llámala cuando la tarea esté hecha, probada en el aparato y marcada (o cuando ya no puedas avanzar en ella: dilo en " +
@@ -56,9 +65,15 @@ export const TEXTO_DEL_DEVELOPER_CONTINUO = [
   "encargo hasta que te diga que no quedan tareas.",
 ].join("\n");
 
-/** Al orquestador: una sola delegación por plan. */
+/**
+ * Al orquestador: una sola delegación por plan, y SIN decirle al desarrollador que siga. Medido en la pasada 13: con
+ * «seguirá él con las demás», el orquestador le escribió «cuando la cierres sigue con la 2 en el mismo encargo», y el
+ * desarrollador construyó T1 y T2 a la vez sin marcar nada. Codex, con el mismo modelo, mandaba «SOLO la Tarea 1» y la
+ * siguiente después, al mismo hilo. Aquí la siguiente la pone el harness al cerrar la tarea (`siguiente_tarea`).
+ */
 export const TEXTO_DEL_ORQUESTADOR_CONTINUO = [
-  "DESARROLLADOR CONTINUO: a developer-xone mándale SOLO la PRIMERA tarea pendiente del plan (`TAREA: <número>`): seguirá él",
-  "con las demás en el mismo encargo y volverá cuando no quede ninguna. No le mandes la siguiente tarea al volver salvo que su",
-  "informe diga que alguna se quedó sin hacer.",
+  "DESARROLLADOR CONTINUO: a developer-xone mándale SOLO la PRIMERA tarea pendiente del plan (`TAREA: <número>`) y NO le",
+  "digas que siga con las demás: la siguiente se la da el harness, en el mismo encargo, cuando cierre la actual con sus",
+  "criterios marcados. Volverá cuando no quede ninguna. Al volver, no le mandes otra salvo que su informe diga que alguna",
+  "se quedó sin hacer.",
 ].join("\n");

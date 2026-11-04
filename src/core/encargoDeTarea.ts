@@ -14,6 +14,19 @@ import { leerTareasDelPlan, type TareaDelPlan } from "./tareasDelPlan.js";
 /** La línea que dice la tarea del encargo, en cualquier sitio del texto. */
 export const LINEA_DE_TAREA = /^[ \t]*TAREA:[ \t]*(.*)$/im;
 
+/**
+ * Lo que va detrás de la ficha: el ALCANCE y cómo se CIERRA. Medido con Codex sobre la calculadora (04-11-2026), con el
+ * mismo modelo: su orquestador escribía «ejecuta SOLO la Tarea 1… no modifiques Menu.xne todavía» y «devuelve el
+ * resultado de cada criterio con la evidencia», y su desarrollador cerró la tarea criterio a criterio sin adelantarse.
+ * El nuestro, sin esas dos frases, construía las tareas siguientes dentro de la primera y no marcaba nada. Lo pone el
+ * código, no el orquestador: así no depende de que se acuerde.
+ */
+export const ALCANCE_Y_CIERRE_DE_LA_TAREA = [
+  "ALCANCE: haz SOLO esta tarea. Lo que piden las otras tareas del plan no lo toques todavía, aunque lo veas venir.",
+  "CIERRE: prueba en el aparato CADA criterio de arriba, marca solo los comprobados y, al cerrarla, di por criterio",
+  "`[x]` o `[ ]` con su prueba (lo que viste o mediste) o por qué no se pudo comprobar.",
+].join("\n");
+
 /** Cuántas tareas pendientes se le listan al orquestador al devolverle un encargo. */
 const TOPE_DE_TAREAS_LISTADAS = 8;
 
@@ -96,6 +109,8 @@ export function decidirEncargo(nombre: string, encargo: string, leerTasks: (plan
     `LA TAREA DE ESTE ENCARGO, de /planes/${plan}/TASKS.md (líneas ${String(tarea.linea)}–${String(tarea.linea + tarea.lineas - 1)}; el resto del plan no hace falta leerlo):`,
     `## ${tarea.numero} — ${tarea.titulo}`,
     tarea.cuerpo,
+    "",
+    ALCANCE_Y_CIERRE_DE_LA_TAREA,
   ].join("\n");
   return { tipo: "tarea", plan, tarea, encargo: `${encargo}${ficha}` };
 }

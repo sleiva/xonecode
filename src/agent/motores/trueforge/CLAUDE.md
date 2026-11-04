@@ -99,6 +99,9 @@ Ante una discrepancia con el código, **el código manda**.
   **Si cierra con tareas pendientes, la llama el CÓDIGO por él** (`modeloLangchain.ts#alCerrar`), con lo que iba a decir
   como resumen: tener la tool no bastaba. Y un encargo que nombra el plan SIN su ruta («plan `calc`») también cae en la
   regla de una tarea (`core/encargoDeTarea.ts#planesPorSuNombre`).
+  **Sin NINGÚN criterio marcado, `siguiente_tarea` no pasa a la primera** (`textoSinEvidencia`; la segunda, sí: no
+  atasca). La ficha lleva detrás el ALCANCE y el CIERRE por criterio (`ALCANCE_Y_CIERRE_DE_LA_TAREA`), y al orquestador
+  se le dice que NO le pida seguir: «sigue con la 2» era lo que mezclaba las tareas.
 - **Un hijo NO ARRANCA mientras trabaja aquel del que depende** (`espera:` en el `.md`, `esperas.ts`): se devuelve al
   orquestador al instante. **Nunca se espera bloqueando**. `developer-xone` espera a `designer-xone`. **Un encargo
   devuelto sin arrancar retira su anuncio** (`crearHijo#devolverSinArrancar`, `esperas.ts#noArranco`): si no, quien lo

@@ -56,6 +56,7 @@ process.on("warning", (aviso) => {
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { guardarGeometria } from "../lib/geometria.mjs";
+import { ponerCarpetasPorOmision, rutaParaAbrir, RUTAS_REALES } from "../lib/carpetas.mjs";
 import { COMO_CASOS, diferenciaDeTextos, partirEnCasos, pasosDelCaso } from "../lib/casos.mjs";
 import { asegurarTunel, canalDeGranja, dispositivoDeLaSesion, puertoConMotivo, retirarOpciones, serieAndroid, PUERTO_DEL_HOTSWAP } from "../lib/dispositivo.mjs";
 
@@ -79,6 +80,8 @@ function urlPorOmision(puertoPedido, seriePedida) {
   return `wss://127.0.0.1:${puerto}/hotswap`;
 }
 const TOPE_MS = Number(process.env.HOTSWAP_TOPE_MS ?? 40_000);
+// Sin harness, las carpetas por omisión (`../lib/carpetas.mjs`).
+ponerCarpetasPorOmision();
 const ARTEFACTOS = process.env.XONECODE_ARTEFACTOS;
 /**
  * Dónde va lo que se saca del contexto y NO es para enseñar: el árbol de controles, el log.
@@ -103,7 +106,7 @@ const HOTSWAP = process.env.XONECODE_HOTSWAP ?? ARTEFACTOS;
  * rendirse y abrirlo con `python3` desde la shell. Es la misma regla que `porQueNo`: decir la
  * ruta buena, no que la adivine.
  */
-const RUTA_VIRTUAL = process.env.XONECODE_HOTSWAP === undefined ? "/artefactos/" : "/hotswap/";
+const RUTA_VIRTUAL = process.env[RUTAS_REALES] === "1" ? rutaParaAbrir("hotswap") : process.env.XONECODE_HOTSWAP === undefined ? "/artefactos/" : "/hotswap/";
 /**
  * A partir de aquí una respuesta de TEXTO se guarda en vez de imprimirse.
  *
@@ -461,11 +464,11 @@ function sinBinarios(respuesta) {
     // una imagen, así que no vuelve a entrar aquí.
     if (imagen !== undefined) {
       const geometria = guardarGeometria({ nombreDeCaptura: nombre, bytes, serie: seriePedida });
-      if (geometria !== undefined) process.stderr.write(`(con su geometría para el crítico: /hotswap/${geometria})\n`);
+      if (geometria !== undefined) process.stderr.write(`(con su geometría para el crítico: ${rutaParaAbrir("hotswap")}${geometria})\n`);
     }
     // Con la ruta VIRTUAL delante, que es la que se puede volver a abrir. Una captura sigue
     // diciendo `/artefactos/`, que es donde está y donde la tarjeta del hilo la enseña.
-    const virtual = imagen === undefined ? RUTA_VIRTUAL : "/artefactos/";
+    const virtual = imagen === undefined ? RUTA_VIRTUAL : rutaParaAbrir("artefactos");
     copia[clave] = `<guardado como ${virtual}${nombre}, ${bytes.length} bytes>`;
   }
   return copia;

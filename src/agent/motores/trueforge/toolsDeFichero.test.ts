@@ -64,6 +64,12 @@ describe("edit_file con varios cambios y la validación en su resultado, sobre e
     expect(r.texto).toContain("Corrígelo antes de probar.");
   });
 
+  it("un .xne bien formado con una prop repetida también lo dice: es un bug mudo de XOne", async () => {
+    const { llamar } = proyecto();
+    const r = await llamar("write_file", { file_path: "/Calc.xne", content: '<coll name="Calc">\n<prop name="MAP_K" type="B"/>\n<prop name="MAP_K" type="B"/>\n</coll>\n' });
+    expect(r.texto).toContain("Validado: /Calc.xne:3: la prop «MAP_K» ya está en la línea 2");
+  });
+
   it("y write_file de un fichero nuevo también valida", async () => {
     const { llamar } = proyecto();
     expect((await llamar("write_file", { file_path: "/nuevo.js", content: "var a = `x`;\n" })).texto).toContain("Validado: /nuevo.js:");

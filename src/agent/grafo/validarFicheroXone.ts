@@ -3,6 +3,7 @@ import type { FilesystemBackend } from "deepagents";
 import { z } from "zod";
 import { comprobarCss } from "../../core/cssBienFormado.js";
 import { comprobarJs } from "../../core/jsParaRhino.js";
+import { propRepetida } from "../../core/propsRepetidas.js";
 import { comprobarXml, type ResultadoXml } from "../../core/xmlBienFormado.js";
 import { puedeLeerRuta } from "./perfiles.js";
 
@@ -58,6 +59,11 @@ function comprobar(ruta: string, texto: string): ResultadoXml {
 export function validacionDeTexto(ruta: string, texto: string): string | undefined {
   if (!VALIDABLE.test(ruta)) return undefined;
   const r = comprobar(ruta, texto);
+  // Bien formado no basta en un `.xne`: dos props con el mismo `name` son un bug mudo (`core/propsRepetidas.ts`).
+  const repetida = r.ok && /\.xne$/i.test(ruta) ? propRepetida(texto) : undefined;
+  if (repetida !== undefined) {
+    return `Validado: ${ruta}:${repetida.linea}: la prop «${repetida.nombre}» ya está en la línea ${repetida.primera}: XOne no avisa y una pisa a la otra.\nCorrígelo antes de probar.`;
+  }
   if (r.ok) return `Validado: ${ruta} está bien.`;
   const linea = texto.replace(/^\uFEFF/, "").split(/\r?\n/)[r.linea - 1] ?? "";
   return `Validado: ${ruta}:${r.linea}:${r.columna}: ${r.motivo}\n    ${linea.trim().slice(0, 200)}\nCorrígelo antes de probar.`;
