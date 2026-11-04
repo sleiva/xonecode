@@ -168,6 +168,8 @@ import { decodificarImagen } from "../../dispositivos/decodificarImagen.js";
 import { crearDescribirImagen } from "../../grafo/describirImagen.js";
 import { crearImagenesVistas, crearVerImagen } from "../../grafo/verImagen.js";
 import { unaCriticaPorTarea } from "./unaCriticaPorTarea.js";
+import { conColaDelAparato } from "./colaDelAparato.js";
+import { crearSerieDeEscrituras } from "../../../core/serieDeEscrituras.js";
 import { nombraUnaMaqueta } from "../../../core/maquetaDelTurno.js";
 import { crearTraerDeLaMaquina } from "../../grafo/traerDeLaMaquina.js";
 import { describirPantalla, ESFUERZO_DEL_CRITICO_VISUAL, invocarVisualConModelos, PAPEL_DEL_JUEZ_VISUAL, type ConsumoVisual, type InvocarVisual } from "../../dispositivos/juezVisual.js";
@@ -1338,6 +1340,9 @@ export async function abrirSesionTrueforge(
    */
   const guardaDelProyecto = crearGuardaDelProyecto(raiz);
   const backend = conEscriturasAnotadas(montarBackend() as unknown as BackendDeFicheros, guardaDelProyecto);
+  /** Las órdenes al MISMO aparato, en serie para TODA la sesión (`colaDelAparato.ts`): el hotswap admite una conexión. */
+  const colaDelAparato = crearSerieDeEscrituras();
+  const aparatoDeLaSesion = lectorDelDispositivoDeSesion(opciones.artefactos);
 
   /**
    * **Los motores EXTERNOS**, por el MISMO puerto que deepagents (`subagenteExterno.ts`), con sus
@@ -2107,7 +2112,7 @@ export async function abrirSesionTrueforge(
       // En Windows, cada script con el Node del servidor y su ruta: por su shebang desde el Git Bash no arrancaban.
       lanzadorDeScripts: (a) => lanzadorDeScriptsEn(process.platform, scriptsConRuta(raiz, a.skills), process.execPath),
       conShell: () =>
-        conMedidaTrasCapturar(conGuardaDelProyecto(montarBackend({
+        conColaDelAparato(conMedidaTrasCapturar(conGuardaDelProyecto(montarBackend({
           entorno: conTrazaDelEntorno(entornoDeLaShellDelProyecto(raiz, opciones.artefactos)),
           // Cada orden, con la traza encendida (IXCODE-72): qué shell la corrió y qué ficheros dejó en la raíz.
           ...(diagnostico?.orden === undefined ? {} : { traza: (orden) => diagnostico.orden?.("shell propia", orden) }),
@@ -2118,7 +2123,7 @@ export async function abrirSesionTrueforge(
         }) as unknown as {
           execute(c: string): unknown;
           write(ruta: string, contenido: string): unknown;
-        }, guardaDelProyecto)),
+        }, guardaDelProyecto)), colaDelAparato, () => aparatoDeLaSesion()?.id),
     });
     const nombres = toolsDe(piezas);
     const nota = [

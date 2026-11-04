@@ -641,6 +641,45 @@ describe("una sesión con el motor TrueForge", () => {
     expect(avisos[0]).toContain("command not found");
   }, 30_000);
 
+  /** `docs/PARALELISMO-TRUEFORGE.md` §5.2: dos órdenes de UNA respuesta corren con `Promise.all`, y el hotswap admite una conexión. */
+  it("dos órdenes al aparato en la MISMA respuesta no se solapan: la cola del aparato las pone en fila", async () => {
+    const raiz = proyecto();
+    const fuera = mkdtempSync(join(tmpdir(), "xc-cola-"));
+    const registro = join(fuera, "orden.txt");
+    const orden = (n: string) => `echo ${n}-entra >> '${registro}'; sleep 0.4; echo ${n}-sale >> '${registro}'`;
+    const guiones = [
+      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "device-controller", input: "dos órdenes" }) }] })],
+      [
+        new AIMessageChunk({
+          content: "",
+          tool_call_chunks: [
+            { index: 0, id: "x1", name: "execute", args: JSON.stringify({ command: orden("A") }) },
+            { index: 1, id: "x2", name: "execute", args: JSON.stringify({ command: orden("B") }) },
+          ],
+        }),
+      ],
+      [new AIMessageChunk({ content: "Hechas." })],
+      [new AIMessageChunk({ content: "Hecho." })],
+    ];
+    const modelo = {
+      bindTools: () => modelo,
+      stream: async () => {
+        const g = guiones.shift() ?? [new AIMessageChunk({ content: "" })];
+        return (async function* () {
+          for (const t of g) yield t;
+        })();
+      },
+    };
+    const m = { paraPapel: () => modelo, paraModelo: () => modelo, descripcion: () => ({}) } as unknown as ModelosPort;
+    const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO });
+    await s.turno("prueba el aparato", piel().p);
+    const lineas = readFileSync(registro, "utf8").trim().split("\n");
+    expect(lineas).toHaveLength(4);
+    // En fila: cada una sale antes de que entre la otra (en el orden que sea).
+    expect(lineas[0]!.slice(0, 1)).toBe(lineas[1]!.slice(0, 1));
+    expect(lineas[1]).toMatch(/-sale$/);
+  }, 30_000);
+
   it("el raíz DELEGA en el device-controller, que EJECUTA de verdad: la shell la tiene solo él", async () => {
     const raiz = proyecto();
     const vistos: string[][] = [];
