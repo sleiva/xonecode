@@ -276,21 +276,18 @@ it("baseUrlDeOllama usa el valor por omisión cuando no está configurada", () =
   else process.env.OLLAMA_BASE_URL = original;
 });
 
-it("Modelos y el catálogo comparten OLLAMA_BASE_URL", () => {
+it("Modelos y el catálogo comparten OLLAMA_BASE_URL (el cliente va por su `/v1`, el de OpenAI)", () => {
   vi.stubEnv("OLLAMA_BASE_URL", "http://ollama.local");
   expect(baseUrlDeOllama()).toBe("http://ollama.local");
-  const cliente = new Modelos({ bandera: "ollama/prueba" }).paraPapel("rapido") as { baseUrl: string };
-  expect(cliente.baseUrl).toBe(baseUrlDeOllama());
+  const cliente = new Modelos({ bandera: "ollama/prueba" }).paraPapel("rapido") as { clientConfig: { baseURL: string } };
+  expect(cliente.clientConfig.baseURL).toBe(`${baseUrlDeOllama()}/v1`);
 });
 
-it("Modelos configura Ollama Cloud con su endpoint y bearer", () => {
+it("Modelos configura Ollama Cloud con su endpoint y su clave", () => {
   vi.stubEnv("OLLAMA_API_KEY", "clave-prueba-ollama");
-  const cliente = new Modelos({ bandera: "ollama-cloud/glm-4.6" }).paraPapel("rapido") as {
-    baseUrl: string;
-    client: { config: { headers: Record<string, string> } };
-  };
-  expect(cliente.baseUrl).toBe("https://ollama.com");
-  expect(cliente.client.config.headers).toEqual({ authorization: "Bearer clave-prueba-ollama" });
+  const cliente = new Modelos({ bandera: "ollama-cloud/glm-4.6" }).paraPapel("rapido") as { clientConfig: { baseURL: string; apiKey: string } };
+  expect(cliente.clientConfig.baseURL).toBe("https://ollama.com/v1");
+  expect(cliente.clientConfig.apiKey).toBe("clave-prueba-ollama");
 });
 
 describe("los compatibles con OpenAI (NVIDIA, Groq, xAI)", () => {

@@ -2,7 +2,6 @@ import { randomUUID } from "node:crypto";
 import { ChatOpenAI } from "@langchain/openai";
 import { ChatAnthropic } from "@langchain/anthropic";
 import type { AIMessageChunk } from "@langchain/core/messages";
-import { ChatOllama } from "@langchain/ollama";
 import type { ModelosPort, Papel } from "../../core/ports.js";
 import {
   COMPATIBLES_OPENAI, compatibleConOpenAi, esProveedorPersonalizado, parsear, resolver,
@@ -241,6 +240,21 @@ function construirCompatibleOpenAi(
   });
 }
 
+/**
+ * **Ollama por su API compatible con OpenAI (`/v1`), no por la nativa** —la misma puerta que usa Codex—. Medido el
+ * 04-11-2026 con `deepseek-v4.1-flash:cloud`: la nativa (`/api/chat`, la de `ChatOllama`) no dice la CACHÉ, y la pasada
+ * de la calculadora contaba el 0 % —toda la entrada como nueva—; `/v1/chat/completions`, con la misma petición dos
+ * veces, devolvió `cached_tokens` 0 y luego 4.736 de 4.834. El esfuerzo va como `reasoning_effort`, el campo de esa API.
+ */
+function clienteDeOllama(modelo: string, base: string, apiKey: string, esfuerzo: Esfuerzo | undefined): unknown {
+  return new ChatOpenAI({
+    model: modelo,
+    apiKey: apiKey === "" ? "ollama" : apiKey,
+    configuration: { baseURL: `${base.replace(/\/+$/, "")}/v1`, fetch: fetchConVigilancia() },
+    ...(esfuerzo === undefined ? {} : { modelKwargs: { reasoning_effort: esfuerzo } }),
+  });
+}
+
 /** Dónde viaja, dentro de UNA llamada, el razonamiento del evento crudo hasta su trozo. No sale de esta clase. */
 const RAZONAMIENTO_DEL_DELTA = "__xonecode_thinking_tokens";
 
@@ -423,18 +437,9 @@ function construirModelo(
           ...(esfuerzo === undefined ? {} : { outputConfig: { effort: esfuerzo } }),
         });
       case "ollama":
-        return new ChatOllama({
-          model: modelo,
-          baseUrl: baseUrlDeOllama(),
-          ...(esfuerzo === undefined ? {} : { think: esfuerzo as unknown as boolean }),
-        });
+        return clienteDeOllama(modelo, baseUrlDeOllama(), "ollama", esfuerzo);
       case "ollama-cloud":
-        return new ChatOllama({
-          model: modelo,
-          baseUrl: baseUrlDeOllamaCloud(),
-          headers: { authorization: `Bearer ${process.env.OLLAMA_API_KEY ?? ""}` },
-          ...(esfuerzo === undefined ? {} : { think: esfuerzo as unknown as boolean }),
-        });
+        return clienteDeOllama(modelo, baseUrlDeOllamaCloud(), process.env.OLLAMA_API_KEY ?? "", esfuerzo);
       case "gemini":
         return new ChatGoogleGenerativeAICompatible({
           model: modelo,

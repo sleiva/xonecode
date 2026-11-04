@@ -349,7 +349,7 @@ describe("el esfuerzo, contra el invocationParams de cada cliente", () => {
     it("sin esfuerzo elegido, ningún cliente lleva el campo", () => {
       expect(params("anthropic/claude-opus-5")["output_config"]).toBeUndefined();
       expect(params("deepseek/deepseek-flash")["reasoning_effort"]).toBeUndefined();
-      expect(params("ollama/granite4.2:3b", undefined, true)["think"]).toBeUndefined();
+      expect(params("ollama/granite4.2:3b", undefined, true)["reasoning_effort"]).toBeUndefined();
       expect(JSON.stringify(params("gemini/gemini-3.8-flash"))).not.toContain("thinkingLevel");
     });
 
@@ -361,14 +361,18 @@ describe("el esfuerzo, contra el invocationParams de cada cliente", () => {
       // DeepSeek colapsa `medium` sobre `high`, así que `medium` no es uno de los suyos.
       expect(params("deepseek/deepseek-flash", "medium")["reasoning_effort"]).toBeUndefined();
       // Ollama no valida `xhigh`.
-      expect(params("ollama/granite4.2:3b", "xhigh", true)["think"]).toBeUndefined();
+      expect(params("ollama/granite4.2:3b", "xhigh", true)["reasoning_effort"]).toBeUndefined();
+    });
+
+    it("a ollama CON capacidad de pensar, el nivel va como `reasoning_effort` por su API compatible (`/v1`)", () => {
+      expect(params("ollama/deepseek-v4.1-flash:cloud", "low", true)["reasoning_effort"]).toBe("low");
     });
 
     it("a ollama SIN capacidades medidas no se le manda nada, que es la dirección segura", () => {
       // Pedirle pensar a un modelo que no piensa no da peor respuesta: tumba el turno con
       // `"ministral-3:3b" does not support thinking`.
-      expect(params("ollama/granite4.2:3b", "low")["think"]).toBeUndefined();
-      expect(params("ollama/ministral-3:3b", "low", false)["think"]).toBeUndefined();
+      expect(params("ollama/granite4.2:3b", "low")["reasoning_effort"]).toBeUndefined();
+      expect(params("ollama/ministral-3:3b", "low", false)["reasoning_effort"]).toBeUndefined();
     });
 
     it("un proveedor sin fila medida tampoco lo lleva, aunque el cliente sepa mandarlo", () => {
