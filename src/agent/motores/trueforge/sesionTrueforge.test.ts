@@ -641,6 +641,55 @@ describe("una sesión con el motor TrueForge", () => {
     expect(avisos[0]).toContain("command not found");
   }, 30_000);
 
+  /**
+   * El CONTRATO de paralelismo que da TrueForge hoy (`docs/PARALELISMO-TRUEFORGE.md` §4, entrega A), con barreras y sin
+   * esperas fijas: dos hermanos arrancan sin esperar a que acabe el primero, y el padre no vuelve a llamar a su modelo
+   * mientras tiene hijos vivos (la librería solo planifica las HOJAS del árbol). Si cambia, que se vea aquí.
+   */
+  it("CONTRATO: dos hijos hermanos trabajan A LA VEZ y el padre no llama a su modelo mientras viven", async () => {
+    let llamadasDelRaiz = 0;
+    const raizDuranteHijos: number[] = [];
+    const entrado = { A: false, B: false };
+    const solos: string[] = [];
+    let avisar: (() => void) | undefined;
+    const losDos = new Promise<void>((r) => (avisar = r));
+    const delega = (id: string, nombre: string, input: string) => ({ index: id === "d1" ? 0 : 1, id, name: "create_sub_agent", args: JSON.stringify({ name: nombre, input }) });
+    const modelo = {
+      bindTools: () => modelo,
+      stream: async (mensajes: { content: unknown }[]) => {
+        const texto = mensajes.map((m) => String(m.content)).join("\n");
+        const hijo = texto.includes("ENCARGO-A") ? "A" : texto.includes("ENCARGO-B") ? "B" : undefined;
+        let salida: AIMessageChunk;
+        if (hijo === undefined) {
+          llamadasDelRaiz++;
+          salida =
+            llamadasDelRaiz === 1
+              ? new AIMessageChunk({ content: "", tool_call_chunks: [delega("d1", "analyst-xone", "ENCARGO-A"), delega("d2", "consultant-xone", "ENCARGO-B")] })
+              : new AIMessageChunk({ content: "Hecho." });
+        } else {
+          entrado[hijo] = true;
+          raizDuranteHijos.push(llamadasDelRaiz);
+          if (entrado.A && entrado.B) avisar?.();
+          // La barrera: cada hijo espera a que el OTRO haya entrado. En serie, el primero no lo vería nunca.
+          const visto = await Promise.race([losDos.then(() => true), new Promise<boolean>((r) => setTimeout(() => r(false), 5_000))]);
+          if (!visto) solos.push(hijo);
+          salida = new AIMessageChunk({ content: visto ? `${hijo} con su hermano` : `${hijo} SOLO` });
+        }
+        return (async function* () {
+          yield salida;
+        })();
+      },
+    };
+    const m = { paraPapel: () => modelo, paraModelo: () => modelo, descripcion: () => ({}) } as unknown as ModelosPort;
+    const s = await abrirSesionTrueforge({ raiz: proyecto(), modelos: m, entorno: ENTORNO, skills: CATALOGO });
+    await s.turno("dos cosas a la vez", piel().p);
+    expect(entrado).toEqual({ A: true, B: true });
+    expect(solos).toEqual([]);
+    // El raíz solo había llamado UNA vez mientras sus hijos trabajaban, y luego otra para cerrar.
+    expect(raizDuranteHijos).toEqual([1, 1]);
+    expect(llamadasDelRaiz).toBe(2);
+  }, 30_000);
+
   /** `docs/PARALELISMO-TRUEFORGE.md` §5.2: dos órdenes de UNA respuesta corren con `Promise.all`, y el hotswap admite una conexión. */
   it("dos órdenes al aparato en la MISMA respuesta no se solapan: la cola del aparato las pone en fila", async () => {
     const raiz = proyecto();

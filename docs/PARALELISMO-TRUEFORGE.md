@@ -1,8 +1,16 @@
 # Paralelismo de xonecode con TrueForge Core
 
-Fecha: 4 de noviembre de 2026. Revisión del worktree `developer-continuo`, commit `ec5082ee`, con `@truefoundry/trueforge-core` **0.181.0** instalado.
+Fecha: 4 de noviembre de 2026. Escrito sobre el commit `ec5082ee` (worktree `developer-continuo`); revisado e implementado en parte en la rama `paralelismo`, desde `main` en `ea2ed8f2`, con `@truefoundry/trueforge-core` **0.181.0** instalado.
 
-**Estado: propuesta de implementación, no funcionalidad nueva ya implementada.** Los nombres de módulos, herramientas y banderas que se proponen abajo no son APIs existentes. El análisis se basa en el código local instalado; no presupone capacidades de versiones posteriores de TrueForge.
+**Estado** (rama `paralelismo`):
+
+| Entrega | Estado |
+|---|---|
+| A. Contrato | **Hecha en parte.** Tests de contrato 1–3 en verde (§4): lote de tools concurrente (`modeloLangchain.test.ts`, «CONTRATO»), hermanos a la vez y padre sin llamar a su modelo con hijos vivos (`sesionTrueforge.test.ts`, «CONTRATO»). Pendientes: 4 (aprobación con un hermano trabajando) y 5 (cancelación a todos). La telemetría temporal no se añadió: el lote ya se deduce de la traza (`llamadasModelo` por origen y `at` de cada evento). |
+| B. Recursos compartidos | **Dispositivo: hecho** (§5.2, `colaDelAparato.ts`). **Escrituras: ya existía** dentro de una sesión (ver §2); entre sesiones o procesos, pendiente. |
+| C, D, E | Sin empezar. |
+
+Los nombres de módulos, herramientas y banderas que se proponen para las fases C–E no son APIs existentes. El análisis se basa en el código local instalado; no presupone capacidades de versiones posteriores de TrueForge.
 
 ## 1. Decisión recomendada
 
@@ -24,7 +32,8 @@ Objetivos separados:
 | Herramientas de una respuesta | `executeToolCalls` construye las promesas con `map` y espera `Promise.all` | Las llamadas ya pueden ejecutarse concurrentemente; el siguiente paso del modelo espera al lote |
 | Subagentes hermanos | El orquestador procesa lotes de hasta cinco hilos activos | Analista y diseñador pueden trabajar a la vez |
 | Padre e hijos | `getActiveAgentThreads` selecciona las hojas del árbol | Un padre con hijos activos no vuelve a ejecutar su propio modelo |
-| Escrituras | `escriturasEnSerie` crea una cola por ruta dentro de cada envoltorio | Protege las operaciones que comparten esa instancia; no demuestra exclusión entre backends distintos |
+| Escrituras | `escriturasEnSerie` crea una cola por ruta dentro de cada envoltorio, y **todos los especialistas de una sesión comparten el MISMO backend** (`montarBackend()` una vez en `sesionTrueforge.ts`) | Ya hay exclusión entre agentes de una sesión; no entre sesiones ni procesos sobre el mismo proyecto. `proyectoSinShell` anota esas escrituras (`conEscriturasAnotadas`) para no deshacerlas |
+| Aparato | **Antes no había cola**: dos scripts de una respuesta corrían con `Promise.all` y el hotswap cierra la conexión anterior | Hecho: `colaDelAparato.ts`, una cola por aparato para toda la sesión (test de integración en `sesionTrueforge.test.ts`) |
 | Dependencias de agentes | `esperas.ts` rechaza el arranque si está vivo o anunciado un agente requerido | Evita el bloqueo, pero obliga a una nueva delegación |
 | Continuidad | Se crea otro `AgentThread` y se hereda su conversación | Hay continuidad de contexto dentro de la sesión, no una API nativa de reanudación equivalente a `send_input` |
 

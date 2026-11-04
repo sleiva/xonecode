@@ -319,3 +319,67 @@ describe("view_image en la conversación", () => {
   });
 });
 
+
+/**
+ * El CONTRATO de la librería que da el paralelismo de herramientas (`docs/PARALELISMO-TRUEFORGE.md` §2 y §4, entrega A):
+ * las tools de UNA respuesta del modelo corren a la vez (`executeToolCalls`, `Promise.all`), y el paso siguiente del
+ * modelo espera al lote entero. Con barrera: cada llamada espera a que entre la otra; en serie, no se vería nunca.
+ */
+describe("CONTRATO: las tools de una respuesta corren a la vez", () => {
+  it("dos lecturas de la misma respuesta están DENTRO a la vez, y el modelo no vuelve hasta que acaban las dos", async () => {
+    const { modelo, recibidos } = modeloGuionizado([
+      [new AIMessageChunk({ content: "", tool_call_chunks: [
+        { index: 0, id: "r1", name: "read_file", args: '{"file_path":"/a.xne"}' },
+        { index: 1, id: "r2", name: "read_file", args: '{"file_path":"/b.xne"}' },
+      ] })],
+      [new AIMessageChunk({ content: "Leídas." })],
+    ]);
+    let dentro = 0;
+    let maximo = 0;
+    let avisar: (() => void) | undefined;
+    const lasDos = new Promise<void>((r) => (avisar = r));
+    const source = {
+      name: "xone",
+      id: "xone",
+      listTools: async () => ({
+        result: { tools: [{ name: "read_file", description: "lee", inputSchema: { type: "object", properties: { file_path: { type: "string" } } }, preload: true }] },
+        wasInitialized: undefined,
+      }),
+      callTool: async () => {
+        dentro++;
+        maximo = Math.max(maximo, dentro);
+        if (dentro === 2) avisar?.();
+        const vista = await Promise.race([lasDos.then(() => "juntas"), new Promise<string>((r) => setTimeout(() => r("sola"), 5_000))]);
+        dentro--;
+        return toolResultResponse({ text: vista });
+      },
+      toolCallInfo: async () => ({ type: "mcp", mcp_server_id: "xone", mcp_server_name: "xone", original_tool_name: "read_file" }),
+    };
+    const logger = winston.createLogger({ silent: true, transports: [] });
+    const toolSet = new ToolSet({ source: source as never, selectors: { enableTools: ["@all"], disableTools: [], preloadTools: [], requireApprovalForTools: [] }, preload: true, approvalPolicies: undefined });
+    const raiz = new AgentThread({
+      definition: { modelClient: modeloParaTrueforge({ modelo: () => modelo }), modelName: "prueba", instruction: "reglas" },
+      threadId: "main",
+      title: "main",
+      capabilities: [{ systemToolSets: [toolSet] }] as never,
+      tracing: NOOP_AGENT_TRACING,
+      logger,
+    });
+    const orq = new AgentThreadOrchestrator({
+      agentThreads: new Map([["main", raiz]]),
+      createDynamicSubAgentThread: async () => {
+        throw new Error("sin subagentes");
+      },
+      tracing: NOOP_AGENT_TRACING,
+      logger,
+    });
+    for await (const _ of orq.send([{ type: EventType.USER_MESSAGE, content: "lee las dos" }] as never)) void _;
+    const it2 = orq.execute({ signal: new AbortController().signal });
+    let r = await it2.next();
+    while (!r.done) r = await it2.next();
+    expect(maximo).toBe(2);
+    expect(recibidos).toHaveLength(2);
+    const respuestas = recibidos[1]!.filter((x) => x.getType() === "tool").map((x) => String(x.content));
+    expect(respuestas).toEqual(["juntas", "juntas"]);
+  }, 20_000);
+});
