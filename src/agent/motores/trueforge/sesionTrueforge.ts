@@ -167,6 +167,7 @@ import { geometriaDeCaptura, geometriaDeCapturaYa } from "../../dispositivos/geo
 import { decodificarImagen } from "../../dispositivos/decodificarImagen.js";
 import { crearDescribirImagen } from "../../grafo/describirImagen.js";
 import { crearImagenesVistas, crearVerImagen } from "../../grafo/verImagen.js";
+import { unaCriticaPorTarea } from "./unaCriticaPorTarea.js";
 import { crearTraerDeLaMaquina } from "../../grafo/traerDeLaMaquina.js";
 import { describirPantalla, ESFUERZO_DEL_CRITICO_VISUAL, invocarVisualConModelos, PAPEL_DEL_JUEZ_VISUAL, type ConsumoVisual, type InvocarVisual } from "../../dispositivos/juezVisual.js";
 import { estilosDeDisco, indiceEnDisco, type CargarIndice } from "../../navegacion/indiceEnDisco.js";
@@ -1122,6 +1123,8 @@ export async function abrirSesionTrueforge(
     developerContinuo && agente !== undefined && recibeMarcarCriterios(agente) && agente.scripts === true;
   /** Del desarrollador continuo: en qué tarea de qué plan está cada hilo, y cuáles cerró ya en ese encargo. */
   const tareaDeHilo = new Map<string, { plan: string; tarea: string; cerradas: string[] }>();
+  /** La última tarea del plan que se le encargó a un especialista (`plan|número`): la del crítico de una vez (`unaCriticaPorTarea`). */
+  let ultimaTareaEncargada: string | undefined;
   /** El hilo VIVO de cada especialista (una encarnación viva por especialista): lo que `siguiente_tarea` necesita. */
   const hiloVivoDe = new Map<string, string>();
   const conVistaDelEncargo = opciones.vistaDelEncargo ?? process.env.XONECODE_VISTA_DEL_ENCARGO === "1";
@@ -1605,7 +1608,14 @@ export async function abrirSesionTrueforge(
      * y le volcaba los píxeles en el encargo (7.100 caracteres), y de ahí salían criterios de coordenadas. Con la regla en
      * su prompt lo siguió haciendo; Codex, sin esa tool, encargaba el plan en ~2.000. La medida la toma quien construye.
      */
-    ...herramientasDeJuicio().filter((t) => (t as { name?: string }).name !== NOMBRE_MEDIR_MAQUETA),
+    ...herramientasDeJuicio()
+      .filter((t) => (t as { name?: string }).name !== NOMBRE_MEDIR_MAQUETA)
+      // Con el continuo, el crítico del raíz UNA vez por tarea (`unaCriticaPorTarea.ts`): las siguientes abrían vueltas.
+      .map((t) =>
+        developerContinuo && (t as { name?: string }).name === "xone_critica_visual"
+          ? (unaCriticaPorTarea(t as never, () => ultimaTareaEncargada) as unknown as ToolDeLangchain)
+          : t
+      ),
     ...(carpeta === undefined ? [] : ([crearTraerDeLaMaquina({ carpeta, alEscribir: anotarArtefacto })] as unknown as ToolDeLangchain[])),
     ...traerDeStitch(),
     // Lo aprendido: el orquestador también apunta, sobre todo lo que le cuenta un hijo de motor externo (que no tiene la tool).
@@ -2018,6 +2028,7 @@ export async function abrirSesionTrueforge(
         return devolverSinArrancar(agente.nombre, [], decision.motivo);
       }
       if (decision.tipo === "tarea") params = { ...params, request: { ...params.request, input: decision.encargo } };
+      if (decision.tipo === "tarea") ultimaTareaEncargada = `${decision.plan}|${String(Number.parseInt(decision.tarea.numero.replace(/^T/i, ""), 10))}`;
       if (decision.tipo === "tarea" && developerContinuo && agente.scripts === true) tareaDeHilo.set(params.threadId, { plan: decision.plan, tarea: decision.tarea.numero, cerradas: [] });
     }
     // Pasado el tope de encargos al desarrollador en una TAREA, no arranca: el orquestador recibe la orden de cerrar.
