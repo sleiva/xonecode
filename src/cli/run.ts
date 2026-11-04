@@ -7,6 +7,7 @@ import { inspeccionar, type Entorno } from "../agent/config/entorno.js";
 import { tomarInstantanea, type Instantanea, type Cambio } from "../agent/turno/instantanea.js";
 import { SkillsEnDisco } from "../agent/grafo/skills.js";
 import { Modelos } from "../agent/config/modelos.js";
+import { baseUrlDeOllama, baseUrlDeOllamaCloud, capacidadesDeOllama } from "../agent/config/catalogoModelos.js";
 import { juzgarPantalla, invocarVisualConModelos } from "../agent/dispositivos/juezVisual.js";
 import { proveedoresPersonalizados } from "../agent/config/configEnDisco.js";
 import { abrirSesionReal } from "../agent/turno/turnoReal.js";
@@ -14,7 +15,7 @@ import { runAutonomoPedido, TOPE_MAXIMO_DE_RONDAS_DE_ENTORNO, topeDeRondasDeEnto
 import { SimuladorVerifier } from "../agent/turno/verificador.js";
 import { pintarGasto } from "../agent/turno/informeDeTraza.js";
 import { hidratarFuentesDeDisco } from "./fuentesDeDisco.js";
-import type { FuentesDeEleccion } from "../core/modelos.js";
+import { resolver, type FuentesDeEleccion } from "../core/modelos.js";
 import type { Papel } from "../core/ports.js";
 
 export interface OpcionesRun {
@@ -142,7 +143,7 @@ async function correrReal(opciones: OpcionesRun, escribir: Escribir): Promise<nu
   // La raíz va PUESTA: sin ella, las skills de `<raiz>/.xonecode/skills/` no entrarían en el
   // catálogo y `repartirSkills` avisaría al modelo de que le faltan las que sí tiene.
   const skills = new SkillsEnDisco(raiz);
-  const modelos = new Modelos(fuentes, proveedoresPersonalizados);
+  const modelos = new Modelos(fuentes, proveedoresPersonalizados, await capacidadesDeOllamaDeLosPapeles(fuentes));
 
   // 4. La cabecera va ANTES del turno: qué modelo, cuántas skills, cómo se tomó la foto.
   cabecera(escribir, modelos, skills, instantanea, entorno);
@@ -303,3 +304,25 @@ async function correrReal(opciones: OpcionesRun, escribir: Escribir): Promise<nu
   }
   return bitacora!.corrio("bloqueado") ? 1 : 0;
 }
+
+/**
+ * Las capacidades VIVAS de los modelos de Ollama de los papeles, preguntadas UNA vez al empezar (`/api/show`). Sin
+ * ellas el esfuerzo de un `.md` (`esfuerzo: medium`) no viajaba —la dirección segura con Ollama es no mandar nada que
+ * el modelo quizá no admita— y, medido en la calculadora (04-11-2026), DeepSeek por Ollama pensaba a su nivel por
+ * omisión: llamadas de 13 a 18 mil tokens de salida. La consola ya lo hacía (`cli/main.ts#modelosDeSesion`).
+ */
+async function capacidadesDeOllamaDeLosPapeles(
+  fuentes: FuentesDeEleccion,
+): Promise<((proveedor: string, modelo: string) => { piensa: boolean } | undefined) | undefined> {
+  const deOllama = Object.values(resolver(fuentes)).filter((e) => e.proveedor === "ollama" || e.proveedor === "ollama-cloud");
+  if (deOllama.length === 0) return undefined;
+  const vivas = new Map<string, { piensa: boolean }>();
+  for (const e of deOllama) {
+    const clave = `${e.proveedor}/${e.modelo}`;
+    if (vivas.has(clave)) continue;
+    const c = await capacidadesDeOllama(e.modelo, e.proveedor === "ollama" ? baseUrlDeOllama() : baseUrlDeOllamaCloud());
+    if (c !== undefined) vivas.set(clave, c);
+  }
+  return (proveedor, modelo) => vivas.get(`${proveedor}/${modelo}`);
+}
+

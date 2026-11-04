@@ -1221,6 +1221,8 @@ export const AGENTES_DE_SERIE: readonly Agente[] = [
       "a comprobarlo. Devuelve los ficheros que " +
       "cambió; cada escritura para el turno y pide aprobación, así que un encargo enorme son muchas paradas: pártelo.",
     motor: "modelo",
+    // Decisión suya (04-11-2026): medido con DeepSeek por Ollama, a su nivel por omisión pensaba 13-18 mil tokens por llamada.
+    esfuerzo: "medium",
     soloLectura: false,
     // `artifacts-builder` se queda: escribe documentos e informes. `archify` no, que los
     // diagramas son de `designer-xone` y su descripción son ~700 caracteres por llamada.
