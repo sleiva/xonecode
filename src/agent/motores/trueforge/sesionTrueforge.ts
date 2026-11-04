@@ -1182,6 +1182,8 @@ export async function abrirSesionTrueforge(
   const informesPendientes = new Map<string, string[]>();
   /** Las escrituras pedidas y aún sin respuesta, por hilo e id: la respuesta de una aprobada llega en OTRO `paso`. */
   const escriturasEnVuelo = new Map<string, { nombre: string; args: Record<string, unknown> }>();
+  /** Los hijos que nacieron en AUTÓNOMO y escriben sin parar el turno: lo que escriben se apunta como «sin aprobación». */
+  const hilosQueEscribenSinPreguntar = new Set<string>();
   /** Para la medida automática (`medidaAutomatica.ts`): cuándo nació cada hilo, su última escritura, su última crítica y la última medida que recibió. */
   const nacimientoDeHilo = new Map<string, number>();
   const ultimaEscrituraDeHilo = new Map<string, number>();
@@ -2088,6 +2090,8 @@ export async function abrirSesionTrueforge(
     if (agente !== undefined) especialistaDeHilo.set(params.threadId, agente.nombre);
     if (agente !== undefined && agente.motor !== "modelo") return hijoExterno(agente, params);
     const clase = agente === undefined ? "lee" : clasesDeTools(agente);
+    const autonomoAlNacer = opciones.trabajoSinPersona !== true && opciones.sinAprobacion?.() === true;
+    if (autonomoAlNacer) hilosQueEscribenSinPreguntar.add(params.threadId);
     // Las piezas por lo que declara su `.md` (`capacidades.ts`); la nota sale de SUS tools.
     const piezas = capacidadesDelEspecialista(agente, params.request.name, {
       backend: backend as never,
@@ -2098,7 +2102,14 @@ export async function abrirSesionTrueforge(
       vistaDelEncargo: conVistaDelEncargo,
       informes: capacidadDeInformes,
       // Una tarea de fondo no tiene a quién preguntar: sus escrituras locales no esperan al control de la librería.
-      ...(opciones.trabajoSinPersona === true ? { escribeSinPreguntar: true } : {}),
+      /**
+       * **En autónomo, el hijo escribe SIN parar el turno**, como en una tarea de fondo. Una aprobación de la librería solo
+       * se atiende cuando acaba la ejecución entera, así que la escritura esperaba a que terminaran sus HERMANOS aunque se
+       * fuera a aplicar sola (`docs/PARALELISMO-TRUEFORGE.md`, contrato 4b). El modo se lee al NACER el hijo (vale para
+       * su encargo); las del CONECTOR y las del aparato siguen parando, y lo escrito se apunta como «aplicadas SIN
+       * aprobación» al ver su resultado (`hilosQueEscribenSinPreguntar`).
+       */
+      ...(opciones.trabajoSinPersona === true || autonomoAlNacer ? { escribeSinPreguntar: true } : {}),
       vueltas: (a) =>
         a.ejecucion === true
           ? capacidadDeAvisoDeVueltas({ vueltasDe: (hilo) => capturasDeCadaHilo.get(hilo) ?? 0, umbrales: UMBRALES_DE_CAPTURAS, texto: textoDeCapturas })
@@ -2557,6 +2568,9 @@ export async function abrirSesionTrueforge(
             anotarEscritura(cambios, escritura.nombre, escritura.args);
             escritosDeCadaHilo.set(deHilo, cambios);
             ultimaEscrituraDeHilo.set(deHilo, Date.now());
+            // Sin la tarjeta, el aviso del turno la sigue diciendo: la MISMA regla que en la ronda de aprobación.
+            const ruta = typeof escritura.args["file_path"] === "string" ? escritura.args["file_path"] : undefined;
+            if (hilosQueEscribenSinPreguntar.has(deHilo) && ruta !== undefined && seDetieneEn({ toolCall: { args: escritura.args } })) apuntarAplicadasSinPreguntar?.([ruta]);
             guardarAMitad();
           }
         }

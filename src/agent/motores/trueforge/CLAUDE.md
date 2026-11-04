@@ -104,6 +104,10 @@ Ante una discrepancia con el código, **el código manda**.
   con el id de la imagen y el adaptador (`modeloLangchain.ts#aMensajesDeLangchain`, `imagenDe`) la pone en un mensaje
   DETRÁS del bloque de respuestas de tool —nunca entre dos—, rehecha igual en cada llamada. `describe_image` sigue: es
   otro modelo que la cuenta en texto.
+- **En AUTÓNOMO, un hijo escribe sin la interrupción de aprobación** (`escribeSinPreguntar`, leído al NACER el hijo): la
+  de la librería solo se atiende al acabar la ejecución entera, y la escritura esperaba a sus hermanos. Lo escrito sale
+  igual en «aplicadas SIN aprobación» (`hilosQueEscribenSinPreguntar`); conector y aparato siguen parando. En supervisado
+  la tarjeta sigue esperando a los hermanos (`docs/PARALELISMO-TRUEFORGE.md`, contrato 4).
 - **Las órdenes al MISMO aparato van en fila para toda la sesión** (`colaDelAparato.ts`, sobre la shell de cada hijo con
   la clave del aparato de la sesión): las tools de una respuesta corren a la vez y el hotswap admite una conexión. Otro
   aparato no espera. Plan del resto del paralelismo: `docs/PARALELISMO-TRUEFORGE.md`.

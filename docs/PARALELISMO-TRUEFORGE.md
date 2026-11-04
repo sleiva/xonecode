@@ -6,16 +6,25 @@ Fecha: 4 de noviembre de 2026. Escrito sobre el commit `ec5082ee` (worktree `dev
 
 | Entrega | Estado |
 |---|---|
-| A. Contrato | **Hecha.** Los cinco tests de contrato de §4, con barreras: 1 (lote de tools concurrente, `modeloLangchain.test.ts`), 2–3 (hermanos a la vez y padre sin llamar a su modelo con hijos vivos) y 5 (cancelar aborta la llamada de todos los hijos) en verde en `sesionTrueforge.test.ts`; **el 4 destapa un hueco** (ver «Hallazgo», abajo) y queda como `it.fails`. La telemetría temporal no se añadió: el lote ya se deduce de la traza (`llamadasModelo` por origen y `at` de cada evento). |
+| A. Contrato | **Hecha.** Los cinco tests de contrato de §4, con barreras: 1 (lote de tools concurrente, `modeloLangchain.test.ts`), 2–3 (hermanos a la vez y padre sin llamar a su modelo con hijos vivos) y 5 (cancelar aborta la llamada de todos los hijos) en verde en `sesionTrueforge.test.ts`; **el 4 destapa un hueco** (ver «Hallazgo», abajo): arreglado en autónomo (4b), pendiente en supervisado (`it.fails`). La telemetría temporal no se añadió: el lote ya se deduce de la traza (`llamadasModelo` por origen y `at` de cada evento). |
 | B. Recursos compartidos | **Dispositivo: hecho** (§5.2, `colaDelAparato.ts`). **Escrituras: ya existía** dentro de una sesión (ver §2); entre sesiones o procesos, pendiente. |
 | C, D, E | Sin empezar. |
 
 **Hallazgo del contrato 4 — una aprobación espera a que acaben los hermanos.** Con dos hijos trabajando, la escritura
-de uno que necesita aprobación **no llega a quien decide hasta que el otro termina**: el motor sigue ejecutando a los
-hermanos vivos hasta que ninguno puede avanzar, y `paso()` (`sesionTrueforge.ts`) junta las aprobaciones y solo pregunta
-cuando acaba `orquestador.execute`. Con un hermano largo, la persona ve la tarjeta tarde y el que escribe está parado
-mientras tanto. Arreglarlo es preguntar a mitad de la ejecución: es trabajo de la entrega E (o de una D que entregue las
-aprobaciones por evento). El test lo fija con `it.fails`: el día que pase, saldrá en rojo para quitar la marca.
+de uno que pasa por la aprobación de la librería **no se resuelve hasta que el otro termina**: el motor sigue ejecutando
+a los hermanos vivos hasta que ninguno puede avanzar, y `paso()` (`sesionTrueforge.ts`) junta las aprobaciones y solo las
+decide cuando acaba `orquestador.execute`.
+
+- **Autónomo: ARREGLADO** (contrato 4b, `sesionTrueforge.test.ts`). Era el caso caro: la escritura esperaba aunque se
+  fuera a aplicar sola. Ahora un hijo que nace en autónomo escribe sin la interrupción de aprobación
+  (`escribeSinPreguntar`, la misma pieza que ya usaban las tareas de fondo) y lo escrito sigue saliendo en «aplicadas
+  SIN aprobación». El modo se lee al NACER el hijo: si la persona pasa a supervisado a mitad de un encargo, ese encargo
+  sigue sin preguntar (límite). Las escrituras de un CONECTOR y las del aparato siguen parando.
+- **Supervisado: PENDIENTE** (contrato 4, `it.fails`). Sin tocar la librería solo se puede adelantar la TARJETA (pedir la
+  decisión al llegar el evento y entregarla al acabar la ejecución): el que escribe seguiría esperando a sus hermanos,
+  porque el motor solo replanifica hilos entre lotes. Y con la pregunta abierta mientras el hermano sigue pintando
+  líneas, las pieles de terminal (stdio, TUI) mezclarían su salida con la pregunta. Lo completo —que el que escribe siga
+  sin esperar— es replanificar dentro de la librería: entrega E.
 
 Los nombres de módulos, herramientas y banderas que se proponen para las fases C–E no son APIs existentes. El análisis se basa en el código local instalado; no presupone capacidades de versiones posteriores de TrueForge.
 

@@ -696,7 +696,8 @@ describe("una sesión con el motor TrueForge", () => {
    *
    * **HUECO MEDIDO, marcado `it.fails`**: hoy NO llega. El motor sigue ejecutando a los hermanos vivos hasta que ninguno
    * puede avanzar, y `paso()` junta las aprobaciones y solo pregunta cuando acaba `orquestador.execute`: el hermano agota su
-   * barrera («sin aprobación») y solo después se pide. Arreglarlo es preguntar a mitad de la ejecución (entrega E del plan).
+   * barrera («sin aprobación») y solo después se pide. En AUTÓNOMO ya no espera (contrato 4b); en supervisado, lo completo
+   * es replanificar dentro de la librería (entrega E del plan).
    * Cuando se arregle, este test pasará y `it.fails` lo pondrá en ROJO: quitar la marca.
    */
   it.fails("CONTRATO: la aprobación de un hijo llega mientras su hermano sigue trabajando", async () => {
@@ -754,6 +755,54 @@ describe("una sesión con el motor TrueForge", () => {
     expect(readFileSync(join(raiz, "nota.txt"), "utf8")).toBe("hola\n");
     expect(hermanoAlPedir).toEqual([true]);
     expect(vistoPorElHermano).toEqual(["vio la aprobación"]);
+  }, 30_000);
+
+  /**
+   * CONTRATO 4b, AUTÓNOMO: sin nadie a quien preguntar, la escritura de un hijo se aplica MIENTRAS su hermano trabaja.
+   * El hermano mira el disco dentro de su barrera.
+   */
+  it("CONTRATO: en autónomo, la escritura de un hijo llega al disco mientras su hermano sigue trabajando", async () => {
+    const raiz = proyecto();
+    const vistoPorElHermano: string[] = [];
+    let llamadasDelDev = 0;
+    let llamadasDelRaiz = 0;
+    const delega = (index: number, id: string, nombre: string, input: string) => ({ index, id, name: "create_sub_agent", args: JSON.stringify({ name: nombre, input }) });
+    const modelo = {
+      bindTools: () => modelo,
+      stream: async (mensajes: { content: unknown }[]) => {
+        const texto = mensajes.map((m) => String(m.content)).join("\n");
+        let salida: AIMessageChunk;
+        if (texto.includes("ESCRIBE-NOTA")) {
+          llamadasDelDev++;
+          salida =
+            llamadasDelDev === 1
+              ? new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "w1", name: "write_file", args: JSON.stringify({ file_path: "/nota.txt", content: "hola\n" }) }] })
+              : new AIMessageChunk({ content: "Nota escrita." });
+        } else if (texto.includes("CONSULTA-B")) {
+          const visto = await new Promise<string>((r) => {
+            const t0 = Date.now();
+            const mirar = () => (existsSync(join(raiz, "nota.txt")) ? r("vio la nota") : Date.now() - t0 > 1_500 ? r("sin nota") : setTimeout(mirar, 20));
+            mirar();
+          });
+          vistoPorElHermano.push(visto);
+          salida = new AIMessageChunk({ content: `B: ${visto}` });
+        } else {
+          llamadasDelRaiz++;
+          salida =
+            llamadasDelRaiz === 1
+              ? new AIMessageChunk({ content: "", tool_call_chunks: [delega(0, "d1", "developer-xone", "ESCRIBE-NOTA"), delega(1, "d2", "consultant-xone", "CONSULTA-B")] })
+              : new AIMessageChunk({ content: "Hecho." });
+        }
+        return (async function* () {
+          yield salida;
+        })();
+      },
+    };
+    const m = { paraPapel: () => modelo, paraModelo: () => modelo, descripcion: () => ({}) } as unknown as ModelosPort;
+    const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, sinAprobacion: () => true });
+    await s.turno("escribe y consulta a la vez", piel().p);
+    expect(readFileSync(join(raiz, "nota.txt"), "utf8")).toBe("hola\n");
+    expect(vistoPorElHermano).toEqual(["vio la nota"]);
   }, 30_000);
 
   /** CONTRATO 5 (`docs/PARALELISMO-TRUEFORGE.md` §4): cancelar el turno alcanza la llamada en curso de TODOS los hijos vivos. */
