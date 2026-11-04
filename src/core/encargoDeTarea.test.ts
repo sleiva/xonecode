@@ -77,33 +77,41 @@ describe("un encargo de un plan es UNA tarea", () => {
   });
 });
 
-describe("no se pasa de una tarea ABIERTA a otra (pasada 21: la 02 volvió en rojo y se mandó la 03)", () => {
+describe("una tarea ABIERTA no se deja atrás en silencio (pasada 21: la 02 volvió en rojo y se mandó la 03)", () => {
   const abierta = { plan: "calculadora", numero: "02", intentos: 1 };
 
-  it("con la anterior sin todas sus casillas, la siguiente no arranca y se pide volver a la abierta", () => {
+  it("pasar a la siguiente con la anterior abierta la ARRASTRA: arranca con sus criterios sin marcar delante (como Codex)", () => {
     const d = decidirEncargo("developer-xone", "TAREA: 03\n/planes/calculadora/", leer, abierta);
-    expect(d.tipo).toBe("rechazo");
-    if (d.tipo === "rechazo") {
-      expect(d.motivo).toContain("02 (El teclado) volvió SIN CERRAR (0 de 2 criterios comprobados)");
-      expect(d.motivo).toContain("`TAREA: 02`");
+    expect(d.tipo).toBe("tarea");
+    if (d.tipo === "tarea") {
+      expect(d.arrastra).toBe("02");
+      expect(d.encargo).toContain("ARRASTRAS LA TAREA 02 (El teclado), que volvió SIN CERRAR (0 de 2 criterios comprobados)");
+      expect(d.encargo).toContain("- [ ] las teclas");
+      expect(d.encargo).toContain("- [ ] el «=»");
     }
   });
 
-  it("volver a encargar la abierta SÍ arranca, hasta el tope de intentos", () => {
+  it("lo arrastrado que sigue abierto no se arrastra dos veces: al pasar OTRA vez, no arranca", () => {
+    const d = decidirEncargo("developer-xone", "TAREA: 01\n/planes/calculadora/", leer, { plan: "calculadora", numero: "03", intentos: 1, arrastrada: "02" });
+    expect(d.tipo).toBe("rechazo");
+    if (d.tipo === "rechazo") expect(d.motivo).toContain("se arrastró a la 03 y sigue SIN CERRAR (0 de 2 criterios comprobados): no se arrastra dos veces");
+  });
+
+  it("volver a encargar la que arrastra sigue arrastrando, y volver a la abierta SÍ arranca, hasta el tope de intentos", () => {
+    const d = decidirEncargo("developer-xone", "TAREA: 03\n/planes/calculadora/", leer, { plan: "calculadora", numero: "03", intentos: 1, arrastrada: "02" });
+    expect(d.tipo === "tarea" && d.arrastra).toBe("02");
     expect(decidirEncargo("developer-xone", "TAREA: 2\n/planes/calculadora/", leer, abierta).tipo).toBe("tarea");
   });
 
-  it("con el tope agotado, ni la siguiente ni otra vez la misma: se termina el turno diciéndolo", () => {
-    const agotada = { ...abierta, intentos: INTENTOS_POR_TAREA };
-    for (const linea of ["TAREA: 03", "TAREA: 02"]) {
-      const d = decidirEncargo("developer-xone", `${linea}\n/planes/calculadora/`, leer, agotada);
-      expect(d.tipo).toBe("rechazo");
-      if (d.tipo === "rechazo") expect(d.motivo).toContain("Termina el turno");
-    }
+  it("con el tope agotado, la misma otra vez no: se termina el turno diciéndolo", () => {
+    const d = decidirEncargo("developer-xone", "TAREA: 02\n/planes/calculadora/", leer, { ...abierta, intentos: INTENTOS_POR_TAREA });
+    expect(d.tipo).toBe("rechazo");
+    if (d.tipo === "rechazo") expect(d.motivo).toContain("Termina el turno");
   });
 
-  it("con la anterior FINALIZADA, u otro plan, la siguiente arranca", () => {
-    expect(decidirEncargo("developer-xone", "TAREA: 02\n/planes/calculadora/", leer, { plan: "calculadora", numero: "01", intentos: 1 }).tipo).toBe("tarea");
+  it("con la anterior FINALIZADA, u otro plan, la siguiente arranca sin arrastrar nada", () => {
+    const d = decidirEncargo("developer-xone", "TAREA: 02\n/planes/calculadora/", leer, { plan: "calculadora", numero: "01", intentos: 1 });
+    expect(d.tipo === "tarea" && d.arrastra).toBe(undefined);
     expect(decidirEncargo("developer-xone", "TAREA: 03\n/planes/calculadora/", leer, { plan: "otro", numero: "02", intentos: 1 }).tipo).toBe("tarea");
   });
 });
@@ -129,8 +137,8 @@ describe("un encargo con `TAREA:` que no nombra el plan es del plan de la últim
 });
 
 describe("un plan nombrado que NO existe no saca el encargo de la tarea abierta (Maset: «aplica el plan B de PLAN §2.4»)", () => {
-  it("con `TAREA:` y la anterior abierta, «plan B» no lo hace trabajo libre: no arranca", () => {
+  it("con `TAREA:` y la anterior abierta, «plan B» no lo hace trabajo libre: la arrastra", () => {
     const d = decidirEncargo("developer-xone", "TAREA: 03\nSi una zona no responde, aplica el plan B de PLAN §2.4.", leer, { plan: "calculadora", numero: "02", intentos: 1 });
-    expect(d.tipo).toBe("rechazo");
+    expect(d.tipo === "tarea" && d.arrastra).toBe("02");
   });
 });

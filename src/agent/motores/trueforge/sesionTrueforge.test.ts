@@ -4885,26 +4885,24 @@ describe("un encargo de un plan es UNA tarea, con su línea `TAREA:`", () => {
   }, 30_000);
 
   /** Pasada 21: la 02 volvió en rojo («la tarea no está cerrada») y el orquestador mandó la 03; nadie volvía a por ella. */
-  it("con la tarea anterior SIN CERRAR, la siguiente no arranca: se vuelve a la abierta y, agotados los intentos, se cierra el turno", async () => {
+  it("con la tarea anterior SIN CERRAR, la siguiente la ARRASTRA; lo arrastrado no se arrastra dos veces", async () => {
     const { m, vistos } = modelosConGuion([
       [delega("d1", "TAREA: 01\nDel plan /planes/calc/: la pantalla.")],
       [new AIMessageChunk({ content: "La pantalla no está cerrada: el crítico sigue en rojo." })],
       [delega("d2", "TAREA: 02\nDel plan /planes/calc/: el teclado.")],
-      [delega("d3", "TAREA: 01\nDel plan /planes/calc/: arregla lo que faltaba.")],
-      [new AIMessageChunk({ content: "Sigue en rojo." })],
-      [delega("d4", "TAREA: 01\nDel plan /planes/calc/: la última.")],
-      [new AIMessageChunk({ content: "Sigue en rojo." })],
-      [delega("d5", "TAREA: 01\nDel plan /planes/calc/: otra vez.")],
-      [new AIMessageChunk({ content: "Falta comprobar la 01." })],
+      [new AIMessageChunk({ content: "Teclado hecho; la pantalla sigue en rojo." })],
+      [delega("d3", "TAREA: 01\nDel plan /planes/calc/: vuelve a la pantalla.")],
+      [new AIMessageChunk({ content: "Falta la 01." })],
     ]);
     const s = await abrirSesionTrueforge({ raiz: conPlan(), modelos: m, entorno: ENTORNO, skills: CATALOGO, bucleDelDesarrollador: true, developerContinuo: true });
     await s.turno("haz la calculadora del plan calc", piel().p);
-    expect(vistos[3]!.join("\n")).toContain("developer-xone NO HA ARRANCADO: la tarea 01 (La pantalla) volvió SIN CERRAR (0 de 1 criterios comprobados)");
-    // Volver a la abierta sí arranca…
-    expect(vistos[4]!.join("\n")).toContain("arregla lo que faltaba");
-    // …hasta `INTENTOS_POR_TAREA` (3); la cuarta vez, ni esa: se le dice que cierre el turno contándolo.
-    expect(vistos[8]!.join("\n")).toContain("Termina el turno y dile a la persona qué criterios de la 01 faltan");
-    expect(vistos).toHaveLength(9);
+    // La 02 arranca, con lo que falta de la 01 delante de su encargo…
+    const segundo = vistos[3]!.join("\n");
+    expect(segundo).toContain("## 02 — El teclado");
+    expect(segundo).toContain("ARRASTRAS LA TAREA 01 (La pantalla), que volvió SIN CERRAR (0 de 1 criterios comprobados)");
+    // …y pasar otra vez con la 01 aún abierta no arranca.
+    expect(vistos[5]!.join("\n")).toContain("developer-xone NO HA ARRANCADO: la tarea 01 (La pantalla) se arrastró a la 02 y sigue SIN CERRAR");
+    expect(vistos).toHaveLength(6);
   }, 30_000);
 
   /** Maset: «TAREA: 01\nVuelta de ajuste…» no nombraba el plan, no contaba como intento y el tercero arrancó. */

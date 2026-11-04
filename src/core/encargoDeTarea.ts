@@ -28,19 +28,25 @@ export const ALCANCE_Y_CIERRE_DE_LA_TAREA = [
 ].join("\n");
 
 /**
- * **No se pasa de una tarea ABIERTA a otra** (decisión suya, 04-11-2026: «que no pase de tarea en rojo»). Medido en la
- * calculadora (pasada 21): el desarrollador devolvió la 02 con el crítico en rojo y cuatro de cinco criterios sin marcar,
- * «la tarea no está cerrada», y el orquestador mandó la 03 sin más; nadie volvía a por la 02. Abierta es que no tiene
- * TODAS sus casillas marcadas (`progreso !== "finalizada"`). Se puede volver a encargar hasta este tope de intentos; con
- * él agotado, el turno se termina diciéndole a la persona lo que falta, en vez de seguir con la siguiente.
+ * **Una tarea ABIERTA no se deja atrás en silencio** (decisión suya, 04-11-2026: «que no pase de tarea en rojo»). Medido en
+ * la calculadora (pasada 21): el desarrollador devolvió la 02 con el crítico en rojo y cuatro de cinco criterios sin marcar,
+ * «la tarea no está cerrada», y el orquestador mandó la 03 sin más; nadie volvía a por la 02. Abierta es que no tiene TODAS
+ * sus casillas marcadas (`progreso !== "finalizada"`).
+ *
+ * Se puede volver a encargar hasta este tope de intentos. Y se puede pasar a la siguiente UNA vez ARRASTRÁNDOLA: el encargo
+ * nuevo lleva sus criterios sin marcar para arreglarlos y marcarlos en esa misma vuelta, como hace Codex (medido en Maset,
+ * 04-11-2026: su orquestador miraba la captura y metía lo que faltaba al principio del encargo siguiente; el nuestro, que
+ * frenaba, gastó tres vueltas en un criterio imposible y el turno se cortó sin los contadores). Lo arrastrado que sigue
+ * abierto al pasar OTRA vez, o una tarea con el tope agotado, ya no se mueve: se termina el turno diciendo lo que falta.
  */
 export const INTENTOS_POR_TAREA = 3;
 
-/** La última tarea encargada a quien recibe el encargo, y cuántas veces se le ha encargado en el turno. */
+/** La última tarea encargada a quien recibe el encargo, sus intentos en el turno y la que arrastra, si arrastra alguna. */
 export interface TareaYaEncargada {
   plan: string;
   numero: string;
   intentos: number;
+  arrastrada?: string;
 }
 
 /** Cuántas tareas pendientes se le listan al orquestador al devolverle un encargo. */
@@ -49,7 +55,7 @@ const TOPE_DE_TAREAS_LISTADAS = 8;
 export type DecisionDeEncargo =
   /** No es trabajo de un plan con tareas (o nombra varios planes: no se adivina cuál). */
   | { tipo: "libre" }
-  | { tipo: "tarea"; plan: string; tarea: TareaDelPlan; encargo: string }
+  | { tipo: "tarea"; plan: string; tarea: TareaDelPlan; encargo: string; arrastra?: string }
   | { tipo: "rechazo"; motivo: string };
 
 /** Los planes que nombra un encargo (`/planes/<slug>/`), sin repetir. */
@@ -130,34 +136,54 @@ export function decidirEncargo(
     };
   }
   const tarea = nombradas[0]!;
-  const previa = anterior?.plan === plan ? tareas.find((t) => clave(t.numero) === clave(anterior.numero)) : undefined;
-  if (anterior !== undefined && previa !== undefined && previa.progreso !== "finalizada") {
-    const cuantas = `${String(previa.criterios.hechos)} de ${String(previa.criterios.total)} criterios comprobados`;
-    const agotada = anterior.intentos >= INTENTOS_POR_TAREA;
-    const cerrarElTurno =
-      `Ya se le encargó ${String(anterior.intentos)} veces: NO la mandes otra vez ni pases a otra. Termina el turno y dile a la ` +
-      `persona qué criterios de la ${previa.numero} faltan y por qué (lo que ${nombre} contó al devolverla).`;
-    if (clave(tarea.numero) !== clave(previa.numero)) {
-      return {
-        tipo: "rechazo",
-        motivo:
-          `${nombre} NO HA ARRANCADO: la tarea ${previa.numero} (${previa.titulo}) volvió SIN CERRAR (${cuantas}) y no se pasa a la ` +
-          `${tarea.numero} con una tarea abierta. ` +
-          (agotada
-            ? cerrarElTurno
-            : `Vuelve a mandar \`TAREA: ${previa.numero}\` al mismo ${nombre} con lo que dijo que faltaba, para que lo arregle y lo compruebe.`),
-      };
-    }
-    if (agotada) return { tipo: "rechazo", motivo: `${nombre} NO HA ARRANCADO: la tarea ${previa.numero} sigue SIN CERRAR (${cuantas}). ${cerrarElTurno}` };
+  const abiertaDel = (numero: string | undefined) =>
+    numero === undefined || anterior?.plan !== plan ? undefined : tareas.find((t) => clave(t.numero) === clave(numero) && t.progreso !== "finalizada");
+  const cuantas = (t: TareaDelPlan) => `${String(t.criterios.hechos)} de ${String(t.criterios.total)} criterios comprobados`;
+  const cerrarElTurno = (t: TareaDelPlan) =>
+    `NO la mandes otra vez ni pases a otra. Termina el turno y dile a la persona qué criterios de la ${t.numero} faltan y por qué ` +
+    `(lo que ${nombre} contó al devolverla).`;
+  const previa = abiertaDel(anterior?.numero);
+  const yaArrastrada = abiertaDel(anterior?.arrastrada);
+  const pasaAOtra = previa !== undefined && clave(tarea.numero) !== clave(previa.numero);
+  // Lo arrastrado que sigue abierto no se arrastra dos veces.
+  if (yaArrastrada !== undefined && anterior !== undefined && clave(tarea.numero) !== clave(anterior.numero)) {
+    return {
+      tipo: "rechazo",
+      motivo:
+        `${nombre} NO HA ARRANCADO: la tarea ${yaArrastrada.numero} (${yaArrastrada.titulo}) se arrastró a la ${anterior.numero} y sigue SIN ` +
+        `CERRAR (${cuantas(yaArrastrada)}): no se arrastra dos veces. ` +
+        (anterior.intentos >= INTENTOS_POR_TAREA
+          ? cerrarElTurno(yaArrastrada)
+          : `Vuelve a mandar \`TAREA: ${anterior.numero}\` al mismo ${nombre} con lo que falta de las dos, o termina el turno diciéndolo.`),
+    };
   }
+  if (previa !== undefined && !pasaAOtra && anterior !== undefined && anterior.intentos >= INTENTOS_POR_TAREA) {
+    return {
+      tipo: "rechazo",
+      motivo: `${nombre} NO HA ARRANCADO: la tarea ${previa.numero} sigue SIN CERRAR (${cuantas(previa)}) y ya se le encargó ${String(anterior.intentos)} veces. ${cerrarElTurno(previa)}`,
+    };
+  }
+  // Pasar a otra con la anterior abierta: la ARRASTRA, con sus criterios sin marcar delante del encargo nuevo.
+  const arrastra = pasaAOtra ? previa : yaArrastrada;
+  const arrastre =
+    arrastra === undefined
+      ? []
+      : [
+          "",
+          `ARRASTRAS LA TAREA ${arrastra.numero} (${arrastra.titulo}), que volvió SIN CERRAR (${cuantas(arrastra)}). En esta misma vuelta`,
+          `arregla lo que le falta, compruébalo en el aparato y marca sus casillas en la tarea ${arrastra.numero}; si no se puede`,
+          "comprobar, di por qué. Sus criterios sin marcar:",
+          ...arrastra.cuerpo.split("\n").filter((l) => /^\s*- \[ \]/.test(l)),
+        ];
   const ficha = [
     "",
     "",
     `LA TAREA DE ESTE ENCARGO, de /planes/${plan}/TASKS.md (líneas ${String(tarea.linea)}–${String(tarea.linea + tarea.lineas - 1)}; el resto del plan no hace falta leerlo):`,
     `## ${tarea.numero} — ${tarea.titulo}`,
     tarea.cuerpo,
+    ...arrastre,
     "",
     ALCANCE_Y_CIERRE_DE_LA_TAREA,
   ].join("\n");
-  return { tipo: "tarea", plan, tarea, encargo: `${encargo}${ficha}` };
+  return { tipo: "tarea", plan, tarea, encargo: `${encargo}${ficha}`, ...(arrastra === undefined ? {} : { arrastra: arrastra.numero }) };
 }

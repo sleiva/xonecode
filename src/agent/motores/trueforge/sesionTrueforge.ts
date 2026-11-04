@@ -237,12 +237,22 @@ export const UNA_VENTANA_POR_ENCARGO = [
  * modelo: Codex llevaba la regla en su `AGENTS.md`, que ven TODOS sus agentes, y su analista enumeró cabecera, display y
  * banda; el nuestro, con la regla solo en el bucle del desarrollador, planificó «20 teclas y un 0» y la pantalla salió
  * sin la mitad de las piezas, aunque el desarrollador mirara la maqueta: construye lo que dice el plan.
+ *
+ * Y el parecido de la pantalla ENTERA va en una tarea FINAL, nunca en una que construye una parte. Medido en Maset
+ * (04-11-2026): nuestro plan pedía en la tarea de la cabecera y en la de dos tarjetas «a menos del 10 % de la maqueta», que
+ * no se cumple con piezas por hacer (ni con una maqueta que trae un marco oscuro); la tarea quedó abierta tres vueltas y el
+ * turno se cortó sin los contadores. El de Codex, con el MISMO analista y la misma skill, cerraba cada parte con lo suyo
+ * («captura guardada para comparar»), separaba construir, navegar y datos, y dejaba la comparación lado a lado para el final.
  */
 export const FIDELIDAD_DEL_PLAN = [
-  "FIDELIDAD A LA MAQUETA: si el trabajo parte de una maqueta, el plan es FIEL a ella. La tarea que construye la pantalla",
-  "ENUMERA todas sus piezas —la cabecera con sus iconos, cada línea y chip de cada panel, las bandas, las teclas— y su",
-  "criterio visual es que estén TODAS y se parezcan: estructura, colores, tipografías y proporciones. Un icono que XOne no",
-  "trae es trabajo del diseñador. Los datos de ejemplo de la maqueta no son piezas: no se copian.",
+  "FIDELIDAD A LA MAQUETA: si el trabajo parte de una maqueta, el plan es FIEL a ella: entre sus tareas están TODAS sus piezas",
+  "—la cabecera con sus iconos, cada línea y chip de cada panel, las bandas, las teclas— con su control de XOne. Una tarea que",
+  "construye una PARTE de la pantalla se cierra con lo SUYO: sus piezas están, se leen enteras y no se cortan, y queda una",
+  "captura guardada; NO con que la pantalla entera se parezca, que aún le faltan piezas. El parecido de la pantalla ENTERA",
+  "—estructura, colores, tipografías y proporciones, mirando la captura junto a la maqueta— es la ÚLTIMA tarea, de fidelidad,",
+  "que además vuelve a comprobar lo de las anteriores. Ningún criterio es un porcentaje de una medida: se juzga mirando.",
+  "Construir la pantalla, la navegación y los datos van en tareas separadas. Un icono que XOne no trae es trabajo del",
+  "diseñador. Los datos de ejemplo de la maqueta no son piezas: no se copian.",
 ].join("\n");
 
 export const PLAN_PRIMERO = [
@@ -257,9 +267,9 @@ export const PLAN_PRIMERO = [
   // objetivo, lo averiguado y el entregable— y el plan salió en 2 min con 3 tareas; el nuestro midió antes la maqueta, le
   // volcó 7.100 caracteres de píxeles y alcance añadido, y el plan tardó 6,5 min con 5 tareas y criterios de coordenadas.
   "EL ENCARGO AL ANALISTA, CORTO: el OBJETIVO con las palabras de la persona, sin añadirle alcance; lo que ya averiguaste,",
-  "con fichero:línea, para que no lo redescubra; y el ENTREGABLE (`PLAN.md`, `CONTEXT.md`, `TASKS.md` con pocas tareas, cada",
-  "criterio una prueba en el aparato). No le pases medidas de la maqueta: la mira él. Con maqueta, pídele un plan FIEL a",
-  "ella: que la tarea visual enumere TODAS sus piezas y que se parezcan.",
+  "con fichero:línea, para que no lo redescubra; y el ENTREGABLE (`PLAN.md`, `CONTEXT.md` y `TASKS.md` con tareas numeradas",
+  "y criterios `- [ ]` que se comprueban en el aparato). No le digas cuántas tareas ni cómo partirlas, ni le pases medidas de",
+  "la maqueta: la mira él. Con maqueta, pídele un plan FIEL a ella.",
   // `core/encargoDeTarea.ts`: lo comprueba el harness, no este texto.
   "Cada encargo de un plan al desarrollador o al diseñador es UNA tarea y empieza con la línea `TAREA: <número>`: el harness le",
   "pone delante su ficha, y sin esa línea o con varias tareas el encargo NO arranca. Cuando vuelva, la siguiente al mismo.",
@@ -2063,7 +2073,7 @@ export async function abrirSesionTrueforge(
       diagnostico?.memoria?.(
         agente.nombre,
         "tarea",
-        `${decision.tipo === "tarea" ? `tarea ${decision.plan}#${decision.tarea.numero}` : decision.tipo} · anterior ${previa === undefined ? "—" : `${previa.plan}#${previa.numero} ×${String(previa.intentos)}`}`,
+        `${decision.tipo === "tarea" ? `tarea ${decision.plan}#${decision.tarea.numero}${decision.arrastra === undefined ? "" : ` arrastra ${decision.arrastra}`}` : decision.tipo} · anterior ${previa === undefined ? "—" : `${previa.plan}#${previa.numero} ×${String(previa.intentos)}${previa.arrastrada === undefined ? "" : ` (arrastra ${previa.arrastrada})`}`}`,
       );
       if (decision.tipo === "rechazo") {
         anotarPaso("trueforge.no-arranca", `${agente.nombre}: ${decision.motivo.slice(0, 80)}`)();
@@ -2074,7 +2084,12 @@ export async function abrirSesionTrueforge(
       if (decision.tipo === "tarea" && agente.scripts === true) {
         const antes = tareaEncargadaDe.get(agente.nombre);
         const misma = antes?.plan === decision.plan && Number.parseInt(antes.numero.replace(/^T/i, ""), 10) === Number.parseInt(decision.tarea.numero.replace(/^T/i, ""), 10);
-        tareaEncargadaDe.set(agente.nombre, { plan: decision.plan, numero: decision.tarea.numero, intentos: misma ? antes.intentos + 1 : 1 });
+        tareaEncargadaDe.set(agente.nombre, {
+          plan: decision.plan,
+          numero: decision.tarea.numero,
+          intentos: misma ? antes.intentos + 1 : 1,
+          ...(decision.arrastra === undefined ? {} : { arrastrada: decision.arrastra }),
+        });
       }
       if (decision.tipo === "tarea") ultimaTareaEncargada = `${decision.plan}|${String(Number.parseInt(decision.tarea.numero.replace(/^T/i, ""), 10))}`;
       if (decision.tipo === "tarea" && developerContinuo && agente.scripts === true) tareaDeHilo.set(params.threadId, { plan: decision.plan, tarea: decision.tarea.numero, cerradas: [] });
