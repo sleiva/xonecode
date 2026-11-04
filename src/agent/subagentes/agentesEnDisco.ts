@@ -1183,8 +1183,8 @@ export const AGENTES_DE_SERIE: readonly Agente[] = [
       "cambiar código, y no para preguntas de la plataforma. Dale qué hay que averiguar y " +
       "para qué, que es lo que acota cuánto busca. Devuelve hechos con su fichero y su " +
       "línea, listos para pasárselos al siguiente en un bloque HANDOFF DE ANÁLISIS. Para un " +
-      "desarrollo de varios pasos PÍDELE ADEMÁS EL PLAN: deja el spec, las tareas y el " +
-      "glosario en `/planes/<nombre>/` y te dice el nombre, que es lo que hay que pasarle a " +
+      "desarrollo de varios pasos PÍDELE ADEMÁS EL PLAN: deja `PLAN.md`, `CONTEXT.md` y " +
+      "`TASKS.md` en `/planes/<nombre>/` y te dice el nombre, que es lo que hay que pasarle a " +
       "quien desarrolle. No puede preguntarte nada, así que lo que no pueda decidir te lo " +
       "devuelve como decisión PENDIENTE.",
     motor: "modelo",

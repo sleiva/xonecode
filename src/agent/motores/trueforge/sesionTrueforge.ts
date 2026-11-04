@@ -233,6 +233,12 @@ export const PLAN_PRIMERO = [
   "leído tú los ficheros o que el encargo traiga un «Cómo empezar» NO lo sustituye: el plan es lo que el desarrollador marca y lo",
   "que queda para la tarea siguiente. Después, el diseñador si faltan recursos, y el desarrollador con el NOMBRE del plan. Solo un",
   "retoque (una línea, un color, un texto) va directo.",
+  // Medido con Codex sobre la calculadora (04-11-2026), mismo modelo: su encargo al analista eran ~2.000 caracteres —el
+  // objetivo, lo averiguado y el entregable— y el plan salió en 2 min con 3 tareas; el nuestro midió antes la maqueta, le
+  // volcó 7.100 caracteres de píxeles y alcance añadido, y el plan tardó 6,5 min con 5 tareas y criterios de coordenadas.
+  "EL ENCARGO AL ANALISTA, CORTO: el OBJETIVO con las palabras de la persona, sin añadirle alcance; lo que ya averiguaste,",
+  "con fichero:línea, para que no lo redescubra; y el ENTREGABLE (`PLAN.md`, `CONTEXT.md`, `TASKS.md` con pocas tareas, cada",
+  "criterio una prueba en el aparato). NO midas tú la maqueta ni le pases medidas: la mira él.",
   // `core/encargoDeTarea.ts`: lo comprueba el harness, no este texto.
   "Cada encargo de un plan al desarrollador o al diseñador es UNA tarea y empieza con la línea `TAREA: <número>`: el harness le",
   "pone delante su ficha, y sin esa línea o con varias tareas el encargo NO arranca. Cuando vuelva, la siguiente al mismo.",

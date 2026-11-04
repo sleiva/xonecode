@@ -219,7 +219,9 @@ relee entero cada vez que alguien lo retoma.
   cual con `xone-probar` sin traducirla: «`7 + 8 =` deja `15`», «`5 ÷ 0 =` pinta `ERROR` y después `7` deja `7`»,
   «`xone-hotswap textos` incluye `AC` y `=`», «`xone-log-android --app` sin errores JS tras los casos». Medido con Codex
   sobre la calculadora: con criterios así el desarrollador cerró la tarea criterio a criterio, con la prueba de cada uno.
-  Marcar uno exige una prueba en el aparato posterior al último cambio, así que un criterio que no se puede
+  **Sin coordenadas ni píxeles** («la tecla está en x≈43 y mide 142×110»): un retoque legítimo los rompe y el criterio
+  ya no se puede marcar; las medidas van en el `PLAN.md`. Y **el alcance es el del ENCARGO**: lo que la maqueta enseña y el
+  encargo no pide va, como mucho, en una línea de una tarea, nunca en una tarea propia. Marcar uno exige una prueba en el aparato posterior al último cambio, así que un criterio que no se puede
   probar allí no se podrá marcar nunca. Dicen lo que se VE o se MIDE, no cómo está hecho: «el `rx` del SVG vale 41» o «no
   se crean `.ttf`» no son criterios (lo comprueban el verificador y `validar_fichero_xone`). **Como mucho 8 por tarea y
   200 caracteres cada uno**: el harness no escribe un `TASKS.md` que lo pase. Si una tarea necesita más, son dos tareas.
