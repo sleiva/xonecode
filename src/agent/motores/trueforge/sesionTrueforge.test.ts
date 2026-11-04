@@ -5017,6 +5017,28 @@ describe("un encargo de un plan es UNA tarea, con su línea `TAREA:`", () => {
     expect(vistos.at(-1)!.join("\n")).not.toContain("encargos suyos en esta tarea");
     expect(vistos).toHaveLength(4);
   }, 30_000);
+
+  /** Con una tarea por encargo, el tope de tres encargos cortaba un plan de siete en la tercera. */
+  it("en una tarea de fondo, pasar a OTRA tarea del plan no gasta el tope de encargos", async () => {
+    const raiz = proyecto();
+    mkdirSync(join(raiz, ".xonecode", "planes", "calc"), { recursive: true });
+    writeFileSync(
+      join(raiz, ".xonecode", "planes", "calc", "TASKS.md"),
+      "# Calc\n\n## 01 — Uno\n**Estado:** hecha\n- [x] a\n\n## 02 — Dos\n**Estado:** hecha\n- [x] b\n\n## 03 — Tres\n**Estado:** hecha\n- [x] c\n\n## 04 — Cuatro\n**Estado:** pendiente\n- [ ] d\n",
+    );
+    const { m, vistos } = modelosConGuion([
+      [delega("d1", "TAREA: 01\nDel plan /planes/calc/.")], [new AIMessageChunk({ content: "1" })],
+      [delega("d2", "TAREA: 02\nDel plan /planes/calc/.")], [new AIMessageChunk({ content: "2" })],
+      [delega("d3", "TAREA: 03\nDel plan /planes/calc/.")], [new AIMessageChunk({ content: "3" })],
+      [delega("d4", "TAREA: 04\nDel plan /planes/calc/.")], [new AIMessageChunk({ content: "4" })],
+      [new AIMessageChunk({ content: "Hecho." })],
+    ]);
+    const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, bucleDelDesarrollador: true, developerContinuo: true, trabajoSinPersona: true });
+    await s.turno("haz la calculadora", piel().p);
+    // Nueve llamadas: cinco del raíz y CUATRO del desarrollador; la cuarta tarea arrancó.
+    expect(vistos).toHaveLength(9);
+    expect(vistos.at(-1)!.join("\n")).not.toContain("encargos suyos en esta tarea");
+  }, 30_000);
 });
 
 /** La fidelidad a la maqueta va en el SISTEMA del analista (calculadora con Codex, 04-11-2026). */

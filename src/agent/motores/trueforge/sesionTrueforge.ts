@@ -2076,6 +2076,8 @@ export async function abrirSesionTrueforge(
      * También en una TAREA DE FONDO: sin la tarea apuntada, el continuo no pasaba de una a otra y hacía el plan de golpe,
      * marcando al final (Maset). Un encargo que no arranca no gasta el tope de encargos, que se cuenta después.
      */
+    /** El encargo abre una tarea del plan DISTINTA de la última encargada: no gasta el tope de encargos de una tarea de fondo. */
+    let abreOtraTareaDelPlan = false;
     if (delRaiz && agente !== undefined && (recibeMarcarCriterios(agente) || pruebaEnElAparato(agente))) {
       const decision = decidirEncargo(agente.nombre, params.request.input, (plan) => {
         try {
@@ -2097,6 +2099,7 @@ export async function abrirSesionTrueforge(
         return devolverSinArrancar(agente.nombre, [], decision.motivo);
       }
       if (decision.tipo === "tarea") params = { ...params, request: { ...params.request, input: decision.encargo } };
+      if (decision.tipo === "tarea") abreOtraTareaDelPlan = ultimaTareaEncargada !== `${decision.plan}|${String(Number.parseInt(decision.tarea.numero.replace(/^T/i, ""), 10))}`;
       if (decision.tipo === "tarea" && pruebaEnElAparato(agente)) {
         const antes = tareaEncargadaDe.get(agente.nombre);
         const misma = antes?.plan === decision.plan && Number.parseInt(antes.numero.replace(/^T/i, ""), 10) === Number.parseInt(decision.tarea.numero.replace(/^T/i, ""), 10);
@@ -2111,7 +2114,9 @@ export async function abrirSesionTrueforge(
       if (decision.tipo === "tarea" && developerContinuo && agente.scripts === true) tareaDeHilo.set(params.threadId, { plan: decision.plan, tarea: decision.tarea.numero, cerradas: [] });
     }
     // Pasado el tope de encargos al desarrollador en una TAREA, no arranca: el orquestador recibe la orden de cerrar.
-    if (opciones.trabajoSinPersona === true && agente?.nombre === "developer-xone" && delRaiz) {
+    // Cuentan las VUELTAS sobre una misma tarea, no pasar a la siguiente del plan: con una tarea por encargo, siete tareas
+    // se cortaban en la tercera. Las vueltas de cada tarea ya las acota `INTENTOS_POR_TAREA`.
+    if (opciones.trabajoSinPersona === true && agente?.nombre === "developer-xone" && delRaiz && !abreOtraTareaDelPlan) {
       if (encargosAlDesarrolladorDelTurno >= TOPE_DE_ENCARGOS_AL_DESARROLLADOR) {
         anotarPaso("trueforge.tope-de-encargos", `developer-xone: ${String(encargosAlDesarrolladorDelTurno)} encargos, no arranca otro`)();
         diagnostico?.memoria?.(agente.nombre, "arranca-sin", "tope de encargos al desarrollador");

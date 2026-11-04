@@ -145,7 +145,8 @@ Ante una discrepancia con el código, **el código manda**.
 - **Sale con el CRITERIO DE ACEPTACIÓN medible** del encargo, tope de tres vueltas. **En una TAREA, como mucho
   `TOPE_DE_ENCARGOS_AL_DESARROLLADOR` encargos del orquestador a developer-xone por turno**: el siguiente no arranca
   (`hiloQueNoArranca` con `textoDeTopeDeEncargos`) y manda cerrar con lo que falta en «Por arreglar» / «No se puede en
-  XOne». Medido: siete «últimas vueltas» persiguiendo un crítico en rojo. Con persona delante no aplica.
+  XOne». Medido: siete «últimas vueltas» persiguiendo un crítico en rojo. Con persona delante no aplica. **Pasar a OTRA
+  tarea del plan no cuenta** (`abreOtraTareaDelPlan`): con una tarea por encargo, un plan de siete se cortaba en la tercera.
 - **Un encargo de un plan es UNA tarea, en su línea `TAREA: <número>`** (`core/encargoDeTarea.ts#decidirEncargo`, en
   `crearHijo`): a quien marca el plan (`recibeMarcarCriterios`) o prueba en el aparato, y del orquestador, si nombra UN plan con tareas.
   Sin la línea, con varias o con una que no existe, NO arranca y se le devuelve el motivo; con una, el encargo lleva delante
