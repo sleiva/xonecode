@@ -18,6 +18,7 @@
 import { AIMessage, AIMessageChunk, HumanMessage, SystemMessage, ToolMessage, type BaseMessage } from "@langchain/core/messages";
 import type { ExtendedChatCompletionChunk, ILLM, LLMCreateParams, LLMCreateParamsStreaming, RawAssistantMessageWithUsage } from "./trueforge.js";
 import { razonamientoDe, razonamientoVisibleDe, textoDe } from "../../turno/puente.js";
+import { MARCA_DE_IMAGEN } from "../../grafo/verImagen.js";
 
 /** Lo que llega al padre si, tras un corte, el resumen no dejó texto. */
 const RELLENO_DEL_CORTE = "[Detenido a petición de la persona a mitad de una llamada, antes de poder resumir lo hecho.]";
@@ -114,8 +115,40 @@ function argumentosDe(json: string): Record<string, unknown> {
   }
 }
 
-/** Los mensajes que manda TrueForge, en mensajes de LangChain. */
-export function aMensajesDeLangchain(mensajes: readonly MensajeOpenAi[]): BaseMessage[] {
+/**
+ * Los mensajes que manda TrueForge, en mensajes de LangChain. Con `imagenDe`, una respuesta de tool con la marca de
+ * `view_image` (`agent/grafo/verImagen.ts`) lleva DETRÁS del bloque de respuestas un mensaje con esas imágenes: entre
+ * dos respuestas de tool no puede ir otro mensaje (la API exige que sigan a su llamada). Se rehace igual en cada llamada.
+ */
+export function aMensajesDeLangchain(
+  mensajes: readonly MensajeOpenAi[],
+  imagenDe?: (id: string) => { base64: string; mime: string; ruta: string } | undefined
+): BaseMessage[] {
+  const convertidos = convertirMensajes(mensajes);
+  if (imagenDe === undefined) return convertidos;
+  const salida: BaseMessage[] = [];
+  let pendientes: string[] = [];
+  const soltar = () => {
+    if (pendientes.length === 0) return;
+    const partes: unknown[] = [];
+    for (const id of pendientes) {
+      const imagen = imagenDe(id);
+      if (imagen === undefined) partes.push({ type: "text", text: `(la imagen ${id} ya no está: pídela otra vez con view_image)` });
+      else partes.push({ type: "text", text: `${imagen.ruta}:` }, { type: "image_url", image_url: { url: `data:${imagen.mime};base64,${imagen.base64}` } });
+    }
+    salida.push(new HumanMessage({ content: partes as never }));
+    pendientes = [];
+  };
+  for (const [i, m] of convertidos.entries()) {
+    if (mensajes[i]?.role !== "tool") soltar();
+    salida.push(m);
+    if (mensajes[i]?.role === "tool") pendientes.push(...[...textoDeContenido(mensajes[i]!.content).matchAll(MARCA_DE_IMAGEN)].map((x) => x[1]!));
+  }
+  soltar();
+  return salida;
+}
+
+function convertirMensajes(mensajes: readonly MensajeOpenAi[]): BaseMessage[] {
   return mensajes.map((m): BaseMessage => {
     switch (m.role) {
       case "system":
@@ -174,6 +207,8 @@ export function modeloParaTrueforge(opciones: {
    * calculadora, tenía `siguiente_tarea` y devolvía el encargo sin llamarla; el código la llama por él.
    */
   alCerrar?: (texto: string) => { name: string; argumentos: string } | undefined;
+  /** Las imágenes de `view_image` por su id: con esto, la imagen va al modelo detrás de la respuesta de la tool. */
+  imagenDe?: (id: string) => { base64: string; mime: string; ruta: string } | undefined;
 }): ILLM {
   let secuencia = 0;
   /** Las tool calls cortadas por el tope, por id, con su nota: se reponen IGUAL en cada llamada, que la caché lo agradece. */
@@ -195,6 +230,7 @@ export function modeloParaTrueforge(opciones: {
         const nota = m.role === "tool" && m.tool_call_id !== undefined ? notasDeCorte.get(m.tool_call_id) : undefined;
         return nota === undefined ? m : { ...m, content: `${nota}\n\n${textoDeContenido(m.content)}` };
       }),
+      opciones.imagenDe,
     );
     const senal = opciones.senal?.();
     const id = `xc-${++secuencia}`;

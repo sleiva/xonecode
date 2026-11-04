@@ -166,6 +166,7 @@ import { cajasDeMaqueta, medidasDeImagen, viewportDeMaqueta } from "../../dispos
 import { geometriaDeCaptura, geometriaDeCapturaYa } from "../../dispositivos/geometriaEnDisco.js";
 import { decodificarImagen } from "../../dispositivos/decodificarImagen.js";
 import { crearDescribirImagen } from "../../grafo/describirImagen.js";
+import { crearImagenesVistas, crearVerImagen } from "../../grafo/verImagen.js";
 import { crearTraerDeLaMaquina } from "../../grafo/traerDeLaMaquina.js";
 import { describirPantalla, ESFUERZO_DEL_CRITICO_VISUAL, invocarVisualConModelos, PAPEL_DEL_JUEZ_VISUAL, type ConsumoVisual, type InvocarVisual } from "../../dispositivos/juezVisual.js";
 import { estilosDeDisco, indiceEnDisco, type CargarIndice } from "../../navegacion/indiceEnDisco.js";
@@ -583,7 +584,7 @@ export function textoDelBucle(
           "  `--`). Recargar, limpiar el log, leerlo y capturar ya los hace `xone-probar`. `elements` solo para explorar: es enorme.",
           "- El CSS: busca la clase que vas a tocar con `xone_navegacion` (operación `estilos`) o un `grep` de su nombre. No leas",
           "  `default.css` entero, y lo que ya leíste en este encargo no lo vuelvas a leer.",
-          "- `describe_image` sobre tu captura solo si `comparar_capturas` no cuadra y necesitas ver por qué: cada una es un modelo aparte.",
+          "- Para MIRAR tu captura, `view_image` con su ruta: la ves TÚ, en esta conversación (`describe_image` es otro modelo que te la cuenta).",
           // Medido en Maset (23-10-2026, «el botón Entrar en rojo»): tras reiniciar probó cuatro sintaxis de `launchApplication`
           // —todas salían con 0—, pidió dos `--help` y quiso comprobar la rama con `git`, que no tiene.
           "- Tras `xone-probar --recargar` o `xone-desplegar-android` la app YA está lanzada: no la lances",
@@ -614,7 +615,8 @@ export function textoDelBucle(
           // pasó ni una vez el crítico ni la comparación, y pulió el CSS con `describe_image`. La nativa guarda la GEOMETRÍA
           // que el crítico mide, y tras cada captura el harness ya le pone delante la medida.
           "- VISUAL, solo cuando lo funcional pasa: UNA captura por ronda, `xone-probar … --captura` (la nativa: guarda la geometría",
-          "  que mide el crítico; `xone-hotswap shot name=<control>` solo para un control suelto). Tras cada captura el harness te pone la MEDIDA",
+          "  que mide el crítico; `xone-hotswap shot name=<control>` solo para un control suelto). MÍRALA tú con `view_image`, y lo que",
+          "  veas mal mídelo en su geometría antes de tocar el CSS. Tras cada captura el harness te pone la MEDIDA",
           "  contra la maqueta; con ella, pasa `xone_critica_visual` (pantalla = esa captura, referencia = la maqueta) y arregla TODAS",
           `  las diferencias en la misma ronda antes de otra captura. ${String(RONDAS_VISUALES)} rondas como mucho. \`describe_image\` no mide: no lo uses para pulir.`,
           // Medido en Maset: la maqueta pinta el paso firmado y con filas; la captura era el paso vacío, y salía 24 % «distinta».
@@ -1514,6 +1516,18 @@ export async function abrirSesionTrueforge(
   const atributos = crearAtributosXone() as unknown as ToolDeLangchain;
   // VER una imagen (IXCODE-23), a TODOS, el raíz incluido: es de lectura, y el raíz es quien recibe los adjuntos.
   // `read_file` no abre una imagen y el aviso de adjuntos manda aquí (`describirImagen.ts`).
+  /** Las imágenes que los hijos ven con `view_image`, por id: el adaptador del modelo las pone en la conversación. */
+  const imagenesVistas = crearImagenesVistas();
+  const verImagen = (): ToolDeLangchain =>
+    crearVerImagen({
+      leer: lectorDeReferencias,
+      vistas: imagenesVistas,
+      carpetas: {
+        raiz,
+        ...(carpeta === undefined ? {} : { artefactos: carpeta }),
+        ...(opciones.adjuntos === undefined ? {} : { adjuntos: opciones.adjuntos }),
+      },
+    }) as unknown as ToolDeLangchain;
   const describirImagen = (): ToolDeLangchain =>
     crearDescribirImagen({
       invocar: invocarVisualConModelos({ paraPapel: (p, e) => modelos.paraPapel(p, e) }),
@@ -1587,6 +1601,8 @@ export async function abrirSesionTrueforge(
     validarFichero(),
     atributos,
     describirImagen(),
+    // VER él mismo la captura, como el `view_image` de Codex (`verImagen.ts`): a quien prueba él mismo.
+    ...(agente.scripts === true ? [verImagen()] : []),
     ...(carpeta !== undefined && (agente.escribeEn ?? []).length > 0
       ? [crearCopiarArtefacto({ raiz, carpetaDeArtefactos: carpeta, perfil: agente }) as unknown as ToolDeLangchain]
       : []),
@@ -2128,6 +2144,7 @@ export async function abrirSesionTrueforge(
               ? RESUMEN_DE_RELLENO_DEL_PRESUPUESTO
               : undefined,
         corte: () => detencion.corte(params.threadId),
+        imagenDe: imagenesVistas.de,
         // El CONTINUO no devuelve el encargo con tareas pendientes: lo que iba a decir es el resumen de la que cierra.
         ...(continuoDelHilo && siguienteTareaDelDesarrollador ? { alCerrar: (texto: string) => (quedaTareaDelContinuo(params.threadId) ? { name: NOMBRE_SIGUIENTE_TAREA, argumentos: JSON.stringify({ resumen: texto.trim().slice(0, 300) || "sin resumen" }) } : undefined) } : {}),
         alTirarLlamadas: (n) => {

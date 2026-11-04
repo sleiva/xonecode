@@ -117,13 +117,13 @@ export function rutaVirtualDe(completa: string, carpetas: NonNullable<Dependenci
 }
 
 /** ¿Es una ruta de la MÁQUINA y no una virtual? Una virtual empieza por `/` y nunca por la carpeta de un usuario. */
-function esRutaDeLaMaquina(ruta: string, carpetas: DependenciasDeDescribir["carpetas"]): boolean {
+export function esRutaDeLaMaquina(ruta: string, carpetas: DependenciasDeDescribir["carpetas"]): boolean {
   if (/^[A-Za-z]:[\\/]/.test(ruta) || ruta.startsWith("\\\\") || ruta.startsWith("~")) return true;
   const raices = [carpetas?.raiz, carpetas?.adjuntos, carpetas?.artefactos].filter((c): c is string => c !== undefined);
   return raices.some((c) => ruta.startsWith(c.replace(/[\\/]+$/, "") + "/")) || /^\/(Users|home|private|tmp|var|Volumes)\//.test(ruta);
 }
 
-function mimeDe(nombre: string): string {
+export function mimeDe(nombre: string): string {
   return /\.png$/i.test(nombre) ? "image/png" : "image/jpeg";
 }
 

@@ -293,3 +293,29 @@ describe("el uso de una llamada lleva el razonamiento, cuando el proveedor lo di
   });
 });
 
+/** `view_image` (`agent/grafo/verImagen.ts`): la imagen va al MISMO modelo, detrás de las respuestas de tool. */
+describe("view_image en la conversación", () => {
+  const IMG = { base64: "AAAA", mime: "image/png", ruta: "/artefactos/c.png" };
+  it("la imagen marcada va en un mensaje DETRÁS del bloque de respuestas, nunca entre dos, y se rehace igual", () => {
+    const mensajes = [
+      { role: "user", content: "prueba" },
+      { role: "assistant", content: "", tool_calls: [{ id: "a", type: "function", function: { name: "view_image", arguments: "{}" } }, { id: "b", type: "function", function: { name: "ls", arguments: "{}" } }] },
+      { role: "tool", tool_call_id: "a", content: "⟦imagen:0123456789abcdef⟧ /artefactos/c.png va justo debajo" },
+      { role: "tool", tool_call_id: "b", content: "x" },
+      { role: "assistant", content: "la veo" },
+    ] as never;
+    const de = (id: string) => (id === "0123456789abcdef" ? IMG : undefined);
+    const r = aMensajesDeLangchain(mensajes, de);
+    expect(r.map((m) => m.getType())).toEqual(["human", "ai", "tool", "tool", "human", "ai"]);
+    expect(JSON.stringify(r[4]!.content)).toContain("data:image/png;base64,AAAA");
+    expect(JSON.stringify(aMensajesDeLangchain(mensajes, de))).toBe(JSON.stringify(r));
+    // Sin el registro, la conversión no cambia.
+    expect(aMensajesDeLangchain(mensajes).map((m) => m.getType())).toEqual(["human", "ai", "tool", "tool", "ai"]);
+  });
+
+  it("una imagen que ya no está se dice en texto, sin romper la conversación", () => {
+    const r = aMensajesDeLangchain([{ role: "tool", tool_call_id: "a", content: "⟦imagen:ffffffffffffffff⟧" }] as never, () => undefined);
+    expect(JSON.stringify(r[1]!.content)).toContain("ya no está");
+  });
+});
+
