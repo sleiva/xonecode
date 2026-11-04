@@ -263,6 +263,12 @@ export const PLAN_PRIMERO = [
   "leído tú los ficheros o que el encargo traiga un «Cómo empezar» NO lo sustituye: el plan es lo que el desarrollador marca y lo",
   "que queda para la tarea siguiente. Después, el diseñador si faltan recursos, y el desarrollador con el NOMBRE del plan. Solo un",
   "retoque (una línea, un color, un texto) va directo.",
+  // `docs/REVISION-PARALELISMO-UN-DISPOSITIVO.md` §1, y medido en Maset (04-11-2026): el diseñador esperaba al plan para hacer
+  // en 2,5 min unos recursos que salían de la maqueta, no del plan; y Codex preparaba mientras su analista planificaba.
+  "CON MAQUETA, ANALISTA Y DISEÑADOR A LA VEZ: en la MISMA respuesta, el plan a `analyst-xone` y a `designer-xone` los recursos",
+  "que la maqueta pide y XOne no trae (iconos y fondos SVG, fuentes a `fonts/`), con la orden de devolver la lista de ficheros y",
+  "qué es cada uno. Los dos parten de la misma maqueta y no escriben en el mismo sitio. Al analista dile que los recursos ya se",
+  "están haciendo (sin tarea propia para el diseñador); el desarrollador recibe el plan y esa lista.",
   // Medido con Codex sobre la calculadora (04-11-2026), mismo modelo: su encargo al analista eran ~2.000 caracteres —el
   // objetivo, lo averiguado y el entregable— y el plan salió en 2 min con 3 tareas; el nuestro midió antes la maqueta, le
   // volcó 7.100 caracteres de píxeles y alcance añadido, y el plan tardó 6,5 min con 5 tareas y criterios de coordenadas.
