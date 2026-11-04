@@ -2174,12 +2174,20 @@ export async function abrirSesionTrueforge(
           anotarPaso("trueforge.detener", `${quienEs.get(params.threadId) ?? params.threadId}: ${n} tool call(s) tiradas`)();
         },
       }),
-      messages: mensajesIniciales,
+      /**
+       * **El CONTINUO lleva lo heredado en su CONTEXTO, no aquí** (`contextoInicial`, abajo). La librería pone
+       * `definition.messages` DELANTE en cada llamada y su compactación solo sustituye el contexto
+       * (`AgentThread.transformToLLMRequest`, `ContextCompaction`): medido en la pasada 17 de la calculadora, el
+       * desarrollador heredó 138 mil tokens aquí, cruzó el umbral y compactó en CADA paso sin bajar de 150 mil —una
+       * llamada de resumen sin caché por vuelta—. Los demás no se compactan y siguen como estaban.
+       */
+      messages: continuoDelHilo ? [] : mensajesIniciales,
       // El de la librería, POR ENCIMA del presupuesto: el hilo cierra antes con su resumen, y esto es la red.
       iterationLimit: presupuestoDelHijo + MARGEN_SOBRE_EL_PRESUPUESTO,
     };
     const hijo = new AgentThread({
       definition: definicionDelHijo as never,
+      ...(continuoDelHilo ? { context: mensajesIniciales as never } : {}),
       threadId: params.threadId,
       title: params.request.name,
       parent: params.parent as never,
@@ -2214,7 +2222,8 @@ export async function abrirSesionTrueforge(
       tracing: NOOP_AGENT_TRACING,
       logger,
     });
-    if (agente !== undefined && apertura !== undefined) hijosConMemoria.set(params.threadId, { nombre: agente.nombre, hilo: hijo, iniciales: mensajesIniciales });
+    // En el continuo lo heredado ya va DENTRO de su contexto (y de su foto): no se suma otra vez al cerrar.
+    if (agente !== undefined && apertura !== undefined) hijosConMemoria.set(params.threadId, { nombre: agente.nombre, hilo: hijo, iniciales: continuoDelHilo ? [] : mensajesIniciales });
     return hijo;
   };
 

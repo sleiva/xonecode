@@ -4511,6 +4511,46 @@ describe("un encargo de un plan es UNA tarea, con su línea `TAREA:`", () => {
     expect(segundo).toContain("CADA ENCARGO ES UNA TAREA DEL PLAN");
   }, 30_000);
 
+  it("CONTINUO: lo heredado va en el CONTEXTO del hilo (compactable) y no se duplica al cerrar y volver a abrir", async () => {
+    const { m, vistos } = modelosConGuion([
+      [delega("d1", "TAREA: 01\nDel plan /planes/calc/: la pantalla.")],
+      [new AIMessageChunk({ content: "T1 hecha: [x] se ve" })],
+      [delega("d2", "TAREA: 02\nDel plan /planes/calc/: el teclado.")],
+      [new AIMessageChunk({ content: "T2 hecha" })],
+      [delega("d3", "TAREA: 01\nDel plan /planes/calc/: retoque.")],
+      [new AIMessageChunk({ content: "retoque hecho" })],
+      [new AIMessageChunk({ content: "Hecho." })],
+    ]);
+    const s = await abrirSesionTrueforge({ raiz: conPlanMarcado(), modelos: m, entorno: ENTORNO, skills: CATALOGO, bucleDelDesarrollador: true, developerContinuo: true });
+    await s.turno("haz la calculadora del plan calc", piel().p);
+    const tercero = vistos[5]!.join("\n");
+    expect(tercero.split("T1 hecha: [x] se ve").length - 1).toBe(1);
+    expect(tercero.split("T2 hecha").length - 1).toBe(1);
+  }, 30_000);
+
+  it("CONTINUO: al cruzar el umbral, la compactación resume TAMBIÉN lo heredado (no se queda delante en cada llamada)", async () => {
+    const ls = new AIMessageChunk({
+      content: "",
+      tool_call_chunks: [{ index: 0, id: "l1", name: "ls", args: JSON.stringify({ path: "/" }) }],
+      usage_metadata: { input_tokens: 170_000, output_tokens: 10, total_tokens: 170_010 },
+    });
+    const { m, vistos } = modelosConGuion([
+      [delega("d1", "TAREA: 01\nDel plan /planes/calc/: la pantalla.")],
+      [new AIMessageChunk({ content: "T1 hecha: [x] se ve" })],
+      [delega("d2", "TAREA: 02\nDel plan /planes/calc/: el teclado.")],
+      [ls],
+      [new AIMessageChunk({ content: "RESUMEN-DEL-CONTINUO", usage_metadata: { input_tokens: 900, output_tokens: 50, total_tokens: 950 } })],
+      [new AIMessageChunk({ content: "T2 hecha" })],
+      [new AIMessageChunk({ content: "Hecho." })],
+    ]);
+    const s = await abrirSesionTrueforge({ raiz: conPlanMarcado(), modelos: m, entorno: ENTORNO, skills: CATALOGO, bucleDelDesarrollador: true, developerContinuo: true });
+    await s.turno("haz la calculadora del plan calc", piel().p);
+    expect(vistos[4]!.join("\n")).toMatch(/summary of the conversation/);
+    const tras = vistos[5]!.join("\n");
+    expect(tras).toContain("RESUMEN-DEL-CONTINUO");
+    expect(tras).not.toContain("T1 hecha: [x] se ve");
+  }, 30_000);
+
   it("en una tarea de fondo no se exige: manda el tope de encargos", async () => {
     const { m, vistos } = modelosConGuion([[delega("d1", "Haz T1 y T2 del plan /planes/calc/.")], [new AIMessageChunk({ content: "las dos" })], [new AIMessageChunk({ content: "Hecho." })]]);
     const s = await abrirSesionTrueforge({ raiz: conPlan(), modelos: m, entorno: ENTORNO, skills: CATALOGO, bucleDelDesarrollador: true, trabajoSinPersona: true });
