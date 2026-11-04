@@ -1,3 +1,4 @@
+import { tool, type StructuredToolInterface } from "@langchain/core/tools";
 import { seDetieneEn } from "../../grafo/perfiles.js";
 
 /** El motivo con que se rechaza la escritura de un hijo nacido en autónomo cuando la sesión ya va en supervisado. */
@@ -30,5 +31,22 @@ export function conModoVigenteAlEscribir<T extends object>(backend: T, autonomoA
         return await fn(...args);
       };
     },
+  });
+}
+
+/**
+ * Lo mismo para las tools PROPIAS que escriben el proyecto sin pasar por el backend (`incorporar_adjunto`, `traer_fuente`,
+ * `PROPIAS_QUE_ESCRIBEN`): escriben al disco directo, así que la guarda del backend no las ve. Hallado en la revisión de la
+ * rama: un hijo nacido en autónomo las seguía usando sin aprobación tras pasar a supervisado. Fuera de autónomo, no corren.
+ */
+export function conModoVigenteEnPropias<T extends { name: string }>(propias: readonly T[], queEscriben: readonly string[], autonomoAhora: () => boolean): T[] {
+  return propias.map((t) => {
+    if (!queEscriben.includes(t.name)) return t;
+    const original = t as unknown as StructuredToolInterface;
+    return tool(async (args: unknown) => (autonomoAhora() ? await original.invoke(args as never) : TEXTO_PASO_A_SUPERVISADO), {
+      name: original.name,
+      description: original.description,
+      schema: original.schema as never,
+    }) as unknown as T;
   });
 }

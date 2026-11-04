@@ -853,6 +853,53 @@ describe("una sesión con el motor TrueForge", () => {
     expect(vistosDelDev[1]).toContain("ha pasado a SUPERVISADO");
   }, 30_000);
 
+  /** Lo mismo para las propias que escriben al disco DIRECTO (`incorporar_adjunto`, `traer_fuente`): el backend no las ve. */
+  it("un hijo nacido en autónomo NO incorpora un adjunto si la sesión pasa a supervisado a mitad", async () => {
+    const raiz = proyecto();
+    const carpeta = mkdtempSync(join(tmpdir(), "xc-tf-adjuntos-"));
+    writeFileSync(join(carpeta, "a.png"), "PNG");
+    let autonomo = true;
+    const vistosDelDev: string[] = [];
+    let llamadasDelRaiz = 0;
+    const modelo = {
+      bindTools: () => modelo,
+      stream: async (mensajes: { content: unknown }[]) => {
+        const texto = mensajes.map((m) => String(m.content)).join("\n");
+        let salida: AIMessageChunk;
+        if (texto.includes("INCORPORA")) {
+          vistosDelDev.push(texto);
+          if (vistosDelDev.length === 1) {
+            autonomo = false;
+            salida = new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "i1", name: "incorporar_adjunto", args: JSON.stringify({ adjunto: "/adjuntos/a.png", file_path: "/icons/a.png" }) }] });
+          } else salida = new AIMessageChunk({ content: "Queda por incorporar /icons/a.png." });
+        } else {
+          llamadasDelRaiz++;
+          salida =
+            llamadasDelRaiz === 1
+              ? new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "developer-xone", input: "INCORPORA" }) }] })
+              : new AIMessageChunk({ content: "Hecho." });
+        }
+        return (async function* () {
+          yield salida;
+        })();
+      },
+    };
+    const m = { paraPapel: () => modelo, paraModelo: () => modelo, descripcion: () => ({}) } as unknown as ModelosPort;
+    let preguntada = false;
+    const s = await abrirSesionTrueforge({
+      raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, adjuntos: carpeta,
+      sinAprobacion: () => autonomo,
+      pedirAprobacion: async (pendientes) => {
+        preguntada = true;
+        return new Map(pendientes.map((p) => [p.id, { type: "approve" as const }]));
+      },
+    });
+    await s.turno("incorpora el icono", piel().p);
+    expect(existsSync(join(raiz, "icons", "a.png"))).toBe(false);
+    expect(preguntada).toBe(false);
+    expect(vistosDelDev[1]).toContain("ha pasado a SUPERVISADO");
+  }, 30_000);
+
   /** CONTRATO 5 (`docs/PARALELISMO-TRUEFORGE.md` §4): cancelar el turno alcanza la llamada en curso de TODOS los hijos vivos. */
   it("CONTRATO: cancelar el turno aborta la llamada al modelo de los DOS hermanos que trabajan", async () => {
     const abortados: string[] = [];

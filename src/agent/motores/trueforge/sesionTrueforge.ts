@@ -106,6 +106,7 @@ import {
   capacidadDeNotas,
   capacidadDeConectores,
   capacidadDePropias,
+  PROPIAS_QUE_ESCRIBEN,
   capacidadDeRecortes,
   capacidadesDelEspecialista,
   type Capacidad,
@@ -169,7 +170,7 @@ import { crearDescribirImagen } from "../../grafo/describirImagen.js";
 import { crearImagenesVistas, crearVerImagen } from "../../grafo/verImagen.js";
 import { unaCriticaPorTarea } from "./unaCriticaPorTarea.js";
 import { conColaDelAparato } from "./colaDelAparato.js";
-import { conModoVigenteAlEscribir } from "./modoVigenteAlEscribir.js";
+import { conModoVigenteAlEscribir, conModoVigenteEnPropias } from "./modoVigenteAlEscribir.js";
 import { crearSerieDeEscrituras } from "../../../core/serieDeEscrituras.js";
 import { nombraUnaMaqueta } from "../../../core/maquetaDelTurno.js";
 import { crearTraerDeLaMaquina } from "../../grafo/traerDeLaMaquina.js";
@@ -2097,7 +2098,8 @@ export async function abrirSesionTrueforge(
     const piezas = capacidadesDelEspecialista(agente, params.request.name, {
       // Nacido en autónomo, sus escrituras leen el modo en CADA una (`modoVigenteAlEscribir.ts`): si pasó a supervisado, no.
       backend: (autonomoAlNacer ? conModoVigenteAlEscribir(backend, () => opciones.sinAprobacion?.() === true) : backend) as never,
-      propias: propiasDe,
+      // Y sus propias que escriben el disco directo (`incorporar_adjunto`, `traer_fuente`): el backend no las ve.
+      propias: autonomoAlNacer ? (a: Agente) => conModoVigenteEnPropias(propiasDe(a), PROPIAS_QUE_ESCRIBEN, () => opciones.sinAprobacion?.() === true) : propiasDe,
       conectores: conectoresDe,
       notas: capacidadDeNotasDeLaSesion,
       puedeLlamar: (a) => conBucleDelDesarrollador && (a.llama?.length ?? 0) > 0,
