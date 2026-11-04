@@ -1570,7 +1570,7 @@ export type MensajeDelCliente =
   /** Fijar —o quitar, sin `id`— el aparato de las sesiones nuevas (IXCODE-51). Solo el ID. */
   | { clase: "dispositivoPorDefecto"; id?: string }
   /** El aparato de las tareas del proyecto abierto (Ejecutar): sin `id`, como el global; `granja`; o un aparato de este equipo. */
-  | { clase: "aparatoDeTareas"; id?: string }
+  | { clase: "aparatoDeTareas"; id?: string; proyecto?: string }
   /** En qué aparato de ESTE equipo lanza la pestaña Ejecutar. No toca la pastilla. */
   | { clase: "aparatoDeEjecutar"; id: string }
   /** LEER una conversación sin abrirle consola (IXCODE-36): 200 con `{actos}`, o 409 con `{motivo}`. */

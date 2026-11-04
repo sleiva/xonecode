@@ -9210,6 +9210,9 @@ export function montarRutas(
     if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "aparatoDeTareas") {
       // Del cable, el id y nada más; la raíz es la del proyecto ABIERTO y el aparato sale de la última MEDIDA.
       const pedido = (mensaje as { id?: unknown }).id;
+      // El proyecto que enseñaba la pestaña: si el abierto ya es otro, no se guarda en él. Medido: la elección para
+      // Maset acabó en el config.json de MyAllXOne, que era el abierto, sin decir nada.
+      const delProyecto = (mensaje as { proyecto?: unknown }).proyecto;
       const abierta = vestibulo.proyectoAbierto();
       const servicio = opciones.aparatoDelProyecto;
       const fila = typeof pedido === "string" ? informeDeDispositivos?.dispositivos.find((x) => x.id === pedido) : undefined;
@@ -9219,9 +9222,14 @@ export function montarRutas(
           : pedido === DISPOSITIVO_DE_GRANJA.id
             ? opciones.granja === undefined ? undefined : "granja"
             : fila === undefined ? undefined : fotoDeDispositivo(fila);
-      if (pedido !== undefined && typeof pedido !== "string") {
+      if ((pedido !== undefined && typeof pedido !== "string") || (delProyecto !== undefined && typeof delProyecto !== "string")) {
         respuesta.writeHead(400);
         respuesta.end();
+        return;
+      }
+      if (delProyecto !== undefined && abierta !== undefined && proyectoActivoDe(abierta) !== delProyecto) {
+        respuesta.writeHead(409, { "content-type": "application/json" });
+        respuesta.end(JSON.stringify({ motivo: "el proyecto abierto ya es otro: vuelve a su panel y elígelo allí" }));
         return;
       }
       if (servicio === undefined || abierta === undefined || !esProyectoEnDisco(abierta.raiz) || eleccion === undefined) {

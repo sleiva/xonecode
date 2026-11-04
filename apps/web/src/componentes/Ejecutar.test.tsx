@@ -541,6 +541,11 @@ describe("Ejecutar: Tareas en background", () => {
     expect(within(screen.getByRole("region", { name: "Ahora" })).queryByText(/pixel8/)).toBeNull();
   });
 
+  it("el título dice de qué proyecto es lo guardado", () => {
+    render(<Ejecutar conectado alRevisar={NADA} dispositivos={[PIXEL]} tareas={tareas({ proyecto: "MyAllXOne" })} />);
+    expect(screen.getByRole("heading", { name: "Tareas en background de «MyAllXOne»" })).toBeTruthy();
+  });
+
   it("sin ninguno a mano lo dice y manda a Ajustes → Dispositivos", () => {
     render(<Ejecutar conectado alRevisar={NADA} dispositivos={[EMULADOR]} tareas={tareas()} />);
     const columna = screen.getByRole("region", { name: "Tareas en background" });

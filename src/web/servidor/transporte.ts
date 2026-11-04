@@ -1617,7 +1617,7 @@ export type MensajeDelCliente =
    * El aparato de las tareas (y de los chats nuevos) del proyecto ABIERTO, en la pestaña Ejecutar: sin `id`, como el
    * global; `granja`, la granja; si no, el id de un aparato de este equipo, que se resuelve contra la última MEDIDA.
    */
-  | { clase: "aparatoDeTareas"; id?: string }
+  | { clase: "aparatoDeTareas"; id?: string; proyecto?: string }
   /**
    * En qué aparato de ESTE equipo lanza la pestaña Ejecutar. No toca la pastilla del chat. Solo el id: el resto sale de
    * la medida, y un id que no esté a mano se ignora.

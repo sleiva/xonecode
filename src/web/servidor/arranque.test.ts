@@ -15629,6 +15629,16 @@ describe("la granja de dispositivos", () => {
     expect(r.estado).toBe(409);
     expect(JSON.parse(r.cuerpo).motivo).toMatch(/última medida/);
     expect(enDisco()).toEqual({ modo: "offline" });
+
+    // Con el proyecto de la pestaña: el abierto se guarda; otro, no (antes acababa en el config.json del abierto).
+    expect(await enviarMensaje(accion, { clase: "aparatoDeTareas", id: "granja", proyecto: "p1" })).toBe(204);
+    await asentar();
+    expect(enDisco()).toMatchObject({ origenDeDispositivos: "granja" });
+    const otro = await postearConCuerpo(accion, JSON.stringify({ clase: "aparatoDeTareas", proyecto: "p2" }));
+    expect(otro.estado).toBe(409);
+    expect(JSON.parse(otro.cuerpo).motivo).toMatch(/el proyecto abierto ya es otro/);
+    expect(enDisco()).toMatchObject({ origenDeDispositivos: "granja" });
+    expect(await enviarMensaje(accion, { clase: "aparatoDeTareas", proyecto: 3 } as never)).toBe(400);
     await vestibulo.cerrar();
     rmSync(base, { recursive: true, force: true });
   });

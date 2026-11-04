@@ -1120,11 +1120,16 @@ export function App({
   // «Tareas en background»: el aparato por defecto del proyecto abierto. La negativa la compone el servidor (409).
   const elegirAparatoDeTareas = useCallback(
     async (id: string | undefined): Promise<string | undefined> => {
-      const r = (await enviar({ clase: "aparatoDeTareas", ...(id === undefined ? {} : { id }) })) as Response | undefined;
+      // Con el proyecto que enseña la pestaña: si el abierto cambió entre medias, el servidor no guarda en el otro.
+      const r = (await enviar({
+        clase: "aparatoDeTareas",
+        ...(id === undefined ? {} : { id }),
+        ...(proyectoActivoId === undefined ? {} : { proyecto: proyectoActivoId }),
+      })) as Response | undefined;
       if (r === undefined) return "no se pudo hablar con el servidor";
       return r.ok ? undefined : ((await negativaDe(r)) ?? "el servidor no lo ha guardado");
     },
-    [enviar]
+    [enviar, proyectoActivoId]
   );
 
   /**
@@ -3008,6 +3013,7 @@ export function App({
         : {
             tareas: {
               guardado: estado.alta.aparatoDelProyecto,
+              ...(nombreDelProyectoActivo === undefined ? {} : { proyecto: nombreDelProyectoActivo }),
               ...(estado.dispositivoPorDefecto?.elegido === undefined ? {} : { global: estado.dispositivoPorDefecto.elegido }),
               ...(estado.granja === undefined
                 ? {}

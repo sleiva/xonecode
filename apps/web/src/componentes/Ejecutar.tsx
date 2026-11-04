@@ -423,6 +423,8 @@ export function Ejecutar({
 }
 
 export interface PropsDeAparatoDeTareas {
+  /** De qué proyecto es lo guardado (el ABIERTO): la pestaña sale también en el panel del chat y no se sabía de cuál. */
+  proyecto?: string;
   /** Lo guardado en el proyecto (`alta.aparatoDelProyecto`): los dos ausentes = como el global. */
   guardado: { origen?: "local" | "granja"; dispositivo?: DispositivoElegido };
   /** El aparato global (Ajustes → General), para nombrarlo en «Como el global». Ausente = ninguno. */
@@ -440,6 +442,7 @@ export interface PropsDeAparatoDeTareas {
  * —una tarea puede probar mañana en uno que hoy está apagado—, más el guardado si ya no aparece en ella.
  */
 function AparatoDeTareas({
+  proyecto,
   guardado,
   global,
   granja,
@@ -498,7 +501,7 @@ function AparatoDeTareas({
   };
   return (
     <section className={estilos.columna} aria-label="Tareas en background">
-      <h2 className={estilos.tituloDeColumna}>Tareas en background</h2>
+      <h2 className={estilos.tituloDeColumna}>{proyecto === undefined ? "Tareas en background" : `Tareas en background de «${proyecto}»`}</h2>
       <p className={estilos.aviso}>Dónde prueban por defecto. También es el aparato con el que nace cada chat nuevo del proyecto.</p>
       <ul className={estilos.lista} role="radiogroup" aria-label="Aparato de las tareas">
         {fila(undefined, "Como el global", `el aparato por omisión de Ajustes → General${global === undefined ? ": ninguno" : ` (${global.nombre})`}`, "")}
