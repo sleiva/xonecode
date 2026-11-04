@@ -90,8 +90,8 @@ Ante una discrepancia con el código, **el código manda**.
 - **Encendido por omisión** (`XONECODE_BUCLE_DEL_DEVELOPER=0` lo apaga): quien declara `llama` en su `.md` recibe
   `create_sub_agent` y SOLO esos especialistas (con artefactos, también `xone_critica_visual` y `comparar_capturas`); un
   nombre fuera cae al ayudante genérico de solo lectura. El juez final revisa igual.
-- **El desarrollador CONTINUO, como Codex** (`XONECODE_DEVELOPER_CONTINUO=1` u `opciones.developerContinuo`; apagado por
-  omisión, experimento): el orquestador le manda UNA tarea por encargo, revisa su informe y le manda la siguiente al
+- **El desarrollador CONTINUO, como Codex** (siempre encendido; `opciones.developerContinuo: false` lo apaga en
+  los tests): el orquestador le manda UNA tarea por encargo, revisa su informe y le manda la siguiente al
   MISMO developer (`TEXTO_DEL_ORQUESTADOR_CONTINUO`), y su conversación sigue ENTERA (`memoriaDeEspecialistas.ts#completaDe`
   hasta `UMBRAL_DEL_DESARROLLADOR_CONTINUO`): el prefijo no cambia y una redelegación sale de la caché. Su sistema no
   depende del encargo (`TEXTO_DEL_DEVELOPER_CONTINUO`) y se compacta TARDE (`umbralDelDesarrolladorContinuo`). La ficha

@@ -2442,7 +2442,7 @@ describe("el juez del turno y el crítico de pantalla, enganchados en TrueForge"
       };
     };
     const s = await abrirSesionTrueforge({ raiz: proyecto(), modelos: m, entorno: ENTORNO, skills: CATALOGO, sinAprobacion: () => true, artefactos: carpeta, verifier: verde });
-    await s.turno("mira la pantalla", piel().p);
+    await s.turno("mira la pantalla contra la maqueta /diseno/screen.png", piel().p);
     expect(esfuerzos.length).toBeGreaterThan(0);
     expect(new Set(esfuerzos)).toEqual(new Set(["low"]));
     // El guion no declara consumo: todo lo que hay es del crítico, llamada a llamada.

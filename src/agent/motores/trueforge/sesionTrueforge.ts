@@ -964,7 +964,7 @@ export interface OpcionesDeSesionTrueforge {
   hilo?: string;
   /**
    * El desarrollador CONTINUO (`core/siguienteTarea.ts`): recibe la primera tarea de un plan y sigue con las demás en la
-   * MISMA conversación con `siguiente_tarea`. Ausente, la variable `XONECODE_DEVELOPER_CONTINUO=1`; por omisión, apagado.
+   * MISMA conversación. Por omisión, ENCENDIDO (decisión suya, 04-11-2026); `false` lo apaga.
    */
   developerContinuo?: boolean;
   /** Con el continuo, la siguiente tarea la pide el desarrollador (`siguiente_tarea`) y no el orquestador. Experimento. */
@@ -1121,7 +1121,8 @@ export async function abrirSesionTrueforge(
    */
   const especialistaDeHilo = new Map<string, string>();
   const conMemoriaDeEspecialistas = opciones.memoriaDeEspecialistas ?? process.env.XONECODE_SIN_MEMORIA_DE_ESPECIALISTAS !== "1";
-  const developerContinuo = opciones.developerContinuo ?? process.env.XONECODE_DEVELOPER_CONTINUO === "1";
+  // Decisión suya (04-11-2026): encendido siempre, sin variable; `opciones.developerContinuo: false` solo para los tests.
+  const developerContinuo = opciones.developerContinuo ?? true;
   /**
    * Con el continuo, ¿pide él la siguiente con `siguiente_tarea`? Apagado: como Codex, la siguiente se la manda el
    * ORQUESTADOR al mismo developer tras revisar su informe, y su conversación sigue entera. Medido en las pasadas 12 y
