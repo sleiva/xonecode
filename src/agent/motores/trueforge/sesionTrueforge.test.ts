@@ -805,6 +805,54 @@ describe("una sesión con el motor TrueForge", () => {
     expect(vistoPorElHermano).toEqual(["vio la nota"]);
   }, 30_000);
 
+  /** `docs/REVISION-PARALELISMO-UN-DISPOSITIVO.md` §3: el modo se lee en CADA escritura, no solo al nacer el hijo. */
+  it("un hijo nacido en autónomo NO escribe si la sesión pasa a supervisado a mitad: se le dice por qué, sin lanzar", async () => {
+    const raiz = proyecto();
+    let autonomo = true;
+    const vistosDelDev: string[] = [];
+    let llamadasDelDev = 0;
+    let llamadasDelRaiz = 0;
+    const modelo = {
+      bindTools: () => modelo,
+      stream: async (mensajes: { content: unknown }[]) => {
+        const texto = mensajes.map((m) => String(m.content)).join("\n");
+        let salida: AIMessageChunk;
+        if (texto.includes("ESCRIBE-NOTA")) {
+          llamadasDelDev++;
+          vistosDelDev.push(texto);
+          if (llamadasDelDev === 1) {
+            // La persona cambia a supervisado mientras el hijo pide escribir.
+            autonomo = false;
+            salida = new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "w1", name: "write_file", args: JSON.stringify({ file_path: "/nota.txt", content: "hola\n" }) }] });
+          } else salida = new AIMessageChunk({ content: "Queda por escribir /nota.txt." });
+        } else {
+          llamadasDelRaiz++;
+          salida =
+            llamadasDelRaiz === 1
+              ? new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "developer-xone", input: "ESCRIBE-NOTA" }) }] })
+              : new AIMessageChunk({ content: "Hecho." });
+        }
+        return (async function* () {
+          yield salida;
+        })();
+      },
+    };
+    const m = { paraPapel: () => modelo, paraModelo: () => modelo, descripcion: () => ({}) } as unknown as ModelosPort;
+    let preguntada = false;
+    const s = await abrirSesionTrueforge({
+      raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO,
+      sinAprobacion: () => autonomo,
+      pedirAprobacion: async (pendientes) => {
+        preguntada = true;
+        return new Map(pendientes.map((p) => [p.id, { type: "approve" as const }]));
+      },
+    });
+    await s.turno("escribe la nota", piel().p);
+    expect(existsSync(join(raiz, "nota.txt"))).toBe(false);
+    expect(preguntada).toBe(false);
+    expect(vistosDelDev[1]).toContain("ha pasado a SUPERVISADO");
+  }, 30_000);
+
   /** CONTRATO 5 (`docs/PARALELISMO-TRUEFORGE.md` §4): cancelar el turno alcanza la llamada en curso de TODOS los hijos vivos. */
   it("CONTRATO: cancelar el turno aborta la llamada al modelo de los DOS hermanos que trabajan", async () => {
     const abortados: string[] = [];

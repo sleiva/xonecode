@@ -169,6 +169,7 @@ import { crearDescribirImagen } from "../../grafo/describirImagen.js";
 import { crearImagenesVistas, crearVerImagen } from "../../grafo/verImagen.js";
 import { unaCriticaPorTarea } from "./unaCriticaPorTarea.js";
 import { conColaDelAparato } from "./colaDelAparato.js";
+import { conModoVigenteAlEscribir } from "./modoVigenteAlEscribir.js";
 import { crearSerieDeEscrituras } from "../../../core/serieDeEscrituras.js";
 import { nombraUnaMaqueta } from "../../../core/maquetaDelTurno.js";
 import { crearTraerDeLaMaquina } from "../../grafo/traerDeLaMaquina.js";
@@ -2094,7 +2095,8 @@ export async function abrirSesionTrueforge(
     if (autonomoAlNacer) hilosQueEscribenSinPreguntar.add(params.threadId);
     // Las piezas por lo que declara su `.md` (`capacidades.ts`); la nota sale de SUS tools.
     const piezas = capacidadesDelEspecialista(agente, params.request.name, {
-      backend: backend as never,
+      // Nacido en autónomo, sus escrituras leen el modo en CADA una (`modoVigenteAlEscribir.ts`): si pasó a supervisado, no.
+      backend: (autonomoAlNacer ? conModoVigenteAlEscribir(backend, () => opciones.sinAprobacion?.() === true) : backend) as never,
       propias: propiasDe,
       conectores: conectoresDe,
       notas: capacidadDeNotasDeLaSesion,

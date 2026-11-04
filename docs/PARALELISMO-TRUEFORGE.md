@@ -18,8 +18,9 @@ decide cuando acaba `orquestador.execute`.
 - **Autónomo: ARREGLADO** (contrato 4b, `sesionTrueforge.test.ts`). Era el caso caro: la escritura esperaba aunque se
   fuera a aplicar sola. Ahora un hijo que nace en autónomo escribe sin la interrupción de aprobación
   (`escribeSinPreguntar`, la misma pieza que ya usaban las tareas de fondo) y lo escrito sigue saliendo en «aplicadas
-  SIN aprobación». El modo se lee al NACER el hijo: si la persona pasa a supervisado a mitad de un encargo, ese encargo
-  sigue sin preguntar (límite). Las escrituras de un CONECTOR y las del aparato siguen parando.
+  SIN aprobación». El modo se lee en CADA escritura (`modoVigenteAlEscribir.ts`, recomendación §3 de
+  `REVISION-PARALELISMO-UN-DISPOSITIVO.md`): si la persona pasa a supervisado a mitad de un encargo, lo que pediría
+  aprobación se rechaza con su motivo y el hijo lo dice al devolver. Las escrituras de un CONECTOR y las del aparato siguen parando.
 - **Supervisado: PENDIENTE** (contrato 4, `it.fails`). Sin tocar la librería solo se puede adelantar la TARJETA (pedir la
   decisión al llegar el evento y entregarla al acabar la ejecución): el que escribe seguiría esperando a sus hermanos,
   porque el motor solo replanifica hilos entre lotes. Y con la pregunta abierta mientras el hermano sigue pintando
