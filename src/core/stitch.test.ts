@@ -107,6 +107,33 @@ describe("el diseño vinculado y la pantalla ELEGIDA", () => {
     ]);
   });
 
+  it("con el NOMBRE del fichero (medido el 04-11-2026: el `downloadUrl` pide credenciales), la miniatura la sirve la consola", async () => {
+    const { pantallasConMiniatura, miniaturaPorLaConsola } = await import("./stitch.js");
+    const texto = JSON.stringify({
+      screens: [
+        { name: "projects/9/screens/aa", title: "Calculadora", screenshot: { name: "projects/9/files/838", downloadUrl: "https://stitch.googleapis.com/v1/projects/9/files/838" } },
+        { name: "projects/9/screens/bb", title: "Rara", screenshot: { name: "../../otra", downloadUrl: "https://stitch.googleapis.com/x" } },
+      ],
+    });
+    expect(pantallasConMiniatura(texto)).toEqual([
+      { name: "projects/9/screens/aa", title: "Calculadora", miniatura: "/stitch/miniatura?f=projects%2F9%2Ffiles%2F838" },
+      { name: "projects/9/screens/bb", title: "Rara" },
+    ]);
+    expect(miniaturaPorLaConsola("projects/9/files/838")).toBe("/stitch/miniatura?f=projects%2F9%2Ffiles%2F838");
+  });
+
+  it("`download_file`: la imagen en base64 con su tipo, o el HTML; lo demás, su motivo", async () => {
+    const { leerFicheroDeStitch, motivoDeFicheroInaceptable } = await import("./stitch.js");
+    expect(leerFicheroDeStitch(JSON.stringify({ image: "AAEC", imageMetadata: { width: 390, height: 746, mimeType: "image/jpeg" } }))).toEqual({
+      imagen: { tipo: "image/jpeg", base64: "AAEC" },
+    });
+    expect(leerFicheroDeStitch(JSON.stringify({ html: "<html></html>" }))).toEqual({ html: "<html></html>" });
+    expect(leerFicheroDeStitch("{}")).toContain("no dio el contenido");
+    expect(leerFicheroDeStitch("no json")).toContain("no es JSON");
+    expect(motivoDeFicheroInaceptable("projects/9/files/838")).toBeUndefined();
+    expect(motivoDeFicheroInaceptable("projects/9/files/../x")).toBeDefined();
+  });
+
   it("la elegida solo vale si es del proyecto VINCULADO, y el nombre del proyecto lo pone el vínculo, no el cable", async () => {
     const { pantallaElegidaValida } = await import("./stitch.js");
     const vinculo = { proyecto: "projects/9", nombre: "Maset" };

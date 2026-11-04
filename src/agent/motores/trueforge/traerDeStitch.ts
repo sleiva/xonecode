@@ -20,7 +20,7 @@ import type { ConectoresPort } from "../../../core/ports.js";
 import { TOPE_DE_LLAMADA_MS } from "../../../core/conectores.js";
 import {
   CARPETA_DE_DISENO, casanConNombre, casanConTitulo, conNombreDelLienzo, nombresDelLienzo, designMdDeProyecto, entradasDeStitch, idDeProyecto, type EntradaDeStitch, leerPantalla, motivoDeDescargaInaceptable, motivoDePantallaInaceptable, proyectoDePantalla,
-  RUTA_DE_DISENO, TIPOS_DE_IMAGEN, TOPE_DE_HTML, TOPE_DE_IMAGEN, urlDeImagenCompleta,
+  RUTA_DE_DISENO, TIPOS_DE_IMAGEN, TOPE_DE_HTML, TOPE_DE_IMAGEN, urlDeImagenCompleta, leerFicheroDeStitch, TOOL_DE_DESCARGA, type FicheroDeStitch,
   carpetaDeMaqueta,
   rutaDeMaqueta,
 } from "../../../core/stitch.js";
@@ -221,11 +221,24 @@ export async function traerPantalla(
   }
   if (typeof datos === "string") return datos;
 
-  const motivoImagen = motivoDeDescargaInaceptable(datos.imagen);
-  if (motivoImagen !== undefined) return motivoImagen;
-  let imagen;
+  // Por su NOMBRE con `download_file` (medido el 04-11-2026: el `downloadUrl` pide credenciales); el enlace de antes,
+  // por la red, solo si Stitch no da el nombre (`core/stitch.ts`).
+  const bajarFichero = async (fichero: string): Promise<FicheroDeStitch | string> =>
+    leerFicheroDeStitch(await deps.conectores.llamar(CONECTOR_STITCH, TOOL_DE_DESCARGA, { name: fichero }, { topeMs: TOPE_DE_LLAMADA_MS }));
+  let imagen: { tipo: string; bytes: Buffer };
   try {
-    imagen = await descargar(urlDeImagenCompleta(datos.imagen), TOPE_DE_IMAGEN);
+    if (datos.ficheroDeImagen !== undefined) {
+      const f = await bajarFichero(datos.ficheroDeImagen);
+      if (typeof f === "string") return `No pude bajar la imagen de la pantalla (${f}).`;
+      if (!("imagen" in f)) return "Stitch dio un HTML donde iba la imagen de la pantalla.";
+      const bytes = Buffer.from(f.imagen.base64, "base64");
+      if (bytes.length > TOPE_DE_IMAGEN) return "La imagen de la pantalla pasa del tope de tamaño: no se guarda.";
+      imagen = { tipo: f.imagen.tipo, bytes };
+    } else {
+      const motivoImagen = motivoDeDescargaInaceptable(datos.imagen ?? "");
+      if (motivoImagen !== undefined) return motivoImagen;
+      imagen = await descargar(urlDeImagenCompleta(datos.imagen!), TOPE_DE_IMAGEN);
+    }
   } catch (e) {
     return `No pude bajar la imagen de la pantalla (${e instanceof Error ? e.message : "error"}).`;
   }
@@ -235,7 +248,17 @@ export async function traerPantalla(
   // El HTML y el DESIGN.md son la otra mitad del diseño, en texto; sin ellos la imagen vale igual.
   let html: string | undefined;
   const avisos: string[] = [];
-  if (datos.html !== undefined) {
+  if (datos.ficheroDeHtml !== undefined) {
+    try {
+      const f = await bajarFichero(datos.ficheroDeHtml);
+      if (typeof f === "string") avisos.push(`no pude bajar el código (${f})`);
+      else if (!("html" in f)) avisos.push("Stitch dio una imagen donde iba el código");
+      else if (Buffer.byteLength(f.html) > TOPE_DE_HTML) avisos.push("el código pasa del tope de tamaño y no se guarda");
+      else html = f.html;
+    } catch (e) {
+      avisos.push(`no pude bajar el código (${e instanceof Error ? e.message : "error"})`);
+    }
+  } else if (datos.html !== undefined) {
     const motivoHtml = motivoDeDescargaInaceptable(datos.html);
     if (motivoHtml !== undefined) avisos.push(motivoHtml);
     else {

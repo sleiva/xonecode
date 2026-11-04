@@ -68,6 +68,7 @@ import { iconoDelProyecto, leerFicheroDeProyecto, motivoDeRutaInaceptable } from
 import { leerArtefactoCrudo, leerArtefactoDeSesion } from "../../agent/grafo/artefactosEnDisco.js";
 import { CABECERA_DEL_ENCARGO } from "../../core/tareasEnElGestor.js";
 import { RUTA_ICONO_DEL_PROYECTO, RUTA_IMAGEN_DEL_PROYECTO } from "../../core/imagenesDeDocumento.js";
+import { RUTA_MINIATURA_DE_STITCH } from "../../core/stitch.js";
 import { CLAVE_DE_SELLO, cambiosDeSesion, fotoDeApertura } from "../../agent/sesiones/sesionGit.js";
 import type { InstaladorDeFrameworkPort, PeticionDeTarea } from "../../core/ports.js";
 import { crearVestibulo, type Vestibulo } from "./vestibulo.js";
@@ -250,6 +251,8 @@ describe("montarRutas — el cable, por fin conectado", () => {
       `GET ${RUTA_SOPORTE}`,
       // Y la octava, el icono de la app de un proyecto bajado, para la barra y su panel.
       `GET ${RUTA_ICONO_DEL_PROYECTO}`,
+      // Y la novena, la miniatura de una pantalla de Stitch: la trae el servidor con sus credenciales.
+      `GET ${RUTA_MINIATURA_DE_STITCH}`,
     ].sort());
   });
 
@@ -8156,6 +8159,71 @@ describe("los conectores MCP, por el cable", () => {
     expect(estado).toBe(200);
     expect(cuerpo.length).toBeGreaterThan(0);
     expect(cuerpo).not.toContain("access_token");
+  });
+});
+
+/**
+ * `GET /stitch/miniatura` (04-11-2026): el `downloadUrl` de Stitch pasó a pedir credenciales, así que la miniatura del
+ * selector la trae el SERVIDOR con `download_file` y la sirve.
+ */
+describe("GET /stitch/miniatura", () => {
+  const servicioCon = (llamar: ServicioDeConectores["llamar"]): ServicioDeConectores => ({
+    lista: () => ({ catalogo: [], conectores: [], desconocidos: [] }),
+    anadir: () => {},
+    quitar: () => {},
+    desconectar: () => {},
+    autenticacionDe: () => undefined,
+    crear: () => undefined,
+    guardarClave: () => {},
+    probar: async () => {},
+    llamar,
+    tools: async () => [],
+    autorizar: async () => {},
+    completar: async () => ({ ok: true, mensaje: "" }),
+  });
+  const pedir = async (ruta: (p: IncomingMessage, r: ServerResponse) => void | Promise<void>, url: string) => {
+    let estado = 0;
+    let cabeceras: Record<string, unknown> = {};
+    let cuerpo: unknown;
+    const respuesta = {
+      writeHead: (codigo: number, c?: Record<string, unknown>) => ((estado = codigo), (cabeceras = c ?? {}), respuesta),
+      end: (b: unknown) => ((cuerpo = b), respuesta),
+    } as unknown as ServerResponse;
+    await ruta({ url } as unknown as IncomingMessage, respuesta);
+    return { estado, cabeceras, cuerpo };
+  };
+
+  it("trae la imagen con `download_file` por su nombre y la sirve con su tipo, sandbox y nosniff; la segunda vez, de memoria", async () => {
+    const llamadas: unknown[][] = [];
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), {
+      conectores: () =>
+        servicioCon(async (...a) => {
+          llamadas.push(a);
+          return JSON.stringify({ image: Buffer.from([0xff, 0xd8]).toString("base64"), imageMetadata: { mimeType: "image/jpeg" } });
+        }),
+    });
+    const ruta = servidor.rutas.get(`GET ${RUTA_MINIATURA_DE_STITCH}`)!;
+    const url = `${RUTA_MINIATURA_DE_STITCH}?f=${encodeURIComponent("projects/9/files/838")}`;
+    const r = await pedir(ruta, url);
+    expect(r.estado).toBe(200);
+    expect(r.cabeceras["Content-Type"]).toBe("image/jpeg");
+    expect(r.cabeceras["Content-Security-Policy"]).toBe("sandbox");
+    expect(r.cabeceras["X-Content-Type-Options"]).toBe("nosniff");
+    expect(r.cuerpo).toEqual(Buffer.from([0xff, 0xd8]));
+    expect(llamadas).toEqual([["stitch", "download_file", { name: "projects/9/files/838" }, { topeMs: expect.any(Number) }]]);
+    await pedir(ruta, url);
+    expect(llamadas).toHaveLength(1);
+  });
+
+  it("un nombre que no es de un fichero de Stitch no se pide; lo que no es imagen no se sirve", async () => {
+    const llamadas: unknown[][] = [];
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), { conectores: () => servicioCon(async (...a) => (llamadas.push(a), JSON.stringify({ html: "<script></script>" }))) });
+    const ruta = servidor.rutas.get(`GET ${RUTA_MINIATURA_DE_STITCH}`)!;
+    expect((await pedir(ruta, `${RUTA_MINIATURA_DE_STITCH}?f=${encodeURIComponent("../../etc/passwd")}`)).estado).toBe(400);
+    expect(llamadas).toEqual([]);
+    expect((await pedir(ruta, `${RUTA_MINIATURA_DE_STITCH}?f=${encodeURIComponent("projects/9/files/html1")}`)).estado).toBe(502);
   });
 });
 

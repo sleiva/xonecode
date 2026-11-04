@@ -53,6 +53,37 @@ describe("traer_pantalla_de_stitch", () => {
     expect(r).toContain("referencia");
   });
 
+  it("con el NOMBRE de cada fichero, imagen y código por `download_file`, sin tocar la red (el `downloadUrl` pide credenciales)", async () => {
+    const carpeta = mkdtempSync(join(tmpdir(), "xc-stitch-"));
+    const llamadas: { nombre: string; args: Record<string, unknown> }[] = [];
+    const pedidas: string[] = [];
+    const conectores: ConectoresPort = {
+      delProyecto: () => [],
+      tools: async () => [],
+      llamar: async (_id, nombre, args) => {
+        llamadas.push({ nombre, args });
+        if (nombre === "get_screen")
+          return JSON.stringify({
+            title: "Calculadora",
+            screenshot: { name: "projects/142/files/img1", downloadUrl: "https://stitch.googleapis.com/v1/projects/142/files/img1" },
+            htmlCode: { name: "projects/142/files/html1", downloadUrl: "https://stitch.googleapis.com/v1/projects/142/files/html1" },
+          });
+        if (nombre === "download_file")
+          return args["name"] === "projects/142/files/img1"
+            ? JSON.stringify({ image: Buffer.from([0xff, 0xd8, 0xff]).toString("base64"), imageMetadata: { mimeType: "image/jpeg", width: 390, height: 746 } })
+            : JSON.stringify({ html: "<html>calc</html>" });
+        return "{}";
+      },
+    };
+    const t = crearTraerDeStitch({ conectores, carpeta, descargar: async (url) => (pedidas.push(url), { bytes: Buffer.from([]), tipo: "image/png" }) });
+    const r = String(await t.invoke({ pantalla: PANTALLA }));
+    expect(pedidas).toEqual([]);
+    expect(llamadas.filter((l) => l.nombre === "download_file").map((l) => l.args["name"])).toEqual(["projects/142/files/img1", "projects/142/files/html1"]);
+    expect(readFileSync(join(carpeta, "diseno", "screen.jpg"))).toEqual(Buffer.from([0xff, 0xd8, 0xff]));
+    expect(readFileSync(join(carpeta, "diseno", "code.html"), "utf8")).toBe("<html>calc</html>");
+    expect(r).toContain("(3 bytes)");
+  });
+
   it("la extensión la decide el TIPO; una traída nueva borra la imagen vieja de otra extensión", async () => {
     const primero = montar({ tipoImagen: "image/png" });
     await primero.t.invoke({ pantalla: PANTALLA });

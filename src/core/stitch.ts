@@ -1,11 +1,13 @@
 /**
  * Traer una pantalla de Stitch a la sesión: lo que se decide sin red ni disco.
  *
- * Stitch no devuelve la imagen ni el HTML de una pantalla: devuelve ENLACES de descarga
- * (`get_screen` → `screenshot.downloadUrl`, `htmlCode.downloadUrl`), y el agente no puede bajar
- * una URL. Lo baja el harness (`agent/motores/trueforge/traerDeStitch.ts`), y solo URLs que vienen
- * de la respuesta de Stitch —nunca una que escriba el modelo—, de los hosts MEDIDOS, con tope de
- * tamaño y tipo comprobado.
+ * Stitch no devuelve la imagen ni el HTML de una pantalla: devuelve el NOMBRE de cada fichero
+ * (`get_screen` → `screenshot.name`, `htmlCode.name`) y se baja con su tool `download_file`. Medido el
+ * 04-11-2026: sus `downloadUrl` pasaron a `stitch.googleapis.com`, que pide credenciales (401) y
+ * devuelve un JSON en vez del fichero; el propio Stitch dice que no se usen. Lo baja el harness
+ * (`agent/motores/trueforge/traerDeStitch.ts`), solo ficheros que nombra la respuesta de Stitch —nunca
+ * uno que escriba el modelo—, con tope de tamaño y tipo comprobado. Un `downloadUrl` de los hosts
+ * MEDIDOS de antes se sigue bajando por la red, por si Stitch aún lo da.
  *
  * El destino es FIJO, `/artefactos/diseno/`: es donde el harness ya espera una maqueta (`buscarMaqueta`),
  * de donde `ultimaCaptura` y el crítico de pantalla NO toman capturas del aparato, y la misma carpeta
@@ -67,6 +69,43 @@ export function proyectoDePantalla(pantalla: string): string {
   return pantalla.split("/screens/")[0]!;
 }
 
+/** El nombre de un FICHERO de una pantalla (su imagen o su HTML): lo que pide `download_file`. */
+const FICHERO = /^projects\/\d+\/files\/[A-Za-z0-9_-]+$/;
+
+export function motivoDeFicheroInaceptable(fichero: string): string | undefined {
+  return FICHERO.test(fichero) ? undefined : `«${fichero}» no es un fichero de Stitch: se escribe projects/<id>/files/<id>.`;
+}
+
+/** La tool de Stitch que baja un fichero por su nombre (medido: `{image, imageMetadata}` o `{html}`). */
+export const TOOL_DE_DESCARGA = "download_file";
+
+/** Lo que devuelve `download_file`: la imagen (en base64, con su tipo) o el HTML, o el motivo de no entenderlo. */
+export type FicheroDeStitch = { imagen: { tipo: string; base64: string } } | { html: string };
+
+export function leerFicheroDeStitch(texto: string): FicheroDeStitch | string {
+  let d: Record<string, unknown>;
+  try {
+    d = JSON.parse(texto) as Record<string, unknown>;
+  } catch {
+    return "la respuesta de Stitch a download_file no es JSON";
+  }
+  if (typeof d["html"] === "string") return { html: d["html"] };
+  const meta = d["imageMetadata"] as Record<string, unknown> | undefined;
+  const tipo = typeof meta?.["mimeType"] === "string" ? meta["mimeType"] : "";
+  if (typeof d["image"] === "string" && d["image"] !== "") return { imagen: { tipo, base64: d["image"] } };
+  return "Stitch no dio el contenido de ese fichero";
+}
+
+/**
+ * La ruta de la consola que sirve la miniatura de una pantalla: la trae el SERVIDOR con `download_file`, porque el
+ * navegador no puede llevar las credenciales de Stitch (`web/servidor/arranque.ts`).
+ */
+export const RUTA_MINIATURA_DE_STITCH = "/stitch/miniatura";
+
+export function miniaturaPorLaConsola(fichero: string): string {
+  return `${RUTA_MINIATURA_DE_STITCH}?f=${encodeURIComponent(fichero)}`;
+}
+
 /**
  * ¿Se puede bajar esta URL? HTTPS, sin credenciales, de un host medido. Se aplica a URLs que vienen
  * de la respuesta de Stitch, y aun así se comprueba: la respuesta la escribe otro.
@@ -101,8 +140,12 @@ export interface PantallaDeStitch {
   titulo: string;
   ancho?: number;
   alto?: number;
-  imagen: string;
+  /** El `downloadUrl` de la imagen, si viene (de los hosts medidos se baja por la red). */
+  imagen?: string;
+  /** El nombre del fichero de la imagen, para `download_file`: lo que se usa primero. */
+  ficheroDeImagen?: string;
   html?: string;
+  ficheroDeHtml?: string;
 }
 
 /** Lo que interesa de la respuesta de `get_screen`, o el motivo de que no se entienda. */
@@ -117,8 +160,13 @@ export function leerPantalla(texto: string): PantallaDeStitch | string {
     const v = (d[campo] as { downloadUrl?: unknown } | undefined)?.downloadUrl;
     return typeof v === "string" && v !== "" ? v : undefined;
   };
+  const fichero = (campo: string): string | undefined => {
+    const v = (d[campo] as { name?: unknown } | undefined)?.name;
+    return typeof v === "string" && motivoDeFicheroInaceptable(v) === undefined ? v : undefined;
+  };
   const imagen = url("screenshot");
-  if (imagen === undefined) return "Stitch no dio la imagen de esa pantalla (¿se está generando todavía?)";
+  const ficheroDeImagen = fichero("screenshot");
+  if (imagen === undefined && ficheroDeImagen === undefined) return "Stitch no dio la imagen de esa pantalla (¿se está generando todavía?)";
   const numero = (campo: string): number | undefined => {
     const n = Number(d[campo]);
     return Number.isFinite(n) && n > 0 ? n : undefined;
@@ -126,9 +174,12 @@ export function leerPantalla(texto: string): PantallaDeStitch | string {
   const ancho = numero("width");
   const alto = numero("height");
   const html = url("htmlCode");
+  const ficheroDeHtml = fichero("htmlCode");
   return {
     titulo: typeof d["title"] === "string" ? d["title"] : "(sin título)",
-    imagen,
+    ...(imagen === undefined ? {} : { imagen }),
+    ...(ficheroDeImagen === undefined ? {} : { ficheroDeImagen }),
+    ...(ficheroDeHtml === undefined ? {} : { ficheroDeHtml }),
     ...(ancho === undefined ? {} : { ancho }),
     ...(alto === undefined ? {} : { alto }),
     ...(html === undefined ? {} : { html }),
@@ -329,8 +380,9 @@ export interface PantallaConMiniatura extends EntradaDeStitch {
 }
 
 /**
- * Las pantallas de una respuesta de `list_screens`, con su miniatura (`screenshot.downloadUrl`, medido: la traen todas).
- * Una miniatura fuera de los hosts medidos no se da: la pantalla se ofrece sin imagen.
+ * Las pantallas de una respuesta de `list_screens`, con su miniatura. Con el NOMBRE del fichero de su imagen
+ * (`screenshot.name`), la que sirve la consola (`miniaturaPorLaConsola`); si no, un `downloadUrl` de los hosts
+ * medidos, que el navegador abre tal cual. Sin ninguna de las dos, la pantalla se ofrece sin imagen.
  */
 export function pantallasConMiniatura(texto: string): PantallaConMiniatura[] {
   const lista = (jsonDe(texto) as Record<string, unknown> | undefined)?.["screens"];
@@ -339,8 +391,15 @@ export function pantallasConMiniatura(texto: string): PantallaConMiniatura[] {
     if (typeof e !== "object" || e === null) return [];
     const v = e as Record<string, unknown>;
     if (typeof v["name"] !== "string" || typeof v["title"] !== "string" || motivoDePantallaInaceptable(v["name"]) !== undefined) return [];
-    const url = (v["screenshot"] as Record<string, unknown> | undefined)?.["downloadUrl"];
-    const miniatura = typeof url === "string" && motivoDeDescargaInaceptable(url) === undefined ? url : undefined;
+    const captura = v["screenshot"] as Record<string, unknown> | undefined;
+    const url = captura?.["downloadUrl"];
+    const fichero = captura?.["name"];
+    const miniatura =
+      typeof fichero === "string" && motivoDeFicheroInaceptable(fichero) === undefined
+        ? miniaturaPorLaConsola(fichero)
+        : typeof url === "string" && motivoDeDescargaInaceptable(url) === undefined
+          ? url
+          : undefined;
     return [{ name: v["name"], title: v["title"], ...(miniatura === undefined ? {} : { miniatura }) }];
   });
 }

@@ -18,8 +18,11 @@ conector es un servidor MCP REMOTO: catálogo cerrado por código, o uno escrito
 - **Lo que el modelo ve se LIMPIA y RECORTA**: `esquemaParaElModelo` (sin `x-…` ni `$ref`),
   `fueraDelAgente`, `camposFueraDelResultado`.
 - **Stitch: `traer_pantalla_de_stitch`** (`motores/trueforge/traerDeStitch.ts`, puro en `core/stitch.ts`):
-  el modelo da la pantalla, nunca la URL; solo los hosts medidos, con tope y tipo comprobado, a
-  tamaño real (`=s0`). Destino FIJO `/artefactos/diseno/` —y `diseno/2/`… para la segunda y
+  el modelo da la pantalla, nunca la URL. **Imagen y código se bajan por el NOMBRE de su fichero con `download_file`**
+  (`screenshot.name`, `htmlCode.name`): el `downloadUrl` pide credenciales (medido: 401). El enlace de antes, solo
+  de los hosts medidos y a tamaño real (`=s0`), si Stitch no da el nombre; siempre con tope y tipo comprobado. **La
+  miniatura del selector la sirve la consola** (`GET /stitch/miniatura?f=`, `miniaturaPorLaConsola`): el `<img>` no
+  puede llevar las credenciales. Destino FIJO `/artefactos/diseno/` —y `diseno/2/`… para la segunda y
   siguientes elegidas (`carpetaDeMaqueta`)—, que `buscarMaquetas` prefiere y que `ultimaCaptura`/el
   crítico NO toman por capturas. Dice BYTES, no las medidas de Stitch. Busca por NOMBRE, propios y
   compartidos, sin tildes: primero el del LIENZO (`get_project` → `screenInstances[].label`, solo las

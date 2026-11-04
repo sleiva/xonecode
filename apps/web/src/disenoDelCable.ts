@@ -35,8 +35,11 @@ export function fundirDiseno(antes: EstadoDeDiseno | undefined, mensaje: unknown
     base.pantallas = m["pantallas"].flatMap((p) => {
       const r = p as Record<string, unknown>;
       if (typeof r?.["name"] !== "string" || typeof r["title"] !== "string") return [];
-      // Solo https: una miniatura es un <img> en la página.
-      const miniatura = typeof r["miniatura"] === "string" && r["miniatura"].startsWith("https://") ? r["miniatura"] : undefined;
+      // Solo https, o la ruta de la PROPIA consola que la trae de Stitch con sus credenciales: una miniatura es un <img>.
+      const miniatura =
+        typeof r["miniatura"] === "string" && (r["miniatura"].startsWith("https://") || r["miniatura"].startsWith("/stitch/miniatura?f="))
+          ? r["miniatura"]
+          : undefined;
       return [{ name: r["name"], title: r["title"], ...(miniatura === undefined ? {} : { miniatura }) }];
     });
   }

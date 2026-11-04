@@ -125,7 +125,7 @@ import { medirDiagnosticoDeNode } from "../../agent/config/diagnosticoDeNodeEnMa
 import { CONECTOR_STITCH, marcarPantallasElegidas, traerPantalla } from "../../agent/motores/trueforge/traerDeStitch.js";
 import { guardarDisenoDeProyecto } from "../../agent/config/configEnDisco.js";
 import type { DiagnosticoDeNode } from "../../core/diagnosticoDeNode.js";
-import { conNombreDelLienzo, nombresDelLienzo, pantallasElegidasValidas, pantallasConMiniatura, motivoDeProyectoDeStitchInaceptable, entradasDeStitch, textoDePantallasElegidas, TOPE_DE_PANTALLAS_ELEGIDAS, type DisenoVinculado } from "../../core/stitch.js";
+import { conNombreDelLienzo, leerFicheroDeStitch, motivoDeFicheroInaceptable, nombresDelLienzo, pantallasElegidasValidas, pantallasConMiniatura, RUTA_MINIATURA_DE_STITCH, TIPOS_DE_IMAGEN, TOOL_DE_DESCARGA, TOPE_DE_IMAGEN, motivoDeProyectoDeStitchInaceptable, entradasDeStitch, textoDePantallasElegidas, TOPE_DE_PANTALLAS_ELEGIDAS, type DisenoVinculado } from "../../core/stitch.js";
 import { esMotorLocal } from "../../core/motoresLocales.js";
 import {
   parsear,
@@ -420,6 +420,8 @@ export const RUTA_ACCION = "/accion";
  * el contrato de las skills que los escriben es «autocontenido».
  */
 export const RUTA_ARTEFACTO = "/artefacto";
+/** Cuántas miniaturas de Stitch se guardan en memoria; pasado, se va la más vieja. */
+export const TOPE_DE_MINIATURAS_DE_STITCH = 200;
 /**
  * `GET /soporte?tipo=<proyecto|chat|tarea>&proyecto=<id>[&id=<id>]` — el PAQUETE de soporte
  * (`soporte.ts`), escrito en streaming. Del cable llegan IDs; la raíz y lo que existe los decide
@@ -6761,6 +6763,47 @@ export function montarRutas(
    * Y un mime que no conocemos no se sirve inline. Adivinarlo es cómo un `.txt` acaba
    * ejecutándose como HTML; sin `nosniff` lo adivinaría el navegador.
    */
+  /**
+   * `GET /stitch/miniatura?f=<projects/N/files/F>` — la miniatura de una pantalla de Stitch para el selector de «Nueva
+   * tarea». Medido el 04-11-2026: el `downloadUrl` de Stitch pasó a pedir credenciales (401) y el `<img>` de la página
+   * no puede llevarlas, así que la trae el SERVIDOR con `download_file` (el MISMO servicio de conectores) y la sirve.
+   * Solo un nombre de fichero con su forma, solo PNG/JPEG/WebP y con tope; guardada en memoria por nombre, que en
+   * Stitch no cambia de contenido. Como un artefacto: `sandbox`, `nosniff`.
+   */
+  const miniaturasDeStitch = new Map<string, { tipo: string; bytes: Buffer }>();
+  servidor.registrarRuta("GET", RUTA_MINIATURA_DE_STITCH, async (peticion, respuesta) => {
+    const negar = (codigo: number, texto: string): void => {
+      respuesta.writeHead(codigo, { "Content-Type": "text/plain; charset=utf-8" });
+      respuesta.end(texto);
+    };
+    const fichero = new URLSearchParams((peticion.url ?? "").split("?")[1] ?? "").get("f");
+    if (fichero === null || motivoDeFicheroInaceptable(fichero) !== undefined) return negar(400, "ese no es un fichero de Stitch");
+    if (servicioConectores === undefined) return negar(503, "esta ejecución no tiene conectores");
+    let miniatura = miniaturasDeStitch.get(fichero);
+    if (miniatura === undefined) {
+      try {
+        const f = leerFicheroDeStitch(await servicioConectores.llamar(CONECTOR_STITCH, TOOL_DE_DESCARGA, { name: fichero }, { topeMs: TOPE_DE_LLAMADA_MS }));
+        if (typeof f === "string" || !("imagen" in f) || TIPOS_DE_IMAGEN[f.imagen.tipo] === undefined) return negar(502, "Stitch no dio la imagen");
+        const bytes = Buffer.from(f.imagen.base64, "base64");
+        if (bytes.length > TOPE_DE_IMAGEN) return negar(502, "la imagen pasa del tope");
+        miniatura = { tipo: f.imagen.tipo, bytes };
+        if (miniaturasDeStitch.size >= TOPE_DE_MINIATURAS_DE_STITCH) miniaturasDeStitch.delete(miniaturasDeStitch.keys().next().value!);
+        miniaturasDeStitch.set(fichero, miniatura);
+      } catch (e) {
+        anotarError("miniatura de stitch", e);
+        return negar(502, "Stitch no contestó");
+      }
+    }
+    respuesta.writeHead(200, {
+      "Content-Type": miniatura.tipo,
+      "Content-Length": miniatura.bytes.length,
+      "Content-Security-Policy": "sandbox",
+      "X-Content-Type-Options": "nosniff",
+      "Cache-Control": "private, max-age=3600",
+    });
+    respuesta.end(miniatura.bytes);
+  });
+
   servidor.registrarRuta("GET", RUTA_ARTEFACTO, async (peticion, respuesta) => {
     const responder = (codigo: number, texto: string): void => {
       respuesta.writeHead(codigo, { "Content-Type": "text/plain; charset=utf-8" });
