@@ -49,18 +49,6 @@ export function DisenoDelProyecto({
         <p className={estilos.aviso}>Stitch no está añadido. Se añade en Ajustes → Conectores.</p>
       ) : (
         <>
-          {vinculo === undefined ? null : vinculo === null ? (
-            <p className={estilos.aviso}>Sin proyecto de Stitch vinculado.</p>
-          ) : (
-            <div className={estilos.fila}>
-              <span>
-                Vinculado a <strong>«{vinculo.nombre}»</strong>
-              </span>
-              <button type="button" className={estilos.boton} onClick={() => alDiseno({ accion: "desvincular" })}>
-                Desvincular
-              </button>
-            </div>
-          )}
           {eligiendo ? (
             proyectos === undefined ? (
               <p className={estilos.aviso}>Pidiendo los proyectos de Stitch…</p>
@@ -76,7 +64,7 @@ export function DisenoDelProyecto({
                 </select>
                 <button
                   type="button"
-                  className={estilos.boton}
+                  className={estilos.principal}
                   disabled={elegido === ""}
                   onClick={() => {
                     const p = proyectos.find((x) => x.name === elegido);
@@ -93,7 +81,16 @@ export function DisenoDelProyecto({
               </div>
             )
           ) : (
+            // El estado y sus acciones en UNA línea, como el vínculo de un gestor: «Cambiar» y «Desvincular» (en rojo)
+            // juntos detrás del texto; antes cada uno salía en su línea y con otro estilo.
             <div className={estilos.fila}>
+              {vinculo === undefined ? null : vinculo === null ? (
+                <span className={estilos.aviso}>Sin proyecto de Stitch vinculado.</span>
+              ) : (
+                <span>
+                  Vinculado a <strong>«{vinculo.nombre}»</strong>
+                </span>
+              )}
               <button
                 type="button"
                 className={estilos.boton}
@@ -104,6 +101,11 @@ export function DisenoDelProyecto({
               >
                 {vinculo ? "Cambiar de proyecto" : "Vincular un proyecto de Stitch"}
               </button>
+              {vinculo ? (
+                <button type="button" className={estilos.peligro} onClick={() => alDiseno({ accion: "desvincular" })}>
+                  Desvincular
+                </button>
+              ) : null}
             </div>
           )}
           {diseno?.error === undefined ? null : <p className={estilos.error}>{diseno.error}</p>}

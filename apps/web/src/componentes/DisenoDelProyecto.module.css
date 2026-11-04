@@ -38,6 +38,14 @@
   composes: secundario from "./Boton.module.css";
 }
 
+.principal {
+  composes: primario from "./Boton.module.css";
+}
+
+.peligro {
+  composes: peligro from "./Boton.module.css";
+}
+
 /* Las elegidas: la cabecera con «Quitar» y debajo la lista numerada, una por línea. */
 .elegidas {
   display: flex;
