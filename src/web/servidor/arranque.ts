@@ -10429,7 +10429,8 @@ export function prepararDisenoDeTarea(
 }
 
 export function construirCorredorDeTareasCableado(opciones: {
-  vestibulo: Pick<Vestibulo, "abrirParaTarea" | "proyectosAbiertos" | "obrasEnCurso" | "sesionesDe">;
+  vestibulo: Pick<Vestibulo, "abrirParaTarea" | "proyectosAbiertos" | "obrasEnCurso" | "sesionesDe"> &
+    Partial<Pick<Vestibulo, "tareasAbiertas" | "aparatoParaSesionNueva">>;
   /** La fábrica de `OpcionesDeArranque.tareas`. Ausente = esta ejecución no ejecuta tareas. */
   tareasFabrica?: (informar: (texto: string) => void) => TareasEnDisco;
   informar: (texto: string) => void;
@@ -10546,6 +10547,17 @@ export function construirCorredorDeTareasCableado(opciones: {
           bloqueados: () => [
             ...esperasPorPersonas(opciones.vestibulo.proyectosAbiertos(), disco.listar(), opciones.vestibulo.obrasEnCurso()).keys(),
           ],
+          /**
+           * UN APARATO, UNA TAREA (petición suya, `siguientesAEjecutar#aparatoDe`): el de cada tarea es el que tendría su
+           * sesión NUEVA; el de las que corren, el de su consola. La granja no ocupa: cada tarea pide su copia.
+           * **Límite**: una tarea que se REANUDA abre el aparato de su sesión, que puede no ser el que se calcula aquí.
+           */
+          aparatoDe: (t) => {
+            const d = opciones.vestibulo.aparatoParaSesionNueva?.(t.proyecto.raiz);
+            return d === undefined || d.clase === "granja" ? undefined : d.id;
+          },
+          aparatosEnUso: () =>
+            (opciones.vestibulo.tareasAbiertas?.() ?? []).flatMap((c) => (c.dispositivo === undefined || c.dispositivo.clase === "granja" ? [] : [c.dispositivo.id])),
           /**
            * `sesion` sobrevive si y solo si hay algo que una persona pueda ABRIR, y esto es
            * lo que lo decide: la sesión está en el índice del proyecto —o sea que su

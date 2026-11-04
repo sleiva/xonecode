@@ -519,6 +519,12 @@ export function crearCorredorDeTareas(opciones: {
    */
   bloqueados?: () => readonly string[];
   /**
+   * Con qué aparato nacería cada tarea y cuáles usan ya las que corren (`siguientesAEjecutar#aparatoDe`): un aparato
+   * lo usa una sola tarea. Se leen en cada pasada. Ausentes = no se mira el aparato.
+   */
+  aparatoDe?: (t: Tarea) => string | undefined;
+  aparatosEnUso?: () => readonly string[];
+  /**
    * ¿Hay algo que una persona pueda ABRIR con ese id de sesión? O sea: ¿está en el índice
    * de sesiones del proyecto, con su transcript volcado?
    *
@@ -1463,6 +1469,8 @@ export function crearCorredorDeTareas(opciones: {
     for (const tarea of siguientesAEjecutar(lista.filter((t) => !renunciadas.has(t.id)), {
       concurrencia: opciones.concurrencia(),
       bloqueados: opciones.bloqueados?.() ?? [],
+      ...(opciones.aparatoDe === undefined ? {} : { aparatoDe: opciones.aparatoDe }),
+      aparatosEnUso: opciones.aparatosEnUso?.() ?? [],
     })) {
       // Antes de CADA tarea, no solo al arrancar ni una vez por pasada: ver la cabecera.
       if (!sigoMandando()) return;

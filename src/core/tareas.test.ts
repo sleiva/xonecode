@@ -99,6 +99,27 @@ describe("siguientesAEjecutar", () => {
     expect(siguientesAEjecutar(lista, { concurrencia: 2 }).map((t) => t.id)).toEqual(["a", "b"]);
   });
 
+  it("un APARATO lo usa una sola tarea: la que nacería con el de otra espera, sin gastar hueco; la granja no cuenta", () => {
+    const b = { id: "pb", raiz: "/w/B", nombre: "B" };
+    const c = { id: "pc", raiz: "/w/C", nombre: "C" };
+    const aparatos: Record<string, string | undefined> = { "/w/AppDemo": "emulator-5554", "/w/B": "emulator-5554", "/w/C": undefined };
+    const aparatoDe = (t: Tarea) => aparatos[t.proyecto.raiz];
+    const lista = [
+      tarea({ id: "a", creada: "2026-09-08T10:00:01.000Z" }),
+      tarea({ id: "b", creada: "2026-09-08T10:00:02.000Z", proyecto: b }),
+      tarea({ id: "c", creada: "2026-09-08T10:00:03.000Z", proyecto: c }),
+    ];
+    // Entre las elegidas en la misma pasada: la B no sale con la A en el mismo emulador; la C (granja) sí.
+    expect(siguientesAEjecutar(lista, { concurrencia: 3, aparatoDe }).map((t) => t.id)).toEqual(["a", "c"]);
+    // Con la A corriendo, la B espera y el hueco se lo lleva la C.
+    const conA = [tarea({ id: "a", estado: "en-proceso" }), ...lista.slice(1)];
+    expect(siguientesAEjecutar(conA, { concurrencia: 2, aparatoDe }).map((t) => t.id)).toEqual(["c"]);
+    // Y el que dice la CONSOLA de una tarea que corre también ocupa.
+    expect(siguientesAEjecutar(lista.slice(1), { concurrencia: 3, aparatoDe, aparatosEnUso: ["emulator-5554"] }).map((t) => t.id)).toEqual(["c"]);
+    // Sin la regla, como siempre.
+    expect(siguientesAEjecutar(lista, { concurrencia: 3 }).map((t) => t.id)).toEqual(["a", "b", "c"]);
+  });
+
   it("un proyecto bloqueado NO gasta hueco de concurrencia: no está corriendo nada", () => {
     // La cuenta de huecos es de lo que CORRE. Descontar lo bloqueado dejaría la cola sin
     // arrancar nada con el tope a uno y una pestaña abierta en otro proyecto.

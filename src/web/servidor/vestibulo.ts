@@ -930,6 +930,11 @@ export interface Vestibulo {
    * aparato: qué teléfono está ocupando una tarea, para no lanzar encima la app de otra cosa (IXCODE-58).
    */
   tareasAbiertas(): readonly ConsolaDeProyecto[];
+  /**
+   * Con qué aparato nacería AHORA una sesión nueva en esa raíz —la de una tarea—: el del proyecto, si no el global,
+   * ajustado a su origen. La MISMA resolución que `abrir`, para que la cola no espere por un aparato que no es el suyo.
+   */
+  aparatoParaSesionNueva(raiz: string): DispositivoElegido | undefined;
 
   /**
    * Por qué no se puede guardar a mano en esa raíz ahora mismo (`core/settings.ts
@@ -1116,6 +1121,12 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
     ((entorno: Entorno) => adoptarLegadoSiProcede(rutaAuthPorDefecto(), entorno));
   const guardarModeloGlobal = opciones.guardarModeloGlobal ?? guardarModeloGlobalEnDisco;
   const esProyecto = opciones.esProyecto ?? esProyectoEnDisco;
+  /** Ver `Vestibulo.aparatoParaSesionNueva`: el del proyecto, si no el global, ajustado al origen de la raíz. */
+  const aparatoParaSesionNueva = (raiz: string): DispositivoElegido | undefined =>
+    dispositivoSegunOrigen(
+      opciones.dispositivoDelProyecto?.(raiz) ?? opciones.dispositivoPorDefecto?.(),
+      opciones.origenDeDispositivos?.(raiz) ?? "local",
+    );
 
   const consolaDelVestibulo = crearConsola({
     catalogoModelos: opciones.catalogoModelos,
@@ -1579,12 +1590,10 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
     let historica = reabierta?.historica ?? false;
     if (historica && (await opciones.hayMemoriaDeHilo?.(raiz, sesion!)) === true) historica = false;
     // Una reabierta, el suyo (o ninguno); una NUEVA, el del proyecto y si no el global (IXCODE-51).
-    let dispositivo: DispositivoElegido | undefined = dispositivoSegunOrigen(
+    let dispositivo: DispositivoElegido | undefined =
       reabierta !== undefined
-        ? reabierta.dispositivo
-        : (opciones.dispositivoDelProyecto?.(raiz) ?? opciones.dispositivoPorDefecto?.()),
-      opciones.origenDeDispositivos?.(raiz) ?? "local",
-    );
+        ? dispositivoSegunOrigen(reabierta.dispositivo, opciones.origenDeDispositivos?.(raiz) ?? "local")
+        : aparatoParaSesionNueva(raiz);
     // El fichero que leen los scripts del `device-controller` (`core/dispositivoDeSesion.ts`)
     // queda como la pastilla DESDE QUE SE ABRE: también sin elección, que borra uno viejo.
     escribirDispositivoDeSesion(raiz, idSesion, dispositivo, opciones.canalDeGranja?.(idSesion));
@@ -2831,6 +2840,7 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
     // poda de `cerrarLasOciosasSalvo` al abrir otro proyecto la saca. Las de tarea, vivas o con turno.
     obrasEnCurso: () => [...obras.keys()],
     tareasAbiertas: () => [...deTareas].filter((c) => !c.cerrada),
+    aparatoParaSesionNueva,
     // Las RESERVADAS cuentan como tareas: una que se está abriendo va a escribir ahí (IXCODE-61).
     motivoParaNoEditar: (raiz) =>
       motivoParaNoEditarFichero({

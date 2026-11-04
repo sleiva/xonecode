@@ -9467,6 +9467,37 @@ describe("las tareas en background, el cableado del corredor con el cable — no
     await corredor!.parar();
   });
 
+  /** Petición suya: un aparato lo usa una sola tarea. La granja no ocupa: cada tarea pide su copia. */
+  it.each([
+    [{ id: "emulator-5554", nombre: "pixel8", plataforma: "android", clase: "emulador" }, 0],
+    [{ id: "granja", nombre: "Granja", plataforma: "android", clase: "granja" }, 1],
+  ] as const)("con su aparato en uso por otra tarea, la tarea espera (%o → %i aperturas)", async (aparato, esperadas) => {
+    const aperturas: string[] = [];
+    const cola = colaDeMentira([{ ...tareaEnProceso("t1"), estado: "nuevo" }]);
+    const { corredor, arrancarConectado } = construirCorredorDeTareasCableado({
+      vestibulo: {
+        abrirParaTarea: async (raiz) => {
+          aperturas.push(raiz);
+          throw new Error("abierta");
+        },
+        proyectosAbiertos: () => [],
+        sesionesDe: () => [],
+        obrasEnCurso: () => [],
+        // Otra tarea, de otro proyecto, corre con ese aparato.
+        tareasAbiertas: () => [{ raiz: "/w/Otro", dispositivo: aparato }] as unknown as ReturnType<Vestibulo["tareasAbiertas"]>,
+        aparatoParaSesionNueva: () => aparato,
+      },
+      tareasFabrica: () => cola,
+      informar: () => {},
+      olvidarHiloDeSesion: async () => {},
+      ...ENTREGA_DE_TAREAS,
+    });
+    await arrancarConectado({ emitirTareas: () => {} });
+    await corredor!.asentar();
+    expect(aperturas).toHaveLength(esperadas);
+    await corredor!.parar();
+  });
+
   /**
    * IXCODE-61: tener el proyecto ABIERTO ya no frena sus tareas. Una consola humana QUIETA deja
    * arrancar —el choque posterior lo niega la guarda de IXCODE-36—; frena la OCUPADA (arriba) y

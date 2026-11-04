@@ -326,6 +326,9 @@ export const TOPE_DE_RONDAS_DE_TAREA = 50;
  *  - **Y GANA LA PERSONA**: ver `bloqueados`.
  *  - **Y las ENCADENADAS esperan a su anterior** (`Tarea.tras`) hasta que esté `terminada`, también si quedó en
  *    `requiere-atencion`. Igual que un bloqueado: no gasta hueco ni para la cola.
+ *  - **Y un APARATO lo usa una sola tarea** (`aparatoDe`, `aparatosEnUso`, petición suya): la que nacería con el
+ *    aparato de otra que corre ESPERA, sin gastar hueco. Dos tareas en el mismo emulador se pisan la app, el hotswap
+ *    (admite una conexión) y las capturas. La granja no cuenta: cada tarea pide su copia.
  */
 export function siguientesAEjecutar(
   tareas: readonly Tarea[],
@@ -349,12 +352,23 @@ export function siguientesAEjecutar(
      * ninguna omisión que una lista vacía pudiera estar contradiciendo.
      */
     bloqueados?: readonly string[];
+    /** Con qué aparato nacería la tarea (su id), o `undefined` si no ocupa ninguno que se comparta (la granja, ninguno). */
+    aparatoDe?: (t: Tarea) => string | undefined;
+    /** Los aparatos que ya usan las tareas que corren, tal como los tienen sus consolas. */
+    aparatosEnUso?: readonly string[];
   }
 ): Tarea[] {
   const corriendo = tareas.filter((t) => t.estado === "en-proceso");
   const huecos = opciones.concurrencia - corriendo.length;
   if (huecos <= 0) return [];
   const ocupados = new Set([...corriendo.map((t) => t.proyecto.raiz), ...(opciones.bloqueados ?? [])]);
+  const aparatosOcupados = new Set([
+    ...(opciones.aparatosEnUso ?? []),
+    ...corriendo.flatMap((t) => {
+      const a = opciones.aparatoDe?.(t);
+      return a === undefined ? [] : [a];
+    }),
+  ]);
   const elegidas: Tarea[] = [];
   const candidatas = tareas
     .filter((t) => t.estado === "nuevo")
@@ -367,7 +381,10 @@ export function siguientesAEjecutar(
       if (anterior !== undefined && anterior.estado !== "terminada") continue;
     }
     if (ocupados.has(t.proyecto.raiz)) continue;
+    const aparato = opciones.aparatoDe?.(t);
+    if (aparato !== undefined && aparatosOcupados.has(aparato)) continue;
     ocupados.add(t.proyecto.raiz);
+    if (aparato !== undefined) aparatosOcupados.add(aparato);
     elegidas.push(t);
   }
   return elegidas;

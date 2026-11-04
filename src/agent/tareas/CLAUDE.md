@@ -190,3 +190,6 @@ corre solo y escribe sin aprobación. Cuatro estados; `requiere-atencion` = **es
   Tres salidas: encolar, descartar, «Hacerlo aquí en el chat» (`enChat`). **Resuelta es OTRO
   acto** (`propuesta-resuelta`, `anotarActo`), guardado al momento: el `.jsonl` solo crece.
 - **`Tarea.tras` es el orden** (`siguientesAEjecutar`): espera a la anterior `terminada`; DESCARTADA no retiene.
+- **Un APARATO, una tarea** (`siguientesAEjecutar#aparatoDe`, `aparatosEnUso`; `Vestibulo.aparatoParaSesionNueva`, la MISMA
+  resolución que una sesión nueva): la que nacería con el aparato de otra que corre ESPERA, sin gastar hueco. La granja no
+  ocupa (cada tarea pide su copia). **Límite**: una tarea que se REANUDA abre el aparato de su sesión, no el calculado.
