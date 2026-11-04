@@ -168,6 +168,12 @@ export function modeloParaTrueforge(opciones: {
    * tokens de salida para emparejarlo con el evento.
    */
   alRazonar?: (salida: number, razonamiento: number) => void;
+  /**
+   * Una respuesta que CERRARÍA el hilo (sin tool calls, sin `soloTexto` ni corte por tope) puede seguir con la llamada que
+   * devuelva esto, con el texto dicho como dato. Es el desarrollador CONTINUO (`siguienteTarea.ts`): medido en la
+   * calculadora, tenía `siguiente_tarea` y devolvía el encargo sin llamarla; el código la llama por él.
+   */
+  alCerrar?: (texto: string) => { name: string; argumentos: string } | undefined;
 }): ILLM {
   let secuencia = 0;
   /** Las tool calls cortadas por el tope, por id, con su nota: se reponen IGUAL en cada llamada, que la caché lo agradece. */
@@ -298,6 +304,10 @@ export function modeloParaTrueforge(opciones: {
     ];
     const llamadas = (relleno === undefined ? todas : []).map((t, i) => ({ ...t, id: t.id ?? `${id}-${i}` }));
     if (relleno !== undefined && todas.length > 0) opciones.alTirarLlamadas?.(todas.length);
+    if (llamadas.length === 0 && relleno === undefined && !cortadaPorTope) {
+      const forzada = opciones.alCerrar?.(acumulado === undefined ? "" : textoDe(acumulado));
+      if (forzada !== undefined) llamadas.push({ id: `${id}-al-cerrar`, ...forzada });
+    }
     const uso = acumulado?.usage_metadata;
     if (llamadas.length > 0) {
       if (cortadaPorTope) {

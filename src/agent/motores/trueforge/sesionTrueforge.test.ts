@@ -3595,7 +3595,7 @@ describe("`marcar_criterios_del_plan` en TrueForge: marca quien construye, no el
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, "TASKS.md"), "# T\n\n## T1 — Uno\n\n- [ ] abre\n- [ ] vuelve\n");
     const { m, toolsPorLlamada } = modelosConGuion([
-      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "developer-xone", input: "haz la T1 del plan hoteles" }) }] })],
+      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "developer-xone", input: "TAREA: 1\nhaz la T1 del plan hoteles" }) }] })],
       [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "m1", name: "marcar_criterios_del_plan", args: JSON.stringify({ plan: "hoteles", tarea: "T1", criterios: [1, 2] }) }] })],
       [new AIMessageChunk({ content: "T1 cerrada." })],
       [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d2", name: "create_sub_agent", args: JSON.stringify({ name: "consultant-xone", input: "¿qué es un mapcol?" }) }] })],
@@ -4440,6 +4440,24 @@ describe("un encargo de un plan es UNA tarea, con su línea `TAREA:`", () => {
     expect(tras1).toContain("## 01 — La pantalla");
     expect(vistos[3]!.join("\n")).toContain("No quedan tareas pendientes en /planes/calc/ (cerradas en este encargo: 01, 02)");
     expect(vistos).toHaveLength(5);
+  }, 30_000);
+
+  it("CONTINUO: si devuelve el encargo con tareas pendientes, el código llama a `siguiente_tarea` por él", async () => {
+    const { m, vistos } = modelosConGuion([
+      [delega("d1", "TAREA: 01\nDel plan /planes/calc/: la pantalla.")],
+      [new AIMessageChunk({ content: "La pantalla está hecha." })],
+      [new AIMessageChunk({ content: "El teclado también." })],
+      [new AIMessageChunk({ content: "Hecho." })],
+    ]);
+    const s = await abrirSesionTrueforge({ raiz: conPlan(), modelos: m, entorno: ENTORNO, skills: CATALOGO, bucleDelDesarrollador: true, developerContinuo: true });
+    await s.turno("haz la calculadora del plan calc", piel().p);
+    const tras1 = vistos[2]!.join("\n");
+    expect(tras1).toContain("La pantalla está hecha.");
+    expect(tras1).toContain("Tarea 01 cerrada. SIGUE en esta misma conversación");
+    expect(tras1).toContain("## 02 — El teclado");
+    // Sin más tareas, su texto cierra el hilo y vuelve al orquestador.
+    expect(vistos).toHaveLength(4);
+    expect(vistos[3]!.join("\n")).toContain("El teclado también.");
   }, 30_000);
 
   it("en una tarea de fondo no se exige: manda el tope de encargos", async () => {

@@ -109,7 +109,7 @@ describe("una llamada con los argumentos ROTOS no se pierde", () => {
   }
 
   /** Lo mismo con un guion por llamada al modelo; `ultimo` es el texto con el que acabó el hilo. */
-  async function turnoConGuiones(guiones: AIMessageChunk[][]) {
+  async function turnoConGuiones(guiones: AIMessageChunk[][], extra: Partial<Parameters<typeof modeloParaTrueforge>[0]> = {}) {
     const { modelo, recibidos } = modeloGuionizado(guiones);
     const leidos: unknown[] = [];
     const source = {
@@ -128,7 +128,7 @@ describe("una llamada con los argumentos ROTOS no se pierde", () => {
     const logger = winston.createLogger({ silent: true, transports: [] });
     const toolSet = new ToolSet({ source: source as never, selectors: { enableTools: ["@all"], disableTools: [], preloadTools: [], requireApprovalForTools: [] }, preload: true, approvalPolicies: undefined });
     const raiz = new AgentThread({
-      definition: { modelClient: modeloParaTrueforge({ modelo: () => modelo }), modelName: "prueba", instruction: "reglas" },
+      definition: { modelClient: modeloParaTrueforge({ modelo: () => modelo, ...extra }), modelName: "prueba", instruction: "reglas" },
       threadId: "main",
       title: "main",
       capabilities: [{ systemToolSets: [toolSet] }] as never,
@@ -205,6 +205,21 @@ describe("una llamada con los argumentos ROTOS no se pierde", () => {
     expect(r.llamadasAlModelo).toBe(4);
     expect(r.leidos).toEqual([{ file_path: "/app.xml" }]);
     expect(r.ultimo).toBe("Hecho.");
+  }, 20_000);
+
+  it("`alCerrar`: una respuesta que cerraría el hilo sigue con la llamada que devuelve, con lo dicho como dato", async () => {
+    const dichos: string[] = [];
+    let veces = 0;
+    const r = await turnoConGuiones([[new AIMessageChunk({ content: "T1 hecha." })], [new AIMessageChunk({ content: "Fin." })]], {
+      alCerrar: (texto) => {
+        dichos.push(texto);
+        return veces++ === 0 ? { name: "read_file", argumentos: JSON.stringify({ file_path: "/siguiente" }) } : undefined;
+      },
+    });
+    expect(r.leidos).toEqual([{ file_path: "/siguiente" }]);
+    expect(dichos).toEqual(["T1 hecha.", "Fin."]);
+    expect(r.llamadasAlModelo).toBe(2);
+    expect(r.ultimo).toBe("Fin.");
   }, 20_000);
 
   it("y una llamada sana en una respuesta que acabó bien sigue igual", async () => {

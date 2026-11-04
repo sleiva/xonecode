@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decidirEncargo, planesNombrados } from "./encargoDeTarea.js";
+import { decidirEncargo, planesNombrados, planesPorSuNombre } from "./encargoDeTarea.js";
 
 const TASKS = `# Calculadora
 
@@ -22,6 +22,14 @@ describe("un encargo de un plan es UNA tarea", () => {
   it("sin plan con tareas, no se toca: es trabajo libre", () => {
     expect(decidirEncargo("developer-xone", "Arregla el login", leer)).toEqual({ tipo: "libre" });
     expect(decidirEncargo("developer-xone", "Mira /planes/otro/PLAN.md", leer)).toEqual({ tipo: "libre" });
+  });
+
+  it("el plan nombrado SIN su ruta también cuenta: «plan `calculadora`» sin TAREA no arranca", () => {
+    expect(planesPorSuNombre("Un ajuste (plan `calculadora`, T1) y el plan otro")).toEqual(["calculadora", "otro"]);
+    const d = decidirEncargo("developer-xone", "Vuelta de ajuste visual (plan `calculadora`)", leer);
+    expect(d.tipo).toBe("rechazo");
+    expect(decidirEncargo("developer-xone", "TAREA: 3\nDel plan calculadora: la lógica", leer).tipo).toBe("tarea");
+    expect(decidirEncargo("developer-xone", "Haz un plan sencillo", leer)).toEqual({ tipo: "libre" });
   });
 
   it("con UNA tarea, arranca con su ficha delante, y `T2`, `2` y `02` son la misma", () => {

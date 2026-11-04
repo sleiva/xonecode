@@ -42,8 +42,19 @@ const listar = (tareas: readonly TareaDelPlan[]): string =>
  * Qué hacer con el encargo de `nombre`: dejarlo como está, arrancarlo con la ficha de su tarea delante, o devolverlo con
  * el motivo. `leerTasks` da el `TASKS.md` de un plan, o `undefined` si no lo tiene.
  */
+/**
+ * Los planes que nombra un encargo SIN su ruta: «plan `demo-calculadora`», «el plan demo-calculadora». Medido en la
+ * calculadora: el orquestador nombraba así el plan en sus encargos de ajuste y se saltaban la regla de una tarea. Solo
+ * cuentan los que tienen `TASKS.md` (lo decide quien llama, con `leerTasks`).
+ */
+export function planesPorSuNombre(encargo: string): string[] {
+  const nombres = [...encargo.matchAll(/\bplan(?:es)?\s+[«"`']?([A-Za-z0-9][A-Za-z0-9_-]*)/gi)].map((m) => m[1]!);
+  return [...new Set(nombres)];
+}
+
 export function decidirEncargo(nombre: string, encargo: string, leerTasks: (plan: string) => string | undefined): DecisionDeEncargo {
-  const conTareas = planesNombrados(encargo)
+  const porRuta = planesNombrados(encargo);
+  const conTareas = (porRuta.length > 0 ? porRuta : planesPorSuNombre(encargo))
     .map((plan) => ({ plan, texto: leerTasks(plan) }))
     .filter((p): p is { plan: string; texto: string } => p.texto !== undefined)
     .map((p) => ({ plan: p.plan, tareas: leerTareasDelPlan(p.texto).tareas }))

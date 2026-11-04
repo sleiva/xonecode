@@ -31,7 +31,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSy
 import { dirname, join } from "node:path";
 import { CARPETA_DE_PLANES } from "../../../core/planes.js";
 import { decidirEncargo } from "../../../core/encargoDeTarea.js";
-import { TEXTO_DEL_DEVELOPER_CONTINUO, TEXTO_DEL_ORQUESTADOR_CONTINUO } from "../../../core/siguienteTarea.js";
+import { NOMBRE_SIGUIENTE_TAREA, siguienteTareaPendiente, TEXTO_DEL_DEVELOPER_CONTINUO, TEXTO_DEL_ORQUESTADOR_CONTINUO } from "../../../core/siguienteTarea.js";
 import { crearSiguienteTarea } from "./siguienteTarea.js";
 import { lineasDeAuditoria } from "../../../core/auditoriaDeCierre.js";
 import { crearAuditorDeCierre } from "./auditorDeCierre.js";
@@ -1297,6 +1297,17 @@ export async function abrirSesionTrueforge(
    * 32.000 de siempre. Se lee al construir el raíz: un `/modelo` lo rehace.
    */
   /** El del desarrollador CONTINUO, con la misma resolución de la ventana que el raíz. */
+  /** ¿Le queda al hilo continuo una tarea del plan que no haya cerrado ya en este encargo? */
+  const quedaTareaDelContinuo = (hilo: string): boolean => {
+    const estado = tareaDeHilo.get(hilo);
+    if (estado === undefined) return false;
+    try {
+      const tareas = leerTareasDelPlan(readFileSync(join(raiz, CARPETA_DE_PLANES, estado.plan, "TASKS.md"), "utf8")).tareas;
+      return siguienteTareaPendiente(tareas, estado.tarea, new Set(estado.cerradas)) !== undefined;
+    } catch {
+      return false;
+    }
+  };
   const umbralDelContinuo = (): number => {
     const id = modelos.idDePapel?.("trabajo");
     if (id === undefined) return umbralDelDesarrolladorContinuo(undefined);
@@ -2091,6 +2102,8 @@ export async function abrirSesionTrueforge(
               ? RESUMEN_DE_RELLENO_DEL_PRESUPUESTO
               : undefined,
         corte: () => detencion.corte(params.threadId),
+        // El CONTINUO no devuelve el encargo con tareas pendientes: lo que iba a decir es el resumen de la que cierra.
+        ...(continuoDelHilo ? { alCerrar: (texto: string) => (quedaTareaDelContinuo(params.threadId) ? { name: NOMBRE_SIGUIENTE_TAREA, argumentos: JSON.stringify({ resumen: texto.trim().slice(0, 300) || "sin resumen" }) } : undefined) } : {}),
         alTirarLlamadas: (n) => {
           llamadasTiradasPorDetener += n;
           // A la traza de hitos (con «Depurar»): es la medida de si el filtro hace falta o es red.

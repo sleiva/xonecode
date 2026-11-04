@@ -96,6 +96,9 @@ Ante una discrepancia con el código, **el código manda**.
   mensaje nuevo: el prefijo y el eco del razonamiento siguen enteros—. Al pasar, lo que se cuenta POR TAREA vuelve a cero
   (`presupuesto.nuevaTarea`, `vueltasDeCadaHilo`) y no le corta el tope de vueltas del TURNO. Se compacta, y TARDE
   (`core/contextos.ts#umbralDelDesarrolladorContinuo`). El orquestador lo sabe (`TEXTO_DEL_ORQUESTADOR_CONTINUO`).
+  **Si cierra con tareas pendientes, la llama el CÓDIGO por él** (`modeloLangchain.ts#alCerrar`), con lo que iba a decir
+  como resumen: tener la tool no bastaba. Y un encargo que nombra el plan SIN su ruta («plan `calc`») también cae en la
+  regla de una tarea (`core/encargoDeTarea.ts#planesPorSuNombre`).
 - **Un hijo NO ARRANCA mientras trabaja aquel del que depende** (`espera:` en el `.md`, `esperas.ts`): se devuelve al
   orquestador al instante. **Nunca se espera bloqueando**. `developer-xone` espera a `designer-xone`. **Un encargo
   devuelto sin arrancar retira su anuncio** (`crearHijo#devolverSinArrancar`, `esperas.ts#noArranco`): si no, quien lo
