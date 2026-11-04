@@ -619,6 +619,11 @@ export function textoDelBucle(
           "  veas mal mídelo en su geometría antes de tocar el CSS. Tras cada captura el harness te pone la MEDIDA",
           "  contra la maqueta; con ella, pasa `xone_critica_visual` (pantalla = esa captura, referencia = la maqueta) y arregla TODAS",
           `  las diferencias en la misma ronda antes de otra captura. ${String(RONDAS_VISUALES)} rondas como mucho. \`describe_image\` no mide: no lo uses para pulir.`,
+          // Medido con Codex sobre la calculadora (04-11-2026), mismo modelo: sin esta regla la hizo «inspirada» en la maqueta
+          // (sin cabecera, display ni banda); con ella, mirando captura y maqueta él mismo, salió fiel pieza a pieza.
+          "- FIDELIDAD: una pantalla hecha desde una maqueta se construye lo más FIEL posible —la misma estructura, las mismas",
+          "  piezas, colores, tipografías y proporciones—; un icono que XOne no trae se le pide al diseñador. Tras cada captura,",
+          "  mira la captura Y la maqueta con `view_image` y corrige TODAS las diferencias antes de dar la tarea por terminada.",
           // Medido en Maset: la maqueta pinta el paso firmado y con filas; la captura era el paso vacío, y salía 24 % «distinta».
           // Y en la pasada 8: «el mismo estado, con datos» le llevaba a inyectar por JS los valores de ejemplo de la maqueta.
           "- Los DATOS que pinta la maqueta (cifras, historial, nombres) son de ejemplo: no los inyectes ni los escribas para que la",
