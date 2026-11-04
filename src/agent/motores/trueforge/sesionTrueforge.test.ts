@@ -4771,6 +4771,16 @@ describe("un encargo de un plan es UNA tarea, con su línea `TAREA:`", () => {
     );
     return raiz;
   };
+  /** Con la 01 CERRADA (todas sus casillas): mandar la 02 es pasar de tarea, no dejar una abierta (`INTENTOS_POR_TAREA`). */
+  const conLa01Cerrada = (): string => {
+    const raiz = proyecto();
+    mkdirSync(join(raiz, ".xonecode", "planes", "calc"), { recursive: true });
+    writeFileSync(
+      join(raiz, ".xonecode", "planes", "calc", "TASKS.md"),
+      "# Calc\n\n## 01 — La pantalla\n**Estado:** hecha\n- [x] se ve\n- [x] centrada\n\n## 02 — El teclado\n**Estado:** en curso\n- [x] las teclas\n- [ ] el «=»\n"
+    );
+    return raiz;
+  };
 
   it("varias tareas no arrancan; con UNA, el desarrollador la recibe con su ficha delante", async () => {
     const { m, vistos } = modelosConGuion([
@@ -4861,7 +4871,7 @@ describe("un encargo de un plan es UNA tarea, con su línea `TAREA:`", () => {
       [new AIMessageChunk({ content: "T2 hecha" })],
       [new AIMessageChunk({ content: "Hecho." })],
     ]);
-    const s = await abrirSesionTrueforge({ raiz: conPlanMarcado(), modelos: m, entorno: ENTORNO, skills: CATALOGO, bucleDelDesarrollador: true, developerContinuo: true });
+    const s = await abrirSesionTrueforge({ raiz: conLa01Cerrada(), modelos: m, entorno: ENTORNO, skills: CATALOGO, bucleDelDesarrollador: true, developerContinuo: true });
     await s.turno("haz la calculadora del plan calc", piel().p);
     expect(vistos[0]!.join("\n")).toContain("mándale la SIGUIENTE al MISMO developer-xone");
     expect(toolsPorLlamada[1]).not.toContain("siguiente_tarea");
@@ -4874,6 +4884,27 @@ describe("un encargo de un plan es UNA tarea, con su línea `TAREA:`", () => {
     expect(segundo).toContain("CADA ENCARGO ES UNA TAREA DEL PLAN");
   }, 30_000);
 
+  /** Pasada 21: la 02 volvió en rojo («la tarea no está cerrada») y el orquestador mandó la 03; nadie volvía a por ella. */
+  it("con la tarea anterior SIN CERRAR, la siguiente no arranca: se vuelve a la abierta y, agotados los intentos, se cierra el turno", async () => {
+    const { m, vistos } = modelosConGuion([
+      [delega("d1", "TAREA: 01\nDel plan /planes/calc/: la pantalla.")],
+      [new AIMessageChunk({ content: "La pantalla no está cerrada: el crítico sigue en rojo." })],
+      [delega("d2", "TAREA: 02\nDel plan /planes/calc/: el teclado.")],
+      [delega("d3", "TAREA: 01\nDel plan /planes/calc/: arregla lo que faltaba.")],
+      [new AIMessageChunk({ content: "Sigue en rojo." })],
+      [delega("d4", "TAREA: 01\nDel plan /planes/calc/: otra vez.")],
+      [new AIMessageChunk({ content: "Falta comprobar la 01." })],
+    ]);
+    const s = await abrirSesionTrueforge({ raiz: conPlan(), modelos: m, entorno: ENTORNO, skills: CATALOGO, bucleDelDesarrollador: true, developerContinuo: true });
+    await s.turno("haz la calculadora del plan calc", piel().p);
+    expect(vistos[3]!.join("\n")).toContain("developer-xone NO HA ARRANCADO: la tarea 01 (La pantalla) volvió SIN CERRAR (0 de 1 criterios comprobados)");
+    // Volver a la abierta sí arranca…
+    expect(vistos[4]!.join("\n")).toContain("arregla lo que faltaba");
+    // …y la tercera vez, ni esa: se le dice que cierre el turno contándolo.
+    expect(vistos[6]!.join("\n")).toContain("Termina el turno y dile a la persona qué criterios de la 01 faltan");
+    expect(vistos).toHaveLength(7);
+  }, 30_000);
+
   it("CONTINUO: lo heredado va en el CONTEXTO del hilo (compactable) y no se duplica al cerrar y volver a abrir", async () => {
     const { m, vistos } = modelosConGuion([
       [delega("d1", "TAREA: 01\nDel plan /planes/calc/: la pantalla.")],
@@ -4884,7 +4915,7 @@ describe("un encargo de un plan es UNA tarea, con su línea `TAREA:`", () => {
       [new AIMessageChunk({ content: "retoque hecho" })],
       [new AIMessageChunk({ content: "Hecho." })],
     ]);
-    const s = await abrirSesionTrueforge({ raiz: conPlanMarcado(), modelos: m, entorno: ENTORNO, skills: CATALOGO, bucleDelDesarrollador: true, developerContinuo: true });
+    const s = await abrirSesionTrueforge({ raiz: conLa01Cerrada(), modelos: m, entorno: ENTORNO, skills: CATALOGO, bucleDelDesarrollador: true, developerContinuo: true });
     await s.turno("haz la calculadora del plan calc", piel().p);
     const tercero = vistos[5]!.join("\n");
     expect(tercero.split("T1 hecha: [x] se ve").length - 1).toBe(1);

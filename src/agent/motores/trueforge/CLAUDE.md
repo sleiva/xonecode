@@ -151,6 +151,9 @@ Ante una discrepancia con el código, **el código manda**.
   Sin la línea, con varias o con una que no existe, NO arranca y se le devuelve el motivo; con una, el encargo lleva delante
   su ficha. Solo cuenta la LÍNEA, nunca la prosa («T1 ya está; ahora T2» es correcto). Como el `task_name` de Codex.
   **Límites**: en una TAREA DE FONDO no se exige (lo agotaría el tope de encargos); dos planes en un encargo no se adivinan.
+- **No se pasa de una tarea ABIERTA a otra** (`INTENTOS_POR_TAREA`, `tareaEncargadaDe`): a quien PRUEBA (`scripts`), con la
+  última tarea que se le encargó sin TODAS sus casillas, otra tarea no arranca y se le dice al orquestador que vuelva a la
+  abierta; agotados los intentos, ni esa: que cierre el turno diciéndole a la persona lo que falta. Vale dentro del turno.
   Cada uno con un presupuesto alto (`presupuestoDeLlamadas`: quien lleva `scripts`, `TOPE_DE_LLAMADAS_DEL_DESARROLLADOR`):
   cada encargo nuevo volvía a leer y a entrar en la app desde cero.
   **Tampoco arrancan en una tarea** el analista con plan asignado (`PLAN DE ESTA TAREA` en el encargo) ni el

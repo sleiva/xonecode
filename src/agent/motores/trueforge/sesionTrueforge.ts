@@ -30,7 +30,7 @@ import { claseDeTrabajo } from "../../../core/esfuerzo.js";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { CARPETA_DE_PLANES } from "../../../core/planes.js";
-import { decidirEncargo } from "../../../core/encargoDeTarea.js";
+import { decidirEncargo, type TareaYaEncargada } from "../../../core/encargoDeTarea.js";
 import { NOMBRE_SIGUIENTE_TAREA, siguienteTareaPendiente, TEXTO_DEL_DEVELOPER_CONTINUO, TEXTO_DEL_DEVELOPER_CONTINUO_CON_SIGUIENTE, TEXTO_DEL_ORQUESTADOR_CONTINUO, TEXTO_DEL_ORQUESTADOR_CONTINUO_CON_SIGUIENTE } from "../../../core/siguienteTarea.js";
 import { crearSiguienteTarea } from "./siguienteTarea.js";
 import { lineasDeAuditoria } from "../../../core/auditoriaDeCierre.js";
@@ -1153,6 +1153,8 @@ export async function abrirSesionTrueforge(
   };
   /** La última tarea del plan que se le encargó a un especialista (`plan|número`): la del crítico de una vez (`unaCriticaPorTarea`). */
   let ultimaTareaEncargada: string | undefined;
+  /** La última tarea del plan encargada a cada agente que PRUEBA (`scripts`), con sus intentos en el turno (`INTENTOS_POR_TAREA`). */
+  const tareaEncargadaDe = new Map<string, TareaYaEncargada>();
   /** El hilo VIVO de cada especialista (una encarnación viva por especialista): lo que `siguiente_tarea` necesita. */
   const hiloVivoDe = new Map<string, string>();
   const conVistaDelEncargo = opciones.vistaDelEncargo ?? process.env.XONECODE_VISTA_DEL_ENCARGO === "1";
@@ -2055,13 +2057,18 @@ export async function abrirSesionTrueforge(
         } catch {
           return undefined;
         }
-      });
+      }, agente.scripts === true ? tareaEncargadaDe.get(agente.nombre) : undefined);
       if (decision.tipo === "rechazo") {
         anotarPaso("trueforge.no-arranca", `${agente.nombre}: ${decision.motivo.slice(0, 80)}`)();
         diagnostico?.memoria?.(agente.nombre, "arranca-sin", "encargo sin UNA tarea del plan");
         return devolverSinArrancar(agente.nombre, [], decision.motivo);
       }
       if (decision.tipo === "tarea") params = { ...params, request: { ...params.request, input: decision.encargo } };
+      if (decision.tipo === "tarea" && agente.scripts === true) {
+        const antes = tareaEncargadaDe.get(agente.nombre);
+        const misma = antes?.plan === decision.plan && Number.parseInt(antes.numero.replace(/^T/i, ""), 10) === Number.parseInt(decision.tarea.numero.replace(/^T/i, ""), 10);
+        tareaEncargadaDe.set(agente.nombre, { plan: decision.plan, numero: decision.tarea.numero, intentos: misma ? antes.intentos + 1 : 1 });
+      }
       if (decision.tipo === "tarea") ultimaTareaEncargada = `${decision.plan}|${String(Number.parseInt(decision.tarea.numero.replace(/^T/i, ""), 10))}`;
       if (decision.tipo === "tarea" && developerContinuo && agente.scripts === true) tareaDeHilo.set(params.threadId, { plan: decision.plan, tarea: decision.tarea.numero, cerradas: [] });
     }
@@ -2699,6 +2706,8 @@ export async function abrirSesionTrueforge(
       detencion.reiniciar();
       presupuesto.reiniciar();
       vueltasDelTurno.clear();
+      // Una tarea abierta frena solo dentro del turno: en el siguiente decide la persona (`INTENTOS_POR_TAREA`).
+      tareaEncargadaDe.clear();
       const instantanea = await tomarInstantanea(raiz, opciones.entorno.git);
       const tope = opciones.topeDeRondas ?? MAX_APPROVAL_ROUNDS;
       const aplicadasSinPreguntar: string[] = [];
@@ -3340,6 +3349,7 @@ export async function abrirSesionTrueforge(
       ultimaCriticaDeHilo.clear();
       ultimaMedidaDeHilo.clear();
       rondasVisualesDeHilo.clear();
+      tareaEncargadaDe.clear();
       padreDeHilo.clear();
       informesPendientes.clear();
       hijosConMemoria.clear();

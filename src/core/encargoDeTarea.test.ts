@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decidirEncargo, planesNombrados, planesPorSuNombre } from "./encargoDeTarea.js";
+import { decidirEncargo, INTENTOS_POR_TAREA, planesNombrados, planesPorSuNombre } from "./encargoDeTarea.js";
 
 const TASKS = `# Calculadora
 
@@ -74,5 +74,36 @@ describe("un encargo de un plan es UNA tarea", () => {
     const dos = decidirEncargo("developer-xone", "/planes/a/ y /planes/b/", () => TASKS);
     expect(dos).toEqual({ tipo: "libre" });
     expect(planesNombrados("/planes/a/TASKS.md y /planes/a/PLAN.md, /planes/b/")).toEqual(["a", "b"]);
+  });
+});
+
+describe("no se pasa de una tarea ABIERTA a otra (pasada 21: la 02 volvió en rojo y se mandó la 03)", () => {
+  const abierta = { plan: "calculadora", numero: "02", intentos: 1 };
+
+  it("con la anterior sin todas sus casillas, la siguiente no arranca y se pide volver a la abierta", () => {
+    const d = decidirEncargo("developer-xone", "TAREA: 03\n/planes/calculadora/", leer, abierta);
+    expect(d.tipo).toBe("rechazo");
+    if (d.tipo === "rechazo") {
+      expect(d.motivo).toContain("02 (El teclado) volvió SIN CERRAR (0 de 2 criterios comprobados)");
+      expect(d.motivo).toContain("`TAREA: 02`");
+    }
+  });
+
+  it("volver a encargar la abierta SÍ arranca, hasta el tope de intentos", () => {
+    expect(decidirEncargo("developer-xone", "TAREA: 2\n/planes/calculadora/", leer, abierta).tipo).toBe("tarea");
+  });
+
+  it("con el tope agotado, ni la siguiente ni otra vez la misma: se termina el turno diciéndolo", () => {
+    const agotada = { ...abierta, intentos: INTENTOS_POR_TAREA };
+    for (const linea of ["TAREA: 03", "TAREA: 02"]) {
+      const d = decidirEncargo("developer-xone", `${linea}\n/planes/calculadora/`, leer, agotada);
+      expect(d.tipo).toBe("rechazo");
+      if (d.tipo === "rechazo") expect(d.motivo).toContain("Termina el turno");
+    }
+  });
+
+  it("con la anterior FINALIZADA, u otro plan, la siguiente arranca", () => {
+    expect(decidirEncargo("developer-xone", "TAREA: 02\n/planes/calculadora/", leer, { plan: "calculadora", numero: "01", intentos: 1 }).tipo).toBe("tarea");
+    expect(decidirEncargo("developer-xone", "TAREA: 03\n/planes/calculadora/", leer, { plan: "otro", numero: "02", intentos: 1 }).tipo).toBe("tarea");
   });
 });

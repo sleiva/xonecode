@@ -27,6 +27,22 @@ export const ALCANCE_Y_CIERRE_DE_LA_TAREA = [
   "`[x]` o `[ ]` con su prueba (lo que viste o mediste) o por qué no se pudo comprobar.",
 ].join("\n");
 
+/**
+ * **No se pasa de una tarea ABIERTA a otra** (decisión suya, 04-11-2026: «que no pase de tarea en rojo»). Medido en la
+ * calculadora (pasada 21): el desarrollador devolvió la 02 con el crítico en rojo y cuatro de cinco criterios sin marcar,
+ * «la tarea no está cerrada», y el orquestador mandó la 03 sin más; nadie volvía a por la 02. Abierta es que no tiene
+ * TODAS sus casillas marcadas (`progreso !== "finalizada"`). Se puede volver a encargar hasta este tope de intentos; con
+ * él agotado, el turno se termina diciéndole a la persona lo que falta, en vez de seguir con la siguiente.
+ */
+export const INTENTOS_POR_TAREA = 2;
+
+/** La última tarea encargada a quien recibe el encargo, y cuántas veces se le ha encargado en el turno. */
+export interface TareaYaEncargada {
+  plan: string;
+  numero: string;
+  intentos: number;
+}
+
 /** Cuántas tareas pendientes se le listan al orquestador al devolverle un encargo. */
 const TOPE_DE_TAREAS_LISTADAS = 8;
 
@@ -65,7 +81,12 @@ export function planesPorSuNombre(encargo: string): string[] {
   return [...new Set(nombres)];
 }
 
-export function decidirEncargo(nombre: string, encargo: string, leerTasks: (plan: string) => string | undefined): DecisionDeEncargo {
+export function decidirEncargo(
+  nombre: string,
+  encargo: string,
+  leerTasks: (plan: string) => string | undefined,
+  anterior?: TareaYaEncargada,
+): DecisionDeEncargo {
   const porRuta = planesNombrados(encargo);
   const conTareas = (porRuta.length > 0 ? porRuta : planesPorSuNombre(encargo))
     .map((plan) => ({ plan, texto: leerTasks(plan) }))
@@ -103,6 +124,26 @@ export function decidirEncargo(nombre: string, encargo: string, leerTasks: (plan
     };
   }
   const tarea = nombradas[0]!;
+  const previa = anterior?.plan === plan ? tareas.find((t) => clave(t.numero) === clave(anterior.numero)) : undefined;
+  if (anterior !== undefined && previa !== undefined && previa.progreso !== "finalizada") {
+    const cuantas = `${String(previa.criterios.hechos)} de ${String(previa.criterios.total)} criterios comprobados`;
+    const agotada = anterior.intentos >= INTENTOS_POR_TAREA;
+    const cerrarElTurno =
+      `Ya se le encargó ${String(anterior.intentos)} veces: NO la mandes otra vez ni pases a otra. Termina el turno y dile a la ` +
+      `persona qué criterios de la ${previa.numero} faltan y por qué (lo que ${nombre} contó al devolverla).`;
+    if (clave(tarea.numero) !== clave(previa.numero)) {
+      return {
+        tipo: "rechazo",
+        motivo:
+          `${nombre} NO HA ARRANCADO: la tarea ${previa.numero} (${previa.titulo}) volvió SIN CERRAR (${cuantas}) y no se pasa a la ` +
+          `${tarea.numero} con una tarea abierta. ` +
+          (agotada
+            ? cerrarElTurno
+            : `Vuelve a mandar \`TAREA: ${previa.numero}\` al mismo ${nombre} con lo que dijo que faltaba, para que lo arregle y lo compruebe.`),
+      };
+    }
+    if (agotada) return { tipo: "rechazo", motivo: `${nombre} NO HA ARRANCADO: la tarea ${previa.numero} sigue SIN CERRAR (${cuantas}). ${cerrarElTurno}` };
+  }
   const ficha = [
     "",
     "",
