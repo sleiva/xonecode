@@ -90,18 +90,18 @@ Ante una discrepancia con el código, **el código manda**.
 - **Encendido por omisión** (`XONECODE_BUCLE_DEL_DEVELOPER=0` lo apaga): quien declara `llama` en su `.md` recibe
   `create_sub_agent` y SOLO esos especialistas (con artefactos, también `xone_critica_visual` y `comparar_capturas`); un
   nombre fuera cae al ayudante genérico de solo lectura. El juez final revisa igual.
-- **El desarrollador CONTINUO** (`XONECODE_DEVELOPER_CONTINUO=1` u `opciones.developerContinuo`; apagado por omisión,
-  experimento): recibe la PRIMERA tarea de un plan y sigue con las demás en la MISMA conversación con `siguiente_tarea`
-  (`siguienteTarea.ts`, `core/siguienteTarea.ts`), que le devuelve la ficha de la siguiente como RESULTADO de tool —no como
-  mensaje nuevo: el prefijo y el eco del razonamiento siguen enteros—. Al pasar, lo que se cuenta POR TAREA vuelve a cero
-  (`presupuesto.nuevaTarea`, `vueltasDeCadaHilo`) y no le corta el tope de vueltas del TURNO. Se compacta, y TARDE
-  (`core/contextos.ts#umbralDelDesarrolladorContinuo`). El orquestador lo sabe (`TEXTO_DEL_ORQUESTADOR_CONTINUO`).
-  **Si cierra con tareas pendientes, la llama el CÓDIGO por él** (`modeloLangchain.ts#alCerrar`), con lo que iba a decir
-  como resumen: tener la tool no bastaba. Y un encargo que nombra el plan SIN su ruta («plan `calc`») también cae en la
-  regla de una tarea (`core/encargoDeTarea.ts#planesPorSuNombre`).
-  **Sin NINGÚN criterio marcado, `siguiente_tarea` no pasa a la primera** (`textoSinEvidencia`; la segunda, sí: no
-  atasca). La ficha lleva detrás el ALCANCE y el CIERRE por criterio (`ALCANCE_Y_CIERRE_DE_LA_TAREA`), y al orquestador
-  se le dice que NO le pida seguir: «sigue con la 2» era lo que mezclaba las tareas.
+- **El desarrollador CONTINUO, como Codex** (`XONECODE_DEVELOPER_CONTINUO=1` u `opciones.developerContinuo`; apagado por
+  omisión, experimento): el orquestador le manda UNA tarea por encargo, revisa su informe y le manda la siguiente al
+  MISMO developer (`TEXTO_DEL_ORQUESTADOR_CONTINUO`), y su conversación sigue ENTERA (`memoriaDeEspecialistas.ts#completaDe`
+  hasta `UMBRAL_DEL_DESARROLLADOR_CONTINUO`): el prefijo no cambia y una redelegación sale de la caché. Su sistema no
+  depende del encargo (`TEXTO_DEL_DEVELOPER_CONTINUO`) y se compacta TARDE (`umbralDelDesarrolladorContinuo`). La ficha
+  lleva detrás el ALCANCE y el CIERRE por criterio (`ALCANCE_Y_CIERRE_DE_LA_TAREA`). Con `XONECODE_SIGUIENTE_TAREA=1`
+  (`siguienteTareaDelDesarrollador`) la pide él con `siguiente_tarea` (`siguienteTarea.ts`): si cierra con tareas
+  pendientes la llama el código (`modeloLangchain.ts#alCerrar`), y sin ningún criterio marcado no pasa a la primera
+  (`textoSinEvidencia`). Un encargo que nombra el plan sin su ruta también cae en la regla de una tarea
+  (`core/encargoDeTarea.ts#planesPorSuNombre`).
+- **`ejecutar_script` admite varias órdenes con `;` o `&&`** (`core/comandoExterno.ts#ordenesEncadenadas`, hasta
+  `TOPE_DE_ORDENES_ENCADENADAS`), cada una con la regla estrecha entera: para el modelo es un paso, no varios.
 - **Un hijo NO ARRANCA mientras trabaja aquel del que depende** (`espera:` en el `.md`, `esperas.ts`): se devuelve al
   orquestador al instante. **Nunca se espera bloqueando**. `developer-xone` espera a `designer-xone`. **Un encargo
   devuelto sin arrancar retira su anuncio** (`crearHijo#devolverSinArrancar`, `esperas.ts#noArranco`): si no, quien lo

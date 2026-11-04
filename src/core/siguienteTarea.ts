@@ -58,8 +58,8 @@ export const DESCRIPCION_DE_SIGUIENTE_TAREA =
   "Llámala cuando la tarea esté hecha, probada en el aparato y marcada (o cuando ya no puedas avanzar en ella: dilo en " +
   "`resumen`). Si no quedan tareas, te lo dice y cierras con tu informe final.";
 
-/** Al desarrollador, detrás de su bucle: cómo sigue. */
-export const TEXTO_DEL_DEVELOPER_CONTINUO = [
+/** Al desarrollador, detrás de su bucle, cuando la siguiente la pide él (`siguiente_tarea`). */
+export const TEXTO_DEL_DEVELOPER_CONTINUO_CON_SIGUIENTE = [
   `TRABAJAS EL PLAN ENTERO EN ESTE ENCARGO: al acabar una tarea (probada y marcada), llama a \`${NOMBRE_SIGUIENTE_TAREA}\` con un`,
   "`resumen` de una línea; te devuelve la ficha de la siguiente y sigues aquí mismo, con lo que ya sabes. No devuelvas el",
   "encargo hasta que te diga que no quedan tareas.",
@@ -71,9 +71,32 @@ export const TEXTO_DEL_DEVELOPER_CONTINUO = [
  * desarrollador construyó T1 y T2 a la vez sin marcar nada. Codex, con el mismo modelo, mandaba «SOLO la Tarea 1» y la
  * siguiente después, al mismo hilo. Aquí la siguiente la pone el harness al cerrar la tarea (`siguiente_tarea`).
  */
-export const TEXTO_DEL_ORQUESTADOR_CONTINUO = [
+export const TEXTO_DEL_ORQUESTADOR_CONTINUO_CON_SIGUIENTE = [
   "DESARROLLADOR CONTINUO: a developer-xone mándale SOLO la PRIMERA tarea pendiente del plan (`TAREA: <número>`) y NO le",
   "digas que siga con las demás: la siguiente se la da el harness, en el mismo encargo, cuando cierre la actual con sus",
   "criterios marcados. Volverá cuando no quede ninguna. Al volver, no le mandes otra salvo que su informe diga que alguna",
   "se quedó sin hacer.",
+].join("\n");
+
+/**
+ * Al desarrollador, detrás de su bucle, como en Codex: cada encargo es UNA tarea, y el siguiente le llega en esta misma
+ * conversación. El texto no cambia entre encargos: va en su sistema, y el prefijo tiene que ser el mismo.
+ */
+export const TEXTO_DEL_DEVELOPER_CONTINUO = [
+  "CADA ENCARGO ES UNA TAREA DEL PLAN, y el siguiente te llega AQUÍ MISMO, en esta conversación: lo que ya leíste y aprendiste",
+  "sigue valiendo, no lo releas si no cambió. Cierra la tarea con su informe por criterio y devuelve el encargo; no empieces",
+  "la siguiente por tu cuenta.",
+].join("\n");
+
+/**
+ * Al orquestador, como el de Codex (`spawn_agent` y después `send_input` al mismo hilo). Medido con Codex sobre la
+ * calculadora con DeepSeek: una tarea por encargo, revisión del informe y la siguiente al mismo desarrollador; las tres
+ * cerradas criterio a criterio, en una sola conversación del desarrollador.
+ */
+export const TEXTO_DEL_ORQUESTADOR_CONTINUO = [
+  "DESARROLLADOR CONTINUO: a developer-xone mándale UNA tarea del plan por encargo (`TAREA: <número>`), con lo que ya sabes",
+  "y lo que NO debe tocar todavía. Cuando vuelva, revisa su informe criterio a criterio: si algo quedó sin comprobar o se",
+  "contradice con el plan, resuélvelo; después mándale la SIGUIENTE al MISMO developer-xone. Su conversación sigue entera",
+  "(no la rehace), así que volver a encargarle es barato: no le repitas lo que ya sabe. No lo cambies por otro especialista",
+  "para comprobar lo que él ya probó en el aparato.",
 ].join("\n");

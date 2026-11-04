@@ -411,6 +411,18 @@ describe("ejecutar_script: los scripts de sus skills, sin shell", () => {
     expect(corridos).toEqual(["xone-hotswap click name=Entrar -- shot", "xone-hotswap fill name=MAP_LOGIN value='08 006'"]);
   });
 
+  it("como Codex, VARIOS de sus scripts en una llamada con ; o &&; cada orden pasa la regla entera", async () => {
+    const { corridos, correr } = conScripts();
+    expect((await correr("xone-hotswap atras ; xone-hotswap screen && xone-log-android --app")).result.isError).not.toBe(true);
+    // Un `;` DENTRO de comillas simples es texto, no un corte.
+    expect((await correr("xone-hotswap fill name=A value='a;b' && xone-hotswap screen")).result.isError).not.toBe(true);
+    expect(corridos).toEqual(["xone-hotswap atras ; xone-hotswap screen && xone-log-android --app", "xone-hotswap fill name=A value='a;b' && xone-hotswap screen"]);
+    for (const c of ["xone-hotswap screen ;", "xone-hotswap screen ; ; xone-hotswap shot", "xone-hotswap screen & xone-hotswap shot", Array(8).fill("xone-hotswap screen").join(" ; ")]) {
+      expect((await correr(c)).result.isError, c).toBe(true);
+    }
+    expect(corridos).toHaveLength(2);
+  });
+
   it("lo que no es uno de sus scripts, o lleva lo que la shell reinterpreta, vuelve como error y NO se corre", async () => {
     const { corridos, correr } = conScripts();
     for (const c of ["ls -la", "adb devices", "xone-hotswap shot; rm -rf /", "xone-log-android --app | grep x", "xone-hotswap shot > /tmp/x", "./xone-hotswap shot"]) {

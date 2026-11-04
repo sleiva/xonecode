@@ -239,7 +239,19 @@ export interface MemoriaDeEspecialistas {
   olvidar(): void;
 }
 
-export function crearMemoriaDeEspecialistas(topes: { completa?: number; reducida?: number } = {}): MemoriaDeEspecialistas {
+export function crearMemoriaDeEspecialistas(
+  topes: {
+    completa?: number;
+    reducida?: number;
+    /**
+     * El tope de la memoria ENTERA de un especialista en concreto, si es otro. Es el desarrollador CONTINUO: como el
+     * `send_input` de Codex, su siguiente encargo sigue su conversación tal cual —el prefijo no cambia y sale de la
+     * caché— hasta que la compactación del hilo la resuma (`umbralDelDesarrolladorContinuo`). Reducida o en ventana,
+     * cada redelegación era una conversación nueva: sin caché y releyendo lo que ya había leído.
+     */
+    completaDe?: (nombre: string) => number | undefined;
+  } = {}
+): MemoriaDeEspecialistas {
   const completa = topes.completa ?? TOPE_COMPLETA_TOKENS;
   const reducida = topes.reducida ?? TOPE_REDUCIDA_TOKENS;
   const guardada = new Map<string, EncarnacionPrevia>();
@@ -276,7 +288,7 @@ export function crearMemoriaDeEspecialistas(topes: { completa?: number; reducida
         perdidas.delete(nombre);
         return cabe ? "guardada-reducida" : "guardada-ventana";
       }
-      if (tokens <= completa) {
+      if (tokens <= (topes.completaDe?.(nombre) ?? completa)) {
         guardada.set(nombre, { mensajes: saneados, tokens });
         perdidas.delete(nombre);
         return "guardada";

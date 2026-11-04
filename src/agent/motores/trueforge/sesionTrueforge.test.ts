@@ -4436,7 +4436,7 @@ describe("un encargo de un plan es UNA tarea, con su línea `TAREA:`", () => {
       [new AIMessageChunk({ content: "las dos tareas hechas" })],
       [new AIMessageChunk({ content: "Hecho." })],
     ]);
-    const s = await abrirSesionTrueforge({ raiz: conPlanMarcado(), modelos: m, entorno: ENTORNO, skills: CATALOGO, bucleDelDesarrollador: true, developerContinuo: true });
+    const s = await abrirSesionTrueforge({ raiz: conPlanMarcado(), modelos: m, entorno: ENTORNO, skills: CATALOGO, bucleDelDesarrollador: true, developerContinuo: true, siguienteTareaDelDesarrollador: true });
     await s.turno("haz la calculadora del plan calc", piel().p);
     // El orquestador sabe que basta con la primera.
     expect(vistos[0]!.join("\n")).toContain("DESARROLLADOR CONTINUO");
@@ -4459,7 +4459,7 @@ describe("un encargo de un plan es UNA tarea, con su línea `TAREA:`", () => {
       [new AIMessageChunk({ content: "El teclado también." })],
       [new AIMessageChunk({ content: "Hecho." })],
     ]);
-    const s = await abrirSesionTrueforge({ raiz: conPlanMarcado(), modelos: m, entorno: ENTORNO, skills: CATALOGO, bucleDelDesarrollador: true, developerContinuo: true });
+    const s = await abrirSesionTrueforge({ raiz: conPlanMarcado(), modelos: m, entorno: ENTORNO, skills: CATALOGO, bucleDelDesarrollador: true, developerContinuo: true, siguienteTareaDelDesarrollador: true });
     await s.turno("haz la calculadora del plan calc", piel().p);
     const tras1 = vistos[2]!.join("\n");
     expect(tras1).toContain("La pantalla está hecha.");
@@ -4480,12 +4480,35 @@ describe("un encargo de un plan es UNA tarea, con su línea `TAREA:`", () => {
       [new AIMessageChunk({ content: "no puedo probarla" })],
       [new AIMessageChunk({ content: "Hecho." })],
     ]);
-    const s = await abrirSesionTrueforge({ raiz: conPlan(), modelos: m, entorno: ENTORNO, skills: CATALOGO, bucleDelDesarrollador: true, developerContinuo: true });
+    const s = await abrirSesionTrueforge({ raiz: conPlan(), modelos: m, entorno: ENTORNO, skills: CATALOGO, bucleDelDesarrollador: true, developerContinuo: true, siguienteTareaDelDesarrollador: true });
     await s.turno("haz la calculadora del plan calc", piel().p);
     expect(vistos[2]!.join("\n")).toContain("La tarea 01 NO se cierra todavía: tiene 1 criterio(s) y no hay ninguno marcado");
     expect(vistos[3]!.join("\n")).toContain("Tarea 01 cerrada. SIGUE en esta misma conversación");
     // El encargo lleva el alcance y el cierre por criterio detrás de la ficha.
     expect(vistos[1]!.join("\n")).toContain("ALCANCE: haz SOLO esta tarea.");
+  }, 30_000);
+
+  it("CONTINUO como Codex: el orquestador manda la siguiente al MISMO developer y su conversación sigue ENTERA", async () => {
+    const leer = new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "r1", name: "read_file", args: JSON.stringify({ file_path: "/Clientes.xne" }) }] });
+    const { m, vistos, toolsPorLlamada } = modelosConGuion([
+      [delega("d1", "TAREA: 01\nDel plan /planes/calc/: la pantalla.")],
+      [leer],
+      [new AIMessageChunk({ content: "T1 hecha: [x] se ve" })],
+      [delega("d2", "TAREA: 02\nDel plan /planes/calc/: el teclado.")],
+      [new AIMessageChunk({ content: "T2 hecha" })],
+      [new AIMessageChunk({ content: "Hecho." })],
+    ]);
+    const s = await abrirSesionTrueforge({ raiz: conPlanMarcado(), modelos: m, entorno: ENTORNO, skills: CATALOGO, bucleDelDesarrollador: true, developerContinuo: true });
+    await s.turno("haz la calculadora del plan calc", piel().p);
+    expect(vistos[0]!.join("\n")).toContain("mándale la SIGUIENTE al MISMO developer-xone");
+    expect(toolsPorLlamada[1]).not.toContain("siguiente_tarea");
+    // El segundo encargo lleva DELANTE la primera conversación entera, con lo que devolvió la tool sin recortar.
+    const segundo = vistos[4]!.join("\n");
+    expect(segundo).toContain("## 01 — La pantalla");
+    expect(segundo).toContain("T1 hecha: [x] se ve");
+    expect(segundo).toContain("NUEVO ENCARGO");
+    expect(segundo).toContain("## 02 — El teclado");
+    expect(segundo).toContain("CADA ENCARGO ES UNA TAREA DEL PLAN");
   }, 30_000);
 
   it("en una tarea de fondo no se exige: manda el tope de encargos", async () => {

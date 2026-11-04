@@ -39,6 +39,39 @@ function palabras(comando: string): string[] | undefined {
   return salida;
 }
 
+/** Cuántas órdenes como mucho en un encadenado (`a; b && c`). */
+export const TOPE_DE_ORDENES_ENCADENADAS = 6;
+
+/**
+ * Un comando partido en sus órdenes por los `;` y `&&` de FUERA de las comillas simples, con el separador que va delante de
+ * cada una a partir de la segunda; `undefined` si una comilla no cierra o queda una orden vacía. Como Codex, que junta
+ * `xone-hotswap atras; sleep 1; xone-hotswap screen` en una llamada: para el modelo es UN paso, no tres. Cada orden se
+ * valida después con la regla estrecha, así que el encadenado no abre la shell.
+ */
+export function ordenesEncadenadas(comando: string): { ordenes: string[]; separadores: (";" | "&&")[] } | undefined {
+  const ordenes: string[] = [];
+  const separadores: (";" | "&&")[] = [];
+  let actual = "";
+  let enComillas = false;
+  for (let i = 0; i < comando.length; i++) {
+    const c = comando[i]!;
+    if (c === "'") enComillas = !enComillas;
+    const corte = enComillas ? undefined : c === ";" ? ";" : c === "&" && comando[i + 1] === "&" ? "&&" : undefined;
+    if (corte === undefined) {
+      actual += c;
+      continue;
+    }
+    if (actual.trim() === "") return undefined;
+    ordenes.push(actual.trim());
+    separadores.push(corte);
+    actual = "";
+    if (corte === "&&") i++;
+  }
+  if (enComillas || actual.trim() === "") return undefined;
+  ordenes.push(actual.trim());
+  return { ordenes, separadores };
+}
+
 /**
  * El motivo por el que ese comando NO se deja correr, o `undefined` si se deja. `scripts` son los
  * nombres (sin ruta) de los ejecutables de las skills del agente. El motivo dice la forma que sí

@@ -50,6 +50,16 @@ describe("la memoria de cada especialista en la sesión", () => {
     expect(JSON.stringify(ms[1])).toContain("/a.css");
   });
 
+  it("con `completaDe`, un especialista guarda su conversación ENTERA por encima del tope común (el continuo)", () => {
+    const m = crearMemoriaDeEspecialistas({ completa: 10, reducida: 100_000, completaDe: (n) => (n === "developer-xone" ? 160_000 : undefined) });
+    m.abrir("developer-xone", "h1");
+    expect(m.cerrar("h1", { bien: true, mensajes: CON_FICHERO, tokens: 65_000 })).toBe("guardada");
+    const r = m.abrir("developer-xone", "h2");
+    expect("previa" in r && r.previa.mensajes).toEqual(CON_FICHERO);
+    m.abrir("consultant-xone", "h3");
+    expect(m.cerrar("h3", { bien: true, mensajes: CON_FICHERO, tokens: 65_000 })).toBe("guardada-reducida");
+  });
+
   /** Tres delegaciones seguidas, cada una con su encargo, una llamada a tool y su respuesta, y lo que dijo al cerrar. */
   const delegacion = (n: number, peso = 200) => [
     { role: "user", content: `encargo ${String(n)}` },

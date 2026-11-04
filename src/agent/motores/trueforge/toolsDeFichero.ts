@@ -36,7 +36,7 @@ import { desalojarSiGrande, MAXIMO_DE_COINCIDENCIAS, truncarSiLargo } from "./re
 import { motivoDeTasksInaceptable, RUTA_DE_TASKS } from "../../../core/tareasDelPlan.js";
 import { motivoDeComandoRechazado, motivoDeOtroAparato } from "../../../core/shellDeAgente.js";
 import type { DispositivoDeLaSesion } from "../../../core/dispositivoDeSesion.js";
-import { comandoConNode, conScriptsPorNode, motivoDeComandoExternoInaceptable, motivoDeScriptSustituido } from "../../../core/comandoExterno.js";
+import { comandoConNode, conScriptsPorNode, motivoDeComandoExternoInaceptable, motivoDeScriptSustituido, ordenesEncadenadas, TOPE_DE_ORDENES_ENCADENADAS } from "../../../core/comandoExterno.js";
 
 /** El backend de deepagents en su versión nueva, en lo que se usa. */
 export interface BackendDeFicheros {
@@ -556,8 +556,9 @@ export function fuenteDeEjecucion(
             description:
               estrecha === undefined
                 ? "Runs a shell command in the project root and returns its output and exit code. Use the xone-* scripts of your skills."
-                : `Runs ONE script of your skills by its name, in the project root, and returns its output and exit code: ${estrecha.join(", ")}. ` +
-                  "Arguments as plain words or in single quotes; no ;, &&, |, >, $ nor double quotes. Any of them with --help says how it is used.",
+                : `Runs your skills' scripts by name, in the project root, and returns its output and exit code: ${estrecha.join(", ")}. ` +
+                  "Arguments as plain words or in single quotes; no |, >, $ nor double quotes. Several scripts in ONE call with ; or && " +
+                  `(up to ${String(TOPE_DE_ORDENES_ENCADENADAS)}): \`xone-hotswap atras ; xone-hotswap screen\`. Any of them with --help says how it is used.`,
             inputSchema: { type: "object" as const, properties: { command: { type: "string" } }, required: ["command"] },
             preload: true,
           },
@@ -570,19 +571,30 @@ export function fuenteDeEjecucion(
       if (params.name !== nombre || typeof comando !== "string" || comando.trim() === "") {
         return toolResultResponse({ text: `${nombre} necesita un \`command\``, isError: true });
       }
-      const fueraDeForma =
-        estrecha === undefined ? undefined : (motivoDeScriptSustituido(comando, estrecha) ?? motivoDeComandoExternoInaceptable(comando, estrecha));
-      if (fueraDeForma !== undefined) return toolResultResponse({ text: fueraDeForma, isError: true });
-      // Una búsqueda por el disco entero no se lanza (`motivoDeComandoRechazado`): se devuelve el camino bueno.
-      // Y uno que iría a OTRO aparato que el de la sesión (`motivoDeOtroAparato`): el elegido se pasa siempre.
-      const rechazo = motivoDeComandoRechazado(comando) ?? motivoDeOtroAparato(comando, dispositivo());
-      if (rechazo !== undefined) return toolResultResponse({ text: rechazo, isError: true });
+      // La forma ESTRECHA admite varias órdenes con `;` y `&&` (`ordenesEncadenadas`), y CADA UNA pasa la regla entera.
+      const encadenado = estrecha === undefined ? { ordenes: [comando], separadores: [] } : ordenesEncadenadas(comando.trim());
+      if (encadenado === undefined || encadenado.ordenes.length > TOPE_DE_ORDENES_ENCADENADAS) {
+        const texto = `Como mucho ${String(TOPE_DE_ORDENES_ENCADENADAS)} órdenes de tus scripts, separadas por ; o &&, sin órdenes vacías ni comillas sin cerrar.`;
+        return toolResultResponse({ text: texto, isError: true });
+      }
+      for (const orden of encadenado.ordenes) {
+        const fueraDeForma =
+          estrecha === undefined ? undefined : (motivoDeScriptSustituido(orden, estrecha) ?? motivoDeComandoExternoInaceptable(orden, estrecha));
+        if (fueraDeForma !== undefined) return toolResultResponse({ text: fueraDeForma, isError: true });
+        // Una búsqueda por el disco entero no se lanza (`motivoDeComandoRechazado`): se devuelve el camino bueno.
+        // Y uno que iría a OTRO aparato que el de la sesión (`motivoDeOtroAparato`): el elegido se pasa siempre.
+        const rechazo = motivoDeComandoRechazado(orden) ?? motivoDeOtroAparato(orden, dispositivo());
+        if (rechazo !== undefined) return toolResultResponse({ text: rechazo, isError: true });
+      }
+      const enNode = enWindows === undefined || estrecha === undefined ? undefined : encadenado.ordenes.map((o) => comandoConNode(o, enWindows.rutas, enWindows.node));
       const lanzado =
         enWindows === undefined
           ? comando
           : estrecha === undefined
             ? conScriptsPorNode(comando, enWindows.rutas, enWindows.node)
-            : comandoConNode(comando, enWindows.rutas, enWindows.node);
+            : enNode!.some((o) => o === undefined)
+              ? undefined
+              : enNode!.map((o, i) => (i === 0 ? o! : `${encadenado.separadores[i - 1]!} ${o!}`)).join(" ");
       if (lanzado === undefined) {
         return toolResultResponse({ text: "XOneCode no sabe dónde está ese script en esta máquina, así que no se ejecuta.", isError: true });
       }

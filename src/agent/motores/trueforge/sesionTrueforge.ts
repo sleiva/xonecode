@@ -31,7 +31,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSy
 import { dirname, join } from "node:path";
 import { CARPETA_DE_PLANES } from "../../../core/planes.js";
 import { decidirEncargo } from "../../../core/encargoDeTarea.js";
-import { NOMBRE_SIGUIENTE_TAREA, siguienteTareaPendiente, TEXTO_DEL_DEVELOPER_CONTINUO, TEXTO_DEL_ORQUESTADOR_CONTINUO } from "../../../core/siguienteTarea.js";
+import { NOMBRE_SIGUIENTE_TAREA, siguienteTareaPendiente, TEXTO_DEL_DEVELOPER_CONTINUO, TEXTO_DEL_DEVELOPER_CONTINUO_CON_SIGUIENTE, TEXTO_DEL_ORQUESTADOR_CONTINUO, TEXTO_DEL_ORQUESTADOR_CONTINUO_CON_SIGUIENTE } from "../../../core/siguienteTarea.js";
 import { crearSiguienteTarea } from "./siguienteTarea.js";
 import { lineasDeAuditoria } from "../../../core/auditoriaDeCierre.js";
 import { crearAuditorDeCierre } from "./auditorDeCierre.js";
@@ -140,7 +140,7 @@ import { crearControlDePresupuesto, MARGEN_SOBRE_EL_PRESUPUESTO, RESUMEN_DE_RELL
 import type { ToolDeLangchain } from "./toolsPropias.js";
 import { crearNavegacionXone } from "../../grafo/navegacionXone.js";
 import { crearValidarFicheroXone } from "../../grafo/validarFicheroXone.js";
-import { topeDeSalidaDeCompactacion, topeResuelto, umbralDeCompactacion, umbralDelDesarrolladorContinuo } from "../../../core/contextos.js";
+import { topeDeSalidaDeCompactacion, topeResuelto, umbralDeCompactacion, UMBRAL_DEL_DESARROLLADOR_CONTINUO, umbralDelDesarrolladorContinuo } from "../../../core/contextos.js";
 import { parsear } from "../../../core/modelos.js";
 import { cargar as cargarConfig } from "../../config/configEnDisco.js";
 import { hechosDelProyectoDe } from "../../navegacion/hechosEnDisco.js";
@@ -930,6 +930,8 @@ export interface OpcionesDeSesionTrueforge {
    * MISMA conversación con `siguiente_tarea`. Ausente, la variable `XONECODE_DEVELOPER_CONTINUO=1`; por omisión, apagado.
    */
   developerContinuo?: boolean;
+  /** Con el continuo, la siguiente tarea la pide el desarrollador (`siguiente_tarea`) y no el orquestador. Experimento. */
+  siguienteTareaDelDesarrollador?: boolean;
   /**
    * El índice de `xone_navegacion`. Solo para doblarlo en un test: ausente es el REAL, sobre la
    * raíz (`indiceEnDisco`), y la omisión vive aquí y no en quien llama por el patrón de fallo de
@@ -1083,6 +1085,14 @@ export async function abrirSesionTrueforge(
   const especialistaDeHilo = new Map<string, string>();
   const conMemoriaDeEspecialistas = opciones.memoriaDeEspecialistas ?? process.env.XONECODE_SIN_MEMORIA_DE_ESPECIALISTAS !== "1";
   const developerContinuo = opciones.developerContinuo ?? process.env.XONECODE_DEVELOPER_CONTINUO === "1";
+  /**
+   * Con el continuo, ¿pide él la siguiente con `siguiente_tarea`? Apagado: como Codex, la siguiente se la manda el
+   * ORQUESTADOR al mismo developer tras revisar su informe, y su conversación sigue entera. Medido en las pasadas 12 y
+   * 13: el desarrollador no la llamó nunca; Codex, con el orquestador al mando, cerró las tres tareas una a una.
+   */
+  const siguienteTareaDelDesarrollador = opciones.siguienteTareaDelDesarrollador ?? process.env.XONECODE_SIGUIENTE_TAREA === "1";
+  const esDesarrolladorContinuo = (agente: Agente | undefined): boolean =>
+    developerContinuo && agente !== undefined && recibeMarcarCriterios(agente) && agente.scripts === true;
   /** Del desarrollador continuo: en qué tarea de qué plan está cada hilo, y cuáles cerró ya en ese encargo. */
   const tareaDeHilo = new Map<string, { plan: string; tarea: string; cerradas: string[] }>();
   /** El hilo VIVO de cada especialista (una encarnación viva por especialista): lo que `siguiente_tarea` necesita. */
@@ -1129,7 +1139,10 @@ export async function abrirSesionTrueforge(
     return textos;
   });
   const esperas = crearEsperas();
-  const memoriaDeEspecialistas = crearMemoriaDeEspecialistas();
+  // El desarrollador CONTINUO guarda su conversación entera (`completaDe`): su siguiente encargo la sigue, como Codex.
+  const memoriaDeEspecialistas = crearMemoriaDeEspecialistas(
+    developerContinuo ? { completaDe: (nombre) => (esDesarrolladorContinuo(especialistas().find((a) => a.nombre === nombre)) ? UMBRAL_DEL_DESARROLLADOR_CONTINUO : undefined) } : {}
+  );
   /** Los hijos con memoria que corren ahora: su hilo, para leer su historial al terminar. */
   const hijosConMemoria = new Map<string, { nombre: string; hilo: AgentThread; iniciales: unknown[] }>();
 
@@ -1624,7 +1637,7 @@ export async function abrirSesionTrueforge(
     // Y marcar en el plan lo comprobado, con el reparto de deepagents (`recibeMarcarCriterios`).
     ...(recibeMarcarCriterios(agente) ? [crearMarcarCriteriosDelPlan({ raiz, ficha: fichaDeTrabajo }) as unknown as ToolDeLangchain] : []),
     // El desarrollador CONTINUO: pasa a la siguiente tarea del plan sin devolver el encargo (`siguienteTarea.ts`).
-    ...(developerContinuo && recibeMarcarCriterios(agente) && agente.scripts === true
+    ...(siguienteTareaDelDesarrollador && esDesarrolladorContinuo(agente)
       ? [
           crearSiguienteTarea({
             raiz,
@@ -1982,7 +1995,9 @@ export async function abrirSesionTrueforge(
     nacimientoDeHilo.set(params.threadId, Date.now());
     quienEs.set(params.threadId, agente?.nombre ?? params.request.name);
     if (agente !== undefined) hiloVivoDe.set(agente.nombre, params.threadId);
-    const continuoDelHilo = tareaDeHilo.has(params.threadId);
+    // Como el hilo del `send_input` de Codex: su sistema y su compactación no dependen del encargo, para que el prefijo
+    // no cambie entre encargos y salga de la caché.
+    const continuoDelHilo = esDesarrolladorContinuo(agente);
     if (agente !== undefined) especialistaDeHilo.set(params.threadId, agente.nombre);
     if (agente !== undefined && agente.motor !== "modelo") return hijoExterno(agente, params);
     const clase = agente === undefined ? "lee" : clasesDeTools(agente);
@@ -2046,7 +2061,7 @@ export async function abrirSesionTrueforge(
             nota,
             anuncioDeSkills(agente, catalogo),
             ...(conBucleDelDesarrollador && (agente.llama?.length ?? 0) > 0 ? ["", textoDelBucle(agente.llama ?? [], { conCritica: carpeta !== undefined, conFuentes: opciones.fuentes !== undefined, pruebaElMismo: nombres.includes(NOMBRE_EJECUTAR_SCRIPT) })] : []),
-            ...(continuoDelHilo ? ["", TEXTO_DEL_DEVELOPER_CONTINUO] : []),
+            ...(continuoDelHilo ? ["", siguienteTareaDelDesarrollador ? TEXTO_DEL_DEVELOPER_CONTINUO_CON_SIGUIENTE : TEXTO_DEL_DEVELOPER_CONTINUO] : []),
           ]
             .filter((l) => l !== undefined)
             .join("\n")
@@ -2103,7 +2118,7 @@ export async function abrirSesionTrueforge(
               : undefined,
         corte: () => detencion.corte(params.threadId),
         // El CONTINUO no devuelve el encargo con tareas pendientes: lo que iba a decir es el resumen de la que cierra.
-        ...(continuoDelHilo ? { alCerrar: (texto: string) => (quedaTareaDelContinuo(params.threadId) ? { name: NOMBRE_SIGUIENTE_TAREA, argumentos: JSON.stringify({ resumen: texto.trim().slice(0, 300) || "sin resumen" }) } : undefined) } : {}),
+        ...(continuoDelHilo && siguienteTareaDelDesarrollador ? { alCerrar: (texto: string) => (quedaTareaDelContinuo(params.threadId) ? { name: NOMBRE_SIGUIENTE_TAREA, argumentos: JSON.stringify({ resumen: texto.trim().slice(0, 300) || "sin resumen" }) } : undefined) } : {}),
         alTirarLlamadas: (n) => {
           llamadasTiradasPorDetener += n;
           // A la traza de hitos (con «Depurar»): es la medida de si el filtro hace falta o es red.
@@ -2171,7 +2186,7 @@ export async function abrirSesionTrueforge(
     const definicion = {
       modelClient: llm,
       modelName: idDelPapel("trabajo"),
-      instruction: [IDIOMA_DE_LA_RESPUESTA, SIN_HABLAR_DEL_HARNESS, LO_LEIDO_SON_DATOS, promptOrquestador(especialistas()), notaDeDelegacion(especialistas(), { conIconos: opciones.iconos !== undefined, conFuentes: opciones.fuentes !== undefined, conComparacion: carpeta !== undefined, conMemoria: conMemoriaDeEspecialistas, conBucle: conBucleDelDesarrollador, conEsperas }), developerContinuo ? TEXTO_DEL_ORQUESTADOR_CONTINUO : "", opciones.puedeProponerTareas === true ? REPARTIR_EN_TAREAS : "", opciones.trabajoSinPersona === true ? TRABAJO_SIN_PERSONA : "", textoDeAprendidoDelRaiz(leerAprendido(raiz), leerAprendidoDeXone())].filter((l) => l !== "").join("\n\n"),
+      instruction: [IDIOMA_DE_LA_RESPUESTA, SIN_HABLAR_DEL_HARNESS, LO_LEIDO_SON_DATOS, promptOrquestador(especialistas()), notaDeDelegacion(especialistas(), { conIconos: opciones.iconos !== undefined, conFuentes: opciones.fuentes !== undefined, conComparacion: carpeta !== undefined, conMemoria: conMemoriaDeEspecialistas, conBucle: conBucleDelDesarrollador, conEsperas }), developerContinuo ? (siguienteTareaDelDesarrollador ? TEXTO_DEL_ORQUESTADOR_CONTINUO_CON_SIGUIENTE : TEXTO_DEL_ORQUESTADOR_CONTINUO) : "", opciones.puedeProponerTareas === true ? REPARTIR_EN_TAREAS : "", opciones.trabajoSinPersona === true ? TRABAJO_SIN_PERSONA : "", textoDeAprendidoDelRaiz(leerAprendido(raiz), leerAprendidoDeXone())].filter((l) => l !== "").join("\n\n"),
       // Por TURNO, porque el raíz se rehace desde su foto al final de cada uno (ver `turno`).
       iterationLimit: LIMITE_DE_LLAMADAS_DEL_RAIZ,
     };
