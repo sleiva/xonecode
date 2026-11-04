@@ -656,10 +656,11 @@ describe("PanelDelProyecto", () => {
     expect(screen.getByText("Vinculado a IXCODE en xone.")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Desvincular" }));
     expect(alGestor).toHaveBeenCalledWith({ accion: "desvincular" });
-    // DeepWiki, conectado y no gestor: su interruptor, el primero de la fila.
+    // Jira es el gestor: lo dice su columna de Tareas.
+    expect(within(filaDe("Jira")).getByText("gestor")).toBeTruthy();
+    // DeepWiki, conectado y no gestor: su interruptor, en la columna del chat.
     const interruptor = within(filaDe("DeepWiki")).getByRole("switch", { name: "Usar en este proyecto" });
     expect(interruptor.getAttribute("aria-checked")).toBe("false");
-    expect(filaDe("DeepWiki").querySelector("div")?.firstElementChild).toBe(interruptor);
     fireEvent.click(interruptor);
     expect(alGestor).toHaveBeenCalledWith({ accion: "usarConector", conector: "deepwiki", usar: true });
     expect(screen.getAllByRole("switch")).toHaveLength(1);
@@ -883,30 +884,56 @@ describe("PanelDelProyecto", () => {
     asignado: "Assigned",
   };
   const seccion = (nombre: string) => screen.getByRole("region", { name: nombre });
-  /** La fila de Notion en «Gestor de tareas»: Jira, conectado y sin vínculo, tiene su propio «Vincular». */
-  const notion = () => within(within(seccion("Gestor de tareas")).getByText("Notion", { selector: "span" }).closest("li")!);
+  /** La fila de Notion en la tabla de servicios: Jira, conectado y sin vínculo, tiene su propio «Vincular». */
+  const servicios = () => seccion("Servicios del proyecto");
+  const filaDe = (nombre: string) => within(servicios()).getByText(nombre, { selector: "span" }).closest("li")!;
+  const notion = () => within(filaDe("Notion"));
 
-  it("Conectores en DOS secciones: «Gestor de tareas» solo con Jira y Notion; «Conectores para el chat» con el resto, «Conectar» y casilla", () => {
+  it("Conectores en UNA tabla de servicios: los gestores (Jira, Notion) arriba y sin interruptor de chat; el resto con su interruptor y su «Conectar»", () => {
     const { alGestor, props } = montar({ gestor: { estado: { conectores: ["deepwiki"] } }, conectores: CON_NOTION });
     pestana("Conectores");
-    const gestores = seccion("Gestor de tareas");
-    const chat = seccion("Conectores para el chat");
-    expect(within(gestores).getAllByRole("listitem")).toHaveLength(2);
-    expect(within(gestores).getByText("Jira", { selector: "span" })).toBeTruthy();
-    expect(within(gestores).getByText("Notion", { selector: "span" })).toBeTruthy();
-    expect(within(gestores).queryByText("DeepWiki")).toBeNull();
-    expect(within(gestores).queryByRole("switch")).toBeNull();
-    expect(within(chat).getByText("Los que usará el agente en el chat de este proyecto.")).toBeTruthy();
-    expect(within(chat).queryByText("Jira", { selector: "span" })).toBeNull();
-    expect(within(chat).queryByText("Notion", { selector: "span" })).toBeNull();
-    const interruptor = within(chat).getByRole("switch", { name: "Usar en este proyecto" });
+    const filas = within(servicios()).getAllByRole("listitem");
+    expect(filas[0]!.textContent).toMatch(/^Jira/);
+    expect(filas[1]!.textContent).toMatch(/^Notion/);
+    expect(within(filaDe("Jira")).queryByRole("switch")).toBeNull();
+    expect(within(filaDe("Notion")).queryByRole("switch")).toBeNull();
+    // Sin vínculo, cada gestor lo dice en su columna de Tareas.
+    expect(within(filaDe("Jira")).getByText("sin vincular")).toBeTruthy();
+    // DeepWiki no es gestor: «—» en Tareas y su interruptor en Chat.
+    expect(within(filaDe("DeepWiki")).queryByText("sin vincular")).toBeNull();
+    const interruptor = within(filaDe("DeepWiki")).getByRole("switch", { name: "Usar en este proyecto" });
     expect(interruptor.getAttribute("aria-checked")).toBe("true");
+    expect(within(filaDe("DeepWiki")).getByText("en el chat")).toBeTruthy();
     fireEvent.click(interruptor);
     expect(alGestor).toHaveBeenCalledWith({ accion: "usarConector", conector: "deepwiki", usar: false });
-    fireEvent.click(within(chat).getByRole("button", { name: "Conectar GitHub" }));
+    fireEvent.click(within(filaDe("GitHub")).getByRole("button", { name: "Conectar GitHub" }));
     expect(props.alAutorizarConector).toHaveBeenCalledWith("github");
     // Notion, sin vínculo: nada se pide al montar (buscar necesita texto).
     expect(alGestor).not.toHaveBeenCalledWith(expect.objectContaining({ conector: "notion" }));
+  });
+
+  it("Stitch en su fila: Diseño y Chat en la misma, con el vínculo en «Con qué» y su elección desplegada debajo", () => {
+    const conStitch = {
+      ...CONECTORES,
+      catalogo: [...CONECTORES.catalogo, { id: "stitch", nombre: "Stitch", descripcion: "", autenticacion: "oauth" as const }],
+      conectores: [...CONECTORES.conectores, { id: "stitch", estado: "autorizado" as const, prueba: { cuando: 1, ok: true as const, tools: [] } }],
+    };
+    const alDiseno = vi.fn();
+    const { rerender } = montar({ gestor: { estado: { conectores: ["stitch"] } }, conectores: conStitch, alDiseno, diseno: { vinculo: null } });
+    pestana("Conectores");
+    // Con diseño, la tabla tiene su columna.
+    expect(within(servicios()).getByText("Diseño")).toBeTruthy();
+    expect(within(filaDe("Stitch")).getByText("sin vincular")).toBeTruthy();
+    expect(within(filaDe("Stitch")).getByRole("switch", { name: "Usar en este proyecto" }).getAttribute("aria-checked")).toBe("true");
+    expect(alDiseno).toHaveBeenCalledWith({ accion: "estado" });
+    // La elección del proyecto de Stitch va bajo su fila, sin repetir el título de la sección.
+    expect(within(filaDe("Stitch")).getByRole("button", { name: "Vincular un proyecto de Stitch" })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Diseño (Stitch)" })).toBeNull();
+    rerender({ diseno: { vinculo: { proyecto: "projects/1", nombre: "Maset" } } });
+    expect(within(filaDe("Stitch")).getByText("vinculado")).toBeTruthy();
+    expect(within(filaDe("Stitch")).getByText("«Maset» · en el chat")).toBeTruthy();
+    // DeepWiki no hace diseño: su columna, «—».
+    expect(within(filaDe("DeepWiki")).queryByText("sin vincular")).toBeNull();
   });
 
   it("Notion: buscar → lista de bases → describir → lo entendido del esquema → «Vincular» con el `collection://` (no el id de la base)", () => {
@@ -980,10 +1007,9 @@ describe("PanelDelProyecto", () => {
   it("con Jira vinculado, Notion AVISA de que lo sustituirá; y con Notion vinculado, lo mismo desde Jira", () => {
     const { alGestor, rerender } = montar({ gestor: VINCULADO, conectores: CON_NOTION });
     pestana("Conectores");
-    const gestores = seccion("Gestor de tareas");
     // El vinculado, arriba.
-    expect(within(gestores).getAllByRole("listitem")[0]!.textContent).toMatch(/^Jira/);
-    expect(within(gestores).getByText("Vinculado a IXCODE en xone.")).toBeTruthy();
+    expect(within(servicios()).getAllByRole("listitem")[0]!.textContent).toMatch(/^Jira/);
+    expect(within(filaDe("Jira")).getByText("Vinculado a IXCODE en xone.")).toBeTruthy();
     // El formulario del otro no se monta de entrada.
     expect(screen.queryByRole("searchbox", { name: "Buscar una base de Notion" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Vincular Notion en su lugar…" }));
@@ -1000,7 +1026,7 @@ describe("PanelDelProyecto", () => {
     // Ya con Notion vinculado: arriba, con el nombre de la base; Jira ofrece sustituirlo.
     alGestor.mockClear();
     rerender({ gestor: VINCULADO_A_NOTION });
-    expect(within(seccion("Gestor de tareas")).getAllByRole("listitem")[0]!.textContent).toMatch(/^Notion/);
+    expect(within(servicios()).getAllByRole("listitem")[0]!.textContent).toMatch(/^Notion/);
     expect(screen.getByText("Vinculado a la base «Tasks» de Notion.")).toBeTruthy();
     expect(alGestor).not.toHaveBeenCalledWith({ accion: "sitios", conector: "jira" });
     fireEvent.click(screen.getByRole("button", { name: "Vincular Jira en su lugar…" }));

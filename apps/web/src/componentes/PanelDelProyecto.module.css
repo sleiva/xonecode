@@ -413,6 +413,93 @@
   border-bottom: 0.5px solid var(--dsw-alias-border-l2);
 }
 
+/* La tabla de servicios de la pestaña Conectores (opción B del lienzo): una fila por servicio, sus
+   usos en columnas. La rejilla la comparten la cabecera y cada fila; con Diseño tiene una columna más. */
+.servicios {
+  --columnas-de-servicio: minmax(180px, 2fr) repeat(2, minmax(80px, 1fr)) minmax(0, 2fr);
+  display: flex;
+  flex-direction: column;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 10px;
+  padding: 0 14px;
+}
+
+.servicios[data-con-diseno] {
+  --columnas-de-servicio: minmax(180px, 2fr) repeat(3, minmax(80px, 1fr)) minmax(0, 2fr);
+}
+
+.cabeceraDeServicios,
+.filaDeServicio {
+  display: grid;
+  grid-template-columns: var(--columnas-de-servicio);
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.cabeceraDeServicios {
+  padding: 10px 0 8px;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.servicios .conector:last-child {
+  border-bottom: none;
+}
+
+.celdaDeServicio {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  min-width: 0;
+}
+
+.celda {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.conQue {
+  min-width: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.nada {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.marca,
+.marcaActiva {
+  display: inline-flex;
+  padding: 2px 10px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 999px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.marcaActiva {
+  border-color: var(--xonecode-azul);
+  color: var(--dsw-alias-label-primary);
+  font-weight: 600;
+}
+
+/* Lo que se edita de un servicio va bajo su fila, alineado con su nombre. */
+.cuerpoDeServicio {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 0 4px 28px;
+}
+
 .filaDeConector {
   display: flex;
   flex-wrap: wrap;
@@ -638,4 +725,13 @@
 
 .cifrasDePlan dd[data-tono="aviso"] {
   color: var(--xonecode-naranja);
+}
+
+.cuerpoDeServicio .vinculo {
+  padding-left: 0;
+}
+
+/* En la fila de un servicio las etiquetas del formulario no se parten («Proyecto de Jira» salía en dos líneas). */
+.cuerpoDeServicio .casilla {
+  white-space: nowrap;
 }

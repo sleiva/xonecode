@@ -1449,9 +1449,10 @@ export function Ajustes({
         La CAPA y el VELO son nuestros, y no un adorno: los CSS Modules del primitivo son
         stubs vacíos, así que su `dialog` y su máscara no traen ni posición ni tamaño. Sin
         esto la ventana se pintaba al final del `body`, debajo de la aplicación entera —
-        montada y fuera de la vista, que desde fuera se lee como «el botón no hace nada». */}
-    // Un modal DE VERDAD: ni Escape ni el clic fuera lo cierran, solo su botón de cerrar
-    // (que pasa por `alIntentarCerrar`: con un borrador sucio, cerrar decide si se pierde).
+        montada y fuera de la vista, que desde fuera se lee como «el botón no hace nada».
+
+        Un modal DE VERDAD: ni Escape ni el clic fuera lo cierran, solo su botón de cerrar
+        (que pasa por `alIntentarCerrar`: con un borrador sucio, cerrar decide si se pierde). */}
     <Modal open onClose={SIN_CERRAR_AJUSTES} title="Ajustes" headless className={estilos.capa}>
       <div className={estilos.velo}>
       <div className={estilos.ventana}>

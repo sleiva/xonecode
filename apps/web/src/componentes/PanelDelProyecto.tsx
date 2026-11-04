@@ -1230,104 +1230,158 @@ function ConectoresDelProyecto({
     .filter((id) => id === vinculo?.conector || anadido(id) !== undefined);
   const paraElChat = conectores.conectores.filter((c) => !GESTORES_DE_TAREAS.includes(c.id));
 
+  // La tabla de servicios (opción B del lienzo, 04-11-2026): UNA fila por servicio y lo que hace en
+  // este proyecto en sus columnas —gestor de tareas, diseño, chat—; lo que se edita se despliega bajo
+  // su fila. Cada servicio solo ofrece lo que puede: Jira y Notion son gestores (no van al chat) y
+  // Stitch, diseño y chat.
+  const conDiseno = alDiseno !== undefined;
   return (
     <div className={estilos.seccion}>
       {avisos}
-      <section className={estilos.seccion} aria-label="Gestor de tareas">
-        <h2 className={estilos.titulo}>Gestor de tareas</h2>
-        <p className={estilos.aviso}>
-          De dónde salen las tareas de la pestaña Tareas. El proyecto tiene uno solo: vincular otro sustituye al que haya.
-        </p>
-        {gestores.length === 0 ? (
-          <p className={estilos.aviso}>Ni Jira ni Notion están añadidos. Se añaden en Ajustes.</p>
-        ) : (
-          <ul className={estilos.lista}>
-            {gestores.map((id) => (
-              <FilaDeGestor
-                key={id}
-                id={id}
-                nombre={nombreDe(id)}
-                {...(anadido(id) === undefined ? {} : { fila: anadido(id)! })}
-                gestor={gestor}
-                conectores={conectores}
-                {...(vinculo === undefined ? {} : { vinculo, nombreDelVinculado: nombreDe(vinculo.conector) })}
-                conectado={conectado}
-                alGestor={alGestor}
-                alAutorizar={alAutorizar}
-                alProbar={alProbar}
-                alAbrirAjustes={alAbrirAjustes}
-                {...(tareasDesdeElGestor === undefined ? {} : { tareasDesdeElGestor })}
-              />
-            ))}
-          </ul>
-        )}
-      </section>
-      {alDiseno === undefined ? null : (
-        <DisenoDelProyecto
-          {...(diseno === undefined ? {} : { diseno })}
-          stitchAnadido={anadido("stitch") !== undefined}
-          alDiseno={alDiseno}
-        />
-      )}
-      <section className={estilos.seccion} aria-label="Conectores para el chat">
-        <h2 className={estilos.titulo}>Conectores para el chat</h2>
-        <p className={estilos.aviso}>Los que usará el agente en el chat de este proyecto.</p>
-        {paraElChat.length === 0 ? (
-          <p className={estilos.aviso}>No hay otros conectores añadidos.</p>
-        ) : (
-          <ul className={estilos.lista}>
-            {paraElChat.map((c) => {
-              const usado = estado.conectores.includes(c.id);
-              const conCasilla = esConectado(c) || usado;
-              return (
-                <li key={c.id} className={estilos.conector}>
-                  <div className={estilos.filaDeConector}>
-                    {/* El INTERRUPTOR va el primero: es lo que se decide en esta fila. Sin él (un
-                        conector sin conectar, que antes pide «Conectar») queda su hueco, para que
-                        los iconos y los nombres sigan en columna. */}
-                    {conCasilla ? (
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={usado}
-                        aria-label="Usar en este proyecto"
-                        title={usado ? "Lo usa el agente en este proyecto" : "No lo usa el agente en este proyecto"}
-                        className={estilos.interruptor}
-                        disabled={!conectado}
-                        onClick={() => alGestor({ accion: "usarConector", conector: c.id, usar: !usado })}
-                      >
-                        <span className={estilos.bolita} aria-hidden="true" />
-                      </button>
-                    ) : (
-                      <span className={estilos.huecoDeInterruptor} aria-hidden="true" />
-                    )}
-                    <IconoDeConector id={c.id} nombre={nombreDe(c.id)} />
-                    <span className={estilos.tituloDeConector}>{nombreDe(c.id)}</span>
-                    <span className={estilos.alFinal}>
-                      <BotonDeConectar fila={c} nombre={nombreDe(c.id)} conectado={conectado} alAutorizar={alAutorizar} alProbar={alProbar} />
-                    </span>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </section>
-      {conectores.conectores.length === 0 ? (
+      <section className={estilos.seccion} aria-label="Servicios del proyecto">
         <div className={estilos.encabezado}>
+          <p className={estilos.aviso}>
+            Un servicio por fila; lo que hace en este proyecto se elige en sus columnas. El gestor de tareas es uno solo: vincular otro
+            sustituye al que haya.
+          </p>
+          <button type="button" className={estilos.accion} onClick={alAbrirAjustes}>
+            {conectores.conectores.length === 0 ? "Abrir Ajustes" : "Añadir otro conector en Ajustes"}
+          </button>
+        </div>
+        {conectores.conectores.length === 0 && vinculo === undefined ? (
           <p className={estilos.aviso}>No hay ningún conector añadido. Se añaden en Ajustes.</p>
-          <button type="button" className={estilos.accion} onClick={alAbrirAjustes}>
-            Abrir Ajustes
-          </button>
-        </div>
-      ) : (
-        <div>
-          <button type="button" className={estilos.accion} onClick={alAbrirAjustes}>
-            Añadir otro conector en Ajustes
-          </button>
-        </div>
-      )}
+        ) : (
+          <div className={estilos.servicios} data-con-diseno={conDiseno ? "" : undefined}>
+            <div className={estilos.cabeceraDeServicios} aria-hidden="true">
+              <span>Servicio</span>
+              <span>Tareas</span>
+              {conDiseno ? <span>Diseño</span> : null}
+              <span>Chat</span>
+              <span>Con qué</span>
+            </div>
+            <ul className={estilos.lista}>
+              {gestores.map((id) => (
+                <FilaDeGestor
+                  key={id}
+                  id={id}
+                  nombre={nombreDe(id)}
+                  {...(anadido(id) === undefined ? {} : { fila: anadido(id)! })}
+                  gestor={gestor}
+                  conectores={conectores}
+                  {...(vinculo === undefined ? {} : { vinculo, nombreDelVinculado: nombreDe(vinculo.conector) })}
+                  conectado={conectado}
+                  alGestor={alGestor}
+                  alAutorizar={alAutorizar}
+                  alProbar={alProbar}
+                  alAbrirAjustes={alAbrirAjustes}
+                  conDiseno={conDiseno}
+                  {...(tareasDesdeElGestor === undefined ? {} : { tareasDesdeElGestor })}
+                />
+              ))}
+              {paraElChat.map((c) => {
+                const usado = estado.conectores.includes(c.id);
+                const conCasilla = esConectado(c) || usado;
+                const esStitch = c.id === "stitch" && alDiseno !== undefined;
+                const disenoVinculado = esStitch ? diseno?.vinculo : undefined;
+                return (
+                  <FilaDeServicio
+                    key={c.id}
+                    id={c.id}
+                    nombre={nombreDe(c.id)}
+                    estado={<BotonDeConectar fila={c} nombre={nombreDe(c.id)} conectado={conectado} alAutorizar={alAutorizar} alProbar={alProbar} />}
+                    conDiseno={conDiseno}
+                    {...(esStitch
+                      ? { diseno: <Marca activa={disenoVinculado !== undefined && disenoVinculado !== null} texto={disenoVinculado ? "vinculado" : "sin vincular"} /> }
+                      : {})}
+                    chat={
+                      conCasilla ? (
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={usado}
+                          aria-label="Usar en este proyecto"
+                          title={usado ? "Lo usa el agente en este proyecto" : "No lo usa el agente en este proyecto"}
+                          className={estilos.interruptor}
+                          disabled={!conectado}
+                          onClick={() => alGestor({ accion: "usarConector", conector: c.id, usar: !usado })}
+                        >
+                          <span className={estilos.bolita} aria-hidden="true" />
+                        </button>
+                      ) : undefined
+                    }
+                    conQue={disenoVinculado ? `«${disenoVinculado.nombre}»${usado ? " · en el chat" : ""}` : usado ? "en el chat" : "sin usar en este proyecto"}
+                  >
+                    {esStitch ? (
+                      <div className={estilos.cuerpoDeServicio}>
+                        <DisenoDelProyecto {...(diseno === undefined ? {} : { diseno })} stitchAnadido alDiseno={alDiseno} enFila />
+                      </div>
+                    ) : null}
+                  </FilaDeServicio>
+                );
+              })}
+            </ul>
+          </div>
+        )}
+        {gestores.length === 0 ? <p className={estilos.aviso}>Ni Jira ni Notion están añadidos: este proyecto no tiene gestor de tareas.</p> : null}
+      </section>
     </div>
+  );
+}
+
+/** Lo que no se puede hacer con ese servicio en esa columna. */
+function Nada() {
+  return (
+    <span className={estilos.nada} aria-hidden="true">
+      —
+    </span>
+  );
+}
+
+/** Una pastilla de estado en una columna: «gestor», «vinculado»… */
+function Marca({ activa, texto }: { activa: boolean; texto: string }) {
+  return <span className={activa ? estilos.marcaActiva : estilos.marca}>{texto}</span>;
+}
+
+/**
+ * Una fila de la tabla de servicios: nombre y estado de la conexión, una celda por uso (lo que no
+ * aplica, «—») y «con qué»; debajo, lo que se edita de ese servicio.
+ */
+function FilaDeServicio({
+  id,
+  nombre,
+  estado,
+  tareas,
+  diseno,
+  chat,
+  conQue,
+  conDiseno,
+  children,
+}: {
+  id: string;
+  nombre: string;
+  estado?: ReactNode;
+  tareas?: ReactNode;
+  diseno?: ReactNode;
+  chat?: ReactNode;
+  conQue: string;
+  conDiseno: boolean;
+  children?: ReactNode;
+}) {
+  return (
+    <li className={estilos.conector}>
+      <div className={estilos.filaDeServicio}>
+        <span className={estilos.celdaDeServicio}>
+          <IconoDeConector id={id} nombre={nombre} />
+          <span className={estilos.tituloDeConector}>{nombre}</span>
+          {estado}
+        </span>
+        <span className={estilos.celda}>{tareas ?? <Nada />}</span>
+        {conDiseno ? <span className={estilos.celda}>{diseno ?? <Nada />}</span> : null}
+        <span className={estilos.celda}>{chat ?? <Nada />}</span>
+        <span className={estilos.conQue}>{conQue}</span>
+      </div>
+      {children}
+    </li>
   );
 }
 
@@ -1424,7 +1478,9 @@ function FilaDeGestor({
   alProbar,
   alAbrirAjustes,
   tareasDesdeElGestor,
+  conDiseno,
 }: {
+  conDiseno: boolean;
   tareasDesdeElGestor?: AjusteDeTareasDesdeElGestor;
   id: string;
   nombre: string;
@@ -1470,17 +1526,29 @@ function FilaDeGestor({
       />
     ) : null;
 
+  const enSuLugar = conectadoElConector && otroVinculado && !cambiando;
+  const proyecto = vinculado && vinculo !== undefined ? (proyectoALaVista(vinculo) ?? vinculo.proyecto) : undefined;
   return (
-    <li className={estilos.conector}>
-      <div className={estilos.filaDeConector}>
-        <IconoDeConector id={id} nombre={nombre} />
-        <span className={estilos.tituloDeConector}>{nombre}</span>
-        <span className={estilos.alFinal}>
-          {fila === undefined ? null : <BotonDeConectar fila={fila} nombre={nombre} conectado={conectado} alAutorizar={alAutorizar} alProbar={alProbar} />}
-        </span>
-      </div>
+    <FilaDeServicio
+      id={id}
+      nombre={nombre}
+      {...(fila === undefined ? {} : { estado: <BotonDeConectar fila={fila} nombre={nombre} conectado={conectado} alAutorizar={alAutorizar} alProbar={alProbar} /> })}
+      tareas={
+        vinculado ? (
+          <Marca activa texto="gestor" />
+        ) : enSuLugar ? (
+          <button type="button" className={estilos.accion} onClick={() => setCambiando(true)} disabled={!conectado}>
+            {`Vincular ${nombre} en su lugar…`}
+          </button>
+        ) : conectadoElConector ? (
+          <Marca activa={false} texto="sin vincular" />
+        ) : undefined
+      }
+      conDiseno={conDiseno}
+      conQue={proyecto === undefined ? "sin usar en este proyecto" : `gestor de tareas · ${proyecto}`}
+    >
       {vinculado && vinculo !== undefined ? (
-        <>
+        <div className={estilos.cuerpoDeServicio}>
           <VinculoActual vinculo={vinculo} nombre={nombre} conectado={conectado} alGestor={alGestor} />
           {tareasDesdeElGestor === undefined ? null : (
             <TareasDesdeElGestor
@@ -1491,18 +1559,11 @@ function FilaDeGestor({
               alGuardar={tareasDesdeElGestor.alGuardar}
             />
           )}
-        </>
-      ) : !conectadoElConector ? null : otroVinculado && !cambiando ? (
-        // Sin conexión no se le puede preguntar nada: solo se enseña el vínculo que ya hay.
-        <div className={estilos.vinculo}>
-          <button type="button" className={estilos.accion} onClick={() => setCambiando(true)} disabled={!conectado}>
-            {`Vincular ${nombre} en su lugar…`}
-          </button>
         </div>
-      ) : (
-        formulario
+      ) : !conectadoElConector || enSuLugar ? null : (
+        <div className={estilos.cuerpoDeServicio}>{formulario}</div>
       )}
-    </li>
+    </FilaDeServicio>
   );
 }
 

@@ -16,11 +16,14 @@ export function DisenoDelProyecto({
   diseno,
   stitchAnadido,
   alDiseno,
+  enFila = false,
 }: {
   diseno?: EstadoDeDiseno;
   /** Si el conector Stitch está añadido: sin él no hay nada que vincular. */
   stitchAnadido: boolean;
   alDiseno: (p: PeticionDeDiseno) => void;
+  /** Dentro de la fila de Stitch de la tabla de servicios: sin título ni explicación, los pone la fila. */
+  enFila?: boolean;
 }) {
   const [eligiendo, setEligiendo] = useState(false);
   const [elegido, setElegido] = useState("");
@@ -34,10 +37,14 @@ export function DisenoDelProyecto({
   const proyectos = diseno?.proyectos;
   return (
     <section className={estilos.seccion} aria-label="Diseño (Stitch)">
-      <h2 className={estilos.titulo}>Diseño (Stitch)</h2>
-      <p className={estilos.aviso}>
-        El proyecto de Stitch de este proyecto. Al crear una tarea eliges la pantalla con su miniatura, y la tarea la trae por su id.
-      </p>
+      {enFila ? null : (
+        <>
+          <h2 className={estilos.titulo}>Diseño (Stitch)</h2>
+          <p className={estilos.aviso}>
+            El proyecto de Stitch de este proyecto. Al crear una tarea eliges la pantalla con su miniatura, y la tarea la trae por su id.
+          </p>
+        </>
+      )}
       {!stitchAnadido ? (
         <p className={estilos.aviso}>Stitch no está añadido. Se añade en Ajustes → Conectores.</p>
       ) : (

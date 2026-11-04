@@ -124,8 +124,9 @@ Ante una discrepancia con el código, **el código manda**.
   clave se enseña con `etiquetaDeClave` y viaja ENTERA; el `collection://` de Notion no se pinta.
   **Notion en tres pasos** (`VinculoDeNotion`): buscar, DESCRIBIR el esquema, vincular con
   `esquema.proyecto`; respuestas de otra búsqueda/base no se pintan. La fila despliega su `ficha`.
-- **Conectores en DOS secciones**: «Gestor de tareas» (Jira/Notion, UNO por proyecto; sustituir se
-  AVISA) y «Conectores para el chat». **Conectar desde el panel** con el MISMO
+- **Conectores en UNA tabla de servicios** (opción B de su lienzo): una fila por servicio con sus usos en columnas
+  (Tareas, Diseño si hay `alDiseno`, Chat) y lo que se edita desplegado bajo su fila; cada uno solo ofrece lo que puede
+  (Jira/Notion: gestor, UNO por proyecto, sustituir se AVISA; Stitch: diseño y chat). **Conectar desde el panel** con el MISMO
   `{clase:"conector", accion:"autorizar"}`; «Conectar» solo si FALTA la credencial
   (`BotonDeConectar`); sin prueba se PRUEBA solo una vez por montaje (`useProbarLoSinProbar`); tras
   una prueba nueva y buena se reintenta lo fallido una vez (`useReintentoTrasConectar`). «no está
