@@ -1547,7 +1547,7 @@ describe("una sesión con el motor TrueForge", () => {
         raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, bucleDelDesarrollador: true,
         artefactos: mkdtempSync(join(tmpdir(), "xc-tf-scripts-")),
       });
-      await s.turno("haz la calculadora", piel().p);
+      await s.turno("haz la calculadora de la maqueta /diseno/screen.png", piel().p);
       // Sus scripts SIN shell, y sin perder las de escribir (lo que sí perdería con `ejecucion`).
       expect(toolsPorLlamada[1]).toEqual(expect.arrayContaining(["ejecutar_script", "write_file", "edit_file"]));
       expect(toolsPorLlamada[1]).not.toContain("execute");
@@ -1565,12 +1565,26 @@ describe("una sesión con el motor TrueForge", () => {
         raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, bucleDelDesarrollador: true,
         artefactos: mkdtempSync(join(tmpdir(), "xc-tf-bucle-")),
       });
-      await s.turno("haz la calculadora", piel().p);
+      await s.turno("haz la calculadora de la maqueta /diseno/screen.png", piel().p);
       expect(toolsPorLlamada[1]).toEqual(expect.arrayContaining(["xone_critica_visual", "comparar_capturas"]));
       expect(vistos[1]!.join("\n")).toContain("PARA JUZGAR UNA PANTALLA");
       // El de pruebas no juzga: saca las capturas.
       expect(toolsPorLlamada[2]).not.toContain("xone_critica_visual");
       expect(toolsPorLlamada[2]).not.toContain("comparar_capturas");
+    }, 30_000);
+
+    it("SIN maqueta en la petición, el desarrollador no tiene crítico ni medida y su bucle dice que revisa el juez", async () => {
+      const raiz = proyecto();
+      const artefactos = mkdtempSync(join(tmpdir(), "xc-art-"));
+      const { m, vistos, toolsPorLlamada } = modelosConGuion([
+        [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "developer-xone", input: "añade la opción" }) }] })],
+        [new AIMessageChunk({ content: "hecho" })],
+        [new AIMessageChunk({ content: "Hecho." })],
+      ]);
+      const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, artefactos, bucleDelDesarrollador: true });
+      await s.turno("crea una opción Contacto en UTILIDADES que abra www.xone.es", piel().p);
+      expect(toolsPorLlamada[1]).not.toContain("xone_critica_visual");
+      expect(vistos[1]!.join("\n")).toContain("sin maqueta NO hay crítico");
     }, 30_000);
 
     it("sin carpeta de artefactos no hay capturas que juzgar, y el texto no las nombra", async () => {
@@ -1586,7 +1600,7 @@ describe("una sesión con el motor TrueForge", () => {
       const raiz = proyecto();
       const { m, vistos } = modelosConGuion(guion());
       const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, bucleDelDesarrollador: true });
-      await s.turno("haz la calculadora", piel().p);
+      await s.turno("haz la calculadora de la maqueta /diseno/screen.png", piel().p);
       const sistema = vistos[1]!.join("\n");
       expect(sistema).toContain("NO TERMINAS hasta que se cumpla el CRITERIO DE ACEPTACIÓN");
       // El MISMO número que cuenta el harness: si el prompt dijera otro, el contador le cortaría antes (o después).

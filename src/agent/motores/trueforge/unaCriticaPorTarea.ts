@@ -8,10 +8,16 @@ import { tool, type StructuredToolInterface } from "@langchain/core/tools";
  *
  * `tareaActual` es la última tarea del plan que se le encargó a alguien (`plan|número`); sin tarea, no se limita.
  */
-export function unaCriticaPorTarea(critica: StructuredToolInterface, tareaActual: () => string | undefined): StructuredToolInterface {
+export function unaCriticaPorTarea(
+  critica: StructuredToolInterface,
+  tareaActual: () => string | undefined,
+  /** Sin maqueta no hay contra qué comparar: el crítico no corre y lo revisa el juez del cierre. */
+  hayMaqueta: () => boolean = () => true
+): StructuredToolInterface {
   const criticadas = new Set<string>();
   return tool(
     async (args: unknown) => {
+      if (!hayMaqueta()) return TEXTO_SIN_MAQUETA;
       const tarea = tareaActual();
       if (tarea !== undefined && criticadas.has(tarea)) return textoDeCriticaRepetida(tarea);
       if (tarea !== undefined) criticadas.add(tarea);
@@ -29,3 +35,7 @@ export function textoDeCriticaRepetida(tarea: string): string {
     "siguiente tarea, o cierra si no quedan."
   );
 }
+
+export const TEXTO_SIN_MAQUETA =
+  "Este trabajo no parte de una maqueta: no hay crítica visual (no hay contra qué comparar). Lo revisa el juez al cerrar; " +
+  "sigue con el trabajo o cierra.";
