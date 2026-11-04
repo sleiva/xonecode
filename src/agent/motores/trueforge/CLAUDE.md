@@ -154,6 +154,7 @@ Ante una discrepancia con el código, **el código manda**.
 - **No se pasa de una tarea ABIERTA a otra** (`INTENTOS_POR_TAREA`, `tareaEncargadaDe`): a quien PRUEBA (`scripts`), con la
   última tarea que se le encargó sin TODAS sus casillas, otra tarea no arranca y se le dice al orquestador que vuelva a la
   abierta; agotados los intentos, ni esa: que cierre el turno diciéndole a la persona lo que falta. Vale dentro del turno.
+  Un encargo con `TAREA:` que no nombra el plan es del de la última tarea encargada: si no, no contaba como intento.
   Cada uno con un presupuesto alto (`presupuestoDeLlamadas`: quien lleva `scripts`, `TOPE_DE_LLAMADAS_DEL_DESARROLLADOR`):
   cada encargo nuevo volvía a leer y a entrar en la app desde cero.
   **Tampoco arrancan en una tarea** el analista con plan asignado (`PLAN DE ESTA TAREA` en el encargo) ni el

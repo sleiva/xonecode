@@ -109,7 +109,7 @@ describe("no se pasa de una tarea ABIERTA a otra (pasada 21: la 02 volvió en ro
 });
 
 describe("un encargo con `TAREA:` que no nombra el plan es del plan de la última tarea (Maset: el tercer intento se coló)", () => {
-  const abierta = { plan: "calculadora", numero: "02", intentos: 2 };
+  const abierta = { plan: "calculadora", numero: "02", intentos: INTENTOS_POR_TAREA };
 
   it("cuenta como intento: con el tope agotado, no arranca", () => {
     const d = decidirEncargo("developer-xone", "TAREA: 02\nVuelta de ajuste visual: solo falta un criterio.", leer, abierta);

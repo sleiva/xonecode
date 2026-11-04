@@ -34,7 +34,7 @@ export const ALCANCE_Y_CIERRE_DE_LA_TAREA = [
  * TODAS sus casillas marcadas (`progreso !== "finalizada"`). Se puede volver a encargar hasta este tope de intentos; con
  * él agotado, el turno se termina diciéndole a la persona lo que falta, en vez de seguir con la siguiente.
  */
-export const INTENTOS_POR_TAREA = 2;
+export const INTENTOS_POR_TAREA = 3;
 
 /** La última tarea encargada a quien recibe el encargo, y cuántas veces se le ha encargado en el turno. */
 export interface TareaYaEncargada {
