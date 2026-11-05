@@ -192,7 +192,7 @@ function FilaDeProyecto({
           filas.projectRow,
           estilos.filaConAccion,
           esLaMarcada && estilos.filaAbierta,
-          p.rama !== undefined && estilos.filaConRama
+          estilos.filaDeProyecto
         )}
         // Dos señales para lo mismo y no una: el color de fondo lo pierde
         // quien no distingue bien los tonos, y el `aria-current` es lo que
@@ -269,17 +269,17 @@ function FilaDeProyecto({
           disabled={apagado || abriendoAlgo}
           onClick={() => alAbrirProyecto(p.id)}
         >
-          <span className={filas.projectText}>
+          <span className={clsx(filas.projectText, estilos.textoDeProyecto)}>
             {/* El proyecto activo se marca con el fondo y con el NOMBRE, no
                 con el filo de cian: ese se quedó para la fila que estás
                 leyendo (ver `Barra.module.css`). */}
-            <span className={clsx(filas.title, esLaMarcada && estilos.tituloActivo)}>
+            <span className={clsx(filas.title, estilos.nombreDeProyecto, esLaMarcada && estilos.tituloActivo)}>
               {p.nombre}
             </span>
             {/*
-              La rama de la que se BAJÓ la copia, debajo y más pequeña: es la que manda al
-              subir y al comparar, y hasta ahora solo se veía abriendo el proyecto. Con la
-              `.meta` de la hoja copiada, que es su segunda línea de fila. `aria-hidden` con la
+              La rama de la que se BAJÓ la copia, en una pastilla a la derecha del nombre (lienzo,
+              «Barra lateral», variante B: filas de una línea): es la que manda al subir y al
+              comparar, y hasta ahora solo se veía abriendo el proyecto. `aria-hidden` con la
               rama en `title`, como los iconos de al lado: sin ocultarla, el nombre accesible
               del botón sería «Tienda master» y no el del proyecto.
             */}

@@ -548,7 +548,7 @@ describe("el «+» y la chincheta de cada proyecto", () => {
     expect(tienda.querySelector('[title="Rama de origen: desarrollo"]')).not.toBeNull();
     // Sin rama no se pinta línea vacía, y la fila se queda como estaba.
     expect(filaDeProyecto("Almacén").querySelector('[title^="Rama de origen"]')).toBeNull();
-    expect(filaDeProyecto("Almacén").className).not.toMatch(/filaConRama/);
+    expect(filaDeProyecto("Almacén").textContent).toBe("Almacén");
     // Y el botón se sigue llamando solo por el nombre del proyecto.
     expect(screen.getByRole("button", { name: "Tienda" })).toBeTruthy();
   });

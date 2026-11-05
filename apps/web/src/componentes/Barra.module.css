@@ -64,7 +64,7 @@
 .filaAbierta.filaAbierta.filaAbierta {
   position: relative;
   background: var(--dsw-alias-interactive-bg-hover);
-  border-radius: var(--radio-tarjeta);
+  border-radius: var(--radio-control);
 }
 
 /* El nombre del proyecto activo. Es la otra mitad de su marca ahora que el filo de cian se
@@ -136,7 +136,7 @@
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-primary);
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: var(--radio-tarjeta);
+  border-radius: var(--radio-control);
   font: inherit;
 }
 
@@ -144,9 +144,9 @@
    indistinguible de una barra rota. `.empty` de la hoja copiada ya le da el color y el
    tamaño; esto solo lo mete debajo de su fila de proyecto en vez de al margen de la
    lista. */
-.sinSesiones {
-  padding: var(--espacio-4) var(--espacio-12) var(--espacio-8) 30px;
-  font-style: italic;
+.sinSesiones.sinSesiones {
+  padding: var(--espacio-2) var(--espacio-12) var(--espacio-6) 46px;
+  font-size: var(--tipo-pequeno);
 }
 
 /* El aviso de proyectos sin enseñar, en TARJETA y no en línea suelta italiza como
@@ -157,7 +157,7 @@
 .avisoOcultos {
   margin: 6px 10px 8px;
   padding: var(--espacio-8) var(--espacio-10);
-  border-radius: var(--radio-tarjeta);
+  border-radius: var(--radio-control);
   background: var(--dsw-alias-bg-layer-2);
   border: 0.5px solid var(--dsw-alias-border-l2);
 }
@@ -478,23 +478,45 @@
   font-size: var(--tipo-mini);
 }
 
-/* Una fila de proyecto con su RAMA debajo del nombre. La hoja copiada la fija a 34 px de
-   alto —una línea—, y con dos el texto se salía por abajo: aquí crece lo justo, y las que no
-   llevan rama se quedan exactamente como estaban. La doble clase le gana a `.projectRow` sin
-   depender del orden de las hojas en el bundle. */
-.filaConRama.filaConRama {
-  height: auto;
-  min-height: 34px;
-  padding-top: var(--espacio-4);
-  padding-bottom: var(--espacio-4);
+/* La fila de proyecto en UNA línea y a 32 px, tenga rama o no (lienzo, «Barra lateral»,
+   variante B): con la rama debajo, unas filas medían 44 y otras 34 y la lista iba a saltos.
+   Radio de control, el de la escala, y no el 8 de la hoja copiada. Doble clase para ganarle a
+   `.projectRow` sin depender del orden de las hojas en el bundle. */
+.filaDeProyecto.filaDeProyecto {
+  height: 32px;
+  border-radius: var(--radio-control);
 }
 
-/* La rama: más pequeña y más apagada que el nombre, y en letra de máquina, que es la regla del
-   rediseño para lo que es un dato (una rama es un identificador, no prosa). Doble clase para
-   ganarle a la `.meta` de la hoja copiada, que declara su propio tamaño y alto de línea. */
+.textoDeProyecto.textoDeProyecto {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--espacio-8);
+}
+
+/* El nombre no encoge mientras quepa (deja hueco para una rama mínima): lo que se corta es la
+   rama. Con `flex-shrink` a secas el reparto daba «MyAllXO…» con la rama entera al lado. */
+.nombreDeProyecto.nombreDeProyecto {
+  flex: 0 0 auto;
+  max-width: calc(100% - 32px);
+  font-weight: var(--peso-medio);
+}
+
+/* El abierto, a 600: tres clases para ganarle a la de arriba. */
+.nombreDeProyecto.nombreDeProyecto.tituloActivo {
+  font-weight: var(--peso-fuerte);
+}
+
+/* La rama, en pastilla de máquina a la derecha: se corta ella antes que el nombre. */
 .ramaDeProyecto.ramaDeProyecto {
-  color: var(--dsw-alias-label-tertiary);
+  flex: 0 1 auto;
+  min-width: 24px;
+  max-width: 96px;
+  margin-left: auto;
+  padding: 0 var(--espacio-4);
+  border-radius: var(--radio-mini);
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-secondary);
   font-family: var(--ds-font-family-code);
   font-size: var(--tipo-mini);
-  line-height: 14px;
+  line-height: 18px;
 }
