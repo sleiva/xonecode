@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { probarGranja, type Hablar, type ResultadoDeHablar } from "./granjaEnRed.js";
+import { crearCopiaEnGranja, probarGranja, type Hablar, type ResultadoDeHablar } from "./granjaEnRed.js";
 
 const HUELLA = Array.from({ length: 32 }, () => "AB").join(":");
 const OTRA = Array.from({ length: 32 }, () => "CD").join(":");
@@ -93,5 +93,38 @@ describe("probarGranja", () => {
         }),
       ),
     ).toEqual({ estado: "respuesta-inesperada", http: 200 });
+  });
+});
+
+describe("crear una copia en la granja (`POST /api/devices/:serial/copies`)", () => {
+  /** Un servidor de verdad en loopback (`http://`, sin TLS): lo que pide el cliente y lo que contesta cada código. */
+  async function granjaLocal(codigo: number) {
+    const { createServer } = await import("node:http");
+    const vistas: { metodo?: string; ruta?: string; tipo?: string; auth?: string; cuerpo: string }[] = [];
+    const servidor = createServer((q, r) => {
+      let cuerpo = "";
+      q.on("data", (t) => (cuerpo += String(t)));
+      q.on("end", () => {
+        vistas.push({ metodo: q.method, ruta: q.url, tipo: q.headers["content-type"], auth: q.headers.authorization, cuerpo });
+        r.writeHead(codigo, { "content-type": "application/json" }).end("{}");
+      });
+    });
+    await new Promise<void>((x) => servidor.listen(0, "127.0.0.1", x));
+    const puerto = (servidor.address() as { port: number }).port;
+    return { conexion: { direccion: `http://127.0.0.1:${puerto}`, token: "xfarm_T" }, vistas, cerrar: () => new Promise((x) => servidor.close(x)) };
+  }
+
+  it("pide count con JSON y el token; 202 es ok, y 507/409/403 se dicen con su motivo", async () => {
+    const bien = await granjaLocal(202);
+    expect(await crearCopiaEnGranja(bien.conexion, "R8 YWA", 3)).toEqual({ ok: true });
+    expect(bien.vistas).toEqual([{ metodo: "POST", ruta: "/api/devices/R8%20YWA/copies", tipo: "application/json", auth: "Bearer xfarm_T", cuerpo: '{"count":3}' }]);
+    await bien.cerrar();
+    for (const [codigo, motivo] of [[507, /no cabe en la memoria/], [409, /cambiando sus copias/], [403, /no deja a este usuario/], [500, /contestó 500/]] as const) {
+      const g = await granjaLocal(codigo);
+      const r = await crearCopiaEnGranja(g.conexion, "B", 1);
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.motivo).toMatch(motivo);
+      await g.cerrar();
+    }
   });
 });

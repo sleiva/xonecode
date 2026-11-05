@@ -10677,3 +10677,13 @@ el del orquestador (`tareasCriticadas`), y arregla lo rojo con una recarga; la c
 criterio y el del encargo ya no la ponen de tope, y recargar incluye el CSS. Descartada la (a), como Codex: más rápida,
 pero la pantalla se habría entregado con los operadores mal. Y la línea `TAREA:` cuenta solo los números de su principio:
 dos encargos no arrancaron por nombrar otra tarea detrás.
+
+## La granja: sin copias libres, se crea una (05-11-2026)
+
+Dos tareas de la calculadora en MyAllXOne con la granja: 12 despliegues con «no hay ninguna copia libre» y la calculadora
+escrita entera sin probar. `GET /api/state` lo explicaba: tres teléfonos `ready` con **0 copias** (`copiesMax` 20,
+`copiesFit` 6, 8 y 35) y los cuatro emuladores apagados. No había ningún slot, ni libre ni ocupado, y xonecode solo cogía
+los que ya existían. El protocolo de la granja (§5) deja a un usuario normal SUBIR `count` en `POST /api/devices/:serial/copies`
+y las nuevas quedan a su nombre: ahora, sin libres, se pide `count + 1` en el teléfono con más sitio, se espera a que ese
+slot esté `running` y se coge; al acabar el turno se libera (`reset`) como cualquier otra y queda libre para la siguiente.
+Arrancar un emulador apagado queda fuera: es una acción de teléfono y, por rol, de un admin.

@@ -47,6 +47,49 @@ export function copiasLibres(estado: unknown, descartadas: readonly CopiaDeGranj
   return porTelefono.sort((a, b) => b.length - a.length).flat();
 }
 
+/** Un teléfono al que se le puede pedir UNA copia más (`POST /api/devices/:serial/copies`): las que tiene, y dónde. */
+export interface TelefonoParaCrearCopia {
+  serial: string;
+  telefono: string;
+  /** Las copias que tiene ya (`copies`): la nueva será la `copias + 1`. */
+  copias: number;
+}
+
+/**
+ * **Sin copias libres, la granja puede CREAR una** (protocolo, §5: un usuario normal puede SUBIR `count`, y las nuevas
+ * quedan a su nombre). Medido el 05-11-2026: tres teléfonos `ready` con 0 copias y los emuladores apagados daban «no hay
+ * ninguna copia libre» en cada despliegue, y la tarea escribía la calculadora entera sin probarla. El teléfono: `ready`,
+ * sin estar ya cambiando sus copias (`copiesBusy`), por debajo de `copiesMax` y con sitio en su RAM (`copiesFit`, si lo
+ * dice); primero el que más admite. Un emulador apagado no está `ready`: no se arranca desde aquí.
+ */
+export function telefonoParaCrearCopia(estado: unknown): TelefonoParaCrearCopia | undefined {
+  if (typeof estado !== "object" || estado === null) return undefined;
+  const dispositivos = (estado as { devices?: unknown }).devices;
+  if (!Array.isArray(dispositivos)) return undefined;
+  const candidatos: (TelefonoParaCrearCopia & { caben: number })[] = [];
+  for (const d of dispositivos) {
+    if (typeof d !== "object" || d === null) continue;
+    const t = d as { serial?: unknown; state?: unknown; copies?: unknown; copiesMax?: unknown; copiesBusy?: unknown; copiesFit?: unknown; info?: { model?: unknown } };
+    if (t.state !== "ready" || typeof t.serial !== "string" || t.copiesBusy === true) continue;
+    if (typeof t.copies !== "number" || typeof t.copiesMax !== "number" || t.copies >= t.copiesMax) continue;
+    const caben = typeof t.copiesFit === "number" ? t.copiesFit : 1;
+    if (caben <= 0) continue;
+    candidatos.push({ serial: t.serial, telefono: typeof t.info?.model === "string" ? t.info.model : t.serial, copias: t.copies, caben });
+  }
+  const elegido = candidatos.sort((a, b) => b.caben - a.caben)[0];
+  return elegido === undefined ? undefined : { serial: elegido.serial, telefono: elegido.telefono, copias: elegido.copias };
+}
+
+/** La copia `numero` de ese teléfono ya ARRANCADA (`running`, canal sin marcar como caído), sea de quien sea: la recién creada es nuestra. */
+export function copiaRecienCreada(estado: unknown, serial: string, numero: number, telefono: string): CopiaDeGranja | undefined {
+  const dispositivos = (estado as { devices?: unknown } | null)?.devices;
+  if (!Array.isArray(dispositivos)) return undefined;
+  const t = dispositivos.find((d) => (d as { serial?: unknown } | null)?.serial === serial) as { slots?: unknown } | undefined;
+  if (!Array.isArray(t?.slots)) return undefined;
+  const c = t.slots.find((x) => (x as { number?: unknown } | null)?.number === numero) as { state?: unknown; hotswap?: { ok?: unknown } } | undefined;
+  return c !== undefined && c.state === "running" && c.hotswap?.ok !== false ? { serial, numero, telefono } : undefined;
+}
+
 export function mismaCopia(a: CopiaDeGranja, b: CopiaDeGranja): boolean {
   return a.serial === b.serial && a.numero === b.numero;
 }

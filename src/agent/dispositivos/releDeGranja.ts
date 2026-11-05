@@ -20,10 +20,11 @@ import { randomBytes } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { Duplex } from "node:stream";
 import { WebSocketServer } from "ws";
-import { EnrutadorDeCanal, copiasLibres, mismaCopia, nombreDeCopia, type CopiaDeGranja } from "../../core/canalDeGranja.js";
+import { EnrutadorDeCanal, copiaRecienCreada, copiasLibres, mismaCopia, nombreDeCopia, telefonoParaCrearCopia, type CopiaDeGranja } from "../../core/canalDeGranja.js";
 import {
   abrirCanalDeGranja,
   hablarConGranja,
+  crearCopiaEnGranja,
   liberarCopiaDeGranja,
   pedirAGranja,
   rutaDeCopia,
@@ -41,6 +42,9 @@ export const REINTENTOS_DE_SALUDO = 3;
 /** Entre reintento y reintento: lo que tarda una copia recién limpiada en levantar su canal. */
 export const PAUSA_DE_REINTENTO_DE_GRANJA_MS = 2_000;
 
+/** Cuánto se espera a que ARRANQUE una copia recién pedida (instalar y lanzar el framework en el teléfono). */
+export const TOPE_DE_CREAR_COPIA_MS = 180_000;
+
 /** Un cliente LOCAL del canal (un script, la recarga): a quién darle sus respuestas. */
 export interface ClienteDelCanal {
   enviar(texto: string): void;
@@ -57,6 +61,10 @@ export interface DependenciasDeCopias {
   pedirEstado?: (c: ConexionDeGranja) => Promise<unknown>;
   abrirCanal?: AbrirCanalDeGranja;
   liberar?: (c: ConexionDeGranja, copia: CopiaDeGranja) => Promise<{ ok: true } | { ok: false; motivo: string }>;
+  /** `POST /api/devices/:serial/copies` (`crearCopiaEnGranja`): sin copias libres, se pide una más. */
+  crearCopia?: (c: ConexionDeGranja, serial: string, count: number) => Promise<{ ok: true } | { ok: false; motivo: string }>;
+  /** Cuánto se espera a que arranque la copia creada (`TOPE_DE_CREAR_COPIA_MS`); los tests lo acortan. */
+  topeDeCrearCopia?: number;
   informar: (texto: string) => void;
   /** Cambió la copia de una sesión (cogida o liberada): para decirlo en la pastilla. */
   alCambiarCopia?: (sesion: string, copia: CopiaDeGranja | undefined) => void;
@@ -102,6 +110,8 @@ export function crearGestorDeCopias(deps: DependenciasDeCopias): GestorDeCopias 
     });
   const abrirCanal = deps.abrirCanal ?? abrirCanalDeGranja;
   const liberarEnGranja = deps.liberar ?? liberarCopiaDeGranja;
+  const crearCopia = deps.crearCopia ?? crearCopiaEnGranja;
+  const topeDeCrearCopia = deps.topeDeCrearCopia ?? TOPE_DE_CREAR_COPIA_MS;
   const topeDeSaludo = deps.topeDeSaludo ?? TOPE_DE_SALUDO_DE_GRANJA_MS;
   const pausaDeReintento = deps.pausaDeReintento ?? PAUSA_DE_REINTENTO_DE_GRANJA_MS;
 
@@ -194,12 +204,35 @@ export function crearGestorDeCopias(deps: DependenciasDeCopias): GestorDeCopias 
       e.copia = undefined;
       deps.alCambiarCopia?.(sesion, undefined);
     }
+    /**
+     * Sin copias libres, se CREA una en el teléfono que más admite (`telefonoParaCrearCopia`) y se espera a que arranque
+     * la nueva, que es la `copias + 1` y ya es nuestra. Medido: tres teléfonos `ready` con 0 copias daban «no hay ninguna
+     * copia libre» en cada despliegue (05-11-2026).
+     */
+    const crearUna = async (): Promise<CopiaDeGranja | { motivo: string }> => {
+      const telefono = telefonoParaCrearCopia(await pedirEstado(conexion));
+      if (telefono === undefined) return { motivo: "no hay ninguna copia libre en la granja ahora mismo, y ningún teléfono admite otra" };
+      const numero = telefono.copias + 1;
+      deps.informar(`granja: no había copias libres; se crea la copia ${String(numero)} en ${telefono.telefono}`);
+      const pedida = await crearCopia(conexion, telefono.serial, numero);
+      if (!pedida.ok) return { motivo: `no hay ninguna copia libre y no se pudo crear otra en ${telefono.telefono}: ${pedida.motivo}` };
+      const hasta = Date.now() + topeDeCrearCopia;
+      for (;;) {
+        const lista = copiaRecienCreada(await pedirEstado(conexion), telefono.serial, numero, telefono.telefono);
+        if (lista !== undefined) return lista;
+        if (Date.now() >= hasta) return { motivo: `la copia nueva de ${telefono.telefono} no arrancó a tiempo` };
+        await new Promise((x) => setTimeout(x, pausaDeReintento));
+      }
+    };
     const descartadas: CopiaDeGranja[] = [];
     for (;;) {
       const libres = copiasLibres(await pedirEstado(conexion), descartadas);
-      const copia = libres[0];
+      let copia = libres[0];
       if (copia === undefined) {
-        return descartadas.length === 0 ? { motivo: "no hay ninguna copia libre en la granja ahora mismo" } : { motivo: "otros cogieron las copias libres mientras se pedía una: vuelve a intentarlo" };
+        if (descartadas.length > 0) return { motivo: "otros cogieron las copias libres mientras se pedía una: vuelve a intentarlo" };
+        const creada = await crearUna();
+        if ("motivo" in creada) return creada;
+        copia = creada;
       }
       const r = await conReintentos(copia);
       if (r === "ocupada") {

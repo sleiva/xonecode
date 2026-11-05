@@ -219,6 +219,27 @@ export async function liberarCopiaDeGranja(conexion: ConexionDeGranja, copia: Co
   return r.http === 200 ? { ok: true } : { ok: false, motivo: `la granja contestó ${r.http}` };
 }
 
+/**
+ * Pide UNA copia más en un teléfono: `POST /api/devices/:serial/copies` con `{count}` (protocolo, §5). Responde `202` al
+ * momento y la copia nueva aparece en los slots al arrancar. Un usuario normal solo puede SUBIR `count`. Nunca lanza.
+ */
+export async function crearCopiaEnGranja(conexion: ConexionDeGranja, serial: string, count: number): Promise<{ ok: true } | { ok: false; motivo: string }> {
+  const r = await pedirAGranja(conexion, {
+    metodo: "POST",
+    ruta: `/api/devices/${encodeURIComponent(serial)}/copies`,
+    cabeceras: { "content-type": "application/json" },
+    cuerpo: Buffer.from(JSON.stringify({ count })),
+  });
+  if (r.tipo === "huella-distinta") return { ok: false, motivo: "el certificado de la granja ha cambiado" };
+  if (r.tipo === "sin-respuesta") return { ok: false, motivo: `la granja no responde${r.codigo === undefined ? "" : ` (${r.codigo})`}` };
+  r.respuesta.resume();
+  if (r.http === 200 || r.http === 202) return { ok: true };
+  if (r.http === 507) return { ok: false, motivo: "la copia nueva no cabe en la memoria del teléfono" };
+  if (r.http === 409) return { ok: false, motivo: "el teléfono está cambiando sus copias o no está listo" };
+  if (r.http === 403) return { ok: false, motivo: "la granja no deja a este usuario añadir copias" };
+  return { ok: false, motivo: `la granja contestó ${r.http}` };
+}
+
 /** El canal hotswap de una copia, abierto por la puerta de la granja. */
 export interface CanalDeGranja {
   enviar(texto: string): void;

@@ -124,6 +124,49 @@ describe("el gestor de copias de la granja", () => {
     expect(b.cierres[0]).toMatch(/Ajustes/);
   });
 
+  // Medido el 05-11-2026: tres teléfonos `ready` con 0 copias, y cada despliegue era «no hay ninguna copia libre».
+  it("sin copias libres, CREA una en el teléfono que más admite, espera a que arranque y la coge (y la libera al acabar)", async () => {
+    const telefonos = (slots: unknown[]) => ({
+      devices: [
+        { serial: "A", state: "ready", info: { model: "Pixel 3" }, copies: 0, copiesMax: 20, copiesFit: 6, slots: [] },
+        { serial: "B", state: "ready", info: { model: "Pixel 8" }, copies: 2, copiesMax: 20, copiesFit: 35, slots },
+        { serial: "E", state: "emulator-off", copies: 0, copiesMax: 20, slots: [] },
+      ],
+    });
+    const fotos = [telefonos([]), telefonos([]), telefonos([{ number: 3, owner: "yo", state: "starting" }]), telefonos([{ number: 3, owner: "yo", state: "running" }])];
+    const pedidas: [string, number][] = [];
+    const f = canalFalso();
+    const abiertas: CopiaDeGranja[] = [];
+    const { g, informes, liberadas } = gestor(async (copia) => (abiertas.push(copia), f.canal), {
+      pedirEstado: async () => fotos.shift() ?? telefonos([{ number: 3, owner: "yo", state: "running" }]),
+      crearCopia: async (_c, serial, count) => (pedidas.push([serial, count]), { ok: true }),
+      pausaDeReintento: 1,
+    });
+    const a = cliente();
+    await g.conectarCliente("s1", a.c);
+    expect(pedidas).toEqual([["B", 3]]);
+    expect(abiertas).toEqual([{ serial: "B", numero: 3, telefono: "Pixel 8" }]);
+    expect(a.recibidos[0]).toBe(HOLA);
+    expect(informes.join("\n")).toContain("no había copias libres; se crea la copia 3 en Pixel 8");
+    await g.liberar("s1");
+    expect(liberadas).toEqual([{ serial: "B", numero: 3, telefono: "Pixel 8" }]);
+  });
+
+  it("si la copia no se puede crear (507) o no arranca a tiempo, se dice el motivo", async () => {
+    const estado = { devices: [{ serial: "B", state: "ready", info: { model: "Pixel 8" }, copies: 0, copiesMax: 20, slots: [] }] };
+    const sinRam = gestor(async () => ({ tipo: "ocupada" }), {
+      pedirEstado: async () => estado,
+      crearCopia: async () => ({ ok: false, motivo: "la copia nueva no cabe en la memoria del teléfono" }),
+    });
+    const a = cliente();
+    await sinRam.g.conectarCliente("s1", a.c);
+    expect(a.cierres[0]).toMatch(/no se pudo crear otra en Pixel 8: la copia nueva no cabe en la memoria/);
+    const lenta = gestor(async () => ({ tipo: "ocupada" }), { pedirEstado: async () => estado, crearCopia: async () => ({ ok: true }), topeDeCrearCopia: 5, pausaDeReintento: 1 });
+    const b = cliente();
+    await lenta.g.conectarCliente("s1", b.c);
+    expect(b.cierres[0]).toMatch(/la copia nueva de Pixel 8 no arrancó a tiempo/);
+  });
+
   it("una copia que se abre sin saludar YA es nuestra: se apunta (para liberarla) y se reintenta sobre la misma", async () => {
     const muda = canalFalso({ saluda: false });
     const buena = canalFalso();

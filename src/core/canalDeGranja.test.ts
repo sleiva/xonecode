@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { EnrutadorDeCanal, copiasLibres, nombreDeCopia } from "./canalDeGranja.js";
+import { EnrutadorDeCanal, copiaRecienCreada, copiasLibres, nombreDeCopia, telefonoParaCrearCopia } from "./canalDeGranja.js";
 
 const telefono = (serial: string, modelo: string, estado: string, slots: unknown[]) => ({ serial, state: estado, info: { model: modelo }, slots });
 
@@ -80,5 +80,31 @@ describe("EnrutadorDeCanal", () => {
     expect(e.vaciar()).toEqual(["a"]);
     expect(e.saludo).toBeUndefined();
     expect(e.recibido("{}")).toBeUndefined();
+  });
+});
+
+describe("crear una copia cuando no hay libres", () => {
+  it("elige el teléfono ready, sin cambiar copias, por debajo del máximo y con más sitio; nunca un emulador apagado", () => {
+    const estado = {
+      devices: [
+        { serial: "A", state: "ready", info: { model: "Pixel 3" }, copies: 0, copiesMax: 20, copiesFit: 6 },
+        { serial: "B", state: "ready", info: { model: "Pixel 8" }, copies: 1, copiesMax: 20, copiesFit: 35 },
+        { serial: "C", state: "ready", copies: 20, copiesMax: 20, copiesFit: 50 },
+        { serial: "D", state: "ready", copies: 0, copiesMax: 20, copiesFit: 90, copiesBusy: true },
+        { serial: "E", state: "emulator-off", copies: 0, copiesMax: 20 },
+        { serial: "F", state: "ready", copies: 0, copiesMax: 20, copiesFit: 0 },
+      ],
+    };
+    expect(telefonoParaCrearCopia(estado)).toEqual({ serial: "B", telefono: "Pixel 8", copias: 1 });
+    expect(telefonoParaCrearCopia({ devices: [{ serial: "E", state: "emulator-off", copies: 0, copiesMax: 20 }] })).toBeUndefined();
+    expect(telefonoParaCrearCopia(undefined)).toBeUndefined();
+  });
+
+  it("la recién creada se coge cuando está running, sea de quien sea (la nueva queda a nuestro nombre)", () => {
+    const estado = (state: string, ok?: boolean) => ({ devices: [{ serial: "B", slots: [{ number: 2, owner: "yo", state, ...(ok === undefined ? {} : { hotswap: { ok } }) }] }] });
+    expect(copiaRecienCreada(estado("starting"), "B", 2, "Pixel 8")).toBeUndefined();
+    expect(copiaRecienCreada(estado("running", false), "B", 2, "Pixel 8")).toBeUndefined();
+    expect(copiaRecienCreada(estado("running"), "B", 2, "Pixel 8")).toEqual({ serial: "B", numero: 2, telefono: "Pixel 8" });
+    expect(copiaRecienCreada(estado("running"), "B", 3, "Pixel 8")).toBeUndefined();
   });
 });
