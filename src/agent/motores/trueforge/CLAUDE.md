@@ -165,6 +165,8 @@ Ante una discrepancia con el código, **el código manda**.
   Sin la línea, con varias o con una que no existe, NO arranca y se le devuelve el motivo; con una, el encargo lleva delante
   su ficha. Solo cuenta la LÍNEA, nunca la prosa («T1 ya está; ahora T2» es correcto), y de la línea solo los números del
   PRINCIPIO («`TAREA: 1` — no empieces la 02» es la 1; «`TAREA: 1 y 2`», dos). Como el `task_name` de Codex.
+  Sin plan nombrado ni tarea anterior (un turno NUEVO: «Continuar»), la línea es del ÚNICO plan con tareas abiertas
+  (`decidirEncargo#planesDelProyecto`); con dos, no se adivina. Sin esto salía «libre» y el cupo del crítico no casaba.
   También en una TAREA DE FONDO: sin ella el continuo no tiene tarea apuntada y hace el plan de golpe; lo que no arranca no
   gasta `TOPE_DE_ENCARGOS_AL_DESARROLLADOR`. **Límite**: dos planes en un encargo no se adivinan.
 - **Una tarea ABIERTA no se deja atrás en silencio** (`INTENTOS_POR_TAREA`, `tareaEncargadaDe`): a quien PRUEBA (`pruebaEnElAparato`: `scripts` o el `ejecucion` de Claude Code),

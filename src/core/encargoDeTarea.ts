@@ -92,6 +92,8 @@ export function decidirEncargo(
   encargo: string,
   leerTasks: (plan: string) => string | undefined,
   anterior?: TareaYaEncargada,
+  /** Los planes del proyecto (sus carpetas en `/planes/`): para la línea `TAREA:` sin plan nombrado ni tarea anterior. */
+  planesDelProyecto?: () => readonly string[],
 ): DecisionDeEncargo {
   const porRuta = planesNombrados(encargo);
   const conTareasDe = (planes: readonly string[]) =>
@@ -104,7 +106,17 @@ export function decidirEncargo(
   // Sin un plan CON TAREAS nombrado pero con su línea `TAREA:`, es del plan de la última tarea que se le encargó. Medido en
   // Maset: «TAREA: 01 / Vuelta de ajuste visual…» no nombraba plan, y «TAREA: 02 … aplica el plan B de PLAN §2.4» nombraba
   // uno que no existe («B»); los dos pasaban por trabajo libre y se saltaban la tarea abierta (`INTENTOS_POR_TAREA`).
-  const conTareas = nombrados.length === 0 && anterior !== undefined && LINEA_DE_TAREA.test(encargo) ? conTareasDe([anterior.plan]) : nombrados;
+  const delAnterior = nombrados.length === 0 && anterior !== undefined && LINEA_DE_TAREA.test(encargo) ? conTareasDe([anterior.plan]) : nombrados;
+  /**
+   * Y sin tarea anterior (un turno NUEVO de la sesión: «Continuar», otra tarea de fondo), del ÚNICO plan con tareas sin
+   * terminar. Medido en la calculadora (05-11-2026): «TAREA: 01» sin nombrar el plan salía «libre», sin tarea apuntada el
+   * cupo del crítico no casaba entre desarrollador y orquestador, y el rojo del orquestador abrió otra vuelta. Con dos o
+   * más abiertos no se adivina.
+   */
+  const conTareas =
+    delAnterior.length === 0 && nombrados.length === 0 && LINEA_DE_TAREA.test(encargo) && planesDelProyecto !== undefined
+      ? conTareasDe(planesDelProyecto()).filter((p) => p.tareas.some((t) => t.progreso !== "finalizada"))
+      : delAnterior;
   if (conTareas.length !== 1) return { tipo: "libre" };
   const { plan, tareas } = conTareas[0]!;
   const forma = `Empieza el encargo con la línea \`TAREA: <número>\` y UNA sola tarea: la prueba en el aparato y la marca del plan van por tarea.`;

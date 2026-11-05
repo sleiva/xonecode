@@ -76,6 +76,18 @@ describe("un encargo de un plan es UNA tarea", () => {
     }
   });
 
+  // Medido en la calculadora (05-11-2026): un turno NUEVO («Continuar») con «TAREA: 01» sin nombrar el plan salía libre.
+  it("sin plan nombrado ni tarea anterior, la línea TAREA: es del ÚNICO plan con tareas abiertas; con dos, no se adivina", () => {
+    const solo = decidirEncargo("developer-xone", "TAREA: 01\nPrueba la pantalla en el aparato.", leer, undefined, () => ["calculadora"]);
+    expect(solo.tipo).toBe("tarea");
+    if (solo.tipo === "tarea") expect(solo.plan).toBe("calculadora");
+    // «otro» sin TASKS.md no cuenta: sigue siendo uno.
+    expect(decidirEncargo("developer-xone", "TAREA: 01\nPrueba.", leer, undefined, () => ["calculadora", "otro"]).tipo).toBe("tarea");
+    const dos = (plan: string) => (plan === "calculadora" || plan === "otro" ? TASKS : undefined);
+    expect(decidirEncargo("developer-xone", "TAREA: 01\nPrueba.", dos, undefined, () => ["calculadora", "otro"]).tipo).toBe("libre");
+    expect(decidirEncargo("developer-xone", "Prueba la pantalla.", leer, undefined, () => ["calculadora"]).tipo).toBe("libre");
+  });
+
   it("una tarea que no existe no arranca", () => {
     const d = decidirEncargo("designer-xone", "TAREA: 9\n/planes/calculadora/", leer);
     expect(d).toEqual({ tipo: "rechazo", motivo: expect.stringContaining("«TAREA: 9» no es una tarea de /planes/calculadora/TASKS.md") });

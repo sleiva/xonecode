@@ -2168,7 +2168,13 @@ export async function abrirSesionTrueforge(
         } catch {
           return undefined;
         }
-      }, pruebaEnElAparato(agente) ? tareaEncargadaDe.get(agente.nombre) : undefined);
+      }, pruebaEnElAparato(agente) ? tareaEncargadaDe.get(agente.nombre) : undefined, () => {
+        try {
+          return readdirSync(join(raiz, CARPETA_DE_PLANES), { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name);
+        } catch {
+          return [];
+        }
+      });
       // Qué decidió y con qué tarea anterior, en la traza: sin esto, una tarea abierta que se saltaba no dejaba rastro.
       const previa = pruebaEnElAparato(agente) ? tareaEncargadaDe.get(agente.nombre) : undefined;
       diagnostico?.memoria?.(
