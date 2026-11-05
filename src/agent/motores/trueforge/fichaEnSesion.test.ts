@@ -159,6 +159,26 @@ describe("con la auditoría de cierre", () => {
     expect(tasks(raiz)).toContain("**Estado:** implementada");
   });
 
+  /** Calculadora en la consola (05-11-2026): cada criterio probado con su caso y las ocho casillas respaldadas por la última captura. */
+  it("marcar de una vez respalda con TODAS las pruebas vigentes, y el auditor ve los casos de cada una", () => {
+    const raiz = proyecto();
+    const f = crearFichaDeSesion({ raiz, continuar: true });
+    f.alResultado("write_file", { file_path: "/Calc.xne" }, "ok", "developer-xone");
+    f.alResultado("ejecutar_script", { command: "xone-hotswap click name=K_7 --- click name=K_8" }, CASOS, "developer-xone");
+    f.alResultado("ejecutar_script", { command: "xone-hotswap click name=K_9 --- click name=K_1" }, '{"comando":"caso","caso":1,"pasos":"AC 9 SUB 4 EQ","nuevos":["5"]}', "developer-xone");
+    f.alResultado("ejecutar_script", { command: "xone-captura-android" }, "guardada /artefactos/captura-9.png", "developer-xone");
+    const r = f.respaldo() as { evidencia: string };
+    writeFileSync(join(raiz, ".xonecode", "planes", "calc", "TASKS.md"), TASKS.replace(/- \[ \]/g, "- [x]"));
+    f.alMarcar("calc", "01", [1, 2], r.evidencia);
+    const a = f.paraAuditar();
+    expect(a[0]!.evidencia.resumen).toBe("/artefactos/captura-9.png");
+    expect(a[0]!.otras?.map((e) => e.resumen)).toEqual(["1 caso(s): AC 9 SUB 4 EQ → 5", "1 caso(s): AC 7 ADD 8 EQ → 15"]);
+    // Editar después las caduca TODAS: ni principal ni otras.
+    writeFileSync(join(raiz, "Calc.xne"), "<coll cambiada/>\n");
+    f.alResultado("edit_file", { file_path: "/Calc.xne" }, "ok", "developer-xone");
+    expect(f.paraAuditar()).toEqual([]);
+  });
+
   it("si todo cumple, «hecha» como sin auditoría: no sube ni baja nada", () => {
     const { f } = preparada();
     const todo = new Map([["calc/01/1", { veredicto: "cumple" as const, porque: "" }], ["calc/01/2", { veredicto: "cumple" as const, porque: "" }]]);

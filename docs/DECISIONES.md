@@ -10539,3 +10539,16 @@ sin ronda ni crítico que pedir; las rondas vuelven a cero en cada tarea. Por ma
 otra pantalla y conserva su bucle. Lo acompañan dos textos: el raíz no cuela lo visual de una tarea en el encargo de la
 siguiente (`BUCLE_DE_CALIDAD`), y el criterio de parecido va solo en la tarea de la pantalla (`FIDELIDAD_DEL_PLAN`, skill
 `xone-plan-builder`). Codex tardó 18 min sin crítico alguno: no es la misma comparación.
+
+## Un respaldo lleva TODAS las pruebas vigentes, no solo la última (05-11-2026)
+
+En la misma pasada de la consola, la T2 (la lógica) se probó criterio a criterio: casos `7 8 9 → 789`, `2 + 3 = 5`,
+`6 × 7 = 42`, `8 ÷ 0` → aviso, veinte pulsaciones, `12.5 ÷ 2 = 6.25`, todos de la versión que se entregó. El desarrollador
+marcó las ocho casillas en una llamada y `pruebaVigente` las respaldó todas con la ÚLTIMA prueba, la captura de `6.25`. El
+auditor de cierre, con esa captura sola, no vio «789» ni el aviso de dividir entre cero, dijo «no se ve» y la tarea bajó a
+«implementada» con todo probado.
+
+Ahora el respaldo guarda también las demás pruebas en el aparato vigentes al marcar (`Respaldo.otras`, hasta
+`TOPE_DE_OTRAS_PRUEBAS`), y el auditor recibe sus casos en texto y sus capturas nombradas (las imágenes siguen con
+`TOPE_DE_IMAGENES_DE_AUDITORIA`). Su prompt gana una línea: varias pruebas de la misma versión se juzgan juntas. La vigencia
+no cambia: todas son de la misma versión, y una escritura después las caduca a la vez. Sin medir aún en una pasada.

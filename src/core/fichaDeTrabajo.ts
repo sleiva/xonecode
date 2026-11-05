@@ -51,6 +51,14 @@ export interface Respaldo {
   tarea: string;
   criterio: number;
   evidencia: string;
+  /**
+   * Las DEMÁS pruebas en el aparato vigentes al marcar (más recientes primero, hasta `TOPE_DE_OTRAS_PRUEBAS`). Medido en la
+   * consola con la calculadora (05-11-2026): el desarrollador probó cada criterio de la lógica con su caso y marcó las ocho
+   * casillas de una vez; todas quedaron respaldadas por la ÚLTIMA prueba —la captura de «12.5 ÷ 2 = 6.25»—, el auditor no
+   * vio en ella «789» ni el aviso de dividir entre cero, y la tarea bajó a «implementada» con todo probado. Ausente en las
+   * fichas de antes.
+   */
+  otras?: string[];
   cuando: string;
 }
 
@@ -97,12 +105,20 @@ export function vigente(e: Evidencia, huellasActuales: Readonly<Record<string, s
   return [...rutas].every((ruta) => huellasActuales[ruta] === e.version[ruta]);
 }
 
+/** Cuántas pruebas más, además de la principal, guarda un respaldo (`Respaldo.otras`). */
+export const TOPE_DE_OTRAS_PRUEBAS = 12;
+
+/** Las pruebas en el aparato que siguen valiendo, la más reciente primero. */
+export function pruebasVigentes(f: FichaDeTrabajo, huellasActuales: Readonly<Record<string, string | undefined>>): Evidencia[] {
+  return [...f.evidencias].reverse().filter((e) => PRUEBAS_EN_EL_APARATO.includes(e.tipo) && vigente(e, huellasActuales));
+}
+
 /**
  * La prueba en el aparato que respalda marcar un criterio AHORA: la más reciente de las vigentes. Sin ninguna, no se
  * marca (`marcar_criterios_del_plan` lo devuelve como error).
  */
 export function pruebaVigente(f: FichaDeTrabajo, huellasActuales: Readonly<Record<string, string | undefined>>): Evidencia | undefined {
-  return [...f.evidencias].reverse().find((e) => PRUEBAS_EN_EL_APARATO.includes(e.tipo) && vigente(e, huellasActuales));
+  return pruebasVigentes(f, huellasActuales)[0];
 }
 
 export function conRespaldo(f: FichaDeTrabajo, r: Respaldo): FichaDeTrabajo {

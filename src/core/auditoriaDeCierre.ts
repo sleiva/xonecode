@@ -24,6 +24,8 @@ export interface CriterioAAuditar {
   /** La ficha de su tarea, recortada a `TOPE_DE_FICHA_EN_AUDITORIA`. */
   ficha: string;
   evidencia: Evidencia;
+  /** Las demás pruebas vigentes de su respaldo (`Respaldo.otras`): los casos van en texto; las capturas, nombradas. */
+  otras?: Evidencia[];
 }
 
 export interface CriterioAuditado {
@@ -73,6 +75,9 @@ export function criteriosAAuditar(
     const id = `${r.plan}/${r.tarea}/${String(r.criterio)}`;
     if (salida.some((c) => c.id === id)) continue;
     const cabecera = `${t.numero} — ${t.titulo}\n${t.cuerpo}`;
+    const otras = (r.otras ?? [])
+      .map((id) => f.evidencias.find((x) => x.id === id))
+      .filter((x): x is Evidencia => x !== undefined && x.id !== e.id && vigente(x, huellasActuales));
     salida.push({
       id,
       plan: r.plan,
@@ -81,6 +86,7 @@ export function criteriosAAuditar(
       texto,
       ficha: cabecera.length > TOPE_DE_FICHA_EN_AUDITORIA ? `${cabecera.slice(0, TOPE_DE_FICHA_EN_AUDITORIA - 1)}…` : cabecera,
       evidencia: e,
+      ...(otras.length === 0 ? {} : { otras }),
     });
   }
   return salida;
@@ -124,6 +130,7 @@ export const PROMPT_DEL_AUDITOR = [
   // prueba un criterio amplio. Medido aquí: una sola captura respaldó 21 casillas de tres tareas.
   "La prueba tiene que cubrir TODO lo que pide el criterio: una captura de la pantalla recién abierta no prueba lo que pasa al",
   "pulsar, y una comprobación de una parte no prueba el criterio entero.",
+  "Un criterio puede traer VARIAS pruebas de la misma versión: juzga lo que enseñan JUNTAS.",
   "Juzga SOLO lo que pide el criterio: lo que no pide (otra línea, otro detalle) no cuenta ni a favor ni en contra. No juzgues",
   "si es bonito ni propongas mejoras. Que el agente lo marcara no cuenta: juzga solo la prueba.",
   "Los CASOS son líneas «pasos → textos nuevos»: los textos nuevos son los que aparecen en la pantalla respecto a cómo estaba",
@@ -138,7 +145,13 @@ export const PROMPT_DEL_AUDITOR = [
 /** El bloque de texto de un criterio, delante de su prueba (la imagen va detrás, la pone quien llama). */
 export function textoDeCriterioParaAuditar(c: CriterioAAuditar): string {
   const prueba = c.evidencia.tipo === "captura" ? "una captura del aparato (la imagen de abajo)" : `${c.evidencia.tipo}: ${c.evidencia.resumen}`;
-  return `\n---\nCRITERIO ${c.id}: ${c.texto}\nFicha de su tarea:\n${c.ficha}\nPrueba: ${prueba}${c.evidencia.pantalla === undefined ? "" : ` (pantalla ${c.evidencia.pantalla})`}`;
+  const otras = (c.otras ?? []).map((e) =>
+    e.tipo === "captura" ? `- otra captura, ${e.resumen} (no se enseña)` : `- ${e.tipo}: ${e.resumen}`
+  );
+  return (
+    `\n---\nCRITERIO ${c.id}: ${c.texto}\nFicha de su tarea:\n${c.ficha}\nPrueba: ${prueba}${c.evidencia.pantalla === undefined ? "" : ` (pantalla ${c.evidencia.pantalla})`}` +
+    (otras.length === 0 ? "" : `\nOtras pruebas de esta misma versión:\n${otras.join("\n")}`)
+  );
 }
 
 /**

@@ -6,6 +6,7 @@ import {
   PROMPT_DEL_AUDITOR,
   repartoDeImagenes,
   textoDeCasillaMarcada,
+  textoDeCriterioParaAuditar,
   TOPE_DE_IMAGENES_DE_AUDITORIA,
   type CriterioAAuditar,
 } from "./auditoriaDeCierre.js";
@@ -61,6 +62,31 @@ describe("qué se audita al cerrar", () => {
     expect(r.rutas).toHaveLength(TOPE_DE_IMAGENES_DE_AUDITORIA);
     expect(r.rutas).toEqual(["/artefactos/captura-e3.png", "/artefactos/captura-e2.png"]);
     expect([...r.sinImagen.keys()].sort()).toEqual(["a", "d"]);
+  });
+});
+
+describe("un criterio con varias pruebas", () => {
+  it("lleva sus otras pruebas VIGENTES, y su texto las enumera: los casos enteros, las capturas nombradas", () => {
+    const casos = (id: string, resumen: string, version: Record<string, string> = { "/C.xne": "h1" }): Evidencia => ({
+      id, tipo: "casos", cuando: "2026-11-03T09:00:00Z", quien: "developer-xone", resumen, version,
+    });
+    const f = conFicha(
+      [captura("e1", "2026-11-03T10:00:00Z"), casos("e2", "1 caso(s): AC 7 8 9 → 789"), casos("e3", "viejo", { "/C.xne": "h0" }), captura("e4", "2026-11-03T09:30:00Z")],
+      [{ plan: "calc", tarea: "02", criterio: 1, evidencia: "e1", otras: ["e2", "e3", "e4", "e9"], cuando: "x" }]
+    );
+    const [c] = criteriosAAuditar(f, tareas, { "/C.xne": "h1" });
+    // La caducada (e3) y la que no existe (e9) se caen.
+    expect(c!.otras?.map((e) => e.id)).toEqual(["e2", "e4"]);
+    const texto = textoDeCriterioParaAuditar(c!);
+    expect(texto).toContain("Otras pruebas de esta misma versión:\n- casos: 1 caso(s): AC 7 8 9 → 789\n- otra captura, /artefactos/captura-e4.png (no se enseña)");
+    expect(PROMPT_DEL_AUDITOR).toContain("juzga lo que enseñan JUNTAS");
+  });
+
+  it("sin otras, el texto es el de siempre", () => {
+    const f = conFicha([captura("e1", "2026-11-03T10:00:00Z")], [{ plan: "calc", tarea: "02", criterio: 1, evidencia: "e1", cuando: "x" }]);
+    const [c] = criteriosAAuditar(f, tareas, { "/C.xne": "h1" });
+    expect(c!.otras).toBeUndefined();
+    expect(textoDeCriterioParaAuditar(c!)).not.toContain("Otras pruebas");
   });
 });
 
