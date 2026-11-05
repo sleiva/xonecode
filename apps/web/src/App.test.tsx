@@ -2647,6 +2647,45 @@ describe("App: el panel del proyecto (IXCODE-11)", () => {
     expect(enPanel()).toBe(true);
   });
 
+  /** Medido en la consola (05-11-2026): el proyecto se abrió sin plan, una tarea de fondo lo escribió y el Resumen no lo vio. */
+  it("con una tarea de FONDO trabajando en el proyecto, los planes se releen solos; y una vez más al terminar", () => {
+    vi.useFakeTimers();
+    try {
+      const { store, enviar } = conProyectoAbierto();
+      const tarea = { id: "t1", proyecto: "p1", proyectoNombre: "AppDemo", titulo: "Calc", peticion: "Calc", encargo: "Calc", adjuntos: [], creada: "2026-11-05T06:00:00.000Z" };
+      const pedidas = () => enviar.mock.calls.filter(([m]) => (m as { clase?: string }).clase === "planes").length;
+      act(() => void vi.advanceTimersByTime(MS_ENTRE_LECTURAS_DE_PLANES * 2));
+      const sinTarea = pedidas();
+      act(() => void vi.advanceTimersByTime(MS_ENTRE_LECTURAS_DE_PLANES * 2));
+      expect(pedidas()).toBe(sinTarea);
+      act(() => store.aplicar({ clase: "tareas", concurrencia: 1, corriendoAqui: true, lista: [{ ...tarea, estado: "en-proceso" as const }] }));
+      act(() => void vi.advanceTimersByTime(MS_ENTRE_LECTURAS_DE_PLANES * 2));
+      expect(pedidas()).toBe(sinTarea + 2);
+      act(() => store.aplicar({ clase: "tareas", concurrencia: 1, corriendoAqui: true, lista: [{ ...tarea, estado: "terminada" as const }] }));
+      expect(pedidas()).toBe(sinTarea + 3);
+      act(() => void vi.advanceTimersByTime(MS_ENTRE_LECTURAS_DE_PLANES * 2));
+      expect(pedidas()).toBe(sinTarea + 3);
+      // Una tarea de OTRO proyecto no relee los de este.
+      act(() => store.aplicar({ clase: "tareas", concurrencia: 1, corriendoAqui: true, lista: [{ ...tarea, proyecto: "p2", estado: "en-proceso" as const }] }));
+      act(() => void vi.advanceTimersByTime(MS_ENTRE_LECTURAS_DE_PLANES * 2));
+      expect(pedidas()).toBe(sinTarea + 3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("ir al Resumen del proyecto relee los planes, cada vez que se vuelve a él", () => {
+    const { enviar } = conProyectoAbierto();
+    const pedidas = () => enviar.mock.calls.filter(([m]) => (m as { clase?: string }).clase === "planes").length;
+    const antes = pedidas();
+    fireEvent.click(enBarra("AppDemo"));
+    expect(pedidas()).toBe(antes + 1);
+    fireEvent.click(screen.getByRole("tab", { name: "Tareas" }));
+    expect(pedidas()).toBe(antes + 1);
+    fireEvent.click(screen.getByRole("tab", { name: "Resumen" }));
+    expect(pedidas()).toBe(antes + 2);
+  });
+
   /**
    * IXCODE-74: con una tarea trabajando en el proyecto, «Subir» fallaba sin decir nada (el servidor se niega en
    * `vestibulo.ts#enObra` y el motivo iba al chat). Por la composición REAL de `App`: el flag de la tarea y el fallo

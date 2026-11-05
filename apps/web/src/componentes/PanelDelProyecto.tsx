@@ -144,6 +144,7 @@ export function PanelDelProyecto({
   alAprendido,
   pestanaInicial,
   tareasDesdeElGestor,
+  alVerResumen,
 }: {
   nombre: string;
   /** El NOMBRE del entorno del proyecto. Ausente = no consta, y no se pinta. */
@@ -225,8 +226,19 @@ export function PanelDelProyecto({
   pestanaInicial?: PestanaDelProyecto;
   /** El mapeo de estados y el disparo del vínculo (la puerta 2), contestados por el servidor. Ausente = no se ofrecen. */
   tareasDesdeElGestor?: AjusteDeTareasDesdeElGestor;
+  /**
+   * Se llama cada vez que el Resumen queda DELANTE (al montar en él y al volver a su pestaña): para releer lo que pinta
+   * y pudo cambiar mientras no se miraba (los planes que escribe una tarea de fondo). Ausente = nada.
+   */
+  alVerResumen?: () => void;
 }) {
   const [pestana, setPestana] = useState<PestanaDelProyecto>(pestanaInicial ?? "resumen");
+  const resumenDelante = pestana === "resumen";
+  useEffect(() => {
+    if (resumenDelante) alVerResumen?.();
+    // Solo al quedar delante: `alVerResumen` cambia de identidad en cada render de quien lo pasa.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resumenDelante]);
   /** Sin copia en el equipo no hay consola de ESTE proyecto: solo su Resumen. */
   const sinCopia = copia !== undefined && copia.proyecto.local !== true;
   /** Soporte exporta la copia: sin copia, sin el id del proyecto o sin quien pida, no hay pestaña. */

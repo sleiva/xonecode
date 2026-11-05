@@ -1646,6 +1646,21 @@ export function App({
   }, [turnoEnVuelo, planesALaVista, estado.conectado, pedirPlanes]);
 
   /**
+   * **Y con una tarea de FONDO trabajando en el proyecto abierto, también**, y una vez más al terminar: su turno no es el
+   * de esta ventana, así que ni el fin de turno ni el reloj de arriba lo releían. Medido en la consola (05-11-2026): el
+   * proyecto se abrió sin plan, la tarea lo escribió después y el Resumen no lo enseñó hasta recargar.
+   */
+  const tareaDeFondoEnCurso = tareasDelProyecto?.some((t) => t.estado === "en-proceso") === true;
+  const habiaTareaDeFondo = useRef(false);
+  useEffect(() => {
+    if (habiaTareaDeFondo.current && !tareaDeFondoEnCurso && estado.conectado) pedirPlanes();
+    habiaTareaDeFondo.current = tareaDeFondoEnCurso;
+    if (!tareaDeFondoEnCurso || !estado.conectado) return;
+    const reloj = setInterval(pedirPlanes, MS_ENTRE_LECTURAS_DE_PLANES);
+    return () => clearInterval(reloj);
+  }, [tareaDeFondoEnCurso, estado.conectado, pedirPlanes]);
+
+  /**
    * Los planes se piden en cuanto hay proyecto abierto y cable, sin esperar a la pestaña: la
    * pestaña solo EXISTE si hay alguno, así que esperarla sería no enterarse nunca. El store los
    * tira al cambiar de sesión y al caerse el cable, y eso vuelve a disparar esto.
@@ -3699,6 +3714,7 @@ export function App({
           <>
             <AvisoDeConexion conectado={estado.conectado} />
             <PanelDelProyecto
+              alVerResumen={pedirPlanes}
               // Uno por proyecto: al cambiar de proyecto se vuelve a montar y vuelve a preguntar
               // el estado de SU gestor, en vez de quedarse con la pestaña y la búsqueda del otro.
               key={proyectoActivoId ?? ""}
