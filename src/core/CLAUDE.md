@@ -33,6 +33,10 @@ Trozo del mapa de la raíz; el porqué medido, en `docs/DECISIONES.md`. **El có
 - **`config.json` RECHAZA claves**; van en `~/.xonecode/auth.json` (0600). `authEnDisco.ts`
   nunca destruye lo que había y ante JSON roto PARA.
 - **Variable de entorno por proveedor en UN sitio** (`VARIABLES_POR_PROVEEDOR`).
+- **La API la elige el `config.json`** (`apiDeModelos`: `chat` por omisión o `responses`, la de Codex;
+  `core/modelos.ts#apiPara`): solo DeepSeek y Ollama van por Responses (`agent/config/razonamientoDeResponses.ts`
+  repone el razonamiento y, en DeepSeek, lo renombra). **Límite**: la consola web solo lee el `config.json` GLOBAL
+  (`fuentesDeLaConsolaWeb`), así que la del proyecto vale en `run` y no en la web.
 - **Una llamada al modelo que no responde se CORTA** (`agent/config/vigilanciaDeLlamada.ts`, en el `fetch` de los
   compatibles OpenAI, DeepSeek debajo del eco): sin primer dato en `TOPE_HASTA_EL_PRIMER_DATO_MS` se aborta y LANZA, y el
   cliente reintenta; un silencio de `TOPE_DE_SILENCIO_DEL_MODELO_MS` a mitad hace fallar el flujo (fallo del motor). **Un keep-alive

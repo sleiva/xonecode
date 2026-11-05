@@ -5,13 +5,14 @@ import type { AIMessageChunk } from "@langchain/core/messages";
 import type { ModelosPort, Papel } from "../../core/ports.js";
 import {
   COMPATIBLES_OPENAI, compatibleConOpenAi, esProveedorPersonalizado, parsear, resolver,
-  pideThinkingAdaptativo, aceptaThinkingAdaptativo,
-  type Eleccion, type FuentesDeEleccion, type Proveedor, type ProveedorDeclarado,
+  pideThinkingAdaptativo, aceptaThinkingAdaptativo, apiDeModelosDe, apiPara,
+  type ApiDeModelos, type Eleccion, type FuentesDeEleccion, type Proveedor, type ProveedorDeclarado,
 } from "../../core/modelos.js";
 import { TOPE_DE_SALIDA_SIN_STREAMING, topeDeSalida } from "../../core/contextos.js";
 import { esfuerzoAplicable, pensamientoAplicable, type CapacidadesVivas, type ClaseDeTrabajo, type DuracionDeCache, type Esfuerzo, type Pensamiento } from "../../core/esfuerzo.js";
 import { baseUrlDeOllama, baseUrlDeOllamaCloud } from "./catalogoModelos.js";
 import { crearMemoriaDeEco, fetchConEcoDeRazonamiento } from "./ecoDeRazonamiento.js";
+import { crearMemoriaDeRazonamiento, fetchConRazonamientoDeResponses } from "./razonamientoDeResponses.js";
 import { fetchConVigilancia } from "./vigilanciaDeLlamada.js";
 import { ChatGoogleGenerativeAICompatible } from "./gemini.js";
 import { userIdDeDeepSeekEnDisco } from "./identidadEnDisco.js";
@@ -84,6 +85,9 @@ export class Modelos implements ModelosPort {
    */
   private readonly identidad: () => string | undefined;
 
+  /** Por qué API se habla (`core/modelos.ts#apiDeModelosDe`): de las MISMAS `fuentes`, así los `new Modelos(` no cambian. */
+  private readonly api: ApiDeModelos;
+
   constructor(
     fuentes: FuentesDeEleccion = {},
     personalizados?: () => readonly ProveedorDeclarado[],
@@ -96,11 +100,12 @@ export class Modelos implements ModelosPort {
     this.personalizados = personalizados ?? (() => fuentes.global?.proveedores ?? []);
     this.capacidades = capacidades ?? (() => undefined);
     this.esfuerzoDeLaSesion = esfuerzo;
+    this.api = apiDeModelosDe(fuentes);
   }
 
   paraPapel(papel: Papel, esfuerzo?: Esfuerzo, clase?: ClaseDeTrabajo, pensamiento?: Pensamiento, cache?: DuracionDeCache, topeDeSalida?: number): unknown {
     return construirModelo(
-      this.eleccion[papel], this.personalizados(), esfuerzo ?? this.esfuerzoDeLaSesion, this.capacidades, this.identidad, clase, pensamiento, cache, topeDeSalida,
+      this.eleccion[papel], this.personalizados(), esfuerzo ?? this.esfuerzoDeLaSesion, this.capacidades, this.identidad, clase, pensamiento, cache, topeDeSalida, this.api,
     );
   }
 
@@ -111,7 +116,7 @@ export class Modelos implements ModelosPort {
    */
   paraModelo(id: string, esfuerzo?: Esfuerzo, clase?: ClaseDeTrabajo, pensamiento?: Pensamiento): unknown {
     return construirModelo(
-      parsear(id), this.personalizados(), esfuerzo ?? this.esfuerzoDeLaSesion, this.capacidades, this.identidad, clase, pensamiento,
+      parsear(id), this.personalizados(), esfuerzo ?? this.esfuerzoDeLaSesion, this.capacidades, this.identidad, clase, pensamiento, undefined, undefined, this.api,
     );
   }
 
@@ -255,6 +260,41 @@ function clienteDeOllama(modelo: string, base: string, apiKey: string, esfuerzo:
   });
 }
 
+/** La de DeepSeek SIN `/v1`: medido, su `/responses` cuelga de la raíz (`https://api.deepseek.com/responses`). */
+export const URL_DE_RESPONSES_DE_DEEPSEEK = "https://api.deepseek.com";
+
+/**
+ * **El cliente por la API Responses** (`apiDeModelos: "responses"`), para DeepSeek y Ollama. Medido el 05-11-2026 con la
+ * API real (`razonamientoDeResponses.ts` dice qué y por qué):
+ * - el esfuerzo NO viaja como `reasoning` del constructor (LangChain solo lo manda a modelos de OpenAI que conoce): va por
+ *   `modelKwargs`, como en Chat; `"none"` apaga el pensamiento;
+ * - el razonamiento se recoge y se REPONE en el `fetch`, como el eco de Chat, y con DeepSeek además se renombra;
+ * - debajo de todo, la misma vigilancia de la llamada.
+ */
+function clienteDeResponses(
+  modelo: string,
+  baseURL: string,
+  apiKey: string,
+  esfuerzo: Esfuerzo | "none" | undefined,
+  formato: "deepseek" | "estandar",
+  topeDeSalida?: number,
+  userId?: string,
+): unknown {
+  if (apiKey.trim() === "") throw new Error("falta la credencial para deepseek (DEEPSEEK_API_KEY); usa /provider deepseek");
+  const kwargs = {
+    ...(esfuerzo === undefined ? {} : { reasoning: { effort: esfuerzo } }),
+    ...(userId === undefined ? {} : { user_id: userId }),
+  };
+  return new ChatOpenAI({
+    model: modelo,
+    apiKey,
+    useResponsesApi: true,
+    ...(topeDeSalida === undefined ? {} : { maxTokens: topeDeSalida }),
+    configuration: { baseURL, fetch: fetchConRazonamientoDeResponses(crearMemoriaDeRazonamiento(), formato, fetchConVigilancia()) },
+    ...(Object.keys(kwargs).length === 0 ? {} : { modelKwargs: kwargs }),
+  });
+}
+
 /** Dónde viaja, dentro de UNA llamada, el razonamiento del evento crudo hasta su trozo. No sale de esta clase. */
 const RAZONAMIENTO_DEL_DELTA = "__xonecode_thinking_tokens";
 
@@ -343,7 +383,9 @@ function construirModelo(
   pensamiento?: Pensamiento,
   cache?: DuracionDeCache,
   topeDeSalidaPedido?: number,
+  apiPedida: ApiDeModelos = "chat",
 ): unknown {
+    const api = apiPara(proveedor, apiPedida);
     /**
      * **El nivel se criba AQUÍ y contra ESTE modelo, no donde se eligió.**
      *
@@ -379,6 +421,8 @@ function construirModelo(
       case "groq":
       case "xai":
       case "deepseek":
+        if (api === "responses") return clienteDeResponses(modelo, URL_DE_RESPONSES_DE_DEEPSEEK, process.env[COMPATIBLES_OPENAI.deepseek.variable] ?? "", pensamientoApagado ? "none" : esfuerzo, "deepseek", topeDeSalidaPedido, identidad());
+        return construirCompatibleOpenAi(proveedor, modelo, COMPATIBLES_OPENAI[proveedor], pensamientoApagado ? undefined : esfuerzo, identidad, pensamientoApagado, topeDeSalidaPedido);
       case "opencode-go":
       case "opencode-zen":
         // Enumerados uno a uno, y no un `default`, para que el switch siga siendo
@@ -437,6 +481,7 @@ function construirModelo(
           ...(esfuerzo === undefined ? {} : { outputConfig: { effort: esfuerzo } }),
         });
       case "ollama":
+        if (api === "responses") return clienteDeResponses(modelo, `${baseUrlDeOllama().replace(/\/+$/, "")}/v1`, "ollama", esfuerzo, "estandar");
         return clienteDeOllama(modelo, baseUrlDeOllama(), "ollama", esfuerzo);
       case "ollama-cloud":
         return clienteDeOllama(modelo, baseUrlDeOllamaCloud(), process.env.OLLAMA_API_KEY ?? "", esfuerzo);

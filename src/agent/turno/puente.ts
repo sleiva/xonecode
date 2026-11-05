@@ -53,7 +53,13 @@ export function textoDe(msg: unknown): string {
  * (`ecoDeRazonamiento.ts`), y meterlo en la foto de la sesión la engordaría para nada.
  */
 export function razonamientoVisibleDe(msg: unknown): string {
-  const deBloques = razonamientoDe(msg);
+  // Y los bloques `reasoning` de la API Responses (`razonamientoDeResponses.ts`): solo se ENSEÑAN, como el `reasoning_content`.
+  const deResponses = Array.isArray((msg as { content?: unknown } | null)?.content)
+    ? ((msg as { content: unknown[] }).content)
+        .map((b) => (b !== null && typeof b === "object" && (b as { type?: unknown }).type === "reasoning" && typeof (b as { reasoning?: unknown }).reasoning === "string" ? (b as { reasoning: string }).reasoning : ""))
+        .join("")
+    : "";
+  const deBloques = razonamientoDe(msg) + deResponses;
   const extra = (msg as { additional_kwargs?: { reasoning_content?: unknown } } | null)?.additional_kwargs
     ?.reasoning_content;
   return typeof extra === "string" && extra !== "" ? deBloques + extra : deBloques;

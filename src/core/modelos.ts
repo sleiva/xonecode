@@ -371,6 +371,24 @@ export function parsear(texto: string): { proveedor: Proveedor; modelo: string }
   return { proveedor: proveedor as Proveedor, modelo };
 }
 
+/**
+ * **Por qué API se habla con el modelo**: Chat Completions (`chat`, la de siempre) o Responses (`responses`, la de
+ * Codex: `wire_api = "responses"`). Solo cambia algo en los proveedores de `PROVEEDORES_CON_RESPONSES`; los demás van
+ * siempre por Chat. Del `config.json` (el del proyecto manda sobre el global), nunca de una variable de entorno.
+ * Medido el 05-11-2026 que DeepSeek y Ollama la sirven entera con `@langchain/openai` (`razonamientoDeResponses.ts`).
+ */
+export type ApiDeModelos = "chat" | "responses";
+export const PROVEEDORES_CON_RESPONSES: readonly Proveedor[] = ["deepseek", "ollama"];
+
+export function apiDeModelosDe(fuentes: Pick<FuentesDeEleccion, "proyecto" | "global"> = {}): ApiDeModelos {
+  return fuentes.proyecto?.apiDeModelos ?? fuentes.global?.apiDeModelos ?? "chat";
+}
+
+/** La API con la que se construye ESTE proveedor: Responses solo donde se sabe servida. */
+export function apiPara(proveedor: Proveedor, api: ApiDeModelos): ApiDeModelos {
+  return api === "responses" && PROVEEDORES_CON_RESPONSES.includes(proveedor) ? "responses" : "chat";
+}
+
 export interface FuentesDeEleccion {
   /** `--modelo proveedor/modelo`: fija los TRES papeles. */
   bandera?: string;

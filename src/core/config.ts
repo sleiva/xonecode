@@ -19,6 +19,7 @@
  */
 
 import { esMotor, MOTORES, type MotorDeAgente } from "./motor.js";
+import type { ApiDeModelos } from "./modelos.js";
 import {
   PROVEEDORES, PAPELES,
   esProveedorPersonalizado, motivoDeEndpointInaceptable, motivoDeSlugInaceptable,
@@ -38,6 +39,8 @@ export interface ConfigDeFichero {
   modelo?: string;
   /** El motor de agente de las sesiones NUEVAS (`core/motor.ts`). Ausente = `MOTOR_POR_OMISION`. */
   motor?: MotorDeAgente;
+  /** Por qué API se habla con el modelo (`core/modelos.ts#apiDeModelosDe`). Ausente = `"chat"`. */
+  apiDeModelos?: ApiDeModelos;
   modelos?: Partial<Record<Papel, string>>;
   /** Tema visual de la consola, persistido solo cuando pertenece al proyecto. */
   tema?: string;
@@ -228,6 +231,15 @@ export function validar(
           texto: `«${ruta}»: «modelo» debe ser la cadena «proveedor/modelo»; se descarta.`,
           severidad: "aviso",
         });
+      }
+      continue;
+    }
+
+    if (clave === "apiDeModelos") {
+      if (valor === "chat" || valor === "responses") {
+        config.apiDeModelos = valor;
+      } else {
+        avisos.push({ texto: `«${ruta}»: «apiDeModelos» debe ser «chat» o «responses»; se descarta.`, severidad: "aviso" });
       }
       continue;
     }

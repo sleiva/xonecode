@@ -10564,3 +10564,23 @@ Dos huecos de los dos cambios de arriba, señalados en una revisión y COMPROBAD
 - **Lo mismo en el crítico del orquestador** (`unaCriticaPorTarea`): gastaba la crítica de la tarea ANTES del resultado, y
   tras una que no abría la captura la segunda contestaba «ya pasó su crítica visual». Ahora solo la gasta un veredicto; el
   inicio del veredicto es una constante de `criticaVisual.ts` (`INICIO_DE_UN_VEREDICTO`), la que leen los dos controles.
+
+## La API Responses, como transporte opcional (05-11-2026)
+
+Codex habla con Ollama por Responses (`wire_api = "responses"`), y xonecode por Chat Completions. Sondas contra la API real
+con `@langchain/openai` 1.5.5 (`useResponsesApi: true`), fuera del harness:
+
+| | DeepSeek directo | Ollama 0.40.14 (`deepseek-v4.1-flash:cloud`) |
+|---|---|---|
+| tool call y vuelta con su resultado | sí, sin 400 | sí |
+| imagen en el resultado (`input_image`) | sí (con `image_url` LangChain la mandaba como TEXTO) | sí |
+| caché | 3.968 de 4.213 en la segunda | 4.096 de 4.161 |
+| texto del razonamiento | NO llegaba: lo manda como `reasoning_text` y LangChain lee `summary` | sí |
+| esfuerzo | solo por `modelKwargs` (`reasoning` del constructor no viaja) | igual |
+| primer trozo | 300-450 ms | 270-370 ms |
+
+Se implementa detrás de `apiDeModelos: "responses"` en el `config.json`, sin variable de entorno: `clienteDeResponses`
+(`agent/config/modelos.ts`) y una costura en el `fetch` como el eco de Chat (`razonamientoDeResponses.ts`) que guarda lo
+pensado por `call_id` y lo REPONE delante de esa llamada —TrueForge reconstruye los mensajes en cada vuelta y no llevaba
+el item `reasoning`—, y que en DeepSeek renombra `reasoning_text` a `reasoning_summary_text`. Por omisión sigue Chat: la
+comparación con la calculadora está por hacer.

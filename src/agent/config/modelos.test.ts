@@ -119,6 +119,37 @@ describe("el tope de salida pedido viaja a DeepSeek", () => {
   });
 });
 
+/** `apiDeModelos: "responses"` (05-11-2026): la petición que SALE, no el objeto construido. */
+describe("la API Responses, en la petición", () => {
+  const anterior = process.env.DEEPSEEK_API_KEY;
+  const fetchAnterior = globalThis.fetch;
+  afterEach(() => {
+    globalThis.fetch = fetchAnterior;
+    if (anterior === undefined) delete process.env.DEEPSEEK_API_KEY;
+    else process.env.DEEPSEEK_API_KEY = anterior;
+  });
+
+  it("con la opción, DeepSeek va a `/responses` con el esfuerzo en `reasoning` («none» si está apagado); sin ella, a Chat", async () => {
+    process.env.DEEPSEEK_API_KEY = "sk-de-pega";
+    const pedidos: { url: string; cuerpo: Record<string, unknown> }[] = [];
+    globalThis.fetch = (async (url: unknown, init?: { body?: unknown }) => {
+      const ruta = String(url);
+      pedidos.push({ url: ruta, cuerpo: JSON.parse(String(init?.body)) });
+      const cuerpo = ruta.endsWith("/responses")
+        ? { id: "r", object: "response", created_at: 0, model: "deepseek-flash", status: "completed", output: [{ type: "message", id: "m", role: "assistant", status: "completed", content: [{ type: "output_text", text: "ok", annotations: [] }] }], usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 } }
+        : { id: "x", object: "chat.completion", created: 0, model: "deepseek-flash", choices: [{ index: 0, message: { role: "assistant", content: "ok" }, finish_reason: "stop" }], usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 } };
+      return new Response(JSON.stringify(cuerpo), { status: 200, headers: { "content-type": "application/json" } });
+    }) as typeof fetch;
+    const conResponses = new Modelos({ bandera: "deepseek/deepseek-flash", global: { apiDeModelos: "responses" } });
+    for (const cliente of [conResponses.paraPapel("trabajo", "low"), conResponses.paraPapel("trabajo", undefined, undefined, "apagado")]) {
+      await (cliente as { invoke: (m: unknown) => Promise<unknown> }).invoke([{ role: "user", content: "hola" }]);
+    }
+    await (new Modelos({ bandera: "deepseek/deepseek-flash" }).paraPapel("trabajo") as { invoke: (m: unknown) => Promise<unknown> }).invoke([{ role: "user", content: "hola" }]);
+    expect(pedidos.map((p) => new URL(p.url).pathname)).toEqual(["/responses", "/responses", "/v1/chat/completions"]);
+    expect(pedidos.map((p) => p.cuerpo["reasoning"])).toEqual([{ effort: "low" }, { effort: "none" }, undefined]);
+  });
+});
+
 /**
  * La CACHÉ de Anthropic, en el cuerpo que se MANDA. Medido el 21-10-2026 con `claude-sonnet-5-5`: sin `cache_control` la
  * segunda llamada leía 0 de caché. Aquí no vale `invocationParams()` —su `cache_control` sale de las opciones de cada
