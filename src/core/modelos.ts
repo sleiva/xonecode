@@ -381,7 +381,9 @@ export type ApiDeModelos = "chat" | "responses";
 export const PROVEEDORES_CON_RESPONSES: readonly Proveedor[] = ["deepseek", "ollama"];
 
 export function apiDeModelosDe(fuentes: Pick<FuentesDeEleccion, "proyecto" | "global"> = {}): ApiDeModelos {
-  return fuentes.proyecto?.apiDeModelos ?? fuentes.global?.apiDeModelos ?? "chat";
+  // Por omisión Responses (petición suya, 05-11-2026: «déjala para los proveedores que la permitan»); `apiPara` la limita a
+  // los de `PROVEEDORES_CON_RESPONSES`, y `"chat"` en el `config.json` vuelve a Chat Completions.
+  return fuentes.proyecto?.apiDeModelos ?? fuentes.global?.apiDeModelos ?? "responses";
 }
 
 /** La API con la que se construye ESTE proveedor: Responses solo donde se sabe servida. */

@@ -33,7 +33,7 @@ Trozo del mapa de la raíz; el porqué medido, en `docs/DECISIONES.md`. **El có
 - **`config.json` RECHAZA claves**; van en `~/.xonecode/auth.json` (0600). `authEnDisco.ts`
   nunca destruye lo que había y ante JSON roto PARA.
 - **Variable de entorno por proveedor en UN sitio** (`VARIABLES_POR_PROVEEDOR`).
-- **La API la elige el `config.json`** (`apiDeModelos`: `chat` por omisión o `responses`, la de Codex;
+- **La API la elige el `config.json`** (`apiDeModelos`: `responses`, la de Codex, por omisión, o `chat`;
   `core/modelos.ts#apiPara`): solo DeepSeek y Ollama van por Responses (`agent/config/razonamientoDeResponses.ts`
   repone el razonamiento y, en DeepSeek, lo renombra). **Límite**: la consola web solo lee el `config.json` GLOBAL
   (`fuentesDeLaConsolaWeb`), así que la del proyecto vale en `run` y no en la web.

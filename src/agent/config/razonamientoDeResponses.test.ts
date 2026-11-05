@@ -101,8 +101,8 @@ describe("el razonamiento por la API Responses", () => {
 });
 
 describe("`apiDeModelos` en el config.json", () => {
-  it("del proyecto manda sobre el global; ausente, Chat; solo DeepSeek y Ollama van por Responses", () => {
-    expect(apiDeModelosDe({})).toBe("chat");
+  it("del proyecto manda sobre el global; ausente, Responses; solo DeepSeek y Ollama van por ella", () => {
+    expect(apiDeModelosDe({})).toBe("responses");
     expect(apiDeModelosDe({ global: { apiDeModelos: "responses" } })).toBe("responses");
     expect(apiDeModelosDe({ global: { apiDeModelos: "responses" }, proyecto: { apiDeModelos: "chat" } })).toBe("chat");
     expect(apiPara("deepseek", "responses")).toBe("responses");

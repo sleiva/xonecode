@@ -39,7 +39,7 @@ export interface ConfigDeFichero {
   modelo?: string;
   /** El motor de agente de las sesiones NUEVAS (`core/motor.ts`). Ausente = `MOTOR_POR_OMISION`. */
   motor?: MotorDeAgente;
-  /** Por qué API se habla con el modelo (`core/modelos.ts#apiDeModelosDe`). Ausente = `"chat"`. */
+  /** Por qué API se habla con el modelo (`core/modelos.ts#apiDeModelosDe`). Ausente = `"responses"` donde el proveedor la admite. */
   apiDeModelos?: ApiDeModelos;
   modelos?: Partial<Record<Papel, string>>;
   /** Tema visual de la consola, persistido solo cuando pertenece al proyecto. */

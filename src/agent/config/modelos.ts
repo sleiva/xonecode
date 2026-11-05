@@ -383,7 +383,7 @@ function construirModelo(
   pensamiento?: Pensamiento,
   cache?: DuracionDeCache,
   topeDeSalidaPedido?: number,
-  apiPedida: ApiDeModelos = "chat",
+  apiPedida: ApiDeModelos = "responses",
 ): unknown {
     const api = apiPara(proveedor, apiPedida);
     /**

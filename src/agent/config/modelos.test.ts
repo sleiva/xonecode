@@ -111,7 +111,8 @@ describe("el tope de salida pedido viaja a DeepSeek", () => {
         { status: 200, headers: { "content-type": "application/json" } }
       );
     }) as typeof fetch;
-    const modelos = new Modelos({ bandera: "deepseek/deepseek-flash" });
+    // Por Chat Completions (`max_tokens`); por Responses es `max_output_tokens`, en su propio test.
+    const modelos = new Modelos({ bandera: "deepseek/deepseek-flash", global: { apiDeModelos: "chat" } });
     for (const cliente of [modelos.paraPapel("trabajo", undefined, undefined, "apagado", undefined, 32_768), modelos.paraPapel("trabajo")]) {
       await (cliente as { invoke: (m: unknown) => Promise<unknown> }).invoke([{ role: "user", content: "hola" }]);
     }
@@ -129,7 +130,7 @@ describe("la API Responses, en la petición", () => {
     else process.env.DEEPSEEK_API_KEY = anterior;
   });
 
-  it("con la opción, DeepSeek va a `/responses` con el esfuerzo en `reasoning` («none» si está apagado); sin ella, a Chat", async () => {
+  it("por omisión DeepSeek va a `/responses` con el esfuerzo en `reasoning` («none» si está apagado); con «chat», a Chat", async () => {
     process.env.DEEPSEEK_API_KEY = "sk-de-pega";
     const pedidos: { url: string; cuerpo: Record<string, unknown> }[] = [];
     globalThis.fetch = (async (url: unknown, init?: { body?: unknown }) => {
@@ -140,11 +141,12 @@ describe("la API Responses, en la petición", () => {
         : { id: "x", object: "chat.completion", created: 0, model: "deepseek-flash", choices: [{ index: 0, message: { role: "assistant", content: "ok" }, finish_reason: "stop" }], usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 } };
       return new Response(JSON.stringify(cuerpo), { status: 200, headers: { "content-type": "application/json" } });
     }) as typeof fetch;
-    const conResponses = new Modelos({ bandera: "deepseek/deepseek-flash", global: { apiDeModelos: "responses" } });
+    // Por omisión, Responses (petición suya, 05-11-2026); con `"chat"` en el config.json, Chat Completions.
+    const conResponses = new Modelos({ bandera: "deepseek/deepseek-flash" });
     for (const cliente of [conResponses.paraPapel("trabajo", "low"), conResponses.paraPapel("trabajo", undefined, undefined, "apagado")]) {
       await (cliente as { invoke: (m: unknown) => Promise<unknown> }).invoke([{ role: "user", content: "hola" }]);
     }
-    await (new Modelos({ bandera: "deepseek/deepseek-flash" }).paraPapel("trabajo") as { invoke: (m: unknown) => Promise<unknown> }).invoke([{ role: "user", content: "hola" }]);
+    await (new Modelos({ bandera: "deepseek/deepseek-flash", global: { apiDeModelos: "chat" } }).paraPapel("trabajo") as { invoke: (m: unknown) => Promise<unknown> }).invoke([{ role: "user", content: "hola" }]);
     expect(pedidos.map((p) => new URL(p.url).pathname)).toEqual(["/responses", "/responses", "/v1/chat/completions"]);
     expect(pedidos.map((p) => p.cuerpo["reasoning"])).toEqual([{ effort: "low" }, { effort: "none" }, undefined]);
   });
@@ -292,8 +294,9 @@ describe("el esfuerzo, contra el invocationParams de cada cliente", () => {
   });
 
   const params = (id: string, esfuerzo?: "low" | "medium" | "high" | "xhigh" | "max", piensa?: boolean) => {
+    // Por Chat Completions (`reasoning_effort`, `thinking`): por Responses el esfuerzo va en `reasoning`, en su test.
     const modelos = new Modelos(
-      { bandera: id },
+      { bandera: id, global: { apiDeModelos: "chat" } },
       undefined,
       piensa === undefined ? undefined : () => ({ piensa }),
     );
@@ -342,7 +345,8 @@ describe("el esfuerzo, contra el invocationParams de cada cliente", () => {
    */
   describe("el pensamiento de un subagente, por familia", () => {
     const con = (id: string, o: { esfuerzo?: "low" | "high" | "max"; sesion?: "low" | "high" | "max"; clase?: "mecanica"; pensamiento?: "apagado" | "activo" }) => {
-      const modelos = new Modelos({ bandera: id }, undefined, undefined, o.sesion);
+      // El esfuerzo por Chat Completions (`reasoning_effort`, `thinking`); por Responses va en `reasoning` (test aparte).
+      const modelos = new Modelos({ bandera: id, global: { apiDeModelos: "chat" } }, undefined, undefined, o.sesion);
       return (modelos.paraPapel("trabajo", o.esfuerzo, o.clase, o.pensamiento) as {
         invocationParams: () => Record<string, unknown>;
       }).invocationParams();

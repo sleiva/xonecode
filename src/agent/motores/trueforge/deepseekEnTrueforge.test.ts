@@ -72,7 +72,8 @@ describe("DeepSeek en TrueForge: el razonamiento vuelve con la tool call", () =>
     const s = await abrirSesionTrueforge({
       raiz,
       // El cliente REAL de DeepSeek, con su eco; sin identidad, para no leer ningún login.
-      modelos: new Modelos({ bandera: "deepseek/deepseek-flash" }, () => [], undefined, undefined, () => undefined),
+      // El eco de `reasoning_content` es de Chat Completions; por Responses lo prueba `razonamientoDeResponses.test.ts`.
+      modelos: new Modelos({ bandera: "deepseek/deepseek-flash", global: { apiDeModelos: "chat" } }, () => [], undefined, undefined, () => undefined),
       entorno: { git: { usable: false, prefijo: "" } } as never,
       skills: [],
     });
