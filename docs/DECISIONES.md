@@ -10548,7 +10548,16 @@ marcó las ocho casillas en una llamada y `pruebaVigente` las respaldó todas co
 auditor de cierre, con esa captura sola, no vio «789» ni el aviso de dividir entre cero, dijo «no se ve» y la tarea bajó a
 «implementada» con todo probado.
 
-Ahora el respaldo guarda también las demás pruebas en el aparato vigentes al marcar (`Respaldo.otras`, hasta
-`TOPE_DE_OTRAS_PRUEBAS`), y el auditor recibe sus casos en texto y sus capturas nombradas (las imágenes siguen con
+Ahora el respaldo guarda también las demás pruebas en el aparato vigentes al marcar (`Respaldo.otras`: los casos
+primero, hasta `TOPE_DE_OTROS_CASOS`, y `TOPE_DE_OTRAS_CAPTURAS` capturas), y el auditor recibe sus casos en texto y sus capturas nombradas (las imágenes siguen con
 `TOPE_DE_IMAGENES_DE_AUDITORIA`). Su prompt gana una línea: varias pruebas de la misma versión se juzgan juntas. La vigencia
 no cambia: todas son de la misma versión, y una escritura después las caduca a la vez. Sin medir aún en una pasada.
+
+Dos huecos de los dos cambios de arriba, señalados en una revisión y COMPROBADOS antes de arreglarlos:
+
+- **Una crítica que fallaba juzgaba la pantalla**: se apuntaba al PEDIR la tool. El test de sesión lo enseñaba sin querer
+  (su primera crítica devolvía «No pude abrir «c.png»» y la T2 ya la daba por juzgada); corrido contra el código anterior,
+  el caso nuevo falla. Ahora la apunta la propia tool cuando devuelve `Veredicto visual de «…»`, y volver a encargar la
+  MISMA tarea de la pantalla la deja juzgar otra vez.
+- **Las capturas desplazaban a los casos**: con un tope común de doce, diez casos y ocho capturas dejaban 5 casos al
+  auditor. Ahora van por separado: los casos primero y las capturas con su propio tope.

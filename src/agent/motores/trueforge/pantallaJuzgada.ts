@@ -10,7 +10,8 @@ import { tool, type StructuredToolInterface } from "@langchain/core/tools";
  * La regla: una MAQUETA que pasó el crítico en una tarea queda JUZGADA cuando se encarga OTRA tarea del plan (no si se
  * arrastra la anterior, que sigue abierta). Contra una maqueta juzgada el crítico no vuelve a correr —contesta que lo que
  * difiera va como observación al cierre— y la medida automática es un dato, sin ronda visual ni crítico que pedir. Otra
- * maqueta (Maset: una pantalla por tarea) tiene su propio bucle.
+ * maqueta (Maset: una pantalla por tarea) tiene su propio bucle. Solo cuenta una crítica que DEVOLVIÓ veredicto (una que
+ * falló no juzga nada), y volver a encargar la MISMA tarea de la pantalla la deja juzgar otra vez.
  */
 export interface PantallasJuzgadas {
   /** Se pasó el crítico contra `maqueta` durante la tarea `tarea` (`plan|número`). Sin una de las dos, nada. */
@@ -74,18 +75,29 @@ export function textoDeMedidaInformativa(opciones: { captura: string; maqueta: s
   );
 }
 
-/** El crítico que no vuelve a juzgar una maqueta ya juzgada (`PantallasJuzgadas`). Lo demás pasa igual. */
+/** Cómo empieza lo que devuelve el crítico cuando HA JUZGADO (`criticaVisual.ts`): lo demás es un fallo o una negativa. */
+export const INICIO_DE_UN_VEREDICTO = "Veredicto visual de «";
+
+/**
+ * El crítico que no vuelve a juzgar una maqueta ya juzgada en OTRA tarea (`PantallasJuzgadas`), y que apunta la crítica
+ * cuando devuelve veredicto. Lo demás pasa igual.
+ */
 export function sinJuzgarDosVeces(
   critica: StructuredToolInterface,
   maquetaDe: (args: unknown) => string | undefined,
-  pantallas: Pick<PantallasJuzgadas, "juzgadaEn">
+  pantallas: Pick<PantallasJuzgadas, "juzgadaEn" | "alCriticar">,
+  tareaActual: () => string | undefined
 ): StructuredToolInterface {
   return tool(
     async (args: unknown) => {
       const maqueta = maquetaDe(args);
-      const tarea = pantallas.juzgadaEn(maqueta);
-      if (maqueta !== undefined && tarea !== undefined) return textoDePantallaJuzgada(maqueta, tarea);
-      return critica.invoke(args as never);
+      const tarea = tareaActual();
+      const juzgadaEn = pantallas.juzgadaEn(maqueta);
+      if (maqueta !== undefined && juzgadaEn !== undefined && juzgadaEn !== tarea) return textoDePantallaJuzgada(maqueta, juzgadaEn);
+      const salida: unknown = await critica.invoke(args as never);
+      const texto = typeof salida === "string" ? salida : String((salida as { content?: unknown } | undefined)?.content ?? "");
+      if (texto.startsWith(INICIO_DE_UN_VEREDICTO)) pantallas.alCriticar(tarea, maqueta);
+      return salida;
     },
     { name: critica.name, description: critica.description, schema: critica.schema as never }
   ) as unknown as StructuredToolInterface;

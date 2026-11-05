@@ -17,8 +17,7 @@ import {
   fichaNueva,
   interpretarFicha,
   pruebaVigente,
-  pruebasVigentes,
-  TOPE_DE_OTRAS_PRUEBAS,
+  otrasPruebas,
   vigente,
   type EstadoDeCriterio,
   type FichaDeTrabajo,
@@ -164,7 +163,7 @@ export function crearFichaDeSesion(opciones: {
     alMarcar(plan, tarea, criterios, evidencia) {
       // Con la principal, las DEMÁS pruebas vigentes: el auditor del cierre las ve todas (`Respaldo.otras`).
       sincronizar();
-      const otras = pruebasVigentes(ficha, huellasActuales()).map((e) => e.id).filter((id) => id !== evidencia).slice(0, TOPE_DE_OTRAS_PRUEBAS);
+      const otras = otrasPruebas(ficha, huellasActuales(), evidencia);
       for (const criterio of criterios) ficha = conRespaldo(ficha, { plan, tarea, criterio, evidencia, ...(otras.length === 0 ? {} : { otras }), cuando: ahora() });
       guardar();
     },

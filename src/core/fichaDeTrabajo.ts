@@ -52,7 +52,7 @@ export interface Respaldo {
   criterio: number;
   evidencia: string;
   /**
-   * Las DEMÁS pruebas en el aparato vigentes al marcar (más recientes primero, hasta `TOPE_DE_OTRAS_PRUEBAS`). Medido en la
+   * Las DEMÁS pruebas en el aparato vigentes al marcar (`otrasPruebas`). Medido en la
    * consola con la calculadora (05-11-2026): el desarrollador probó cada criterio de la lógica con su caso y marcó las ocho
    * casillas de una vez; todas quedaron respaldadas por la ÚLTIMA prueba —la captura de «12.5 ÷ 2 = 6.25»—, el auditor no
    * vio en ella «789» ni el aviso de dividir entre cero, y la tarea bajó a «implementada» con todo probado. Ausente en las
@@ -105,12 +105,26 @@ export function vigente(e: Evidencia, huellasActuales: Readonly<Record<string, s
   return [...rutas].every((ruta) => huellasActuales[ruta] === e.version[ruta]);
 }
 
-/** Cuántas pruebas más, además de la principal, guarda un respaldo (`Respaldo.otras`). */
-export const TOPE_DE_OTRAS_PRUEBAS = 12;
+/**
+ * Cuántos CASOS y cuántas CAPTURAS más guarda un respaldo además de la principal (`otrasPruebas`). Por separado: con un tope
+ * común, ocho capturas —que el auditor no ve como imagen pasadas las suyas— echaban los casos más viejos, que son los que
+ * prueban la lógica (medido en `fichaEnSesion.test.ts`: 5 de 10 casos).
+ */
+export const TOPE_DE_OTROS_CASOS = 24;
+export const TOPE_DE_OTRAS_CAPTURAS = 2;
 
 /** Las pruebas en el aparato que siguen valiendo, la más reciente primero. */
 export function pruebasVigentes(f: FichaDeTrabajo, huellasActuales: Readonly<Record<string, string | undefined>>): Evidencia[] {
   return [...f.evidencias].reverse().filter((e) => PRUEBAS_EN_EL_APARATO.includes(e.tipo) && vigente(e, huellasActuales));
+}
+
+/** Las demás pruebas vigentes para un respaldo cuya principal es `principal`: los casos primero, y pocas capturas. */
+export function otrasPruebas(f: FichaDeTrabajo, huellasActuales: Readonly<Record<string, string | undefined>>, principal: string): string[] {
+  const vigentes = pruebasVigentes(f, huellasActuales).filter((e) => e.id !== principal);
+  return [
+    ...vigentes.filter((e) => e.tipo === "casos").slice(0, TOPE_DE_OTROS_CASOS),
+    ...vigentes.filter((e) => e.tipo === "captura").slice(0, TOPE_DE_OTRAS_CAPTURAS),
+  ].map((e) => e.id);
 }
 
 /**

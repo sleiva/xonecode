@@ -32,20 +32,33 @@ describe("una pantalla se juzga en su tarea", () => {
     expect(maquetaDeReferencia("/adjuntos/otra.png", [CALC])).toBeUndefined();
   });
 
-  it("el crítico contra una maqueta juzgada no corre y lo manda como observación; contra otra, sí", async () => {
+  it("el crítico contra una maqueta juzgada en OTRA tarea no corre; en la misma, sí; y solo apunta lo que dio veredicto", async () => {
     let llamadas = 0;
-    const critica = tool(async () => (llamadas++, "ROJO: la tecla = es mayor"), { name: "xone_critica_visual", description: "x", schema: z.object({ pantalla: z.string(), referencia: z.string().optional() }) });
+    let respuesta = "Veredicto visual de «calc» (comparado con la referencia): rojo.";
+    const critica = tool(async () => (llamadas++, respuesta), { name: "xone_critica_visual", description: "x", schema: z.object({ pantalla: z.string(), referencia: z.string().optional() }) });
     const p = crearPantallasJuzgadas();
-    const envuelta = sinJuzgarDosVeces(critica as never, (a) => maquetaDeReferencia((a as { referencia?: string }).referencia, [CALC, OTRA]), p);
+    let tarea = "calc|1";
+    const envuelta = sinJuzgarDosVeces(critica as never, (a) => maquetaDeReferencia((a as { referencia?: string }).referencia, [CALC, OTRA]), p, () => tarea);
     expect(envuelta.name).toBe("xone_critica_visual");
-    expect(String(await envuelta.invoke({ pantalla: "/artefactos/c.png", referencia: CALC }))).toContain("ROJO");
-    p.alCriticar("calc|1", CALC);
+    // Una crítica que falla no juzga nada.
+    respuesta = "No pude abrir «c.png» (Error).";
+    await envuelta.invoke({ pantalla: "/artefactos/c.png", referencia: CALC });
     p.alPasar("calc|1", false);
+    expect(p.juzgadaEn(CALC)).toBeUndefined();
+    // Con veredicto, sí: y en la tarea siguiente ya no corre contra esa maqueta.
+    tarea = "calc|1";
+    respuesta = "Veredicto visual de «calc» (comparado con la referencia): rojo.";
+    expect(String(await envuelta.invoke({ pantalla: "/artefactos/c.png", referencia: CALC }))).toContain("rojo");
+    p.alPasar("calc|1", false);
+    tarea = "calc|2";
     const repetida = String(await envuelta.invoke({ pantalla: "/artefactos/c.png", referencia: "/diseno/screen.jpg" }));
     expect(repetida).toContain("ya se juzgó en la tarea 01 de /planes/calc/");
     expect(repetida).toContain("OBSERVACIÓN");
-    expect(String(await envuelta.invoke({ pantalla: "/artefactos/c.png", referencia: OTRA }))).toContain("ROJO");
-    expect(llamadas).toBe(2);
+    // Otra maqueta corre; y volver a encargar la tarea de la pantalla la deja juzgar otra vez.
+    expect(String(await envuelta.invoke({ pantalla: "/artefactos/c.png", referencia: OTRA }))).toContain("rojo");
+    tarea = "calc|1";
+    expect(String(await envuelta.invoke({ pantalla: "/artefactos/c.png", referencia: CALC }))).toContain("rojo");
+    expect(llamadas).toBe(4);
   });
 
   it("la medida contra una maqueta juzgada es un dato: ni ronda visual ni crítico que pedir", () => {

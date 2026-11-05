@@ -200,7 +200,7 @@ Ante una discrepancia con el código, **el código manda**.
   devuelve el motivo y no se marca), y **el estado de la tarea lo calcula el código al cerrar** y lo escribe en su
   `TASKS.md`: `hecha` solo con todo respaldado vigente y el verificador en verde. El cierre de `run` la enseña.
   **La AUDITORÍA de cierre** (F2: `core/auditoriaDeCierre.ts`, `auditorDeCierre.ts`): las casillas marcadas con prueba
-  vigente se preguntan al papel `afilado` con su prueba delante —la principal y las DEMÁS pruebas vigentes al marcar (`Respaldo.otras`, hasta `TOPE_DE_OTRAS_PRUEBAS`): marcar de una vez respaldaba todo con la última— (casos en texto, capturas como imagen, como mucho
+  vigente se preguntan al papel `afilado` con su prueba delante —la principal y las DEMÁS pruebas vigentes al marcar (`Respaldo.otras`: los casos primero, hasta `TOPE_DE_OTROS_CASOS`, y `TOPE_DE_OTRAS_CAPTURAS` capturas): marcar de una vez respaldaba todo con la última— (casos en texto, capturas como imagen, como mucho
   `TOPE_DE_IMAGENES_DE_AUDITORIA`), con el prompt MEDIDO (porqué antes que veredicto; `cumple`/`contradice`/`no-se-ve`;
   refutar exige `cita`). Lo que no se sostiene queda `sin-sostener` y la tarea no pasa de `implementada`: **solo BAJA**.
   No poder preguntar se dice y no baja nada. **Límites**: los jueces aún no la reciben, y en una tarea de fondo el juez

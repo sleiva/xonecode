@@ -5041,10 +5041,19 @@ describe("un encargo de un plan es UNA tarea, con su línea `TAREA:`", () => {
   }, 30_000);
 
   /** Calculadora en la consola (05-11-2026): tras juzgar la pantalla en T1, los críticos de T2 abrían otra vuelta visual. */
-  it("la pantalla juzgada en su tarea no se vuelve a juzgar al pasar a otra tarea del plan", async () => {
+  /**
+   * Un caso para cada lado. Si la crítica de T1 da VEREDICTO, la de T2 no corre. Si FALLA (la captura no se abre), no ha juzgado
+   * nada y la de T2 corre: antes se apuntaba al PEDIR la tool, y una crítica fallida dejaba la pantalla juzgada.
+   */
+  const pasarDeTareaConCritica = async (conCaptura: boolean): Promise<string[][]> => {
     const raiz = proyecto();
+    const { PNG } = await import("pngjs");
+    const png = new PNG({ width: 40, height: 80 });
+    png.data.fill(200);
     mkdirSync(join(raiz, "diseno"), { recursive: true });
-    writeFileSync(join(raiz, "diseno", "screen.png"), "no es un png");
+    writeFileSync(join(raiz, "diseno", "screen.png"), PNG.sync.write(png));
+    const carpeta = mkdtempSync(join(tmpdir(), "xc-tf-art-"));
+    if (conCaptura) writeFileSync(join(carpeta, "c.png"), PNG.sync.write(png));
     mkdirSync(join(raiz, ".xonecode", "planes", "calc"), { recursive: true });
     writeFileSync(
       join(raiz, ".xonecode", "planes", "calc", "TASKS.md"),
@@ -5059,14 +5068,24 @@ describe("un encargo de un plan es UNA tarea, con su línea `TAREA:`", () => {
       [critica("cv2")],
       [new AIMessageChunk({ content: "Hecho." })],
     ]);
-    const s = await abrirSesionTrueforge({
-      raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, bucleDelDesarrollador: true, developerContinuo: true,
-      artefactos: mkdtempSync(join(tmpdir(), "xc-tf-art-")),
-    });
+    const base = m.paraPapel.bind(m);
+    (m as { paraPapel: unknown }).paraPapel = (papel: string, ...resto: unknown[]) =>
+      papel === "afilado" ? { invoke: async () => ({ content: '{"veredicto":"verde","hallazgos":[]}' }) } : (base as (...a: unknown[]) => unknown)(papel, ...resto);
+    const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, bucleDelDesarrollador: true, developerContinuo: true, artefactos: carpeta });
     await s.turno("haz la calculadora con la maqueta /diseno/screen.png", piel().p);
-    const tras = (i: number): string => vistos[i]!.join("\n");
-    expect(tras(3)).not.toContain("ya se juzgó");
-    expect(tras(6)).toContain("La pantalla de /diseno/screen.png ya se juzgó en la tarea 01 de /planes/calc/");
+    return vistos;
+  };
+
+  it("la pantalla juzgada en su tarea no se vuelve a juzgar al pasar a otra tarea del plan", async () => {
+    const vistos = await pasarDeTareaConCritica(true);
+    expect(vistos[3]!.join("\n")).toContain("Veredicto visual de «calculadora»");
+    expect(vistos[6]!.join("\n")).toContain("La pantalla de /diseno/screen.png ya se juzgó en la tarea 01 de /planes/calc/");
+  }, 30_000);
+
+  it("una crítica que FALLA no juzga la pantalla: la de la tarea siguiente corre", async () => {
+    const vistos = await pasarDeTareaConCritica(false);
+    expect(vistos[3]!.join("\n")).toContain("No pude abrir «c.png»");
+    expect(vistos[6]!.join("\n")).not.toContain("ya se juzgó");
   }, 30_000);
 });
 

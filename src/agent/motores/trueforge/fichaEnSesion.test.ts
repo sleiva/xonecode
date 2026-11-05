@@ -179,6 +179,23 @@ describe("con la auditoría de cierre", () => {
     expect(f.paraAuditar()).toEqual([]);
   });
 
+  it("las capturas no desplazan a los casos: con diez casos y ocho capturas, el auditor recibe los diez", () => {
+    const raiz = proyecto();
+    const f = crearFichaDeSesion({ raiz, continuar: true });
+    f.alResultado("write_file", { file_path: "/Calc.xne" }, "ok", "developer-xone");
+    for (let i = 1; i <= 10; i++)
+      f.alResultado("ejecutar_script", { command: `xone-hotswap click name=K_${String(i)} --- click name=K_EQ` }, `{"comando":"caso","caso":1,"pasos":"AC ${String(i)} EQ","nuevos":["${String(i)}"]}`, "developer-xone");
+    for (let i = 1; i <= 8; i++) f.alResultado("ejecutar_script", { command: "xone-captura-android" }, `guardada /artefactos/captura-${String(i)}.png`, "developer-xone");
+    const r = f.respaldo() as { evidencia: string };
+    writeFileSync(join(raiz, ".xonecode", "planes", "calc", "TASKS.md"), TASKS.replace(/- \[ \]/g, "- [x]"));
+    f.alMarcar("calc", "01", [1, 2], r.evidencia);
+    const [c] = f.paraAuditar();
+    const otras = c!.otras ?? [];
+    expect(otras.filter((e) => e.tipo === "casos")).toHaveLength(10);
+    // Además de la principal, como mucho dos capturas más: el auditor no ve más imágenes.
+    expect(otras.filter((e) => e.tipo === "captura").length).toBeLessThanOrEqual(2);
+  });
+
   it("si todo cumple, «hecha» como sin auditoría: no sube ni baja nada", () => {
     const { f } = preparada();
     const todo = new Map([["calc/01/1", { veredicto: "cumple" as const, porque: "" }], ["calc/01/2", { veredicto: "cumple" as const, porque: "" }]]);

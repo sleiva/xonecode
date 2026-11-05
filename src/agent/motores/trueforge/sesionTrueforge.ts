@@ -1572,7 +1572,7 @@ export async function abrirSesionTrueforge(
   /** El crítico, que no vuelve a juzgar una pantalla ya juzgada en su tarea; lo demás pasa igual. */
   const sinJuzgarPantallaDosVeces = (t: ToolDeLangchain): ToolDeLangchain =>
     (t as { name?: string }).name === "xone_critica_visual"
-      ? (sinJuzgarDosVeces(t as never, maquetaDeLaCritica, pantallasJuzgadas) as unknown as ToolDeLangchain)
+      ? (sinJuzgarDosVeces(t as never, maquetaDeLaCritica, pantallasJuzgadas, () => ultimaTareaEncargada) as unknown as ToolDeLangchain)
       : t;
   const herramientasDeJuicio = (): ToolDeLangchain[] =>
     carpeta === undefined
@@ -2576,10 +2576,7 @@ export async function abrirSesionTrueforge(
             if (t.function.name === "write_file" || t.function.name === "edit_file" || esEscrituraBinaria(t.function.name)) {
               escriturasEnVuelo.set(claveDe(deHilo, t.id), { nombre: t.function.name, args });
             }
-            if (t.function.name === "xone_critica_visual") {
-              ultimaCriticaDeHilo.set(deHilo, Date.now());
-              pantallasJuzgadas.alCriticar(ultimaTareaEncargada, maquetaDeLaCritica(args));
-            }
+            if (t.function.name === "xone_critica_visual") ultimaCriticaDeHilo.set(deHilo, Date.now());
             // La traza: la MISMA lista blanca que el evento (`detalleDe`, `parametrosDe`), nunca
             // los argumentos crudos.
             const quien = quienEs.get(deHilo) ?? deHilo;
