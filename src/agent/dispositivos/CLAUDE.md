@@ -82,7 +82,10 @@ discrepancia, **el código manda**.
   un relé en loopback por sesión (`ws://127.0.0.1:<p>/granja/<clave>/hotswap`, en el fichero del aparato como `canal`) coge una
   copia libre en la primera conexión (medido: conectarse a la puerta COGE la copia) y mantiene UNA conexión hacia la granja
   (una segunda ECHA a la primera; sin conexión, a los diez minutos la granja la libera y la BORRA), repartiendo las
-  respuestas en orden FIFO. `reset` en el `finally` del turno (`vestibulo.alAcabarTurno`) y al cerrar la consola.
+  respuestas en orden FIFO. **Sin copias libres, CREA una** (`telefonoParaCrearCopia`,
+  `crearCopiaEnGranja`: `POST /api/devices/:serial/copies` con `count + 1`, que un usuario normal puede subir y deja la nueva
+  a su nombre) en el teléfono `ready` con más sitio (`copiesFit`), espera a que su slot esté `running`
+  (`TOPE_DE_CREAR_COPIA_MS`) y la coge; un `507` (sin RAM) o un `409` se dicen. Un emulador apagado no se arranca desde aquí. `reset` en el `finally` del turno (`vestibulo.alAcabarTurno`) y al cerrar la consola.
   `file_upload`/`file_download`/`screenshot`/`restart` van por el mismo relé. **Todo sin adb** (`skills/xone-hotswap/lib/granja.mjs`):
   desplegar = subir el ZIP **con `bd/`** (la copia empieza VACÍA en cada turno; `empaquetarProyecto({conBase})`) + `launchApplication`,
   sin reiniciar; captura por la API (JPEG, con diálogos); log por `getLog` (solo de esa copia; su `exception` trae un aviso falso
