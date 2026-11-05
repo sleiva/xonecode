@@ -13,7 +13,7 @@
   flex-wrap: wrap;
   gap: 8px;
   min-width: 0;
-  font-size: 11px;
+  font-size: var(--tipo-mini);
   color: var(--dsw-alias-label-secondary);
 }
 
@@ -27,7 +27,7 @@
    `campoDeNombreConBoton`, que estila su input). Más específico que esa regla para el ancho. */
 .campoDePuerto {
   composes: campoDeNombreConBoton from "./Ajustes.module.css";
-  font-size: 11px;
+  font-size: var(--tipo-mini);
 }
 
 .campoDePuerto input.puerto {
@@ -38,5 +38,5 @@
 
 .motivo {
   color: var(--dsw-alias-state-error-primary);
-  font-size: 11px;
+  font-size: var(--tipo-mini);
 }

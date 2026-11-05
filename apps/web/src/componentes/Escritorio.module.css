@@ -24,8 +24,8 @@
 .saludo {
   margin: 0;
   color: var(--dsw-alias-label-primary);
-  font-size: 32px;
-  font-weight: 700;
+  font-size: var(--tipo-display);
+  font-weight: var(--peso-fuerte);
   letter-spacing: -0.02em;
 }
 
@@ -47,7 +47,7 @@
   border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: 12px;
   background: var(--dsw-alias-bg-layer-2);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 /* La barrita entre el nombre y la URL, como en el mockup: son dos datos distintos y sin
@@ -84,7 +84,7 @@
 
 .entornoNombre {
   color: var(--dsw-alias-label-primary);
-  font-weight: 600;
+  font-weight: var(--peso-fuerte);
 }
 
 /* Mono, y por el token: una URL es dato de máquina, no prosa. Es la regla tipográfica que
@@ -93,7 +93,7 @@
 .entornoUrl {
   color: var(--dsw-alias-label-tertiary);
   font-family: var(--ds-font-family-code);
-  font-size: 11px;
+  font-size: var(--tipo-mini);
 }
 
 .vacio {
@@ -173,7 +173,7 @@
 .resto {
   margin: 20px 0 0;
   color: var(--dsw-alias-label-tertiary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
   line-height: 1.6;
 }
 
@@ -188,8 +188,8 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--dsw-alias-label-primary);
-  font-size: 14px;
-  font-weight: 600;
+  font-size: var(--tipo-titulo);
+  font-weight: var(--peso-fuerte);
 }
 
 /* Sin color de estado para «sin descargar»: no es un problema, es un hecho — y pintarlo en
@@ -214,9 +214,11 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  color: var(--dsw-alias-label-tertiary);
-  font-family: var(--ds-font-family-code);
-  font-size: 10px;
+  /* Inter y no monoespaciada: es un ESTADO, no un dato (la misma pastilla que el Resumen,
+     `ResumenDeProyecto.module.css#pastilla`). Gris secundario: el terciario no llega a 4,5:1 a 12px. */
+  color: var(--dsw-alias-label-secondary);
+  font-size: var(--tipo-pequeno);
+  font-weight: var(--peso-medio);
   white-space: nowrap;
 }
 
@@ -266,12 +268,12 @@
 .pie {
   margin: 24px 0 0;
   color: var(--dsw-alias-label-tertiary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 .modelo {
   color: var(--dsw-alias-label-secondary);
-  font-weight: 600;
+  font-weight: var(--peso-fuerte);
 }
 
 /* La marca del entorno en la línea de la portada. No se encoge: es lo primero que
@@ -316,22 +318,22 @@
 }
 
 .rotuloDeTrabajando {
-  color: var(--dsw-alias-label-tertiary);
-  font-family: var(--ds-font-family-code);
-  font-size: 11px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: var(--tipo-mini);
+  font-weight: var(--peso-fuerte);
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
 .tituloDeTrabajando {
   color: var(--dsw-alias-label-primary);
-  font-size: 15px;
-  font-weight: 600;
+  font-size: var(--tipo-titulo);
+  font-weight: var(--peso-fuerte);
 }
 
 .colaDeTrabajando {
   color: var(--dsw-alias-label-tertiary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 /* Tareas y Tu equipo, en DOS columnas cuando cabe; el tablero desplegado ocupa la fila entera. */
@@ -373,8 +375,8 @@
 .tituloDeResumen {
   margin: 0;
   color: var(--dsw-alias-label-primary);
-  font-size: 15px;
-  font-weight: 600;
+  font-size: var(--tipo-titulo);
+  font-weight: var(--peso-fuerte);
 }
 
 .cifrasDeTareas {
@@ -407,14 +409,14 @@
 
 .cifrasDeTareas dt {
   color: var(--dsw-alias-label-tertiary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 .cifrasDeTareas dd {
   margin: 0;
   color: var(--dsw-alias-label-primary);
-  font-size: 22px;
-  font-weight: 600;
+  font-size: var(--tipo-display);
+  font-weight: var(--peso-fuerte);
   font-variant-numeric: tabular-nums;
 }
 
@@ -435,7 +437,7 @@
   padding: 7px 10px;
   border-radius: 8px;
   background: var(--dsw-alias-bg-layer-1);
-  font-size: 13px;
+  font-size: var(--tipo-control);
 }
 
 .tituloDeTareaCorta {
@@ -453,5 +455,5 @@
 
 .estadoDeTareaCorta {
   flex-shrink: 0;
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }

@@ -14,7 +14,7 @@
 .vacio {
   margin: 0 0 14px;
   color: var(--dsw-alias-label-tertiary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
   line-height: 1.5;
 }
 
@@ -27,7 +27,7 @@
   border-radius: 10px;
   background: var(--dsw-alias-state-error-secondary);
   color: var(--dsw-alias-label-primary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
   line-height: 1.6;
 }
 
@@ -39,7 +39,7 @@
   border-radius: 10px;
   background: var(--dsw-alias-state-warn-tertiary);
   color: var(--dsw-alias-state-warn-label);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
   line-height: 1.6;
 }
 
@@ -49,8 +49,8 @@
 .grupo {
   margin: 0 0 8px;
   color: var(--dsw-alias-label-tertiary);
-  font-size: 11px;
-  font-weight: 600;
+  font-size: var(--tipo-mini);
+  font-weight: var(--peso-fuerte);
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
@@ -88,7 +88,7 @@
 
 .nombre {
   color: var(--dsw-alias-label-primary);
-  font-weight: 600;
+  font-weight: var(--peso-fuerte);
 }
 
 .autenticacion {
@@ -97,10 +97,8 @@
   border-radius: 999px;
   background: var(--dsw-alias-bg-module-platform);
   color: var(--dsw-alias-label-tertiary);
-  font-family: var(--ds-font-family-code);
-  font-size: 10px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  font-size: var(--tipo-pequeno);
+  font-weight: var(--peso-medio);
   white-space: nowrap;
 }
 
@@ -119,8 +117,8 @@
   flex: none;
   padding: 1px 8px;
   border-radius: 999px;
-  font-size: 11px;
-  font-weight: 600;
+  font-size: var(--tipo-mini);
+  font-weight: var(--peso-fuerte);
   white-space: nowrap;
 }
 
@@ -151,14 +149,14 @@
 .motivo {
   margin: 6px 0 0;
   color: var(--dsw-alias-label-secondary);
-  font-size: 11px;
+  font-size: var(--tipo-mini);
   line-height: 1.5;
 }
 
 .descripcion {
   margin: 6px 0 0;
   color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
   line-height: 1.5;
 }
 
@@ -174,7 +172,7 @@
   background: var(--dsw-alias-button-elevated-fill);
   color: var(--dsw-alias-label-primary);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--tipo-control);
   white-space: nowrap;
   cursor: pointer;
 }
@@ -223,8 +221,8 @@
 .nombreDeTool {
   color: var(--dsw-alias-label-primary);
   font-family: var(--ds-font-family-code);
-  font-size: 12px;
-  font-weight: 600;
+  font-size: var(--tipo-pequeno);
+  font-weight: var(--peso-fuerte);
 }
 
 /* Verde para «solo lectura»: la misma lectura que `Agentes.module.css#.lectura` — el estado
@@ -235,16 +233,14 @@
   border-radius: 999px;
   background: var(--dsw-alias-state-success-tertiary);
   color: var(--dsw-alias-state-success-primary);
-  font-family: var(--ds-font-family-code);
-  font-size: 10px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  font-size: var(--tipo-pequeno);
+  font-weight: var(--peso-medio);
 }
 
 .descripcionDeTool {
   margin: 4px 0 0;
   color: var(--dsw-alias-label-secondary);
-  font-size: 11px;
+  font-size: var(--tipo-mini);
   line-height: 1.5;
 }
 
@@ -263,7 +259,7 @@
 
 .etiqueta {
   color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 /* `Input` del paquete envuelve el `<input>` en un `<span>`, así que este `width` sobre el
@@ -285,7 +281,7 @@
 .aviso {
   margin: 0;
   color: var(--dsw-alias-state-error-primary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 /* Los botones del formulario. El mismo `.accion` que la fila de al lado para que un botón

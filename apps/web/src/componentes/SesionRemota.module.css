@@ -59,18 +59,18 @@
   min-width: 0;
   margin: 0;
   word-break: break-all;
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
   color: var(--dsw-alias-label-primary);
 }
 
 .estado {
   margin: 0;
-  font-size: 13px;
-  font-weight: 500;
+  font-size: var(--tipo-control);
+  font-weight: var(--peso-medio);
   color: var(--dsw-alias-label-primary);
 }
 .aviso {
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
   color: var(--dsw-alias-label-secondary);
 }
 .error {

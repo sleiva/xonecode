@@ -33,12 +33,59 @@
     Consolas, monospace;
 }
 
+/* LA ESCALA (elegida en el lienzo de diseño, variante B «estándar»). Un `.module.css` de
+   `src/` no escribe un tamaño ni un peso suelto: lee uno de estos (`estilosDelCliente.test.ts`).
+   Seis tamaños, nombrados por su USO más común, y tres pesos — sin 700 ni 800.
+   Van con prefijo propio y no `--xonecode-*` porque no dependen del tema: el puente de
+   `temas.css` no tiene que redeclararlos.
+   El espaciado y el radio están DECLARADOS pero sin migrar: la escala del lienzo deja fuera
+   el 10px de los rellenos de botón y el 8px de radio que hoy dominan, y cambiarlos mueve la
+   altura de los controles en toda la consola. Se decide aparte, a la vista. */
+:root {
+  --tipo-display: 24px; /* título de página, cifra grande */
+  --tipo-titulo: 16px; /* título de tarjeta, de diálogo, de sección */
+  --tipo-cuerpo: 14px; /* texto, chat */
+  --tipo-control: 13px; /* botón, pestaña, campo */
+  --tipo-pequeno: 12px; /* ayuda, metadato, pastilla, dato en monoespaciada */
+  --tipo-mini: 11px; /* etiqueta de sección en mayúsculas, lo más pequeño legible */
+
+  --peso-normal: 400;
+  --peso-medio: 500;
+  --peso-fuerte: 600;
+
+  --espacio-1: 4px;
+  --espacio-2: 8px;
+  --espacio-3: 12px;
+  --espacio-4: 16px;
+  --espacio-5: 24px;
+  --espacio-6: 32px;
+
+  --radio-control: 6px;
+  --radio-tarjeta: 10px;
+  --radio-pastilla: 999px;
+}
+
+/* Un encabezado o un `<strong>` sin peso propio se llevaba el `bold` del navegador, que es 700:
+   MEDIDO en la consola (Ajustes, «Entornos de CloudStudio», «Proyectos en la barra», el «modo
+   autónomo» de una ayuda). La escala no tiene 700. Selector de elemento: cualquier clase que fije
+   su peso gana. */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+strong,
+b {
+  font-weight: var(--peso-fuerte);
+}
+
 html {
   font-family: var(--dsw-font-family);
   /* El tamaño y el interlineado de contenido que los tokens de markdown dan por sabidos
      (`--dsh-content-font-size`, `gradient-shadow-text.css`): sin ellos cada componente
      acababa fijando el suyo. */
-  font-size: 14px;
+  font-size: var(--tipo-cuerpo);
   line-height: 1.5;
   /* Sin esto, en macOS el texto claro sobre fondo oscuro sale engordado. */
   -webkit-font-smoothing: antialiased;

@@ -8,20 +8,20 @@
 
 .titulo {
   margin: 0;
-  font-size: 13px;
-  font-weight: 600;
+  font-size: var(--tipo-titulo);
+  font-weight: var(--peso-fuerte);
   color: var(--dsw-alias-label-primary);
 }
 
 .aviso {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
   color: var(--dsw-alias-label-secondary);
 }
 
 .error {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
   color: var(--dsw-alias-state-error-primary);
 }
 
@@ -30,7 +30,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  font-size: 13px;
+  font-size: var(--tipo-control);
   color: var(--dsw-alias-label-primary);
 }
 
@@ -56,7 +56,7 @@
 .listaDePantallas {
   margin: 0;
   padding-left: 22px;
-  font-size: 13px;
+  font-size: var(--tipo-control);
   line-height: 1.5;
   color: var(--dsw-alias-label-primary);
 }
@@ -80,7 +80,7 @@
   border-radius: 8px;
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-primary);
-  font-size: 11px;
+  font-size: var(--tipo-mini);
   text-align: left;
   cursor: pointer;
 }
@@ -118,5 +118,5 @@
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-primary);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--tipo-control);
 }

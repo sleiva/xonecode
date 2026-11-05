@@ -9,8 +9,8 @@
 }
 
 .rotulo {
-  font-size: 12px;
-  font-weight: 600;
+  font-size: var(--tipo-pequeno);
+  font-weight: var(--peso-fuerte);
   color: var(--dsw-alias-label-secondary);
 }
 
@@ -68,12 +68,12 @@
 }
 
 .nombre {
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
   color: var(--dsw-alias-label-secondary);
 }
 
 .nota {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
   color: var(--dsw-alias-label-tertiary);
 }

@@ -33,7 +33,7 @@
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-primary);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--tipo-control);
 }
 
 .aspecto[aria-invalid="true"] {

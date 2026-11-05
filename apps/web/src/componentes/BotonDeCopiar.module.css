@@ -46,7 +46,7 @@
   background: none;
   color: var(--dsw-alias-label-tertiary);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
   cursor: pointer;
 }
 

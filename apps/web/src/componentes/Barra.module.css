@@ -70,7 +70,7 @@
 /* El nombre del proyecto activo. Es la otra mitad de su marca ahora que el filo de cian se
    quedó solo para la sesión. */
 .tituloActivo {
-  font-weight: 600;
+  font-weight: var(--peso-fuerte);
   color: var(--dsw-alias-label-primary);
 }
 
@@ -165,7 +165,7 @@
 .textoDeAviso {
   margin: 0;
   color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
   line-height: 1.5;
 }
 
@@ -349,8 +349,8 @@
      alto que a 10px en versalitas el rótulo casi no se veía — medido en pantalla. `dimmed`
      está pensado para texto DESACTIVADO, no para uno que se lee de reojo pero se lee. */
   color: var(--dsw-alias-label-tertiary);
-  font-size: 10px;
-  font-weight: 600;
+  font-size: var(--tipo-mini);
+  font-weight: var(--peso-fuerte);
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -395,7 +395,7 @@
 .fichaDeSesion,
 .selloDeFecha {
   flex-shrink: 0;
-  font-size: 10px;
+  font-size: var(--tipo-mini);
   line-height: 1;
   white-space: nowrap;
   color: var(--dsw-alias-label-secondary);
@@ -409,7 +409,7 @@
      concedido, es de quién es la fila. */
   background: var(--dsw-alias-state-warn-tertiary);
   color: var(--dsw-alias-state-warn-label);
-  font-family: var(--dsw-font-family-mono, monospace);
+  font-family: var(--ds-font-family-code);
 }
 
 /* La fecha de la sesión, empujada al borde. Iba con el gasto de la sesión delante (una Σ y su
@@ -436,7 +436,7 @@
   flex: none;
   margin-left: 8px;
   color: var(--xonecode-cian-oscuro);
-  font-size: 11px;
+  font-size: var(--tipo-mini);
   font-family: var(--ds-font-family-code);
   animation: pulso 1.4s ease-in-out infinite;
 }
@@ -475,7 +475,7 @@
   white-space: nowrap;
   color: var(--dsw-alias-label-tertiary);
   font-family: var(--ds-font-family-code);
-  font-size: 10px;
+  font-size: var(--tipo-mini);
 }
 
 /* Una fila de proyecto con su RAMA debajo del nombre. La hoja copiada la fija a 34 px de
@@ -495,6 +495,6 @@
 .ramaDeProyecto.ramaDeProyecto {
   color: var(--dsw-alias-label-tertiary);
   font-family: var(--ds-font-family-code);
-  font-size: 11px;
+  font-size: var(--tipo-mini);
   line-height: 14px;
 }

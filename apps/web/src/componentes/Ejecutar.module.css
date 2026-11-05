@@ -30,8 +30,8 @@
 .tituloDeColumna {
   margin: 0;
   color: var(--dsw-alias-label-primary);
-  font-size: 14px;
-  font-weight: 600;
+  font-size: var(--tipo-titulo);
+  font-weight: var(--peso-fuerte);
 }
 
 /* Una opción de «Tareas en background»: nombre y detalle a la izquierda, su estado a la derecha. El elegido, con el
@@ -48,7 +48,7 @@
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-secondary);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
   text-align: left;
   cursor: pointer;
 }
@@ -79,22 +79,22 @@
 .grupo {
   padding: 6px 2px 0;
   color: var(--dsw-alias-label-secondary);
-  font-size: 11px;
-  font-weight: 600;
+  font-size: var(--tipo-mini);
+  font-weight: var(--peso-fuerte);
 }
 
 /* La marca de un aparato a mano en «Tareas en background»: verde, como «listo». */
 .aMano {
   flex-shrink: 0;
-  font-size: 11px;
-  font-weight: 600;
+  font-size: var(--tipo-mini);
+  font-weight: var(--peso-fuerte);
   color: var(--dsw-alias-state-success-primary);
 }
 
 .negativa {
   margin: 0;
   color: var(--dsw-alias-state-error-primary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 /* El «consultando…» y los estados vacíos. Mismo trazo que `CloudStudio.module.css#.aviso`:
@@ -102,7 +102,7 @@
 .aviso {
   margin: 0;
   color: var(--dsw-alias-label-tertiary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
   line-height: 1.6;
 }
 
@@ -124,13 +124,13 @@
 
 .app {
   color: var(--dsw-alias-label-primary);
-  font-size: 14px;
-  font-weight: 600;
+  font-size: var(--tipo-cuerpo);
+  font-weight: var(--peso-fuerte);
 }
 
 .proyecto {
   color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 /* La fecha de la medida en monoespaciada, como el sello de una operación de `/sync`: se
@@ -139,13 +139,13 @@
   margin-left: auto;
   color: var(--dsw-alias-label-tertiary);
   font-family: var(--ds-font-family-code);
-  font-size: 11px;
+  font-size: var(--tipo-mini);
 }
 
 .listo {
   margin: 0;
   color: var(--dsw-alias-state-success-primary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 /* Hay un framework más nuevo: no es una falta (se puede lanzar igual), así que va aparte, con el
@@ -157,7 +157,7 @@
   gap: 8px;
   margin: 0;
   color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
   overflow-wrap: anywhere;
 }
 
@@ -173,7 +173,7 @@
 
 .falta {
   color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
   line-height: 1.6;
 }
 
@@ -193,8 +193,8 @@
   background: var(--xonecode-azul);
   color: var(--xonecode-sobre-azul);
   font: inherit;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: var(--tipo-control);
+  font-weight: var(--peso-fuerte);
   transition: background 120ms ease;
   cursor: pointer;
 }
@@ -230,14 +230,14 @@
 
 .fase {
   color: var(--dsw-alias-label-primary);
-  font-size: 12px;
-  font-weight: 600;
+  font-size: var(--tipo-pequeno);
+  font-weight: var(--peso-fuerte);
 }
 
 .tiempo {
   color: var(--dsw-alias-label-tertiary);
   font-family: var(--ds-font-family-code);
-  font-size: 11px;
+  font-size: var(--tipo-mini);
 }
 
 /* Cancelar es el botón secundario de siempre —el mismo trazo que `.recargar` de Revisión y
@@ -258,7 +258,7 @@
   margin: 0;
   padding: 0 12px 8px;
   color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
   line-height: 1.6;
 }
 
@@ -278,7 +278,7 @@
   padding: 0 12px 8px;
   color: var(--dsw-alias-label-tertiary);
   font-family: var(--ds-font-family-code);
-  font-size: 11px;
+  font-size: var(--tipo-mini);
   line-height: 1.5;
   overflow-wrap: anywhere;
 }
@@ -292,7 +292,7 @@
   background: var(--dsw-alias-bg-layer-2);
   color: var(--dsw-alias-label-secondary);
   font-family: var(--ds-font-family-code);
-  font-size: 11px;
+  font-size: var(--tipo-mini);
   line-height: 1.5;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -308,8 +308,8 @@
    mismo sitio en la pestaña, mismo peso. */
 .rotulo {
   color: var(--dsw-alias-label-primary);
-  font-size: 13px;
-  font-weight: 600;
+  font-size: var(--tipo-control);
+  font-weight: var(--peso-fuerte);
 }
 
 .lista {
@@ -336,7 +336,7 @@
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-secondary);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 /* Y el cursor y el hover son del BOTÓN, no de la fila. Un `<span>` que se ilumina al pasar
@@ -362,5 +362,5 @@ button.dispositivo:hover {
 
 .marca {
   color: var(--dsw-alias-label-tertiary);
-  font-size: 11px;
+  font-size: var(--tipo-mini);
 }

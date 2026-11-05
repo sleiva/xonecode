@@ -26,7 +26,7 @@ function sinComentarios(css: string): string {
   return css.replace(/\/\*[\s\S]*?\*\//g, "");
 }
 
-/** Los alias USADOS sin fallback: `var(--dsw-alias-x)`. Uno con fallback (`font-mono`) no se cuenta. */
+/** Los alias USADOS sin fallback: `var(--dsw-alias-x)`. Uno con fallback no se cuenta aquí (las familias tipográficas, abajo). */
 function aliasUsados(css: string): Set<string> {
   const usados = new Set<string>();
   for (const m of sinComentarios(css).matchAll(/var\(\s*--dsw-alias-([a-z0-9-]+)\s*\)/g)) usados.add(m[1]!);
@@ -54,6 +54,150 @@ describe("los alias que usa el cliente existen", () => {
       for (const a of aliasUsados(h.css)) if (!definidos.has(a)) faltan.push(`${a} (${h.ruta.split("apps/web/")[1]})`);
     }
     expect(faltan).toEqual([]);
+  });
+});
+
+/**
+ * Una familia tipográfica se lee de UNO de los dos tokens de `estilos/tipografia.css`, nunca de
+ * un alias inventado ni de una pila escrita a mano. Medido el 05-11-2026: 13 reglas leían
+ * `--dsw-font-mono`, `--dsw-alias-font-mono` o `--dsw-font-family-mono`, que NO existen en
+ * ninguna hoja. Sin fallback la regla se invalida y la letra se HEREDA (Inter donde se quería
+ * monoespaciada); con fallback cae en la `monospace` del sistema, no en JetBrains Mono. Ninguno
+ * de los dos da error: es el fallo mudo de siempre, y el test de alias de arriba no lo veía
+ * porque solo mira `--dsw-alias-*` SIN fallback.
+ */
+describe("la tipografía sale de sus dos tokens", () => {
+  it("cada font-family de una hoja del cliente lee --dsw-font-family o --ds-font-family-code", () => {
+    const permitidas = /^(var\(--dsw-font-family\)|var\(--ds-font-family-code\)|inherit)$/;
+    const sueltas: string[] = [];
+    for (const ruta of hojasDelCliente().filter((r) => r.endsWith(".module.css"))) {
+      const css = sinComentarios(readFileSync(ruta, "utf8"));
+      for (const m of css.matchAll(/(?<![-\w])font-family\s*:\s*([^;}]+)/g)) {
+        const valor = m[1]!.trim();
+        if (!permitidas.test(valor)) sueltas.push(`${ruta.split("apps/web/")[1]}: ${valor}`);
+      }
+    }
+    expect(sueltas).toEqual([]);
+  });
+});
+
+/**
+ * La escala tipográfica (`estilos/tipografia.css`): un tamaño y un peso salen de sus tokens.
+ * Medido el 05-11-2026 antes de tenerla: 16 tamaños distintos en el CSS y 17 combinaciones de
+ * tamaño, peso y familia en UNA pantalla. Lo que se queda fuera de la escala va aquí con su
+ * motivo; uno nuevo sin motivo da rojo.
+ */
+const TAMANOS_FUERA_DE_ESCALA: Record<string, string> = {
+  "Marca.module.css: 44px": "el logotipo grande del splash: es la marca, no texto",
+  "Marca.module.css: 20px": "el nombre junto al logotipo: va con la marca, no con la escala",
+  "Marca.module.css: 15px": "el eslogan del splash, con la marca",
+  "Turno.module.css: 15px": "glifo: las flechas de turno anterior/siguiente",
+  "Pregunta.module.css: 18px": "glifo: el ✓ o ! de una pregunta contestada",
+  "Pestanas.module.css: 18px": "glifo: la × de cerrar el panel",
+  "RejillaDeAdjuntos.module.css: 20px": "glifo: el + de añadir un fichero",
+  "LoAprendido.module.css: 0.92em": "código en línea: relativo al texto que lo rodea",
+  "Barra.module.css: inherit": "hereda del contexto a propósito",
+};
+
+const PESOS_FUERA_DE_ESCALA: Record<string, string> = {
+  "Marca.module.css: 800": "el logotipo: la marca lleva su propio peso",
+};
+
+function declaracionesDe(propiedad: string): Array<{ fichero: string; valor: string }> {
+  const salida: Array<{ fichero: string; valor: string }> = [];
+  for (const ruta of hojasDelCliente().filter((r) => r.includes("/src/") && r.endsWith(".module.css"))) {
+    const css = sinComentarios(readFileSync(ruta, "utf8"));
+    for (const m of css.matchAll(new RegExp(`(?<![-\\w])${propiedad}\\s*:\\s*([^;}]+)`, "g"))) {
+      salida.push({ fichero: ruta.split("/").pop()!, valor: m[1]!.trim() });
+    }
+  }
+  return salida;
+}
+
+describe("la escala tipográfica", () => {
+  it("cada font-size de src/ lee un --tipo-* o está en la lista de excepciones con su motivo", () => {
+    const sueltos = declaracionesDe("font-size")
+      .filter((d) => !/^var\(--tipo-[a-z]+\)$/.test(d.valor))
+      .map((d) => `${d.fichero}: ${d.valor}`)
+      .filter((clave) => !(clave in TAMANOS_FUERA_DE_ESCALA));
+    expect(sueltos).toEqual([]);
+  });
+
+  it("cada font-weight de src/ lee un --peso-* (400, 500, 600: sin 700 ni 800)", () => {
+    const sueltos = declaracionesDe("font-weight")
+      .filter((d) => !/^(var\(--peso-[a-z]+\)|inherit)$/.test(d.valor))
+      .map((d) => `${d.fichero}: ${d.valor}`)
+      .filter((clave) => !(clave in PESOS_FUERA_DE_ESCALA));
+    expect(sueltos).toEqual([]);
+  });
+
+  it("cada token que se usa está declarado en tipografia.css", () => {
+    const tipografia = sinComentarios(readFileSync(join(ESTILOS, "tipografia.css"), "utf8"));
+    const usados = new Set(
+      [...declaracionesDe("font-size"), ...declaracionesDe("font-weight")]
+        .flatMap((d) => [...d.valor.matchAll(/var\((--(?:tipo|peso)-[a-z]+)\)/g)].map((m) => m[1]!)),
+    );
+    const faltan = [...usados].filter((t) => !new RegExp(`${t}\\s*:`).test(tipografia));
+    expect(faltan).toEqual([]);
+  });
+
+  it("una etiqueta en mayúsculas es SIEMPRE la misma: --tipo-mini y --peso-fuerte", () => {
+    const distintas: string[] = [];
+    for (const ruta of hojasDelCliente().filter((r) => r.includes("/src/") && r.endsWith(".module.css"))) {
+      const css = sinComentarios(readFileSync(ruta, "utf8"));
+      for (const m of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+        const cuerpo = m[2]!;
+        if (!/text-transform:\s*uppercase/.test(cuerpo)) continue;
+        if (!/font-size:\s*var\(--tipo-mini\)/.test(cuerpo) || !/font-weight:\s*var\(--peso-fuerte\)/.test(cuerpo)) {
+          distintas.push(`${ruta.split("/").pop()} ${m[1]!.trim()}`);
+        }
+      }
+    }
+    expect(distintas).toEqual([]);
+  });
+
+  it("ni los encabezados ni <strong>/<b> se llevan el bold (700) del navegador", () => {
+    const tipografia = sinComentarios(readFileSync(join(ESTILOS, "tipografia.css"), "utf8"));
+    expect(tipografia).toMatch(/h1,\s*h2,\s*h3,\s*h4,\s*h5,\s*h6,\s*strong,\s*b\s*\{\s*font-weight:\s*var\(--peso-fuerte\)/);
+  });
+
+  /**
+   * Un `<h2>` es el título de una tarjeta, de una sección o de un diálogo: lee `--tipo-titulo`
+   * (o `--tipo-display`). Medido el 05-11-2026: «Copia local», «Tu equipo», «Tareas», el nombre de
+   * cada proyecto del Escritorio… iban a 14, el tamaño del TEXTO, y no se distinguían de él. Lo
+   * que va en mayúsculas es un rótulo, no un título, y tiene su propia regla (arriba). Un `<h2>`
+   * cuya regla no fija tamaño ni compone otra hereda: eso también es un fallo.
+   */
+  it("cada <h2> con clase lee --tipo-titulo o --tipo-display, o es un rótulo en mayúsculas", () => {
+    const componentes = join(AQUI, "componentes");
+    const reglaDe = (hoja: string, clase: string): string | undefined => {
+      const css = sinComentarios(readFileSync(join(componentes, hoja), "utf8"));
+      return new RegExp(`^\\.${clase}\\s*\\{([^}]*)\\}`, "m").exec(css)?.[1];
+    };
+    const fuera: string[] = [];
+    for (const nombre of readdirSync(componentes).filter((n) => n.endsWith(".tsx") && !n.includes(".test."))) {
+      const tsx = readFileSync(join(componentes, nombre), "utf8");
+      const hojas = new Map([...tsx.matchAll(/import\s+(\w+)\s+from\s+"\.\/([\w.]+\.module\.css)"/g)].map((m) => [m[1]!, m[2]!]));
+      for (const m of tsx.matchAll(/<h2\b[^>]*className=\{([^}]*)\}/g)) {
+        for (const [, alias, clase] of m[1]!.matchAll(/(\w+)\.(\w+)/g)) {
+          const hoja = hojas.get(alias!);
+          if (hoja === undefined) continue;
+          let regla = reglaDe(hoja, clase!);
+          // Una clase que compone otra de otra hoja: el tamaño lo pone la compuesta.
+          const compuesta = regla === undefined ? undefined : /composes:\s*(\w+)\s+from\s+"\.\/([\w.]+)"/.exec(regla);
+          if (compuesta) regla = reglaDe(compuesta[2]!, compuesta[1]!);
+          if (regla === undefined) continue;
+          if (/text-transform:\s*uppercase/.test(regla)) continue;
+          if (!/font-size:\s*var\(--tipo-(titulo|display)\)/.test(regla)) fuera.push(`${nombre}: ${hoja.split(".")[0]}.${clase}`);
+        }
+      }
+    }
+    expect([...new Set(fuera)]).toEqual([]);
+  });
+
+  it("las excepciones siguen existiendo: una que ya no está no se queda en la lista", () => {
+    const presentes = new Set([...declaracionesDe("font-size")].map((d) => `${d.fichero}: ${d.valor}`));
+    expect(Object.keys(TAMANOS_FUERA_DE_ESCALA).filter((k) => !presentes.has(k))).toEqual([]);
   });
 });
 

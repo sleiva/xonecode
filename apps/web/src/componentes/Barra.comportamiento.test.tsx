@@ -1113,7 +1113,7 @@ describe("Barra: el proyecto activo y la sesión activa no se marcan igual", () 
     // Sin esto, quitar el filo dejaría el proyecto activo indistinguible de la fila que
     // tienes debajo del ratón: las dos usan el MISMO alias de fondo.
     expect(regla("filaAbierta")).toMatch(/background:/);
-    expect(regla("tituloActivo")).toMatch(/font-weight:\s*600/);
+    expect(regla("tituloActivo")).toMatch(/font-weight:\s*var\(--peso-fuerte\)/);
   });
 });
 

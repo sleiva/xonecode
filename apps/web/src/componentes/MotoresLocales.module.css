@@ -63,7 +63,7 @@
   border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: 12px;
   background: var(--dsw-alias-bg-layer-2);
-  font-size: 13px;
+  font-size: var(--tipo-control);
 }
 
 .datos {
@@ -103,7 +103,7 @@
   align-items: center;
   gap: 12px;
   color: var(--dsw-alias-label-secondary);
-  font-size: 13px;
+  font-size: var(--tipo-control);
 }
 
 .modelo select {
@@ -114,13 +114,13 @@
 .modelo .nota,
 .modelo .detalle {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 .aviso {
   margin: 0;
   color: var(--dsw-alias-state-warn-primary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 .pruebas {
@@ -131,7 +131,7 @@
   padding: 0;
   list-style: none;
   color: var(--dsw-alias-state-error-primary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 .pruebas li[data-ok] {
@@ -141,13 +141,13 @@
 .hora {
   color: var(--dsw-alias-label-tertiary);
   font-family: var(--ds-font-family-code);
-  font-size: 10px;
+  font-size: var(--tipo-mini);
 }
 
 .resultadoDeLogin {
   margin: 0;
   color: var(--dsw-alias-state-error-primary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 .resultadoDeLogin[data-ok] {
@@ -163,7 +163,7 @@
 .login p {
   margin: 0;
   color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 .filaDeCodigo {
@@ -181,7 +181,7 @@
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-primary);
   font-family: var(--ds-font-family-code);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 .acciones {
@@ -203,7 +203,7 @@
   background: none;
   color: var(--dsw-alias-label-primary);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--tipo-control);
   cursor: pointer;
 }
 
@@ -214,7 +214,7 @@
   margin: 8px 0 0;
   padding-left: 20px;
   color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 .comando {
@@ -238,7 +238,7 @@
   padding: 8px 10px;
   border: 0.5px solid var(--dsw-alias-state-warn-primary);
   border-radius: 8px;
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 .agotado p {
@@ -256,5 +256,5 @@
   border-radius: 999px;
   border: 0.5px solid var(--dsw-alias-state-warn-primary);
   color: var(--dsw-alias-state-warn-primary);
-  font-size: 10px;
+  font-size: var(--tipo-mini);
 }

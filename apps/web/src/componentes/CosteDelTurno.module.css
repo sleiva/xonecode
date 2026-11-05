@@ -13,8 +13,8 @@
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  font-family: var(--dsw-font-mono);
-  font-size: 11px;
+  font-family: var(--ds-font-family-code);
+  font-size: var(--tipo-mini);
   color: var(--dsw-alias-label-tertiary);
   white-space: nowrap;
 }

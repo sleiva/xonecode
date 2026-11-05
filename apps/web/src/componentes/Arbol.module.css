@@ -25,7 +25,7 @@
   background: none;
   color: var(--dsw-alias-label-primary);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--tipo-control);
   text-align: left;
   cursor: pointer;
 }
@@ -46,7 +46,7 @@
 }
 
 .hoja[data-elegida] .nombre {
-  font-weight: 600;
+  font-weight: var(--peso-fuerte);
 }
 
 .hoja[data-elegida]::before {
@@ -64,7 +64,7 @@
   flex: none;
   width: 10px;
   color: var(--dsw-alias-label-tertiary);
-  font-size: 10px;
+  font-size: var(--tipo-mini);
 }
 
 /* La insignia (`M`, `●`, la letra de Revisión) sigue en mono: son marcas de una sola letra que
@@ -73,7 +73,7 @@
   flex: none;
   display: inline-flex;
   font-family: var(--ds-font-family-code);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 /* Las líneas guía del sangrado, tenues: dicen de qué carpeta cuelga una fila sin competir con
@@ -126,7 +126,7 @@
    con la cuenta de lo marcado, y la insignia al final. */
 .nivel[data-explorador] .carpeta {
   color: var(--dsw-alias-label-primary);
-  font-weight: 600;
+  font-weight: var(--peso-fuerte);
 }
 
 .alFinal {
@@ -141,7 +141,7 @@
   border-radius: 10px;
   background: var(--dsw-alias-bg-layer-2);
   color: var(--dsw-alias-label-secondary);
-  font-size: 11px;
-  font-weight: 500;
+  font-size: var(--tipo-mini);
+  font-weight: var(--peso-medio);
   font-variant-numeric: tabular-nums;
 }

@@ -11,19 +11,19 @@
 
 .nota {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
   color: var(--dsw-alias-label-secondary);
 }
 
 .listo {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
   color: var(--dsw-alias-state-success-primary);
 }
 
 .motivo {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
   color: var(--dsw-alias-state-error-primary);
 }
 
@@ -45,7 +45,7 @@
   flex-direction: column;
   gap: 4px;
   color: var(--dsw-alias-label-secondary);
-  font-size: 13px;
+  font-size: var(--tipo-control);
   line-height: 1.5;
 }
 

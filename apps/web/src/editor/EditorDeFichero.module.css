@@ -25,7 +25,7 @@
   height: 100%;
   background: var(--shiki-background);
   color: var(--shiki-foreground);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 .codigo.codigo.codigo :global(.cm-editor.cm-focused) {
@@ -143,7 +143,7 @@
 
 .codigo :global(.tok-heading),
 .codigo :global(.tok-strong) {
-  font-weight: 600;
+  font-weight: var(--peso-fuerte);
 }
 
 .codigo :global(.tok-emphasis) {
@@ -212,7 +212,7 @@
 .rotuloDelTrozo {
   margin: 0 0 4px;
   color: var(--dsw-alias-label-secondary);
-  font-size: 11px;
+  font-size: var(--tipo-mini);
 }
 
 .antes {
@@ -238,7 +238,7 @@
   border-top: 0.5px solid var(--dsw-alias-border-l2);
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 .selector {

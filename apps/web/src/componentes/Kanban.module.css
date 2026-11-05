@@ -17,14 +17,14 @@
 .titulo {
   margin: 0 0 10px;
   color: var(--dsw-alias-label-primary);
-  font-size: 14px;
-  font-weight: 600;
+  font-size: var(--tipo-titulo);
+  font-weight: var(--peso-fuerte);
 }
 
 .vacio {
   margin: 0;
   color: var(--dsw-alias-label-secondary);
-  font-size: 13px;
+  font-size: var(--tipo-control);
 }
 
 .columnas {
@@ -51,15 +51,15 @@
   padding: 2px 0 6px;
   background: var(--dsw-alias-bg-layer-2);
   color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
-  font-weight: 600;
+  font-size: var(--tipo-mini);
+  font-weight: var(--peso-fuerte);
   text-transform: uppercase;
   letter-spacing: 0.02em;
 }
 
 .cuenta {
   color: var(--dsw-alias-label-tertiary);
-  font-weight: 400;
+  font-weight: var(--peso-normal);
 }
 
 .tarjetas {
@@ -94,13 +94,13 @@
 
 .proyecto {
   color: var(--dsw-alias-label-tertiary);
-  font-size: 11px;
+  font-size: var(--tipo-mini);
 }
 
 .tituloDeTarea {
   color: var(--dsw-alias-label-primary);
-  font-size: 13px;
-  font-weight: 500;
+  font-size: var(--tipo-control);
+  font-weight: var(--peso-medio);
 }
 
 /* El título de la tarjeta de atención es su propio botón, separado del de Revisión: los
@@ -113,8 +113,8 @@
   background: none;
   color: var(--dsw-alias-label-primary);
   font: inherit;
-  font-size: 13px;
-  font-weight: 500;
+  font-size: var(--tipo-control);
+  font-weight: var(--peso-medio);
   text-align: left;
   cursor: pointer;
 }
@@ -126,20 +126,20 @@
 .cuando {
   color: var(--dsw-alias-label-tertiary);
   font-family: var(--ds-font-family-code);
-  font-size: 11px;
+  font-size: var(--tipo-mini);
 }
 
 /* Una «nuevo» del proyecto que tienes abierto: sin esto se queda quieta en la primera
    columna sin que nada lo explique, y eso se lee como un cuelgue. */
 .bloqueada {
   color: var(--dsw-alias-state-warn-label);
-  font-size: 11px;
+  font-size: var(--tipo-mini);
 }
 
 .motivo {
   margin: 2px 0 0;
   color: var(--dsw-alias-label-tertiary);
-  font-size: 11px;
+  font-size: var(--tipo-mini);
 }
 
 /* Botones, feedback y la pista de reserva: en `AccionesDeTarea.module.css` desde que esa
@@ -149,7 +149,7 @@
 .ficheros {
   margin: 2px 0 0;
   color: var(--dsw-alias-label-tertiary);
-  font-size: 11px;
+  font-size: var(--tipo-mini);
 }
 
 .ficheros p {
@@ -165,7 +165,7 @@
 .listaDeFicheros code {
   color: var(--dsw-alias-label-secondary);
   font-family: var(--ds-font-family-code);
-  font-size: 11px;
+  font-size: var(--tipo-mini);
 }
 
 .enlaceRevision {
@@ -177,7 +177,7 @@
   background: var(--dsw-alias-bg-layer-2);
   color: var(--dsw-alias-label-primary);
   font: inherit;
-  font-size: 11px;
+  font-size: var(--tipo-mini);
   cursor: pointer;
 }
 
@@ -208,7 +208,7 @@
   background: none;
   color: var(--dsw-alias-label-link, var(--dsw-alias-label-secondary));
   font: inherit;
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
   text-decoration: underline;
   cursor: pointer;
 }

@@ -11,7 +11,7 @@
   flex-direction: column;
   min-height: 0;
   color: var(--dsw-alias-label-primary);
-  font-size: 13px;
+  font-size: var(--tipo-control);
   line-height: 1.6;
 }
 
@@ -36,8 +36,8 @@
 
 .nombre {
   margin: 0;
-  font-size: 24px;
-  font-weight: 700;
+  font-size: var(--tipo-display);
+  font-weight: var(--peso-fuerte);
   letter-spacing: -0.01em;
 }
 
@@ -47,7 +47,7 @@
   gap: 4px 16px;
   margin: 4px 0 0;
   color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 /* El aviso de turno en marcha: una banda entre la cabecera y las pestañas. */
@@ -62,7 +62,7 @@
   border-radius: 8px;
   background: var(--xonecode-fila-hover);
   color: var(--dsw-alias-label-primary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 .cuerpo {
@@ -89,26 +89,26 @@
 
 .titulo {
   margin: 0;
-  font-size: 14px;
-  font-weight: 600;
+  font-size: var(--tipo-titulo);
+  font-weight: var(--peso-fuerte);
 }
 
 .aviso {
   margin: 0;
   color: var(--dsw-alias-label-tertiary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
   max-width: 70ch;
 }
 
 .error {
   margin: 0;
   color: var(--dsw-alias-state-warn-label);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 .nota {
   color: var(--dsw-alias-label-tertiary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 .lista {
@@ -152,7 +152,7 @@
 }
 
 .nombreDePlan {
-  font-weight: 600;
+  font-weight: var(--peso-fuerte);
   /* Un botón que se lee como el título: pulsarlo despliega el detalle del plan. */
   appearance: none;
   background: none;
@@ -160,7 +160,7 @@
   padding: 0;
   color: inherit;
   font: inherit;
-  font-weight: 600;
+  font-weight: var(--peso-fuerte);
   text-align: left;
   cursor: pointer;
 }
@@ -197,7 +197,7 @@
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-primary);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 /* Una tarea: DOS líneas a la izquierda y la acción a la derecha, en UNA sola fila que no se
@@ -247,7 +247,7 @@
   flex: none;
   color: var(--dsw-alias-label-secondary);
   font-family: var(--ds-font-family-code);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 /* El ↗ al gestor, junto a la clave: pequeño y en el tono de la clave, no un enlace de texto. */
@@ -272,7 +272,7 @@
   background: none;
   color: var(--dsw-alias-label-primary);
   font: inherit;
-  font-weight: 500;
+  font-weight: var(--peso-medio);
   text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -284,7 +284,7 @@
   border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: 6px;
   color: var(--dsw-alias-label-secondary);
-  font-size: 11px;
+  font-size: var(--tipo-mini);
 }
 
 /* La acción de la fila EXISTE siempre y se llega tabulando: lo que cambia es la opacidad, con
@@ -317,7 +317,7 @@
   padding: 4px 6px 12px 12px;
   border-left: 2px solid var(--dsw-alias-border-l2);
   margin: 0 0 8px 6px;
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 /* Las pastillas de filtro y «Asignadas a mí»: conmutadores con `aria-pressed`, y la cara de la
@@ -338,7 +338,7 @@
   background: none;
   color: var(--dsw-alias-label-tertiary);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
   white-space: nowrap;
   cursor: pointer;
 }
@@ -351,7 +351,7 @@
   border-color: var(--dsw-alias-border-l4);
   background: var(--xonecode-fila-hover);
   color: var(--dsw-alias-label-primary);
-  font-weight: 600;
+  font-weight: var(--peso-fuerte);
 }
 
 .pastilla:disabled {
@@ -362,8 +362,8 @@
 .cuenta {
   color: var(--dsw-alias-label-tertiary);
   font-family: var(--ds-font-family-code);
-  font-size: 11px;
-  font-weight: 400;
+  font-size: var(--tipo-mini);
+  font-weight: var(--peso-normal);
 }
 
 .consultado {
@@ -440,8 +440,8 @@
   padding: 10px 0 8px;
   border-bottom: 0.5px solid var(--dsw-alias-border-l2);
   color: var(--dsw-alias-label-tertiary);
-  font-size: 11px;
-  font-weight: 600;
+  font-size: var(--tipo-mini);
+  font-weight: var(--peso-fuerte);
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
@@ -467,7 +467,7 @@
 .conQue {
   min-width: 0;
   color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
   overflow-wrap: anywhere;
 }
 
@@ -482,14 +482,14 @@
   border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: 999px;
   color: var(--dsw-alias-label-tertiary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
   white-space: nowrap;
 }
 
 .marcaActiva {
   border-color: var(--xonecode-azul);
   color: var(--dsw-alias-label-primary);
-  font-weight: 600;
+  font-weight: var(--peso-fuerte);
 }
 
 /* Lo que se edita de un servicio va bajo su fila, alineado con su nombre. */
@@ -512,7 +512,7 @@
   align-items: center;
   gap: 6px;
   color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 /* El interruptor de «usar en este proyecto»: una pista de 28×16 con su bolita. Encendido, el
@@ -566,7 +566,7 @@
 }
 
 .tituloDeConector {
-  font-weight: 500;
+  font-weight: var(--peso-medio);
 }
 
 /* Lo de la derecha de la fila de un conector: «Conectar» y/o la casilla. */
@@ -608,7 +608,7 @@
   background: none;
   color: var(--dsw-alias-label-primary);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--tipo-control);
   text-align: left;
   cursor: pointer;
 }
@@ -620,7 +620,7 @@
 .base[aria-pressed="true"] {
   border-color: var(--dsw-alias-border-l4);
   background: var(--xonecode-fila-hover);
-  font-weight: 600;
+  font-weight: var(--peso-fuerte);
 }
 
 .base:disabled {
@@ -636,7 +636,7 @@
 
 .lineaDelEsquema {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 .principal {
@@ -669,7 +669,7 @@
    barra; no sostiene texto largo. */
 .enCurso {
   color: var(--dsw-alias-label-secondary);
-  font-weight: 600;
+  font-weight: var(--peso-fuerte);
 }
 
 /* ── Los planes del Resumen, en TARJETAS (21-10-2026) ───────────────────────────────────────
@@ -712,14 +712,14 @@
 
 .cifrasDePlan dt {
   color: var(--dsw-alias-label-tertiary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 .cifrasDePlan dd {
   margin: 0;
   color: var(--dsw-alias-label-primary);
-  font-size: 18px;
-  font-weight: 600;
+  font-size: var(--tipo-titulo);
+  font-weight: var(--peso-fuerte);
   font-variant-numeric: tabular-nums;
 }
 

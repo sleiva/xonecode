@@ -40,7 +40,7 @@
 .alcance[aria-selected="true"] {
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-primary);
-  font-weight: 600;
+  font-weight: var(--peso-fuerte);
 }
 
 .cuenta {
@@ -48,7 +48,7 @@
   border-radius: 999px;
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-secondary);
-  font-size: 11px;
+  font-size: var(--tipo-mini);
 }
 
 .buscar {
@@ -56,7 +56,7 @@
   align-items: center;
   gap: 8px;
   color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 .buscar input {
@@ -76,14 +76,14 @@
   gap: 6px;
   margin: 0;
   color: var(--dsw-alias-label-tertiary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
   max-width: 80ch;
 }
 
 .error {
   margin: 0;
   color: var(--dsw-alias-state-error-primary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 .lista {
@@ -130,15 +130,15 @@
 
 .titulo h3 {
   margin: 0;
-  font-size: 14px;
-  font-weight: 600;
+  font-size: var(--tipo-cuerpo);
+  font-weight: var(--peso-fuerte);
 }
 
 .pastilla {
   padding: 2px 8px;
   border-radius: 999px;
-  font-size: 11px;
-  font-weight: 600;
+  font-size: var(--tipo-mini);
+  font-weight: var(--peso-fuerte);
   color: var(--dsw-alias-state-business-primary);
   background: var(--dsw-alias-state-business-tertiary);
 }
@@ -161,7 +161,7 @@
 
 .meta {
   color: var(--dsw-alias-label-tertiary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 .acciones {
@@ -194,7 +194,7 @@
   flex-direction: column;
   gap: 4px;
   color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 .editor input,
@@ -205,7 +205,7 @@
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-primary);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--tipo-control);
 }
 
 .editor textarea {
@@ -230,6 +230,6 @@
   padding: 1px 5px;
   border-radius: 4px;
   background: var(--dsw-alias-bg-layer-1);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--ds-font-family-code);
   font-size: 0.92em;
 }

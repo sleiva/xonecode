@@ -28,14 +28,14 @@
 .titulo {
   margin: 0;
   color: var(--dsw-alias-label-primary);
-  font-weight: 600;
+  font-weight: var(--peso-fuerte);
 }
 
 .adjuntos,
 .etiqueta {
   margin: 0;
   color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 .peticion {
@@ -46,7 +46,7 @@
 
 .plegable summary {
   color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
   cursor: pointer;
 }
 
@@ -57,5 +57,5 @@
 .advertencia {
   margin: 0;
   color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }

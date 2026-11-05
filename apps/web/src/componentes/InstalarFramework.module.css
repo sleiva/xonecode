@@ -10,7 +10,7 @@
 /* Lo que tiene el aparato AHORA: siempre a la vista, en su propia línea. */
 .aparato {
   margin: 4px 0 8px;
-  font-size: 14px;
+  font-size: var(--tipo-cuerpo);
   color: var(--dsw-alias-label-primary);
   overflow-wrap: anywhere;
 }
@@ -27,7 +27,7 @@
   padding: 1px 8px;
   border: 1px solid var(--dsw-alias-label-tertiary);
   border-radius: 999px;
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
   color: var(--dsw-alias-label-secondary);
 }
 
@@ -42,7 +42,7 @@
   align-items: center;
   gap: 8px;
   margin-top: 6px;
-  font-size: 13px;
+  font-size: var(--tipo-control);
   color: var(--dsw-alias-label-secondary);
   cursor: pointer;
 }

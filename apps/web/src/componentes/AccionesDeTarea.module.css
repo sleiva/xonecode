@@ -23,7 +23,7 @@
   flex-basis: 100%;
   margin: 0;
   color: var(--dsw-alias-state-warn-label);
-  font-size: 11px;
+  font-size: var(--tipo-mini);
 }
 
 .boton {
@@ -33,7 +33,7 @@
   background: var(--dsw-alias-bg-layer-2);
   color: var(--dsw-alias-label-primary);
   font: inherit;
-  font-size: 11px;
+  font-size: var(--tipo-mini);
   cursor: pointer;
 }
 
@@ -68,7 +68,7 @@
 
 .etiquetaFeedback {
   color: var(--dsw-alias-label-tertiary);
-  font-size: 11px;
+  font-size: var(--tipo-mini);
 }
 
 .campoFeedback {
@@ -78,7 +78,7 @@
   background: var(--dsw-alias-bg-layer-2);
   color: var(--dsw-alias-label-primary);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
   resize: vertical;
 }
 
@@ -94,7 +94,7 @@
   background: var(--dsw-alias-bg-layer-2);
   color: var(--dsw-alias-label-primary);
   font: inherit;
-  font-size: 11px;
+  font-size: var(--tipo-mini);
   cursor: pointer;
 }
 
@@ -111,7 +111,7 @@
   flex-basis: 100%;
   margin: 0;
   color: var(--dsw-alias-label-tertiary);
-  font-size: 11px;
+  font-size: var(--tipo-mini);
   font-style: italic;
 }
 
@@ -180,13 +180,13 @@
 .resumenDeCambios {
   margin-right: auto;
   color: var(--dsw-alias-label-tertiary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 /* El encargo es markdown que se manda tal cual: en letra de código. */
 .campoEncargo.campoEncargo {
   font-family: var(--ds-font-family-code);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 /* «Regenerar el encargo», en una franja discreta. */

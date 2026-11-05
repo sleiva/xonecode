@@ -12,7 +12,7 @@
 
 .saludo {
   margin: 0;
-  font-size: 18px;
+  font-size: var(--tipo-titulo);
   color: var(--dsw-alias-label-primary);
 }
 

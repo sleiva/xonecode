@@ -22,7 +22,7 @@
   background: var(--dsw-alias-bg-layer-2);
   color: var(--dsw-alias-label-primary);
   font: inherit;
-  font-size: 11px;
+  font-size: var(--tipo-mini);
   cursor: pointer;
 }
 
@@ -42,20 +42,20 @@
 .nota {
   margin: 0 0 8px;
   color: var(--dsw-alias-label-tertiary);
-  font-size: 11px;
+  font-size: var(--tipo-mini);
   line-height: 1.5;
 }
 
 .motivo {
   margin: 0 0 6px;
   color: var(--dsw-alias-label-tertiary);
-  font-size: 11px;
+  font-size: var(--tipo-mini);
 }
 
 .ficheros {
   margin: 0 0 6px;
   color: var(--dsw-alias-label-tertiary);
-  font-size: 11px;
+  font-size: var(--tipo-mini);
 }
 
 .ficheros p {
@@ -71,7 +71,7 @@
 .listaDeFicheros code {
   color: var(--dsw-alias-label-secondary);
   font-family: var(--ds-font-family-code);
-  font-size: 11px;
+  font-size: var(--tipo-mini);
 }
 
 /* El transcript lleva scroll PROPIO y tope de alto: un turno largo empujaría el resto de la
@@ -92,14 +92,14 @@
 .asistente {
   margin: 0;
   color: var(--dsw-alias-label-primary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
   line-height: 1.55;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
 .usuario {
-  font-weight: 600;
+  font-weight: var(--peso-fuerte);
 }
 
 /* Paisaje, no conversación: el pulso del agente en gris y en una línea, igual que en el
@@ -108,7 +108,7 @@
 .sistema {
   margin: 0;
   color: var(--dsw-alias-label-tertiary);
-  font-size: 11px;
+  font-size: var(--tipo-mini);
   line-height: 1.5;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -120,7 +120,7 @@
 
 .razonamiento {
   color: var(--dsw-alias-label-tertiary);
-  font-size: 11px;
+  font-size: var(--tipo-mini);
 }
 
 .razonamiento > summary {
@@ -136,18 +136,18 @@
 .error {
   margin: 0;
   color: var(--dsw-alias-state-error-primary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
   line-height: 1.55;
 }
 
 .artefacto {
   margin: 0;
   color: var(--dsw-alias-label-secondary);
-  font-size: 11px;
+  font-size: var(--tipo-mini);
 }
 
 .vacio {
   margin: 0;
   color: var(--dsw-alias-label-tertiary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }

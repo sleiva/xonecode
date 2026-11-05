@@ -22,8 +22,8 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-family: var(--dsw-font-mono);
-  font-size: 11px;
+  font-family: var(--ds-font-family-code);
+  font-size: var(--tipo-mini);
   /* Sin `margin-left: auto`: el empuje al borde derecho lo hace la caja de `.acciones` de
      `Compositor.module.css`, y con dos `auto` el hueco se repartía y esto quedaba suelto. */
   padding: 3px 8px;
@@ -41,7 +41,7 @@
 }
 
 .cifra {
-  font-weight: 600;
+  font-weight: var(--peso-fuerte);
 }
 
 /*
@@ -71,8 +71,8 @@
   border: none;
   cursor: pointer;
   font: inherit;
-  font-family: var(--dsw-font-mono);
-  font-size: 11px;
+  font-family: var(--ds-font-family-code);
+  font-size: var(--tipo-mini);
 }
 
 .boton:hover {

@@ -16,7 +16,7 @@
 .etiqueta {
   composes: etiqueta from "./Ajustes.module.css";
   margin-top: 8px;
-  font-weight: 600;
+  font-weight: var(--peso-fuerte);
 }
 
 .campo {
@@ -34,14 +34,14 @@
 
 .nota {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
   line-height: 1.5;
   color: var(--dsw-alias-label-secondary);
 }
 
 .motivo {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
   color: var(--dsw-alias-state-error-primary);
 }
 
@@ -55,7 +55,7 @@
   border-radius: 8px;
   background: var(--dsw-alias-bg-layer-2);
   color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 .guardado > span {
@@ -83,7 +83,7 @@
 }
 
 .hora {
-  font-size: 11px;
+  font-size: var(--tipo-mini);
   color: var(--dsw-alias-label-tertiary);
 }
 
@@ -101,7 +101,7 @@
   border: 1px solid var(--dsw-alias-border-l2);
   background: var(--dsw-alias-bg-layer-2);
   color: var(--dsw-alias-label-primary);
-  font-size: 13px;
+  font-size: var(--tipo-control);
   line-height: 1.5;
 }
 
@@ -126,7 +126,7 @@
   grid-template-columns: 110px minmax(0, 1fr);
   gap: 4px 12px;
   margin: 0;
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 .datos dt {

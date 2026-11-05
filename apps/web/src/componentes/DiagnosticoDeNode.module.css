@@ -21,7 +21,7 @@
   border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: 12px;
   background: var(--dsw-alias-bg-layer-2);
-  font-size: 13px;
+  font-size: var(--tipo-control);
 }
 
 .cabecera {
@@ -33,7 +33,7 @@
 
 .cuando {
   color: var(--dsw-alias-label-tertiary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 .lineas {

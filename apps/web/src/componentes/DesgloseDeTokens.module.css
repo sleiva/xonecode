@@ -25,21 +25,21 @@
 .titulo {
   margin: 0;
   color: var(--dsw-alias-label-primary);
-  font-size: 14px;
-  font-weight: 600;
+  font-size: var(--tipo-cuerpo);
+  font-weight: var(--peso-fuerte);
 }
 
 .subtitulo {
   margin: 0;
   color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 .tabla {
   width: 100%;
   border-collapse: separate;
   border-spacing: 0;
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
   color: var(--dsw-alias-label-primary);
 }
 
@@ -52,14 +52,14 @@
 }
 
 .tabla td {
-  font-family: var(--dsw-font-mono);
+  font-family: var(--ds-font-family-code);
 }
 
 .tabla thead th {
   padding-top: 0;
   color: var(--dsw-alias-label-tertiary);
-  font-size: 11px;
-  font-weight: 500;
+  font-size: var(--tipo-mini);
+  font-weight: var(--peso-fuerte);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
@@ -73,8 +73,8 @@
   max-width: 280px;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-family: var(--dsw-font-mono);
-  font-weight: 400;
+  font-family: var(--ds-font-family-code);
+  font-weight: var(--peso-normal);
 }
 
 /* Lo gastado antes de medir por modelo: tenue, porque no dice de quién fue. */
@@ -88,7 +88,7 @@
   border-bottom: none;
   background: var(--dsw-alias-state-business-tertiary);
   color: var(--dsw-alias-state-business-primary);
-  font-weight: 600;
+  font-weight: var(--peso-fuerte);
 }
 
 .total th:first-child {
@@ -103,7 +103,7 @@
   margin-left: 6px;
   padding: 1px 6px;
   border-radius: 999px;
-  font-size: 10px;
+  font-size: var(--tipo-mini);
   background: var(--dsw-alias-state-business-tertiary);
   color: var(--dsw-alias-state-business-primary);
 }
@@ -111,7 +111,7 @@
 .nota {
   margin: 0;
   color: var(--dsw-alias-label-secondary);
-  font-size: 11px;
+  font-size: var(--tipo-mini);
 }
 
 .acciones {

@@ -69,7 +69,7 @@
    apagado para que el valor sea lo que se lee, igual que en la maqueta. */
 .rotulo {
   color: var(--dsw-alias-label-tertiary);
-  font-weight: 400;
+  font-weight: var(--peso-normal);
 }
 
 .pastilla {
@@ -90,7 +90,7 @@
   background: var(--xonecode-fila-hover);
   color: var(--dsw-alias-label-secondary);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
   cursor: pointer;
 }
 
@@ -203,14 +203,14 @@
 .titulo {
   padding: 4px 8px 6px;
   color: var(--dsw-alias-label-tertiary);
-  font-size: 11px;
-  font-weight: 600;
+  font-size: var(--tipo-mini);
+  font-weight: var(--peso-fuerte);
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 
 .proveedor[data-actual] {
-  font-weight: 600;
+  font-weight: var(--peso-fuerte);
 }
 
 .modelo {
@@ -232,13 +232,13 @@
    es la mitad de para qué se abre el menú. */
 .modelo[data-actual] {
   color: var(--dsw-alias-label-primary);
-  font-weight: 600;
+  font-weight: var(--peso-fuerte);
 }
 
 .espera,
 .error {
   margin: 4px 8px;
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 .espera {
@@ -260,7 +260,7 @@
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-primary);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 /* El logo del proveedor en la entrada del menú. Como en Ajustes: monocromo, heredando el
@@ -293,7 +293,7 @@
   background: none;
   color: var(--dsw-alias-label-tertiary);
   font: inherit;
-  font-size: 11px;
+  font-size: var(--tipo-mini);
   line-height: 1.45;
   text-align: left;
 }

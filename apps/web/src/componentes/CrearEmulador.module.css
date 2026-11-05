@@ -21,7 +21,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
   color: var(--dsw-alias-label-secondary);
 }
 
@@ -31,12 +31,12 @@
 
 .motivo {
   color: var(--dsw-alias-label-tertiary);
-  font-size: 11px;
+  font-size: var(--tipo-mini);
 }
 
 .estado {
   margin: 0;
-  font-size: 11px;
+  font-size: var(--tipo-mini);
   color: var(--dsw-alias-label-secondary);
 }
 
@@ -55,7 +55,7 @@
   max-height: 96px;
   overflow: auto;
   font-family: var(--ds-font-family-code);
-  font-size: 10px;
+  font-size: var(--tipo-mini);
   background: var(--dsw-alias-bg-layer-2);
   border: 1px solid var(--dsw-alias-border-l2);
   color: var(--dsw-alias-label-secondary);

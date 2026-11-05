@@ -43,7 +43,7 @@
   background: var(--dsw-alias-button-elevated-fill);
   color: var(--dsw-alias-label-primary);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--tipo-control);
   white-space: nowrap;
   cursor: pointer;
 }
@@ -71,8 +71,8 @@
   background: var(--xonecode-azul);
   color: var(--xonecode-sobre-azul);
   font: inherit;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: var(--tipo-control);
+  font-weight: var(--peso-fuerte);
   cursor: pointer;
 }
 
@@ -98,7 +98,7 @@
   background: var(--xonecode-rojo-fondo);
   color: var(--xonecode-rojo);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--tipo-control);
   cursor: pointer;
 }
 
@@ -122,7 +122,7 @@
   background: var(--xonecode-verde-fondo);
   color: var(--xonecode-verde);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--tipo-control);
   cursor: pointer;
 }
 
@@ -153,7 +153,7 @@
   background: none;
   color: var(--dsw-alias-label-tertiary);
   font: inherit;
-  font-size: 14px;
+  font-size: var(--tipo-cuerpo);
   line-height: 1;
   cursor: pointer;
 }

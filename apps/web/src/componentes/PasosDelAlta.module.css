@@ -50,7 +50,7 @@
   height: 18px;
   border-radius: 50%;
   border: 1px solid var(--dsw-alias-border-l2);
-  font-size: 11px;
+  font-size: var(--tipo-mini);
   line-height: 1;
 }
 
@@ -75,7 +75,7 @@
 }
 
 .etiqueta {
-  font-size: 13px;
+  font-size: var(--tipo-control);
   white-space: nowrap;
 }
 
@@ -85,7 +85,7 @@
 
 .etiqueta[data-estado="actual"] {
   color: var(--dsw-alias-label-primary);
-  font-weight: 600;
+  font-weight: var(--peso-fuerte);
 }
 
 .etiqueta[data-estado="hecho"] {

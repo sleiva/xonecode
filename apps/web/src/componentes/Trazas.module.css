@@ -18,7 +18,7 @@
   min-height: 0;
   /* Monoespaciada por contrato: esto es un registro, no prosa. */
   font-family: var(--ds-font-family-code);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 /* La barra de herramientas, pegada arriba: buscar, contar y plegar. */
@@ -90,7 +90,7 @@
   background: var(--dsw-alias-bg-layer-2);
   color: var(--dsw-alias-label-secondary);
   font: inherit;
-  font-weight: 600;
+  font-weight: var(--peso-fuerte);
   text-align: left;
   cursor: pointer;
 }
@@ -103,7 +103,7 @@
 .cuentaDeGrupo {
   margin-left: auto;
   color: var(--dsw-alias-label-tertiary);
-  font-weight: 400;
+  font-weight: var(--peso-normal);
 }
 
 /* La fila. Es un `<button>` de verdad y no un `<div onClick>`: se elige con el teclado, sale
@@ -175,8 +175,8 @@
   border-radius: 6px;
   background: var(--dsw-alias-bg-module-platform);
   color: var(--dsw-alias-label-secondary);
-  font-size: 10px;
-  font-weight: 600;
+  font-size: var(--tipo-mini);
+  font-weight: var(--peso-fuerte);
   letter-spacing: 0.04em;
   white-space: nowrap;
 }
@@ -363,8 +363,8 @@
 
 .cifra {
   color: var(--dsw-alias-label-primary);
-  font-size: 20px;
-  font-weight: 600;
+  font-size: var(--tipo-display);
+  font-weight: var(--peso-fuerte);
 }
 
 .nota,

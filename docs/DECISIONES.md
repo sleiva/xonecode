@@ -10693,3 +10693,28 @@ Y la RESOLUCIÓN (mismo día): la copia creada en el SM-F946B (plegable) llevaba
 la última fila del teclado cortada y el crítico en rojo dos vueltas. La granja cambia la resolución de una copia sin
 recrear la pantalla (`POST …/slots/:n/settings`, presets de `/api/config`), así que al coger una copia en `native` se le
 pone `1080p` (1080×1920, 9:16). Un preset que alguien eligió no se toca. Falta elegirlo según la maqueta (tableta).
+
+## La consola web, con escala tipográfica (05-11-2026)
+
+Revisión de la consola para que se vea uniforme. Medido antes: 16 tamaños de letra en el CSS (con un `10.5px`), 17
+combinaciones de tamaño, peso y familia en UNA pantalla (Ajustes sobre el panel del proyecto), pesos 400/500/600/700/800,
+120 rellenos y 14 radios distintos. Y un fallo mudo: 13 `font-family` leían tres variables de monoespaciada que no existían
+(`--dsw-font-mono` y dos más): sin fallback se heredaba Inter, con fallback salía la `monospace` del sistema.
+
+Se eligió en el lienzo de diseño, entre tres densidades del mismo panel, la B «estándar»: 24 · 16 · 14 · 13 · 12 · 11
+(`--tipo-display` … `--tipo-mini` en `estilos/tipografia.css`) y tres pesos. Es la más cercana a lo que había (base 14),
+así que la migración por VALOR no cambia casi nada a la vista. Lo que sí cambia, a propósito: los botones a 13 (la escala
+dice «control»), el 10px sube a 11, el 700 baja a 600, los títulos de 15/18 suben a 16, las cifras y títulos de página de
+20–32 van a 24, y las etiquetas de sección y pastillas dejan la monoespaciada en mayúsculas por Inter (la monoespaciada
+queda para DATOS). Los rótulos pasan del gris terciario (3,8:1, no llega a 4,5 a 11px) al secundario. Se quedan fuera, con
+motivo en el test, la marca (logotipo y eslogan) y los glifos de flecha, ×, ✓ y + que se dimensionan con `font-size`.
+
+El espaciado y el radio se DECLARAN y no se migran: la escala del lienzo (4…32, 6/10/999) deja fuera el `10px` de los
+rellenos de botón y el `8px` de radio que dominan, y cambiarlos mueve la altura de los controles en toda la consola — el
+síntoma que más veces ha costado arreglar con los botones. Las hojas copiadas de deepseek (`estilos/*.module.css`, la barra
+lateral entre ellas) siguen con sus tamaños: no se tocan.
+
+Y los títulos de tarjeta, en una segunda pasada por SIGNIFICADO y no por valor: «Copia local», «Tu equipo», «Tareas»,
+el nombre de cada proyecto del Escritorio y otros cuatro `<h2>` iban a 14, el tamaño del texto que tenían debajo, y no se
+distinguían de él. Pasan a `--tipo-titulo`, y un test recorre cada `<h2>` de los componentes (siguiendo `composes`) para
+que uno nuevo no vuelva a nacer con el tamaño del cuerpo.

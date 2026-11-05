@@ -42,7 +42,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--ds-font-family-code);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
   color: var(--dsw-alias-label-secondary);
 }
 
@@ -57,7 +57,7 @@
 .contador {
   min-width: 52px;
   text-align: center;
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
   font-variant-numeric: tabular-nums;
   color: var(--dsw-alias-label-secondary);
 }

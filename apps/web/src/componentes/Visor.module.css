@@ -19,7 +19,7 @@
   padding: 8px 0;
   overflow: auto;
   font-family: var(--ds-font-family-code);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
   line-height: 1.6;
 }
 
@@ -54,7 +54,7 @@
   border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: 8px;
   font-family: var(--ds-font-family-code);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
   line-height: 1.6;
   overflow-x: auto;
 }
@@ -79,5 +79,5 @@
 .aviso {
   margin: 12px 0 8px;
   color: var(--dsw-alias-label-tertiary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }

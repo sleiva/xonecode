@@ -39,14 +39,14 @@
 .titulo {
   margin: 0;
   color: var(--dsw-alias-label-primary);
-  font-size: 14px;
-  font-weight: 600;
+  font-size: var(--tipo-cuerpo);
+  font-weight: var(--peso-fuerte);
 }
 
 .aviso {
   margin: 0;
   color: var(--dsw-alias-label-tertiary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 .campo {
@@ -54,7 +54,7 @@
   flex-direction: column;
   gap: 4px;
   color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 .select,
@@ -76,7 +76,7 @@
 .error {
   margin: 0;
   color: var(--dsw-alias-state-error-primary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 .acciones {
@@ -115,7 +115,7 @@
   margin-right: auto;
   color: var(--dsw-alias-label-secondary);
   font-family: var(--ds-font-family-code);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 /* El aviso corto de R8: una fila entre la conexión y el transcript, nunca un diálogo — no hay
@@ -130,7 +130,7 @@
   border-radius: 8px;
   background: var(--xonecode-fila-hover);
   color: var(--dsw-alias-label-primary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 .cerrarAviso {

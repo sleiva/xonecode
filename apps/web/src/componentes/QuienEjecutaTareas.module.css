@@ -9,7 +9,7 @@
   border-radius: 8px;
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-state-warn-label);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
   line-height: 1.5;
   max-width: 70ch;
 }

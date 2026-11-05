@@ -22,10 +22,8 @@
   gap: 5px;
   padding: 3px 9px;
   border-radius: 999px;
-  font-family: var(--ds-font-family-code);
-  font-size: 11px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  font-size: var(--tipo-pequeno);
+  font-weight: var(--peso-medio);
   white-space: nowrap;
 }
 
@@ -71,7 +69,7 @@
 .negativa {
   margin: 0 0 16px;
   color: var(--dsw-alias-state-error-primary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 /* ── La fila de CIFRAS (dashboard, opción A de su lienzo, 21-10-2026) ─────────────────────
@@ -99,9 +97,9 @@
 
 /* Letra de máquina en versalitas, como las pastillas: marca lo que es rótulo de un dato. */
 .rotulo {
-  color: var(--dsw-alias-label-tertiary);
-  font-family: var(--ds-font-family-code);
-  font-size: 11px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: var(--tipo-mini);
+  font-weight: var(--peso-fuerte);
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
@@ -109,15 +107,15 @@
 .linea {
   margin: 0;
   color: var(--dsw-alias-label-secondary);
-  font-size: 13px;
+  font-size: var(--tipo-control);
 }
 
 /* La cifra grande. El tono solo donde dice algo: lo pendiente en naranja (el filo de siempre),
    los planes en el verde de «hecho». El cian es acento, no texto: lo demás en tinta. */
 .cifra {
   color: var(--dsw-alias-label-primary);
-  font-size: 28px;
-  font-weight: 600;
+  font-size: var(--tipo-display);
+  font-weight: var(--peso-fuerte);
   line-height: 1.15;
   font-variant-numeric: tabular-nums;
 }
@@ -133,15 +131,15 @@
 .detalle {
   margin: 0;
   color: var(--dsw-alias-label-tertiary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 .nombre {
   margin: 0;
   overflow: hidden;
   color: var(--dsw-alias-label-primary);
-  font-size: 13px;
-  font-weight: 500;
+  font-size: var(--tipo-control);
+  font-weight: var(--peso-medio);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -152,7 +150,7 @@
 .tira.tira {
   border-top-width: 3px;
   color: var(--dsw-alias-label-secondary);
-  font-size: 13px;
+  font-size: var(--tipo-control);
 }
 
 .tira[data-estado="pendientes"] {
@@ -232,7 +230,7 @@
 .vacio {
   margin: 0;
   color: var(--dsw-alias-label-secondary);
-  font-size: 13px;
+  font-size: var(--tipo-control);
 }
 
 /* ── Conversaciones nuevas (IXCODE-31) ───────────────────────────────────────────────────
@@ -243,11 +241,11 @@
   flex-wrap: wrap;
   gap: 10px;
   color: var(--dsw-alias-label-primary);
-  font-size: 13px;
+  font-size: var(--tipo-control);
 }
 
 .notaDeModo {
   margin: 8px 0 0;
   color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }

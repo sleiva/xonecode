@@ -7,7 +7,7 @@
   overflow: auto;
   padding: 0 16px 24px;
   color: var(--dsw-alias-label-primary);
-  font-size: 13px;
+  font-size: var(--tipo-control);
   line-height: 1.6;
 }
 
@@ -15,7 +15,7 @@
   margin: 0;
   padding: 16px;
   color: var(--dsw-alias-label-secondary);
-  font-size: 13px;
+  font-size: var(--tipo-control);
 }
 
 .elegir {
@@ -51,14 +51,14 @@
 
 .titulo {
   margin: 0;
-  font-size: 15px;
-  font-weight: 600;
+  font-size: var(--tipo-titulo);
+  font-weight: var(--peso-fuerte);
 }
 
 .ruta {
   color: var(--dsw-alias-label-secondary);
   font-family: var(--ds-font-family-code);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 .boton {
@@ -68,7 +68,7 @@
 .nota {
   margin: 10px 0 6px;
   color: var(--dsw-alias-label-tertiary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 .tareas {
@@ -99,13 +99,13 @@
 .numero {
   color: var(--dsw-alias-label-tertiary);
   font-family: var(--ds-font-family-code);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 .tituloDeTarea {
   flex: 1 1 20ch;
   min-width: 0;
-  font-weight: 600;
+  font-weight: var(--peso-fuerte);
   overflow-wrap: anywhere;
 }
 
@@ -114,18 +114,18 @@
   border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: 6px;
   color: var(--dsw-alias-label-secondary);
-  font-size: 11px;
+  font-size: var(--tipo-mini);
 }
 
 .criterios {
   color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 .bloqueo {
   margin: 0 0 6px;
   color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 .prosa {
@@ -160,7 +160,7 @@
 .resumen {
   margin: 10px 0 6px;
   color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 /* Por dónde va cada tarea: un círculo vacío (pendiente), con el borde marcado (en curso), a medias
@@ -194,7 +194,7 @@
 /* Una tarea FINALIZADA se lee de un vistazo: su recuento de criterios en verde. */
 .tarea[data-progreso="finalizada"] .criterios {
   color: var(--xonecode-verde);
-  font-weight: 600;
+  font-weight: var(--peso-fuerte);
 }
 
 /* La barra del porcentaje del plan (criterios comprobados sobre el total), en verde. */
@@ -224,7 +224,7 @@
   flex: none;
   min-width: 4ch;
   color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
   font-variant-numeric: tabular-nums;
   text-align: right;
 }

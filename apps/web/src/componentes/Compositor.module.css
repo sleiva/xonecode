@@ -298,7 +298,7 @@
   background: var(--xonecode-azul);
   color: var(--xonecode-sobre-azul);
   transition: background 120ms ease;
-  font-size: 16px;
+  font-size: var(--tipo-titulo);
   line-height: 1;
   cursor: pointer;
 }
@@ -522,7 +522,7 @@
   align-items: center;
   gap: 8px;
   padding: 3px 0;
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 /* La miniatura de una imagen anexada: para reconocer QUÉ se pegó antes de mandarlo. */
@@ -540,7 +540,7 @@
   flex: 1;
   overflow: hidden;
   color: var(--dsw-alias-label-primary);
-  font-family: var(--dsw-alias-font-mono, monospace);
+  font-family: var(--ds-font-family-code);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -561,7 +561,7 @@
   background: none;
   color: var(--dsw-alias-label-tertiary);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
   text-decoration: underline;
   cursor: pointer;
 }

@@ -42,7 +42,7 @@
   background: none;
   color: var(--dsw-alias-label-primary);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--tipo-control);
   text-align: left;
   white-space: nowrap;
   cursor: pointer;

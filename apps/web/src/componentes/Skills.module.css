@@ -19,13 +19,13 @@
 .pista {
   margin: 0 0 14px;
   color: var(--dsw-alias-label-tertiary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
   line-height: 1.5;
 }
 
 .pista {
   margin: 0;
-  font-weight: 400;
+  font-weight: var(--peso-normal);
 }
 
 /* Los `.md` que no se pudieron leer, y los nombres que hay que arreglar. En rojo y con
@@ -48,7 +48,7 @@
   border-radius: 10px;
   background: var(--dsw-alias-state-error-secondary);
   color: var(--dsw-alias-label-primary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
   line-height: 1.6;
 }
 
@@ -76,7 +76,7 @@
 
 .nombre {
   color: var(--dsw-alias-label-primary);
-  font-weight: 600;
+  font-weight: var(--peso-fuerte);
 }
 
 .relleno {
@@ -92,10 +92,8 @@
   flex: none;
   padding: 1px 6px;
   border-radius: 999px;
-  font-family: var(--ds-font-family-code);
-  font-size: 10px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  font-size: var(--tipo-pequeno);
+  font-weight: var(--peso-medio);
   white-space: nowrap;
 }
 
@@ -119,7 +117,7 @@
 .descripcion {
   margin: 6px 0 0;
   color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
   line-height: 1.5;
 }
 
@@ -133,7 +131,7 @@
   padding-top: 10px;
   border-top: 0.5px solid var(--dsw-alias-border-l2);
   color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 /*
@@ -236,7 +234,7 @@
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-primary);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 .campo input:disabled {
@@ -246,8 +244,8 @@
 
 .rotulo {
   color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
-  font-weight: 600;
+  font-size: var(--tipo-pequeno);
+  font-weight: var(--peso-fuerte);
 }
 
 .casilla {
@@ -255,7 +253,7 @@
   align-items: center;
   gap: 8px;
   color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 /* Mono: el cuerpo de un `.md` es un prompt que se escribe y se relee como texto plano, y la
@@ -269,7 +267,7 @@
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-primary);
   font-family: var(--ds-font-family-code);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
   line-height: 1.5;
   resize: vertical;
 }
@@ -290,7 +288,7 @@
   border-radius: 8px;
   background: var(--dsw-alias-state-warn-tertiary);
   color: var(--dsw-alias-state-warn-label);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
   line-height: 1.5;
 }
 
@@ -317,8 +315,8 @@
 .grupo {
   margin: 0 0 6px;
   color: var(--dsw-alias-label-tertiary);
-  font-size: 11px;
-  font-weight: 600;
+  font-size: var(--tipo-mini);
+  font-weight: var(--peso-fuerte);
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
@@ -339,7 +337,7 @@
   padding-top: 10px;
   border-top: 0.5px solid var(--dsw-alias-border-l2);
   color: var(--dsw-alias-label-tertiary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
   line-height: 1.5;
 }
 
@@ -355,7 +353,7 @@
   border-radius: 8px;
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-primary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
   white-space: nowrap;
 }
 
@@ -412,8 +410,8 @@
   border-radius: 999px;
   background: var(--dsw-alias-state-business-tertiary);
   color: var(--dsw-alias-state-business-primary);
-  font-size: 11px;
-  font-weight: 600;
+  font-size: var(--tipo-mini);
+  font-weight: var(--peso-fuerte);
 }
 
 /* Sin borde ni fondo: el filo de la pestaña ya dice dónde empieza, y una caja más dentro de
@@ -455,7 +453,7 @@
   background: var(--dsw-alias-state-business-tertiary);
   color: var(--dsw-alias-state-business-primary);
   font-family: var(--ds-font-family-code);
-  font-size: 10px;
+  font-size: var(--tipo-mini);
   white-space: nowrap;
 }
 
@@ -464,7 +462,7 @@
 .anexos {
   margin: 6px 0 0;
   color: var(--dsw-alias-label-tertiary);
-  font-size: 11px;
+  font-size: var(--tipo-mini);
   line-height: 1.5;
 }
 
@@ -497,7 +495,7 @@
   overflow: auto;
   color: var(--dsw-alias-label-secondary);
   font-family: var(--ds-font-family-code);
-  font-size: 11px;
+  font-size: var(--tipo-mini);
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
@@ -511,7 +509,7 @@
   gap: 10px;
   margin-top: 10px;
   color: var(--dsw-alias-label-tertiary);
-  font-size: 11px;
+  font-size: var(--tipo-mini);
   line-height: 1.5;
 }
 
@@ -521,8 +519,8 @@
 .rotuloDeBloque {
   margin: 12px 0 4px;
   color: var(--dsw-alias-label-tertiary);
-  font-size: 11px;
-  font-weight: 600;
+  font-size: var(--tipo-mini);
+  font-weight: var(--peso-fuerte);
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
@@ -544,7 +542,7 @@
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-secondary);
   font-family: var(--ds-font-family-code);
-  font-size: 11px;
+  font-size: var(--tipo-mini);
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;

@@ -14,7 +14,7 @@
 .aviso {
   margin: 12px 20px;
   color: var(--dsw-alias-label-tertiary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
   line-height: 1.6;
   max-width: 60ch;
 }
@@ -31,14 +31,14 @@
 
 .proyecto {
   color: var(--dsw-alias-label-primary);
-  font-size: 14px;
-  font-weight: 600;
+  font-size: var(--tipo-cuerpo);
+  font-weight: var(--peso-fuerte);
 }
 
 .rama {
   color: var(--dsw-alias-label-secondary);
   font-family: var(--ds-font-family-code);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 /* El mismo botón secundario de Revisión y de Ficheros, y a propósito: «volver a mirar» es
@@ -55,7 +55,7 @@
 .cuenta {
   margin: 0;
   color: var(--dsw-alias-label-primary);
-  font-size: 13px;
+  font-size: var(--tipo-control);
   line-height: 1.6;
 }
 
@@ -84,8 +84,8 @@
   background: var(--xonecode-azul);
   color: var(--xonecode-sobre-azul);
   font: inherit;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: var(--tipo-control);
+  font-weight: var(--peso-fuerte);
   transition: background 120ms ease;
   cursor: pointer;
 }
@@ -105,7 +105,7 @@
   border-radius: 8px;
   background: var(--dsw-alias-bg-layer-2);
   color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
   line-height: 1.6;
 }
 
@@ -131,13 +131,13 @@
 .cabeceraDeOperacion {
   padding: 6px 12px;
   color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
   cursor: pointer;
 }
 
 .accion {
   color: var(--dsw-alias-label-primary);
-  font-weight: 600;
+  font-weight: var(--peso-fuerte);
 }
 
 /* La hora en monoespaciada, como la rama de la cabecera: se compara letra a letra entre una
@@ -145,7 +145,7 @@
 .sello {
   color: var(--dsw-alias-label-tertiary);
   font-family: var(--ds-font-family-code);
-  font-size: 11px;
+  font-size: var(--tipo-mini);
 }
 
 /* Las líneas TAL CUAL, y `pre-wrap` no es adorno: son líneas de consola y su sangría —el
@@ -163,7 +163,7 @@
   background: var(--dsw-alias-bg-layer-2);
   color: var(--dsw-alias-label-secondary);
   font-family: var(--ds-font-family-code);
-  font-size: 11px;
+  font-size: var(--tipo-mini);
   line-height: 1.5;
   white-space: pre-wrap;
   overflow-wrap: anywhere;

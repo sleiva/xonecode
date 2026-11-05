@@ -22,8 +22,8 @@
 .titulo {
   margin: 0;
   color: var(--dsw-alias-label-primary);
-  font-size: 14px;
-  font-weight: 600;
+  font-size: var(--tipo-titulo);
+  font-weight: var(--peso-fuerte);
 }
 
 /* El sistema en mono: es dato de máquina, no una palabra de la frase. */
@@ -31,7 +31,7 @@
   margin-right: auto;
   color: var(--dsw-alias-label-tertiary);
   font-family: var(--ds-font-family-code);
-  font-size: 11px;
+  font-size: var(--tipo-mini);
 }
 
 /* El mismo botón secundario que Ajustes/Agentes/etc. (`Boton.module.css#secundario`). */
@@ -54,8 +54,8 @@
 .plataforma {
   margin: 0 0 6px;
   color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
-  font-weight: 600;
+  font-size: var(--tipo-pequeno);
+  font-weight: var(--peso-fuerte);
 }
 
 .resumen,
@@ -63,13 +63,13 @@
 .nota {
   margin: 4px 0 0;
   color: var(--dsw-alias-label-tertiary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 .fallo {
   margin: 4px 0 0;
   color: var(--dsw-alias-state-error-primary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 .filas {
@@ -84,7 +84,7 @@
   align-items: baseline;
   gap: 4px 8px;
   padding: 4px 0;
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 .punto {
@@ -114,14 +114,14 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--dsw-alias-label-primary);
-  font-weight: 500;
+  font-weight: var(--peso-medio);
 }
 
 /* La etiqueta de clase y estado, en mono y pequeña, como las de las tarjetas. */
 .etiqueta {
   color: var(--dsw-alias-label-tertiary);
   font-family: var(--ds-font-family-code);
-  font-size: 10px;
+  font-size: var(--tipo-mini);
   white-space: nowrap;
 }
 
@@ -129,5 +129,5 @@
   flex-basis: 100%;
   padding-left: 16px;
   color: var(--dsw-alias-label-tertiary);
-  font-size: 11px;
+  font-size: var(--tipo-mini);
 }

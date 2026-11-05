@@ -50,7 +50,7 @@
 .titulo {
   margin: 0 0 2px;
   color: var(--dsw-alias-label-primary);
-  font-size: 16px;
+  font-size: var(--tipo-titulo);
 }
 
 /*
@@ -66,20 +66,20 @@
   border-radius: 4px;
   background: var(--dsw-alias-bg-layer-2);
   color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
   line-height: 1.5;
 }
 
 .nota {
   margin: 0 0 8px;
   color: var(--dsw-alias-label-tertiary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
   line-height: 1.5;
 }
 
 .etiqueta {
   color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 /* La etiqueta del encargo y el botón de prepararlo comparten fila: es la misma decisión
@@ -107,8 +107,8 @@
 /* El encargo es un documento con apartados: mono, que es lo que este cliente reserva para
    dato de máquina y para lo que se lee como código. */
 #nueva-tarea-encargo {
-  font-family: var(--dsw-alias-font-mono, monospace);
-  font-size: 12px;
+  font-family: var(--ds-font-family-code);
+  font-size: var(--tipo-pequeno);
   line-height: 1.5;
 }
 
@@ -124,14 +124,14 @@
   gap: 8px;
   padding: 4px 0;
   border-bottom: 0.5px solid var(--dsw-alias-border-l2);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 .nombreDeAdjunto {
   flex: 1;
   overflow: hidden;
   color: var(--dsw-alias-label-primary);
-  font-family: var(--dsw-alias-font-mono, monospace);
+  font-family: var(--ds-font-family-code);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -154,7 +154,7 @@
   background: none;
   color: var(--dsw-alias-label-tertiary);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
   text-decoration: underline;
   cursor: pointer;
 }
@@ -202,7 +202,7 @@
   border-color: var(--xonecode-azul);
   background: var(--xonecode-azul);
   color: var(--xonecode-sobre-azul);
-  font-weight: 600;
+  font-weight: var(--peso-fuerte);
 }
 
 .principal.principal:hover {
@@ -218,7 +218,7 @@
 .fallo {
   margin: 0 0 8px;
   color: var(--dsw-alias-state-error-primary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 /* Lo que se escribirá en el gestor: un dato que autoriza, en el color del texto y no en el de una nota al margen. */

@@ -16,8 +16,8 @@
 
 .titulo {
   color: var(--dsw-alias-label-primary);
-  font-size: 12px;
-  font-weight: 600;
+  font-size: var(--tipo-pequeno);
+  font-weight: var(--peso-fuerte);
 }
 
 .resumen,
@@ -25,7 +25,7 @@
 .ayuda {
   margin: 4px 0 0;
   color: var(--dsw-alias-label-tertiary);
-  font-size: 11px;
+  font-size: var(--tipo-mini);
 }
 
 .explicacion {
@@ -46,7 +46,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 4px 10px;
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 .fila .rotulo {
@@ -81,13 +81,13 @@
   gap: 6px;
   margin-top: 4px;
   color: var(--dsw-alias-label-primary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 .error {
   margin: 4px 0 0;
   color: var(--dsw-alias-state-error-primary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 .acciones {

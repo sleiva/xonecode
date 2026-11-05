@@ -17,7 +17,7 @@
 .notaDeImagenes {
   margin: 0;
   color: var(--dsw-alias-label-tertiary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 .rejillaDeImagenes {
@@ -79,7 +79,7 @@
   overflow: hidden;
   padding: 0 8px;
   color: var(--dsw-alias-label-primary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -91,7 +91,7 @@
 .estadoDeImagen {
   padding: 0 8px;
   color: var(--dsw-alias-label-tertiary);
-  font-size: 11px;
+  font-size: var(--tipo-mini);
 }
 
 .imagen[data-nueva] .estadoDeImagen {
@@ -113,7 +113,7 @@
   border-radius: 50%;
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-primary);
-  font-size: 14px;
+  font-size: var(--tipo-cuerpo);
   line-height: 1;
   cursor: pointer;
 }
@@ -133,7 +133,7 @@
   background: none;
   color: var(--dsw-alias-label-secondary);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
   text-align: center;
   cursor: pointer;
 }
@@ -145,6 +145,6 @@
 
 .etiqueta {
   color: var(--dsw-alias-label-primary);
-  font-size: 13px;
-  font-weight: 600;
+  font-size: var(--tipo-control);
+  font-weight: var(--peso-fuerte);
 }

@@ -12,7 +12,7 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
-  font-size: 13px;
+  font-size: var(--tipo-control);
   text-align: center;
   color: var(--xonecode-splash-texto-suave);
 }

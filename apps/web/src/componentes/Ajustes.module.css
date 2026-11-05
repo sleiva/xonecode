@@ -91,7 +91,7 @@
   display: block;
   margin: 0;
   color: var(--dsw-alias-label-primary);
-  font-weight: 600;
+  font-weight: var(--peso-fuerte);
 }
 
 /* De qué ajustes son. Estos tres van a la configuración global y a `auth.json`, no al
@@ -99,7 +99,7 @@
 .alcance {
   display: block;
   color: var(--dsw-alias-label-tertiary);
-  font-size: 11px;
+  font-size: var(--tipo-mini);
 }
 
 /* Pastillas con icono, como en el rediseño. El icono no es decoración: la lista tiene tres
@@ -149,14 +149,14 @@
 .encabezado {
   margin: 0 0 4px;
   color: var(--dsw-alias-label-primary);
-  font-size: 16px;
+  font-size: var(--tipo-titulo);
 }
 
 .nota,
 .vacio {
   margin: 0 0 14px;
   color: var(--dsw-alias-label-tertiary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 .filas {
@@ -193,7 +193,7 @@
 
 .nombre {
   color: var(--dsw-alias-label-primary);
-  font-weight: 600;
+  font-weight: var(--peso-fuerte);
 }
 
 /* Nombre y fecha de último acceso en dos líneas, dentro de la misma casilla — el checkbox
@@ -208,8 +208,8 @@
 /* El mismo tono terciario que `.cuenta`: es el otro dato secundario de esta sección. */
 .fechaDeProyecto {
   color: var(--dsw-alias-label-tertiary);
-  font-size: 11px;
-  font-weight: 400;
+  font-size: var(--tipo-mini);
+  font-weight: var(--peso-normal);
 }
 
 /* El logo del proveedor (`IconoDeProveedor.tsx`), monocromo y heredando el color: se pinta
@@ -238,7 +238,7 @@
   overflow: hidden;
   color: var(--dsw-alias-label-tertiary);
   font-family: var(--ds-font-family-code);
-  font-size: 11px;
+  font-size: var(--tipo-mini);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -261,7 +261,7 @@
   margin-right: auto;
   color: var(--dsw-alias-label-tertiary);
   font-family: var(--ds-font-family-code);
-  font-size: 11px;
+  font-size: var(--tipo-mini);
 }
 
 /* La frase que acompaña a una fila: el estado de una credencial, lo que dice una
@@ -275,7 +275,7 @@
 .detalle {
   margin-right: auto;
   color: var(--dsw-alias-label-tertiary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 .estadoDeClave .detalle {
@@ -349,7 +349,7 @@
   gap: 8px;
   margin: 10px 0 0;
   color: var(--dsw-alias-state-error-primary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 .formulario {
@@ -361,7 +361,7 @@
 
 .etiqueta {
   color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 /* `Input` del paquete envuelve el `<input>` en un `<span>`, así que este `width` solo
@@ -382,7 +382,7 @@
 .aviso {
   margin: 0;
   color: var(--dsw-alias-state-error-primary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 .pie {
@@ -409,7 +409,7 @@
 .subencabezado {
   margin: 18px 0 4px;
   color: var(--dsw-alias-label-primary);
-  font-size: 13px;
+  font-size: var(--tipo-control);
 }
 
 /* El control del modelo por defecto: la pastilla del compositor, en línea. Se alinea a la
@@ -432,7 +432,7 @@
 
 .nombreDePapel {
   min-width: 64px;
-  font-weight: 600;
+  font-weight: var(--peso-fuerte);
 }
 
 /* La fila entera es la etiqueta: pulsar el nombre marca la casilla, que es lo que espera
@@ -514,7 +514,7 @@
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-secondary);
   font-family: var(--ds-font-family-code);
-  font-size: 11px;
+  font-size: var(--tipo-mini);
   overflow-wrap: anywhere;
   user-select: all;
 }
@@ -524,8 +524,8 @@
 .subsubencabezado {
   margin: 14px 0 4px;
   color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
-  font-weight: 500;
+  font-size: var(--tipo-pequeno);
+  font-weight: var(--peso-medio);
 }
 
 /* El engranaje que despliega «ruta actual / ruta personalizada» en la fila de adb/emulator.
@@ -612,7 +612,7 @@
   gap: 4px 14px;
   margin: 0 0 14px;
   color: var(--dsw-alias-label-tertiary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 /* La línea que separa los Requisitos (lo que se configura) del inventario de abajo (lo que
@@ -648,7 +648,7 @@
   gap: 10px;
   margin: 8px 0;
   color: var(--dsw-alias-label-primary);
-  font-size: 13px;
+  font-size: var(--tipo-control);
 }
 
 .filaDeConcurrencia input {
@@ -678,7 +678,7 @@
   gap: 4px;
   margin: 8px 0;
   color: var(--dsw-alias-label-primary);
-  font-size: 13px;
+  font-size: var(--tipo-control);
 }
 
 .etiquetaDeWorkspace {
@@ -704,7 +704,7 @@
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-primary);
   font-family: var(--ds-font-family-code);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 /* El no de la regla se dice con el borde además de con la frase de debajo: el color solo no
@@ -720,8 +720,8 @@
 
 .pistaEnLinea {
   color: var(--dsw-alias-label-tertiary);
-  font-size: 12px;
-  font-weight: 400;
+  font-size: var(--tipo-pequeno);
+  font-weight: var(--peso-normal);
 }
 
 /* ─── La tira de pestañas de una sección ──────────────────────────────────────────────
@@ -799,8 +799,8 @@
   border-radius: 999px;
   background: var(--dsw-alias-state-business-tertiary);
   color: var(--dsw-alias-state-business-primary);
-  font-size: 11px;
-  font-weight: 600;
+  font-size: var(--tipo-mini);
+  font-weight: var(--peso-fuerte);
 }
 
 /* El panel de la pestaña. Sin borde ni fondo: el filo de la pestaña ya dice dónde empieza,
@@ -839,7 +839,7 @@
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-secondary);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--tipo-control);
   cursor: pointer;
 }
 
@@ -871,8 +871,8 @@
    — saltarse un nivel rompería el esquema para quien navegue por encabezados. */
 .encabezadoDeColumna {
   margin: 0;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: var(--tipo-mini);
+  font-weight: var(--peso-fuerte);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--dsw-alias-label-secondary);
@@ -883,7 +883,7 @@
 
 /* La cuenta es un dato secundario del encabezado: se lee después del título, no antes. */
 .cuenta {
-  font-weight: 400;
+  font-weight: var(--peso-normal);
   color: var(--dsw-alias-label-tertiary);
 }
 
@@ -914,7 +914,7 @@
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-primary);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 /* El NOMBRE del entorno, encima de su URL: la etiqueta arriba y, debajo, el campo con
@@ -927,7 +927,7 @@
   gap: 4px;
   margin: 0 0 8px;
   color: var(--dsw-alias-label-primary);
-  font-size: 13px;
+  font-size: var(--tipo-control);
 }
 
 .etiquetaDeNombre {
@@ -951,7 +951,7 @@
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-primary);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--tipo-control);
 }
 
 .campoDeNombreConBoton input[aria-invalid="true"] {
@@ -1011,7 +1011,7 @@
   background: var(--xonecode-rojo);
   color: var(--dsw-alias-label-primary-inverted);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--tipo-control);
   cursor: pointer;
 }
 
@@ -1041,12 +1041,12 @@
 }
 
 .tituloDeAviso {
-  font-weight: 600;
-  font-size: 13px;
+  font-weight: var(--peso-fuerte);
+  font-size: var(--tipo-control);
 }
 
 .textoDeAviso {
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
   line-height: 1.5;
 }
 
@@ -1063,7 +1063,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 .escribirNombre {
@@ -1079,7 +1079,7 @@
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-primary);
   font-family: var(--ds-font-family-code);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 /* «Simuladores y emuladores»: las MISMAS columnas en todas las filas. La lista es la
@@ -1111,7 +1111,7 @@
 
 .detalleDeAvd {
   color: var(--dsw-alias-label-tertiary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 /* Una celda de acción: su botón pegado a la derecha, y el margen automático que trae la hoja
@@ -1158,7 +1158,7 @@
   gap: 8px;
   margin: 8px 0 0;
   color: var(--dsw-alias-label-secondary);
-  font-size: 13px;
+  font-size: var(--tipo-control);
 }
 
 .girando {
@@ -1198,7 +1198,7 @@
   border-radius: 8px;
   background: var(--dsw-alias-state-warn-tertiary);
   color: var(--dsw-alias-state-warn-label);
-  font-size: 13px;
+  font-size: var(--tipo-control);
   line-height: 1.4;
 }
 
@@ -1212,5 +1212,5 @@
   border-radius: 8px;
   background: var(--dsw-alias-bg-layer-1);
   font-family: var(--ds-font-family-code);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }

@@ -75,7 +75,7 @@
 
 .eslogan {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--tipo-control);
   text-align: center;
   max-width: 360px;
   color: var(--xonecode-splash-texto-suave);

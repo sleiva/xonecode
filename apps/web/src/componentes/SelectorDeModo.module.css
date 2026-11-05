@@ -45,7 +45,7 @@
   background: none;
   color: var(--dsw-alias-label-tertiary);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
   line-height: 1;
   white-space: nowrap;
   cursor: pointer;
@@ -70,7 +70,7 @@
   background: var(--dsw-alias-bg-layer-1);
   border-color: var(--xonecode-cian);
   color: var(--dsw-alias-label-primary);
-  font-weight: 600;
+  font-weight: var(--peso-fuerte);
 }
 
 .mitad:disabled {

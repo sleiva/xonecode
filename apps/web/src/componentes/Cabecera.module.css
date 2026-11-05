@@ -62,7 +62,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
   line-height: 22px;
   flex-shrink: 0;
 }
@@ -173,8 +173,8 @@
 .marca {
   flex: none;
   color: var(--xonecode-barra-texto);
-  font-size: 15px;
-  font-weight: 700;
+  font-size: var(--tipo-titulo);
+  font-weight: var(--peso-fuerte);
   letter-spacing: -0.01em;
 }
 
@@ -184,7 +184,7 @@
 .separador {
   flex: none;
   color: var(--xonecode-barra-texto-suave);
-  font-size: 14px;
+  font-size: var(--tipo-cuerpo);
 }
 
 /* La marca cuando ADEMÁS es el enlace al escritorio: el mismo texto y el mismo peso —no se
@@ -198,8 +198,8 @@
   border: none;
   background: none;
   font: inherit;
-  font-size: 15px;
-  font-weight: 700;
+  font-size: var(--tipo-titulo);
+  font-weight: var(--peso-fuerte);
   letter-spacing: -0.01em;
   cursor: pointer;
 }

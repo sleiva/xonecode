@@ -17,7 +17,7 @@
 .avisoDeConexion :global(div) {
   padding: 8px 16px;
   text-align: center;
-  font-size: 13px;
+  font-size: var(--tipo-control);
   background: var(--dsw-alias-state-error-secondary);
   color: var(--dsw-alias-label-primary);
 }

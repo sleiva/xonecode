@@ -12,7 +12,7 @@
 .frase {
   margin: 0;
   color: var(--dsw-alias-label-secondary);
-  font-size: 11px;
+  font-size: var(--tipo-mini);
 }
 
 /* Lo que el juez había dicho cuando una persona lo pisó, y el «cómo llegó aquí» de una
@@ -21,7 +21,7 @@
 .detalle {
   margin: 0;
   color: var(--dsw-alias-label-tertiary);
-  font-size: 11px;
+  font-size: var(--tipo-mini);
 }
 
 /* «Una entrega con una condición menos no puede parecer una entrega normal»
@@ -33,12 +33,12 @@
   border-left: 2px solid var(--dsw-alias-state-warn-primary);
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-state-warn-label);
-  font-size: 11px;
+  font-size: var(--tipo-mini);
 }
 
 .hallazgos {
   margin: 2px 0 0;
   padding-left: 14px;
   color: var(--dsw-alias-label-tertiary);
-  font-size: 11px;
+  font-size: var(--tipo-mini);
 }

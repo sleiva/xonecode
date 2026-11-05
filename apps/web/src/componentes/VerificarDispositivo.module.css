@@ -57,7 +57,7 @@
   gap: 6px;
   min-width: 0;
   color: var(--dsw-alias-state-error-primary);
-  font-size: 11px;
+  font-size: var(--tipo-mini);
 }
 
 .resultado[data-ok] {
@@ -67,12 +67,12 @@
 .hora {
   color: var(--dsw-alias-label-tertiary);
   font-family: var(--ds-font-family-code);
-  font-size: 10px;
+  font-size: var(--tipo-mini);
 }
 
 /* Cuando la verificación contradice a la fila: cuál de las dos es más vieja. En el gris de
    lo secundario, porque es una nota sobre el dato de al lado y no el dato. */
 .desfase {
   color: var(--dsw-alias-label-tertiary);
-  font-size: 10px;
+  font-size: var(--tipo-mini);
 }

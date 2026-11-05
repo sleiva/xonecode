@@ -44,7 +44,7 @@
 .nota {
   margin: 0;
   color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 .respuestaPropia {
@@ -58,8 +58,8 @@
   gap: 8px;
   margin: 0;
   color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
-  font-weight: 600;
+  font-size: var(--tipo-pequeno);
+  font-weight: var(--peso-fuerte);
 }
 
 /* El «?» en su círculo, con el cian de ACENTO: aquí no sostiene texto, lo acompaña. */
@@ -71,14 +71,14 @@
   border: 1.5px solid var(--xonecode-cian);
   border-radius: 50%;
   color: var(--dsw-alias-label-primary);
-  font-size: 11px;
+  font-size: var(--tipo-mini);
   line-height: 1;
 }
 
 .enunciado {
   margin: 0;
   color: var(--dsw-alias-label-primary);
-  font-weight: 600;
+  font-weight: var(--peso-fuerte);
   white-space: pre-wrap;
 }
 

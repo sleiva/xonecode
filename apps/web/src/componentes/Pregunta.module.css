@@ -100,8 +100,8 @@
 .titulo {
   margin: 0;
   color: var(--dsw-alias-label-primary);
-  font-size: 13px;
-  font-weight: 600;
+  font-size: var(--tipo-control);
+  font-weight: var(--peso-fuerte);
   text-align: center;
 }
 
@@ -133,7 +133,7 @@
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-secondary);
   font-family: var(--ds-font-family-code);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
   line-height: 1.5;
 }
 
@@ -234,7 +234,7 @@
   border-color: var(--dsw-alias-border-l4);
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-primary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 .pregunta[data-anidado] .accion:hover {
@@ -263,7 +263,7 @@
 .cuenta {
   margin-right: auto;
   color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 /* Los atajos son texto pulsable y no botones grandes: la acción de la tarjeta es Aceptar. */
@@ -273,7 +273,7 @@
   background: none;
   color: var(--dsw-alias-label-primary);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
   text-decoration: underline;
   cursor: pointer;
 }
@@ -296,7 +296,7 @@
   align-items: center;
   gap: 8px;
   color: var(--dsw-alias-label-primary);
-  font-size: 13px;
+  font-size: var(--tipo-control);
   cursor: pointer;
 }
 
@@ -310,7 +310,7 @@
   color: var(--dsw-alias-label-primary);
   font: inherit;
   font-family: var(--ds-font-family-code);
-  font-size: 13px;
+  font-size: var(--tipo-control);
 }
 
 .nombreDeRama:focus {
@@ -321,7 +321,7 @@
 .notaDeRama {
   margin: 0;
   color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 /* Por dónde va la subida (IXCODE-69): la barra y «N de M» al lado. */
@@ -331,7 +331,7 @@
   gap: 10px;
   margin: 0;
   color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
   font-variant-numeric: tabular-nums;
 }
 
@@ -381,8 +381,8 @@
   height: 18px;
   border-radius: 5px;
   font-family: var(--ds-font-family-code);
-  font-size: 11px;
-  font-weight: 600;
+  font-size: var(--tipo-mini);
+  font-weight: var(--peso-fuerte);
 }
 
 .clase[data-clase="nuevo"] {
@@ -442,7 +442,7 @@
   background: var(--dsw-alias-state-error-secondary);
   color: var(--dsw-alias-state-error-primary);
   font-size: 18px;
-  font-weight: 700;
+  font-weight: var(--peso-fuerte);
 }
 
 .fin[data-bien] .marcaDeFin {
@@ -453,5 +453,5 @@
 .detalle {
   margin: 0;
   color: var(--dsw-alias-label-secondary);
-  font-size: 13px;
+  font-size: var(--tipo-control);
 }

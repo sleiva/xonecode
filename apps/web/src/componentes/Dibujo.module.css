@@ -32,6 +32,6 @@
 .nota {
   margin: 8px 16px 0;
   color: var(--dsw-alias-label-tertiary);
-  font-size: 11px;
+  font-size: var(--tipo-mini);
   line-height: 1.5;
 }

@@ -17,7 +17,7 @@
 .porque {
   flex-basis: 100%;
   color: var(--dsw-alias-state-warn-label);
-  font-size: 12px;
+  font-size: var(--tipo-pequeno);
 }
 
 .porque[data-fallo] {
