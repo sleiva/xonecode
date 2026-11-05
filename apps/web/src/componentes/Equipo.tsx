@@ -156,29 +156,33 @@ function Bloque({
   medido,
   alVerificar,
 }: DatosDeBloque & { titulo: string; conectado: boolean; medido: string; alVerificar?: (id: string) => void }) {
+  const aMano = filas.filter((d) => d.estado !== "no-disponible");
+  const noDisponibles = filas.filter((d) => d.estado === "no-disponible");
   return (
     <div className={estilos.bloque}>
       <h3 className={estilos.plataforma}>{titulo}</h3>
       {resumen === undefined ? null : <p className={estilos.resumen}>{resumen}</p>}
-      {filas.length === 0 ? null : (
+      {aMano.length === 0 ? null : (
         <ul className={estilos.filas}>
-          {filas.map((d) => (
-            <li key={d.id} className={estilos.fila} data-estado={d.estado}>
-              <span className={estilos.punto} aria-hidden="true" />
-              <span className={estilos.nombre}>{d.nombre}</span>
-              <span className={estilos.etiqueta}>
-                {ETIQUETA_DE_CLASE[d.clase]} · {etiquetaDeEstado(d)}
-              </span>
-              {d.detalle === undefined ? null : <span className={estilos.detalle}>{d.detalle}</span>}
-              <VerificarDispositivo
-                dispositivo={d}
-                conectado={conectado}
-                medidoDeLaFoto={medido}
-                {...(alVerificar === undefined ? {} : { alVerificar })}
-              />
-            </li>
+          {aMano.map((d) => (
+            <Fila key={d.id} d={d} conectado={conectado} medido={medido} {...(alVerificar === undefined ? {} : { alVerificar })} />
           ))}
         </ul>
+      )}
+      {/* Los que no están disponibles (un iPhone con el túnel caído), PLEGADOS en una fila
+          (lienzo, «Tu equipo»): tres filas grises con su «Verificar» empujaban lo que sí se
+          puede usar fuera de la tarjeta. Siguen ahí, con su botón, a un clic. */}
+      {noDisponibles.length === 0 ? null : (
+        <details className={estilos.plegados}>
+          <summary className={estilos.resumenDePlegados}>
+            {plural(noDisponibles.length, "aparato no disponible", "aparatos no disponibles")}
+          </summary>
+          <ul className={estilos.filas}>
+            {noDisponibles.map((d) => (
+              <Fila key={d.id} d={d} conectado={conectado} medido={medido} {...(alVerificar === undefined ? {} : { alVerificar })} />
+            ))}
+          </ul>
+        </details>
       )}
       {cuentas.map((c) => (
         <p key={c} className={estilos.cuenta}>
@@ -191,6 +195,38 @@ function Bloque({
         </p>
       ))}
     </div>
+  );
+}
+
+/** Una fila: el punto, nombre y estado en dos líneas, y «Verificar» en la MISMA fila, a la derecha. */
+function Fila({
+  d,
+  conectado,
+  medido,
+  alVerificar,
+}: {
+  d: Dispositivo;
+  conectado: boolean;
+  medido: string;
+  alVerificar?: (id: string) => void;
+}) {
+  return (
+    <li className={estilos.fila} data-estado={d.estado}>
+      <span className={estilos.punto} aria-hidden="true" />
+      <span className={estilos.texto}>
+        <span className={estilos.nombre}>{d.nombre}</span>
+        <span className={estilos.etiqueta}>
+          {ETIQUETA_DE_CLASE[d.clase]} · {etiquetaDeEstado(d)}
+        </span>
+        {d.detalle === undefined ? null : <span className={estilos.detalle}>{d.detalle}</span>}
+      </span>
+      <VerificarDispositivo
+        dispositivo={d}
+        conectado={conectado}
+        medidoDeLaFoto={medido}
+        {...(alVerificar === undefined ? {} : { alVerificar })}
+      />
+    </li>
   );
 }
 

@@ -53,6 +53,26 @@ describe("Equipo", () => {
     expect(screen.getByText("2 simuladores más, apagados.")).toBeTruthy();
   });
 
+  it("los no disponibles van PLEGADOS en una fila que los cuenta, y lo que está a mano queda fuera", () => {
+    const iphone = (id: string) => ({
+      id,
+      nombre: `iPhone ${id}`,
+      plataforma: "ios" as const,
+      clase: "fisico" as const,
+      estado: "no-disponible" as const,
+      detalle: "túnel «disconnected»",
+    });
+    const informe = { ...base, dispositivos: [simulador("A", "arrancado"), iphone("X"), iphone("Y")] };
+    const { container } = render(<Equipo informe={informe} conectado />);
+    const plegado = container.querySelector("details")!;
+    expect(plegado.querySelector("summary")!.textContent).toBe("2 aparatos no disponibles");
+    expect(plegado.textContent).toContain("iPhone X");
+    expect(plegado.textContent).toContain("iPhone Y");
+    // El arrancado, a la vista: fuera del plegado.
+    expect(plegado.textContent).not.toContain("iPhone A");
+    expect(screen.getByText("iPhone A · iOS 26.0")).toBeTruthy();
+  });
+
   it("iOS fuera de macOS es «solo en macOS», no «sin iOS»", () => {
     const informe: InformeDeDispositivos = {
       ...base,

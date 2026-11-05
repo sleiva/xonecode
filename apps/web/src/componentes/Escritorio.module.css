@@ -341,11 +341,15 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
   gap: var(--espacio-16);
-  align-items: start;
+  /* Las dos tarjetas a la MISMA altura y con el borde de arriba alineado (lienzo, «Tu
+     equipo»): `start` dejaba Tareas corta al lado de un Equipo largo. */
+  align-items: stretch;
   margin-top: 24px;
 }
 
-.dosColumnas > * {
+/* Doble clase: `.equipo` trae su `margin-top` y, con la misma especificidad, ganaba según el
+   orden de las hojas en el bundle — Tu equipo salía 24px más abajo que Tareas. */
+.dosColumnas.dosColumnas > * {
   min-width: 0;
   margin-top: 0;
 }

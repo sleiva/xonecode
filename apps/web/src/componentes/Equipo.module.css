@@ -73,18 +73,31 @@
 }
 
 .filas {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-4);
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
+/* Una fila por aparato, sobre su fondo (lienzo, «Tu equipo»): el texto en dos líneas a la
+   izquierda y «Verificar» a la derecha, sin saltar de línea. */
 .fila {
   display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: var(--espacio-4) var(--espacio-8);
-  padding: var(--espacio-4) 0;
+  align-items: center;
+  gap: var(--espacio-10);
+  padding: var(--espacio-8) var(--espacio-10);
+  border-radius: var(--radio-control);
+  background: var(--dsw-alias-bg-layer-1);
   font-size: var(--tipo-pequeno);
+}
+
+.texto {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
 }
 
 .punto {
@@ -114,20 +127,50 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--dsw-alias-label-primary);
-  font-weight: var(--peso-medio);
+  font-weight: var(--peso-fuerte);
 }
 
-/* La etiqueta de clase y estado, en mono y pequeña, como las de las tarjetas. */
+/* La clase y el estado, debajo del nombre. */
 .etiqueta {
   color: var(--dsw-alias-label-tertiary);
-  font-family: var(--ds-font-family-code);
-  font-size: var(--tipo-mini);
-  white-space: nowrap;
+  font-size: var(--tipo-pequeno);
 }
 
 .detalle {
-  flex-basis: 100%;
-  padding-left: var(--espacio-16);
   color: var(--dsw-alias-label-tertiary);
   font-size: var(--tipo-mini);
+}
+
+/* Los no disponibles, plegados en una fila con borde que se despliega. */
+.plegados {
+  margin-top: var(--espacio-4);
+}
+
+.resumenDePlegados {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--espacio-8) var(--espacio-10);
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: var(--radio-control);
+  color: var(--dsw-alias-label-secondary);
+  font-size: var(--tipo-pequeno);
+  cursor: pointer;
+  list-style: none;
+}
+
+.resumenDePlegados::-webkit-details-marker {
+  display: none;
+}
+
+.resumenDePlegados::after {
+  content: "▾";
+}
+
+.plegados[open] > .resumenDePlegados::after {
+  content: "▴";
+}
+
+.plegados[open] > .filas {
+  margin-top: var(--espacio-4);
 }
