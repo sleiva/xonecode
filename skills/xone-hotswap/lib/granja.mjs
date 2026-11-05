@@ -26,9 +26,16 @@ async function falloDeRele(respuesta, que) {
   return new Error(`${que}: la granja contestó ${respuesta.status}${texto === "" ? "" : ` — ${texto}`}`);
 }
 
-/** La captura de la pantalla de la copia, en JPEG. `anchura` reduce (la granja escala); sin ella, a tamaño real. */
-export async function capturaDeGranja(canal, { anchura } = {}) {
-  const consulta = anchura === undefined ? "?quality=85" : `?width=${anchura}&quality=85`;
+/**
+ * El ancho con que se pide la captura. Sin `width` la granja NO la da a tamaño real: la da a 360 px (medido el 05-11-2026,
+ * una copia de 1080×1920 llegaba a 360×640, y el crítico confundía el `÷` con un `+`). 1080 es el de una copia en `1080p`
+ * y el de las capturas del emulador local.
+ */
+export const ANCHO_DE_CAPTURA_DE_GRANJA = 1080;
+
+/** La captura de la pantalla de la copia, en JPEG, a `anchura` px de ancho (la granja escala). */
+export async function capturaDeGranja(canal, { anchura = ANCHO_DE_CAPTURA_DE_GRANJA } = {}) {
+  const consulta = `?width=${anchura}&quality=85`;
   const r = await fetch(`${baseHttpDeGranja(canal)}/screenshot${consulta}`);
   if (!r.ok) throw await falloDeRele(r, "no se pudo capturar la copia de la granja");
   return Buffer.from(await r.arrayBuffer());

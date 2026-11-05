@@ -91,7 +91,7 @@ discrepancia, **el código manda**.
   maqueta (una de tableta, horizontal, también va a `1080p`). `reset` en el `finally` del turno (`vestibulo.alAcabarTurno`) y al cerrar la consola.
   `file_upload`/`file_download`/`screenshot`/`restart` van por el mismo relé. **Todo sin adb** (`skills/xone-hotswap/lib/granja.mjs`):
   desplegar = subir el ZIP **con `bd/`** (la copia empieza VACÍA en cada turno; `empaquetarProyecto({conBase})`) + `launchApplication`,
-  sin reiniciar; captura por la API (JPEG, con diálogos); log por `getLog` (solo de esa copia; su `exception` trae un aviso falso
+  sin reiniciar; captura por la API (JPEG, con diálogos, pedida a `ANCHO_DE_CAPTURA_DE_GRANJA`: sin `width` la granja la da a 360 px); log por `getLog` (solo de esa copia; su `exception` trae un aviso falso
   cuando no hay, `excepcionDeGetLog`); reiniciar = `restart` y reintentar el lanzamiento (sin el ancla, `Permission Denial`).
   El «Probar» del editor con la sesión en la granja usa `lanzamientoEnGranja.ts` (veredicto con `granja`, sin aparato ni
   framework); la pestaña Ejecutar, nunca. La recarga al guardar va por el
