@@ -201,6 +201,22 @@ describe("clienteCloudStudio", () => {
     expect(await clienteCloudStudio(falso.invocar, "AppForTest").leerTexto("app.xml")).toBe(original);
   });
 
+  it("y como OBJETO con `filePath` y `content` (medido en MyAllXOne, 05-11-2026): el contenido es `content`", async () => {
+    // La forma REAL de ese día, con un `.xml` ISO-8859-15: la relectura daba «2.090 B en local, 2.493 B en Studio».
+    const original = '<?xml version="1.0" encoding="iso-8859-15" standalone="yes"?>\n<xml>\n  <app prefix="gen"/>\n</xml>';
+    const sobre = { filePath: "app.xml", content: original, lineCount: 4, contentHash: "43d6…", version: 5217, hasPendingDeltas: true, diskMissing: false, encoding: "iso-8859-15" };
+    const falso = clienteFalso([{ content: [{ type: "text", text: JSON.stringify(sobre, null, 2) }] }]);
+    expect(await clienteCloudStudio(falso.invocar, "AppForTest").leerTexto("app.xml")).toBe(original);
+  });
+
+  it("un `.json` del proyecto con una clave `content` pero sin `filePath` NO se toma por el sobre", async () => {
+    const original = '{\n  "content": "hola"\n}';
+    const falso = clienteFalso([{ content: [{ type: "text", text: JSON.stringify(original) }] }]);
+    expect(await clienteCloudStudio(falso.invocar, "AppForTest").leerTexto("datos.json")).toBe(original);
+    const crudo = clienteFalso([{ content: [{ type: "text", text: original }] }]);
+    expect(await clienteCloudStudio(crudo.invocar, "AppForTest").leerTexto("datos.json")).toBe(original);
+  });
+
   it("un fichero cuyo contenido ES una cadena entre comillas se recupera entero, comillas incluidas", async () => {
     const original = '"hola"';
     const falso = clienteFalso([{ content: [{ type: "text", text: JSON.stringify(original) }] }]);

@@ -85,12 +85,20 @@ function registro(valor: unknown): Record<string, unknown> {
  * Se decodifica cuando parsea a una CADENA; si no (un servidor que algún día mande el texto en
  * crudo), se devuelve tal cual. El caso que esto no distingue —un servidor en crudo con un
  * fichero que sea literalmente una cadena JSON— no se ha visto nunca: el que hay codifica siempre.
+ *
+ * **Y como OBJETO, con el contenido en `content`** (medido en MyAllXOne, 05-11-2026): `{filePath, content, lineCount,
+ * contentHash, version, hasPendingDeltas, diskMissing, encoding}`. Leído como texto, la relectura de la subida comparaba
+ * el objeto entero contra el fichero —«2.090 B en local, 2.493 B en Studio, difieren desde el carácter 0»— con un
+ * `contentHash` idéntico al sha256 local: había llegado bien. Se reconoce por `filePath` y `content` a la vez, para no
+ * confundirlo con un `.json` del proyecto que tenga una clave `content`.
  */
 function contenidoDeFichero(bruto: string): string {
-  if (!bruto.startsWith('"')) return bruto;
+  if (!bruto.startsWith('"') && !bruto.startsWith("{")) return bruto;
   try {
     const decodificado: unknown = JSON.parse(bruto);
-    return typeof decodificado === "string" ? decodificado : bruto;
+    if (typeof decodificado === "string") return decodificado;
+    const sobre = decodificado as { filePath?: unknown; content?: unknown } | null;
+    return typeof sobre === "object" && sobre !== null && typeof sobre.filePath === "string" && typeof sobre.content === "string" ? sobre.content : bruto;
   } catch {
     return bruto;
   }

@@ -25,6 +25,9 @@ Ante una discrepancia con el código, **el código manda**.
 - **Token caducado: se reconecta UNA vez renovando sin navegador** (`cloudstudioMcp.ts#invocarConRenovacion`,
   `esCaducidad`, `sinNavegador`); lo que no se renueva sale con `MOTIVO_SESION_CADUCADA`. Un rechazo de la
   TOOL no es caducidad. La reapertura del proyecto la hace la capa de encima.
+- **`studio_get_file` manda el contenido SERIALIZADO, de dos formas** (`cloudstudioClient.ts#contenidoDeFichero`): como
+  cadena JSON (IXCODE-16) o como OBJETO `{filePath, content, contentHash, encoding, …}`, que se reconoce por `filePath` y
+  `content` a la vez. Sin la segunda, la relectura comparaba el objeto entero y la subida fallaba con todo bien arriba.
 - **Un texto que llega DISTINTO se reescribe en la misma subida** (`subida.ts#INTENTOS_SI_LLEGA_DISTINTO`):
   el tropiezo medido era intermitente (otra posición en cada intento).
 - **El nombre de la tool de proyectos no se codifica a pelo** (`herramientaDeProyectos`), y la
