@@ -88,7 +88,8 @@ Ante una discrepancia con el código, **el código manda**.
 ## El bucle del desarrollador
 
 - **Encendido por omisión** (`XONECODE_BUCLE_DEL_DEVELOPER=0` lo apaga): quien declara `llama` en su `.md` recibe
-  `create_sub_agent` y SOLO esos especialistas (con artefactos, también `xone_critica_visual` y `comparar_capturas`); un
+  `create_sub_agent` y SOLO esos especialistas (con artefactos, también `comparar_capturas`, y `xone_critica_visual` salvo a
+  quien prueba él mismo: ese se mira la captura con `view_image`, como Codex); un
   nombre fuera cae al ayudante genérico de solo lectura. El juez final revisa igual.
 - **El desarrollador CONTINUO, como Codex** (siempre encendido; `opciones.developerContinuo: false` lo apaga en
   los tests): el orquestador le manda UNA tarea por encargo, revisa su informe y le manda la siguiente al
@@ -135,8 +136,9 @@ Ante una discrepancia con el código, **el código manda**.
   compone los scripts hermanos; el harness la reconoce como captura con `--captura` y como vuelta con `--recargar`,
   `COMANDO_DE_CAPTURA`/`ORDEN_QUE_RECARGA`, y la ficha saca de su salida casos Y captura). **Y no tiene los scripts que
   `xone-probar` ya hace** (`core/comandoExterno.ts#SUSTITUIDOS_POR_PROBAR`, `scriptsDeTrueforge`): con ellos en la lista y
-  en el prompt no lo usaba; pedir uno devuelve la orden de `xone-probar` (`motivoDeScriptSustituido`); `comparar_capturas` entre retoques y el crítico UNA vez al cerrar cada
-  pantalla. Cada `xone-recargar/desplegar-android` cuenta una vuelta. Sus scripts, sin `xone-a-utf8` (`scriptsDeTrueforge`): ese es del hijo de
+  en el prompt no lo usaba; pedir uno devuelve la orden de `xone-probar` (`motivoDeScriptSustituido`); `comparar_capturas` y `view_image` entre retoques, sin crítico en su bucle
+  (el del orquestador, uno por tarea, y el del cierre siguen). `xone-probar --recargar` lleva también los ICONOS (los sube
+  y relanza la app): desplegar entero solo la primera vez o con fuentes nuevas. Cada `xone-recargar/desplegar-android` cuenta una vuelta. Sus scripts, sin `xone-a-utf8` (`scriptsDeTrueforge`): ese es del hijo de
   Claude Code, y aquí cada `.xne` se escribe en su codificación.
 - **Avisos por umbral, no «para»** (`textoDelBucle`, `capacidadDeAvisoDeVueltas`, `UMBRALES_DE_VUELTAS`): UN mensaje de
   «cambia de procedimiento». Ciclo de vida de `getControl`: `NUCLEO_XONE` y `errores-comunes.md`.

@@ -13,8 +13,13 @@
  */
 import { COMO_CASOS } from "./casos.mjs";
 
-/** Lo que `--recargar` toma como fichero: los que sabe llevar `xone-recargar-android`. */
-const FICHERO_RECARGABLE = /\.(xne|js|css|xml|ini|json)$/i;
+/**
+ * Lo que `--recargar` toma como fichero: los que sabe llevar `xone-recargar-android`. Los ICONOS también: nombrados, el
+ * script los sube y relanza la app (medido el 05-11-2026 con Codex, `icons/ic_person.svg → relanzada la app` en ~2 s);
+ * sin esto, un SVG nuevo solo llegaba desplegando entero, que sustituye la base de datos y devuelve la app al login.
+ * Las FUENTES no: siguen pidiendo `xone-desplegar-android`.
+ */
+const FICHERO_RECARGABLE = /\.(xne|js|css|xml|ini|json|svg|png|jpe?g|webp)$/i;
 
 /** Lo que espera tras `abrir` antes del primer caso: la ventana se pinta un instante después (`xone-hotswap --help`). */
 export const ESPERA_TRAS_ABRIR_MS = 1000;

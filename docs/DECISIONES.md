@@ -10592,3 +10592,26 @@ orquestador repetía los encargos. Medido contra la API después: DeepSeek acept
 costura cuando el agente escribía un texto antes de llamar a una tool. Ahora el razonamiento va al principio de la vuelta
 del asistente, delante de su texto, uno por vuelta. Un `read ECONNRESET` del analista en la misma pasada queda sin
 explicar (una vez, sin repetir).
+
+## Como Codex: sin crítico en el bucle del desarrollador, y los iconos se recargan (05-11-2026)
+
+Misma calculadora y mismo modelo (DeepSeek flash por la API de DeepSeek, Responses en los dos), hasta la T2:
+
+| | xonecode (28419e08) | Codex (`codex exec`, sus subagentes) |
+|---|---|---|
+| plan entregado | min 6,5 | min 8,8 (5 tareas y 43 criterios: peor) |
+| T1 del desarrollador | ~14,5 min | ~11,6 min |
+| T2 | ~9 min | ~4,4 min |
+| razonamiento por llamada del desarrollador | ~1.170 | ~680 |
+| razonamiento por llamada del orquestador | ~840 | ~130 |
+| entrada de la 1.ª llamada del desarrollador | 26.711 | 11.981 |
+| críticos visuales | 6 en el bucle del desarrollador, 60-90 s cada uno (~7 min) | ninguno: `view_image` él mismo |
+| pruebas en el aparato | 8 despliegues enteros | 1 despliegue y recargas en caliente, también de SVG |
+
+Codex no manda esfuerzo (`effort: null` en todos sus hilos), igual que xonecode: la diferencia de razonamiento no es el nivel.
+
+Dos cambios: el desarrollador que prueba él mismo ya no lleva `xone_critica_visual` (se mira la captura y la maqueta con
+`view_image`; le queda `comparar_capturas`, que mide sin modelo, y la medida automática no le pide el crítico), y
+`xone-probar --recargar` acepta iconos (`xone-recargar-android` ya los subía nombrados y relanzaba la app: «icons/ic_person.svg
+→ relanzada la app», ~2 s), que era lo que le obligaba a desplegar entero cada SVG nuevo. Lo demás medido —lo aprendido
+inyectado entero en cada encargo (~4.900 tokens), un sistema de ~8.000 tokens y 23 tools (~6.000)— queda por hacer.

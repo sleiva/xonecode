@@ -45,6 +45,11 @@ describe("xone-probar: el ciclo de prueba en una orden", () => {
     expect(lib.planDePrueba(orden(["--abrir", "Menu"])).at(-2)?.args).toEqual(["textos"]);
   });
 
+  it("`--recargar` toma también los ICONOS (los sube y relanza la app), pero no una fuente ni el primer caso", () => {
+    const o = orden(["--recargar", "icons/ic_tecla.svg", "Calculadora.xne", "icons/fondo.png", "fonts/Space.ttf", "click", "name=A"]);
+    expect(o["recargar"]).toEqual(["icons/ic_tecla.svg", "Calculadora.xne", "icons/fondo.png"]);
+  });
+
   it("`--recargar` sin ficheros recarga todo lo que cambió, y no se traga el primer paso de los casos", () => {
     const o = orden(["--recargar", "click", "name=A"]);
     expect(o["recargar"]).toEqual([]);

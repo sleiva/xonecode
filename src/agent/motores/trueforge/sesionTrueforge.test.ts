@@ -1903,11 +1903,14 @@ describe("una sesión con el motor TrueForge", () => {
       const sistema = vistos[1]!.join("\n");
       expect(sistema).toContain("PUEDES LLAMAR A: designer-xone,");
       expect(sistema).toContain("prueba TÚ en el aparato");
-      expect(sistema).toContain("pásalo UNA vez al CERRAR cada pantalla");
+      // Sin crítico en su bucle, como Codex (05-11-2026): se mira él la captura y la maqueta.
+      expect(toolsPorLlamada[1]).not.toContain("xone_critica_visual");
+      expect(sistema).toContain("mirando la captura Y la maqueta con `view_image`");
+      expect(sistema).not.toContain("pásalo UNA vez al CERRAR cada pantalla");
       expect(sistema).not.toContain("llama al de pruebas");
     }, 30_000);
 
-    it("encendido y con carpeta de artefactos, el desarrollador recibe el crítico y la medida, y se lo dice; el conductor, no", async () => {
+    it("encendido y con carpeta de artefactos, el desarrollador que prueba él mismo recibe la medida y NO el crítico; el conductor, ninguno", async () => {
       const raiz = proyecto();
       const { m, vistos, toolsPorLlamada } = modelosConGuion(guion());
       const s = await abrirSesionTrueforge({
@@ -1915,8 +1918,9 @@ describe("una sesión con el motor TrueForge", () => {
         artefactos: mkdtempSync(join(tmpdir(), "xc-tf-bucle-")),
       });
       await s.turno("haz la calculadora de la maqueta /diseno/screen.png", piel().p);
-      expect(toolsPorLlamada[1]).toEqual(expect.arrayContaining(["xone_critica_visual", "comparar_capturas"]));
-      expect(vistos[1]!.join("\n")).toContain("PARA JUZGAR UNA PANTALLA");
+      expect(toolsPorLlamada[1]).toContain("comparar_capturas");
+      expect(toolsPorLlamada[1]).not.toContain("xone_critica_visual");
+      expect(vistos[1]!.join("\n")).not.toContain("PARA JUZGAR UNA PANTALLA");
       // El de pruebas no juzga: saca las capturas.
       expect(toolsPorLlamada[2]).not.toContain("xone_critica_visual");
       expect(toolsPorLlamada[2]).not.toContain("comparar_capturas");
@@ -4663,7 +4667,9 @@ describe("en una tarea: el plan asignado y la captura del desarrollador", () => 
     expect(t).toContain("son de ejemplo: no los inyectes ni los escribas");
     // Y la captura de una ronda visual es la NATIVA, con el crítico nombrado (en la 8 capturó con `shot` y no midió nunca).
     expect(t).toContain("UNA captura por ronda, `xone-probar … --captura` (la nativa");
-    expect(t).toContain("pasa `xone_critica_visual`");
+    // Sin el crítico (05-11-2026): la mira él junto a la maqueta, como Codex.
+    expect(t).toContain("mirando la captura Y la maqueta con `view_image`");
+    expect(t).not.toContain("pasa `xone_critica_visual`");
     expect(t).toContain("Tu respuesta final nombra la ÚLTIMA captura");
   });
 
