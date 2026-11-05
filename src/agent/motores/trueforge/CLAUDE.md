@@ -221,6 +221,11 @@ Ante una discrepancia con el código, **el código manda**.
   `textoDeVueltasDelTurnoAgotadas`), haya o no persona: cortado, cada encargo nuevo editaba hasta su primera recarga.
 - **Un plan no se pule a trozos** (`toolsDeFichero.ts#TOPE_DE_RETOQUES_DEL_PLAN`): pasado ese número de `edit_file` sobre
   `/planes/` en un encargo, se devuelve error y se pide reescribirlo de una vez (`write_file` vale en `/planes/`).
+- **Una pantalla se juzga en SU tarea del plan** (`pantallaJuzgada.ts`): la maqueta que pasó el crítico en una tarea queda
+  JUZGADA al encargar otra (no si se arrastra). Contra ella el crítico no corre —lo que difiera va como observación al
+  cierre— y la medida automática es un dato, sin ronda visual ni crítico que pedir; las rondas visuales vuelven a cero en
+  cada tarea. Otra maqueta tiene su bucle. El orquestador no cuela «además, lo visual de la anterior» en el encargo
+  siguiente (`BUCLE_DE_CALIDAD`), y el plan pone el criterio de parecido solo en la tarea de la pantalla.
 - **Los valores de una maqueta son DE EJEMPLO**: ni el plan los manda escribir fijos ni el desarrollador los copia.
 - **Con maqueta, la pantalla ENTERA es UNA tarea** (`FIDELIDAD_DEL_PLAN`, skill `xone-plan-builder`): sus piezas las enumera el
   `DISENO.md`, y la lógica y la entrada desde el menú van aparte. Partida por piezas, la primera tarea no se cierra: quien

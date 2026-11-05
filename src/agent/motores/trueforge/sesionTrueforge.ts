@@ -33,6 +33,7 @@ import { CARPETA_DE_PLANES } from "../../../core/planes.js";
 import { decidirEncargo, type TareaYaEncargada } from "../../../core/encargoDeTarea.js";
 import { NOMBRE_SIGUIENTE_TAREA, siguienteTareaPendiente, TEXTO_DEL_DEVELOPER_CONTINUO, TEXTO_DEL_DEVELOPER_CONTINUO_CON_SIGUIENTE, TEXTO_DEL_ORQUESTADOR_CONTINUO, TEXTO_DEL_ORQUESTADOR_CONTINUO_CON_SIGUIENTE } from "../../../core/siguienteTarea.js";
 import { crearSiguienteTarea } from "./siguienteTarea.js";
+import { crearPantallasJuzgadas, maquetaDeReferencia, sinJuzgarDosVeces, textoDeMedidaInformativa } from "./pantallaJuzgada.js";
 import { lineasDeAuditoria } from "../../../core/auditoriaDeCierre.js";
 import { crearAuditorDeCierre } from "./auditorDeCierre.js";
 import winston from "winston";
@@ -204,6 +205,9 @@ const BUCLE_DE_CALIDAD = [
   "no hay otra: la pantalla está hecha. Para también tras TRES vueltas, y di lo que sigue faltando en vez de darlo por hecho.",
   "Lo que señala se pasa como ESTILO y SITIO, nunca como un VALOR que escribir: las cifras, expresiones y nombres que pinta",
   "la maqueta son de ejemplo, y pedir que se pinten fijos mete un bug.",
+  "CON UN PLAN, la pantalla se juzga en SU tarea: otra vuelta visual es volver a encargar ESA tarea. El encargo de la",
+  "siguiente lleva SOLO la siguiente, sin «además, corrige lo visual de la anterior»: lo que el crítico siga viendo de una",
+  "pantalla ya cerrada va como observación a tu cierre, y el harness no la vuelve a juzgar.",
   "Además el harness CORTA a quien ajusta tras unas vueltas por encargo y por turno.",
 ].join("\n");
 
@@ -256,7 +260,8 @@ export const FIDELIDAD_DEL_PLAN = [
   "proporciones, mirándolas juntas—. Ningún criterio es un porcentaje de una medida: se juzga mirando. Una pantalla de una",
   "maqueta son COMO MUCHO TRES tareas: la pantalla entera, lo que el ENCARGO pide que haga al pulsar, y su entrada desde el",
   "menú. Lo que la maqueta enseña y el encargo no pide (una tecla de función, un panel de historial) se PINTA con la pantalla y",
-  "no tiene tarea propia ni lógica. Un icono que XOne no trae es trabajo del",
+  "no tiene tarea propia ni lógica. El criterio de parecerse a la maqueta va SOLO en la tarea de la pantalla: la de la lógica",
+  "y la de la entrada se comprueban pulsando y leyendo, y no vuelven a juzgar su aspecto. Un icono que XOne no trae es trabajo del",
   "diseñador. Los datos de ejemplo de la maqueta no son piezas: no se copian. Tampoco la VERSIÓN de la app que pinta la",
   "maqueta («v2.4»): sale de la macro `##VERSION##` (`appData.getGlobalMacro(\"##VERSION##\")`), como cualquier dato que la app ya tiene.",
 ].join("\n");
@@ -1182,6 +1187,8 @@ export async function abrirSesionTrueforge(
   };
   /** La última tarea del plan que se le encargó a un especialista (`plan|número`): la del crítico de una vez (`unaCriticaPorTarea`). */
   let ultimaTareaEncargada: string | undefined;
+  /** Las maquetas ya juzgadas en su tarea del plan (`pantallaJuzgada.ts`): ni otro crítico ni otra ronda visual en las siguientes. */
+  const pantallasJuzgadas = crearPantallasJuzgadas();
   /** La última tarea del plan encargada a cada agente que PRUEBA (`scripts`), con sus intentos en el turno (`INTENTOS_POR_TAREA`). */
   const tareaEncargadaDe = new Map<string, TareaYaEncargada>();
   /** El hilo VIVO de cada especialista (una encarnación viva por especialista): lo que `siguiente_tarea` necesita. */
@@ -1556,6 +1563,17 @@ export async function abrirSesionTrueforge(
     return cajasDeMaqueta(html, ancho, alto);
   };
   /** El crítico y la medida, con las MISMAS piezas para quien las tenga: el raíz, y con el bucle encendido el desarrollador. */
+  /** La maqueta de la sesión que nombra la `referencia` de un crítico (`pantallaJuzgada.ts#maquetaDeReferencia`). */
+  const maquetaDeLaCritica = (args: unknown): string | undefined =>
+    maquetaDeReferencia(
+      (args as { referencia?: unknown } | undefined)?.referencia,
+      buscarMaquetas(raiz, opciones.adjuntos, carpeta).map((m) => m.virtual)
+    );
+  /** El crítico, que no vuelve a juzgar una pantalla ya juzgada en su tarea; lo demás pasa igual. */
+  const sinJuzgarPantallaDosVeces = (t: ToolDeLangchain): ToolDeLangchain =>
+    (t as { name?: string }).name === "xone_critica_visual"
+      ? (sinJuzgarDosVeces(t as never, maquetaDeLaCritica, pantallasJuzgadas) as unknown as ToolDeLangchain)
+      : t;
   const herramientasDeJuicio = (): ToolDeLangchain[] =>
     carpeta === undefined
       ? []
@@ -1679,7 +1697,8 @@ export async function abrirSesionTrueforge(
         developerContinuo && (t as { name?: string }).name === "xone_critica_visual"
           ? (unaCriticaPorTarea(t as never, () => ultimaTareaEncargada, () => turnoConMaqueta) as unknown as ToolDeLangchain)
           : t
-      ),
+      )
+      .map(sinJuzgarPantallaDosVeces),
     ...(carpeta === undefined ? [] : ([crearTraerDeLaMaquina({ carpeta, alEscribir: anotarArtefacto })] as unknown as ToolDeLangchain[])),
     ...traerDeStitch(),
     // Lo aprendido: el orquestador también apunta, sobre todo lo que le cuenta un hijo de motor externo (que no tiene la tool).
@@ -1781,7 +1800,7 @@ export async function abrirSesionTrueforge(
     // juzgar la pantalla con lo que el otro capture. El veredicto sigue siendo de un modelo aparte, no suyo, y el
     // juez final del arnés revisa igual (`textoDelBucle`).
     // Sin maqueta, ni crítico ni medida: no hay contra qué comparar; el juez del cierre revisa (`nombraUnaMaqueta`).
-    ...(conBucleDelDesarrollador && (agente.llama?.length ?? 0) > 0 && turnoConMaqueta ? herramientasDeJuicio() : []),
+    ...(conBucleDelDesarrollador && (agente.llama?.length ?? 0) > 0 && turnoConMaqueta ? herramientasDeJuicio().map(sinJuzgarPantallaDosVeces) : []),
   ];
   /**
    * **Un cliente de modelo por papel, modelo y esfuerzo, que dura la SESIÓN** —hasta `/modelo`—, y
@@ -2104,6 +2123,12 @@ export async function abrirSesionTrueforge(
       }
       if (decision.tipo === "tarea") params = { ...params, request: { ...params.request, input: decision.encargo } };
       if (decision.tipo === "tarea") abreOtraTareaDelPlan = ultimaTareaEncargada !== `${decision.plan}|${String(Number.parseInt(decision.tarea.numero.replace(/^T/i, ""), 10))}`;
+      // Otra tarea: lo que la anterior juzgó queda juzgado (salvo que se arrastre), y las rondas visuales vuelven a cero.
+      if (decision.tipo === "tarea" && abreOtraTareaDelPlan) {
+        pantallasJuzgadas.alPasar(ultimaTareaEncargada, decision.arrastra !== undefined);
+        rondasVisualesDeHilo.delete(params.threadId);
+        ultimaCriticaDeHilo.delete(params.threadId);
+      }
       if (decision.tipo === "tarea" && pruebaEnElAparato(agente)) {
         const antes = tareaEncargadaDe.get(agente.nombre);
         const misma = antes?.plan === decision.plan && Number.parseInt(antes.numero.replace(/^T/i, ""), 10) === Number.parseInt(decision.tarea.numero.replace(/^T/i, ""), 10);
@@ -2502,6 +2527,9 @@ export async function abrirSesionTrueforge(
       const filasDeLista = filasDeListaDeGeometria(geometriaDeCapturaYa(carpetaDeHotswap(carpeta), captura, { carpetaDeArtefactos: carpeta, decodificar: decodificarImagen }));
       const { maqueta, comparacion } = medirContraLaMasParecida(join(carpeta, captura), maquetas, filasDeLista);
       ultimaMedidaDeHilo.set(hiloPadre, resumenDeMedida(comparacion, captura));
+      // Contra una pantalla ya juzgada en su tarea, la medida es un dato: ni ronda visual ni crítico que pedir.
+      const juzgadaEn = pantallasJuzgadas.juzgadaEn(maqueta.virtual);
+      if (juzgadaEn !== undefined) return textoDeMedidaInformativa({ captura, maqueta: maqueta.virtual, tarea: juzgadaEn, resumen: resumenDeMedida(comparacion, captura) });
       const ronda = (rondasVisualesDeHilo.get(hiloPadre) ?? 0) + 1;
       rondasVisualesDeHilo.set(hiloPadre, ronda);
       const escribio = ultimaEscrituraDeHilo.get(hiloPadre);
@@ -2548,7 +2576,10 @@ export async function abrirSesionTrueforge(
             if (t.function.name === "write_file" || t.function.name === "edit_file" || esEscrituraBinaria(t.function.name)) {
               escriturasEnVuelo.set(claveDe(deHilo, t.id), { nombre: t.function.name, args });
             }
-            if (t.function.name === "xone_critica_visual") ultimaCriticaDeHilo.set(deHilo, Date.now());
+            if (t.function.name === "xone_critica_visual") {
+              ultimaCriticaDeHilo.set(deHilo, Date.now());
+              pantallasJuzgadas.alCriticar(ultimaTareaEncargada, maquetaDeLaCritica(args));
+            }
             // La traza: la MISMA lista blanca que el evento (`detalleDe`, `parametrosDe`), nunca
             // los argumentos crudos.
             const quien = quienEs.get(deHilo) ?? deHilo;

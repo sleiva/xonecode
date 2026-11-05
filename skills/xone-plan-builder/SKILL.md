@@ -229,7 +229,9 @@ relee entero cada vez que alguien lo retoma.
   distintas) **ni hay tarea de «estuche»** (la colección vacía con su fondo): medido con el mismo modelo, el plan de tres
   tareas —la pantalla entera, su lógica, su entrada en el menú— se cerró entero, y los de seis o siete no cerraron ni la
   primera, porque quien construye hace la pantalla de una vez. **Una pantalla de una maqueta son, como mucho, tres tareas**;
-  lo que la maqueta enseña y el encargo no pide se pinta con la pantalla y no tiene tarea propia ni lógica. Marcar uno exige una prueba en el aparato posterior al último cambio, así que un criterio que no se puede
+  lo que la maqueta enseña y el encargo no pide se pinta con la pantalla y no tiene tarea propia ni lógica. **El criterio de
+  parecerse a la maqueta va solo en la tarea de la pantalla**: la de la lógica y la de la entrada se comprueban pulsando y
+  leyendo, y no vuelven a juzgar su aspecto (la pantalla ya se juzgó en su tarea). Marcar uno exige una prueba en el aparato posterior al último cambio, así que un criterio que no se puede
   probar allí no se podrá marcar nunca. Dicen lo que se VE o se MIDE, no cómo está hecho: «el `rx` del SVG vale 41» o «no
   se crean `.ttf`» no son criterios (lo comprueban el verificador y `validar_fichero_xone`). **Como mucho 8 por tarea y
   200 caracteres cada uno**: el harness no escribe un `TASKS.md` que lo pase. Si una tarea necesita más, son dos tareas.

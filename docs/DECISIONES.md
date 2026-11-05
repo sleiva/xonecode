@@ -10513,3 +10513,29 @@ enumeradas en el `DISENO.md`; sin tarea de «estuche» (la colección vacía con
 sin cerrarla y con el crítico visual dentro); como mucho tres tareas por pantalla, y lo que la maqueta enseña y el encargo no
 pide se pinta sin tarea propia. Medido en `calc3-2`: plan de tres tareas, la T1 (la pantalla entera) 7 de 7 en 24 minutos y
 la T2 encargada al mismo desarrollador. De `dc26d77e` se queda que ningún criterio es un porcentaje.
+
+## Una pantalla se juzga en SU tarea (05-11-2026)
+
+Medido en la consola, tarea de fondo de la calculadora desde cero (DeepSeek flash, pixel8, plan de tres tareas): 60 min,
+con T1 4,6→18,5, T2 18,5→39,3 y T3 39,3→56,2 más un cuarto encargo. El crítico visual corrió 18 veces (14 del
+desarrollador, 4 del raíz), unos 13 min solo en llamadas, y ~25 min de los 60 fueron ajuste visual FUERA de la tarea de la
+pantalla:
+
+- **T2 (la lógica)**: lo funcional quedó comprobado hacia el minuto 23,7; luego cuatro críticos (24,9, 28,5, 32,6, 36,6),
+  cada uno con su despliegue, hasta el 37,5. No lo pedía el plan: el encargo del raíz decía «Además, cierra los defectos
+  visuales de la 01» con ocho puntos sacados de SU crítico al cerrar T1. Y la medida automática exigía otro crítico tras
+  cada captura posterior a una escritura.
+- **T3 (la entrada desde el menú)**: «dos correcciones de la captura» en el encargo, tres críticos más y un cuarto encargo
+  para el glifo `÷` y el aire de la última fila. El analista había puesto un criterio de parecido a la maqueta en T3.
+- Las rondas visuales se contaban por HILO: con el desarrollador continuo la cuenta seguía entre tareas («ronda 8 de 5»).
+
+Corregido un diagnóstico previo: «escribe 15 min antes de probar» y el diseñador reescribiendo ocho SVG durante 6 min salen de
+la pasada del scratchpad (`run --real`), no de la consola: allí el desarrollador probaba al cuarto minuto. Es una muestra;
+se aparca.
+
+Regla (`pantallaJuzgada.ts`): la maqueta que pasó el crítico en una tarea queda juzgada al encargar otra (no si se arrastra,
+que sigue abierta). Contra ella el crítico no corre y contesta que lo que difiera va como observación; la medida es un dato
+sin ronda ni crítico que pedir; las rondas vuelven a cero en cada tarea. Por maqueta y no por turno: en Maset cada tarea es
+otra pantalla y conserva su bucle. Lo acompañan dos textos: el raíz no cuela lo visual de una tarea en el encargo de la
+siguiente (`BUCLE_DE_CALIDAD`), y el criterio de parecido va solo en la tarea de la pantalla (`FIDELIDAD_DEL_PLAN`, skill
+`xone-plan-builder`). Codex tardó 18 min sin crítico alguno: no es la misma comparación.

@@ -5039,6 +5039,35 @@ describe("un encargo de un plan es UNA tarea, con su línea `TAREA:`", () => {
     expect(vistos).toHaveLength(9);
     expect(vistos.at(-1)!.join("\n")).not.toContain("encargos suyos en esta tarea");
   }, 30_000);
+
+  /** Calculadora en la consola (05-11-2026): tras juzgar la pantalla en T1, los críticos de T2 abrían otra vuelta visual. */
+  it("la pantalla juzgada en su tarea no se vuelve a juzgar al pasar a otra tarea del plan", async () => {
+    const raiz = proyecto();
+    mkdirSync(join(raiz, "diseno"), { recursive: true });
+    writeFileSync(join(raiz, "diseno", "screen.png"), "no es un png");
+    mkdirSync(join(raiz, ".xonecode", "planes", "calc"), { recursive: true });
+    writeFileSync(
+      join(raiz, ".xonecode", "planes", "calc", "TASKS.md"),
+      "# Calc\n\n## 01 — Pantalla\n**Estado:** hecha\n- [x] a\n\n## 02 — Lógica\n**Estado:** pendiente\n- [ ] b\n",
+    );
+    const critica = (id: string) =>
+      new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id, name: "xone_critica_visual", args: JSON.stringify({ captura: "/artefactos/c.png", pantalla: "calculadora", referencia: "/diseno/screen.png" }) }] });
+    const { m, vistos } = modelosConGuion([
+      [delega("d1", "TAREA: 01\nDel plan /planes/calc/.")], [new AIMessageChunk({ content: "1" })],
+      [critica("cv1")],
+      [delega("d2", "TAREA: 02\nDel plan /planes/calc/.")], [new AIMessageChunk({ content: "2" })],
+      [critica("cv2")],
+      [new AIMessageChunk({ content: "Hecho." })],
+    ]);
+    const s = await abrirSesionTrueforge({
+      raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, bucleDelDesarrollador: true, developerContinuo: true,
+      artefactos: mkdtempSync(join(tmpdir(), "xc-tf-art-")),
+    });
+    await s.turno("haz la calculadora con la maqueta /diseno/screen.png", piel().p);
+    const tras = (i: number): string => vistos[i]!.join("\n");
+    expect(tras(3)).not.toContain("ya se juzgó");
+    expect(tras(6)).toContain("La pantalla de /diseno/screen.png ya se juzgó en la tarea 01 de /planes/calc/");
+  }, 30_000);
 });
 
 /** La fidelidad a la maqueta va en el SISTEMA del analista (calculadora con Codex, 04-11-2026). */
