@@ -150,6 +150,28 @@ describe("la API Responses, en la petición", () => {
     expect(pedidos.map((p) => new URL(p.url).pathname)).toEqual(["/responses", "/responses", "/v1/chat/completions"]);
     expect(pedidos.map((p) => p.cuerpo["reasoning"])).toEqual([{ effort: "low" }, { effort: "none" }, undefined]);
   });
+
+  // Medido el 05-11-2026 con gpt-6.1-terra: tools, razonamiento repuesto, caché y una captura dentro de la respuesta.
+  it("OpenAI también va por Responses, a su API; sin clave, el error la nombra", async () => {
+    const anterior = process.env.OPENAI_API_KEY;
+    const pedidas: string[] = [];
+    const fetchAnterior = globalThis.fetch;
+    globalThis.fetch = (async (url: string | URL | Request) => {
+      pedidas.push(String(url instanceof Request ? url.url : url));
+      return new Response(JSON.stringify({ id: "r", object: "response", status: "completed", model: "gpt-6.1-terra", output: [{ type: "message", role: "assistant", content: [{ type: "output_text", text: "ok", annotations: [] }] }], usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 } }), { status: 200, headers: { "content-type": "application/json" } });
+    }) as typeof fetch;
+    try {
+      process.env.OPENAI_API_KEY = "sk-de-pega";
+      await (new Modelos({ bandera: "openai/gpt-6.1-terra" }).paraPapel("trabajo") as { invoke: (m: unknown) => Promise<unknown> }).invoke([{ role: "user", content: "hola" }]);
+      expect(pedidas).toEqual(["https://api.openai.com/v1/responses"]);
+      delete process.env.OPENAI_API_KEY;
+      expect(() => new Modelos({ bandera: "openai/gpt-6.1-terra" }).paraPapel("trabajo")).toThrow(/falta la credencial para openai \(OPENAI_API_KEY\)/);
+    } finally {
+      globalThis.fetch = fetchAnterior;
+      if (anterior === undefined) delete process.env.OPENAI_API_KEY;
+      else process.env.OPENAI_API_KEY = anterior;
+    }
+  });
 });
 
 /**

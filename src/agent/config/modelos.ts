@@ -271,6 +271,9 @@ export const URL_DE_RESPONSES_DE_DEEPSEEK = "https://api.deepseek.com";
  * - el razonamiento se recoge y se REPONE en el `fetch`, como el eco de Chat, y con DeepSeek además se renombra;
  * - debajo de todo, la misma vigilancia de la llamada.
  */
+/** La API de OpenAI (Responses y Chat Completions cuelgan de aquí). */
+const URL_DE_OPENAI = "https://api.openai.com/v1";
+
 function clienteDeResponses(
   modelo: string,
   baseURL: string,
@@ -279,8 +282,10 @@ function clienteDeResponses(
   formato: "deepseek" | "estandar",
   topeDeSalida?: number,
   userId?: string,
+  /** Para el error sin clave: el proveedor y su variable. */
+  falta: { proveedor: string; variable: string } = { proveedor: "deepseek", variable: "DEEPSEEK_API_KEY" },
 ): unknown {
-  if (apiKey.trim() === "") throw new Error("falta la credencial para deepseek (DEEPSEEK_API_KEY); usa /provider deepseek");
+  if (apiKey.trim() === "") throw new Error(`falta la credencial para ${falta.proveedor} (${falta.variable}); usa /provider ${falta.proveedor}`);
   const kwargs = {
     ...(esfuerzo === undefined ? {} : { reasoning: { effort: esfuerzo } }),
     ...(userId === undefined ? {} : { user_id: userId }),
@@ -430,6 +435,11 @@ function construirModelo(
         // compilación y no construir un cliente equivocado en silencio.
         return construirCompatibleOpenAi(proveedor, modelo, COMPATIBLES_OPENAI[proveedor], pensamientoApagado ? undefined : esfuerzo, identidad, pensamientoApagado, topeDeSalidaPedido);
       case "openai":
+        // Por Responses, su API propia (medido el 05-11-2026 con gpt-6.1-terra y gpt-5.6-terra: tools con los mensajes
+        // rehechos, el razonamiento repuesto en formato estándar, la caché y una captura dentro de la respuesta de la tool).
+        if (api === "responses") {
+          return clienteDeResponses(modelo, URL_DE_OPENAI, process.env.OPENAI_API_KEY ?? "", esfuerzo, "estandar", undefined, undefined, { proveedor: "openai", variable: "OPENAI_API_KEY" });
+        }
         return new ChatOpenAI({
           model: modelo,
           apiKey: process.env.OPENAI_API_KEY,
@@ -481,7 +491,7 @@ function construirModelo(
           ...(esfuerzo === undefined ? {} : { outputConfig: { effort: esfuerzo } }),
         });
       case "ollama":
-        if (api === "responses") return clienteDeResponses(modelo, `${baseUrlDeOllama().replace(/\/+$/, "")}/v1`, "ollama", esfuerzo, "estandar");
+        if (api === "responses") return clienteDeResponses(modelo, `${baseUrlDeOllama().replace(/\/+$/, "")}/v1`, "ollama", esfuerzo, "estandar", undefined, undefined, { proveedor: "ollama", variable: "OLLAMA_HOST" });
         return clienteDeOllama(modelo, baseUrlDeOllama(), "ollama", esfuerzo);
       case "ollama-cloud":
         return clienteDeOllama(modelo, baseUrlDeOllamaCloud(), process.env.OLLAMA_API_KEY ?? "", esfuerzo);
