@@ -122,6 +122,23 @@ export function crearGestorDeCopias(deps: DependenciasDeCopias): GestorDeCopias 
   const topeDeSaludo = deps.topeDeSaludo ?? TOPE_DE_SALUDO_DE_GRANJA_MS;
   const pausaDeReintento = deps.pausaDeReintento ?? PAUSA_DE_REINTENTO_DE_GRANJA_MS;
 
+  /**
+   * **Dos sesiones no se pisan una copia** (dos tareas a la vez en la granja, 05-11-2026). Las dos conexiones son del
+   * MISMO usuario, así que la granja no contesta «ocupada» a la segunda: la deja entrar y ECHA a la primera («una sola
+   * conexión por canal»), que al reabrir echa a la otra. Por eso coger una copia NUEVA va de una en una en el proceso
+   * (`enOrden`: la foto, la conexión y, sin libres, crearla), y ninguna coge la que ya tiene otra sesión aunque la foto de
+   * la granja aún no le haya apuntado dueño (`copiasDeOtras`). Reabrir la PROPIA no espera turno. **Límite**: otro
+   * proceso con el mismo token (otra consola, otra máquina) no se ve desde aquí.
+   */
+  let turnoDePedir: Promise<unknown> = Promise.resolve();
+  const enOrden = <T>(pedirUna: () => Promise<T>): Promise<T> => {
+    const r = turnoDePedir.then(pedirUna, pedirUna);
+    turnoDePedir = r.catch(() => undefined);
+    return r;
+  };
+  const copiasDeOtras = (sesion: string): CopiaDeGranja[] =>
+    [...sesiones.entries()].flatMap(([s, e]) => (s !== sesion && e.copia !== undefined ? [e.copia] : []));
+
   const estado = (sesion: string): EstadoDeSesion => {
     let e = sesiones.get(sesion);
     if (e === undefined) {
@@ -245,28 +262,30 @@ export function crearGestorDeCopias(deps: DependenciasDeCopias): GestorDeCopias 
         await new Promise((x) => setTimeout(x, pausaDeReintento));
       }
     };
-    const descartadas: CopiaDeGranja[] = [];
-    for (;;) {
-      const libres = copiasLibres(await pedirEstado(conexion), descartadas);
-      let copia = libres[0];
-      if (copia === undefined) {
-        if (descartadas.length > 0) return { motivo: "otros cogieron las copias libres mientras se pedía una: vuelve a intentarlo" };
-        const creada = await crearUna();
-        if ("motivo" in creada) return creada;
-        copia = creada;
+    return enOrden(async () => {
+      const descartadas: CopiaDeGranja[] = [];
+      for (;;) {
+        const libres = copiasLibres(await pedirEstado(conexion), [...descartadas, ...copiasDeOtras(sesion)]);
+        let copia = libres[0];
+        if (copia === undefined) {
+          if (descartadas.length > 0) return { motivo: "otros cogieron las copias libres mientras se pedía una: vuelve a intentarlo" };
+          const creada = await crearUna();
+          if ("motivo" in creada) return creada;
+          copia = creada;
+        }
+        const r = await conReintentos(copia);
+        if (r === "ocupada") {
+          // Otro se la llevó entre la foto y la conexión: la siguiente.
+          descartadas.push(copia);
+          continue;
+        }
+        // Abierta = nuestra, aunque no saludara: se apunta para que el fin del turno la libere.
+        if (r === "ok" || r.cogida === true) apuntar(copia);
+        if (r !== "ok") return r;
+        await ajustarResolucion(copia);
+        return copia;
       }
-      const r = await conReintentos(copia);
-      if (r === "ocupada") {
-        // Otro se la llevó entre la foto y la conexión: la siguiente.
-        descartadas.push(copia);
-        continue;
-      }
-      // Abierta = nuestra, aunque no saludara: se apunta para que el fin del turno la libere.
-      if (r === "ok" || r.cogida === true) apuntar(copia);
-      if (r !== "ok") return r;
-      await ajustarResolucion(copia);
-      return copia;
-    }
+    });
   };
 
   const gestor: GestorDeCopias = {

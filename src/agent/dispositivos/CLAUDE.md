@@ -82,7 +82,9 @@ discrepancia, **el código manda**.
   un relé en loopback por sesión (`ws://127.0.0.1:<p>/granja/<clave>/hotswap`, en el fichero del aparato como `canal`) coge una
   copia libre en la primera conexión (medido: conectarse a la puerta COGE la copia) y mantiene UNA conexión hacia la granja
   (una segunda ECHA a la primera; sin conexión, a los diez minutos la granja la libera y la BORRA), repartiendo las
-  respuestas en orden FIFO. **Sin copias libres, CREA una** (`telefonoParaCrearCopia`,
+  respuestas en orden FIFO. **Dos sesiones no se pisan una copia** (`enOrden`, `copiasDeOtras`): con el MISMO token la granja no
+  dice «ocupada», ECHA a la anterior; coger una NUEVA va de una en una en el proceso y se salta las de otras sesiones (otro
+  proceso con el mismo token no se ve: límite). **Sin copias libres, CREA una** (`telefonoParaCrearCopia`,
   `crearCopiaEnGranja`: `POST /api/devices/:serial/copies` con `count + 1`, que un usuario normal puede subir y deja la nueva
   a su nombre) en el teléfono `ready` con más sitio (`copiesFit`), espera a que su slot esté `running`
   (`TOPE_DE_CREAR_COPIA_MS`) y la coge; un `507` (sin RAM) o un `409` se dicen. Un emulador apagado no se arranca desde aquí. **Una copia en `native` pasa a

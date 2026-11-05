@@ -262,8 +262,89 @@ describe("el gestor de copias de la granja", () => {
     expect(g.claveDe("s1")).not.toBe(g.claveDe("s2"));
     expect(g.sesionDeClave(g.claveDe("s2"))).toBe("s2");
     await g.conectarCliente("s1", cliente().c);
-    // La foto de la granja de mentira no cambia; la segunda sesión empieza por la misma y en la real recibiría 403.
     expect(g.copiaDe("s1")).toBeDefined();
     expect(g.copiaDe("s2")).toBeUndefined();
+  });
+
+  /**
+   * La carrera de dos tareas a la vez. Las dos conexiones son del MISMO usuario (el mismo token), así que la granja no
+   * contesta «ocupada» a la segunda: la deja entrar y ECHA a la primera (protocolo, «una sola conexión por canal»).
+   * Aquí lo reproduce un canal de mentira que cierra el anterior de la misma copia al abrirse otro.
+   */
+  function granjaQueEcha() {
+    const abiertos = new Map<string, ReturnType<typeof canalFalso>>();
+    const abiertas: CopiaDeGranja[] = [];
+    const echadas: CopiaDeGranja[] = [];
+    const abrir = async (copia: CopiaDeGranja): Promise<CanalDeGranja> => {
+      await asentar();
+      const clave = `${copia.serial}#${String(copia.numero)}`;
+      const anterior = abiertos.get(clave);
+      if (anterior !== undefined && !anterior.estaCerrado()) {
+        echadas.push(copia);
+        anterior.caer();
+      }
+      const f = canalFalso();
+      abiertos.set(clave, f);
+      abiertas.push(copia);
+      return f.canal;
+    };
+    return { abrir, abiertas, echadas };
+  }
+
+  it("dos sesiones que piden A LA VEZ con la misma foto de la granja se llevan copias DISTINTAS, sin echarse", async () => {
+    const granja = granjaQueEcha();
+    // La foto no cambia: la granja tarda en apuntar el dueño, y las dos piden antes de que se vea.
+    const { g } = gestor(granja.abrir);
+    await Promise.all([g.conectarCliente("s1", cliente().c), g.conectarCliente("s2", cliente().c)]);
+    expect(granja.echadas).toEqual([]);
+    expect(g.copiaDe("s1")).toBeDefined();
+    expect(g.copiaDe("s2")).toBeDefined();
+    expect(g.copiaDe("s1")).not.toEqual(g.copiaDe("s2"));
+  });
+
+  it("una sesión no coge la copia que ya tiene otra de este proceso aunque la granja aún la dé por libre", async () => {
+    const granja = granjaQueEcha();
+    const { g } = gestor(granja.abrir);
+    await g.conectarCliente("s1", cliente().c);
+    await g.conectarCliente("s2", cliente().c);
+    expect(granja.echadas).toEqual([]);
+    expect(g.copiaDe("s2")).toEqual({ serial: "P3", numero: 2, telefono: "Pixel 3" });
+  });
+
+  it("sin copias libres, dos sesiones a la vez CREAN una cada una (la 3 y la 4), no se pisan la misma", async () => {
+    const granja = granjaQueEcha();
+    let copias = 2;
+    const arrancadas: number[] = [];
+    const pedidas: number[] = [];
+    const { g } = gestor(granja.abrir, {
+      pedirEstado: async () => ({
+        devices: [
+          {
+            serial: "B",
+            state: "ready",
+            info: { model: "Pixel 8" },
+            copies: copias,
+            copiesMax: 20,
+            copiesFit: 10,
+            // Las nuevas salen `running` y, como en la foto atrasada de antes, sin dueño apuntado todavía.
+            slots: arrancadas.map((n) => ({ number: n, owner: null, state: "running" })),
+          },
+        ],
+      }),
+      crearCopia: async (_c, _serial, count) => {
+        await asentar();
+        pedidas.push(count);
+        if (count > copias) {
+          copias = count;
+          arrancadas.push(count);
+        }
+        return { ok: true };
+      },
+      pausaDeReintento: 1,
+    });
+    await Promise.all([g.conectarCliente("s1", cliente().c), g.conectarCliente("s2", cliente().c)]);
+    expect(granja.echadas).toEqual([]);
+    expect(pedidas).toEqual([3, 4]);
+    expect([g.copiaDe("s1")?.numero, g.copiaDe("s2")?.numero].sort()).toEqual([3, 4]);
   });
 });
