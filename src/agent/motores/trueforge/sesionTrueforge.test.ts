@@ -451,10 +451,9 @@ describe("una sesión con el motor TrueForge", () => {
     expect(vistos[1]![0]).not.toContain("CON QUIÉN HABLAS");
     // Y el hijo sabe CUÁNDO usarla: junto a su lista de tools, en su prompt de sistema.
     expect(vistos[1]![0]).toContain("pregunta PRIMERO a `xone_atributos`");
+    // OpenUI no va al desarrollador (05-11-2026): documentar es del documentador.
     expect(toolsPorLlamada[0]).not.toContain("get_openui_instructions");
-    expect(toolsPorLlamada[1]).toContain("get_openui_instructions");
-    // Y su prompt de sistema lleva nuestras reglas, no solo la línea de la librería.
-    expect(vistos[1]!.join("\n")).toContain("/artefactos/<nombre>.openui");
+    expect(toolsPorLlamada[1]).not.toContain("get_openui_instructions");
   }, 20_000);
 
   it("un hijo con un nombre que no es de ningún especialista sale SIN nombre, no con el que inventó el modelo", async () => {
@@ -1905,6 +1904,12 @@ describe("una sesión con el motor TrueForge", () => {
       expect(sistema).toContain("prueba TÚ en el aparato");
       // Sin crítico en su bucle, como Codex (05-11-2026): se mira él la captura y la maqueta.
       expect(toolsPorLlamada[1]).not.toContain("xone_critica_visual");
+      // Ni lo que no usa (0 usos en 133 llamadas de la calculadora): sus escrituras ya validan, ve con `view_image`, los
+      // fondos son del diseñador, le llega la medida y no necesita la fecha.
+      for (const t of ["validar_fichero_xone", "describe_image", "generar_fondo_svg", "convertir_a_p", "get_current_datetime", "get_openui_instructions"]) {
+        expect(toolsPorLlamada[1]).not.toContain(t);
+      }
+      expect(toolsPorLlamada[1]).toEqual(expect.arrayContaining(["view_image", "xone_atributos", "regex_search", "xone_navegacion"]));
       expect(sistema).toContain("mirando la captura Y la maqueta con `view_image`");
       expect(sistema).not.toContain("pásalo UNA vez al CERRAR cada pantalla");
       expect(sistema).not.toContain("llama al de pruebas");
@@ -4115,7 +4120,8 @@ describe("lo APRENDIDO del proyecto llega delante de cada encargo, y quien traba
 
 describe("`convertir_a_p` en TrueForge: las medidas de la maqueta, con la resolución del app.xml", () => {
   const guion = () => [
-    [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "developer-xone", input: "pinta la fila de la maqueta" }) }] })],
+    // Al diseñador: el desarrollador que prueba él mismo ya no la lleva (05-11-2026, 0 usos).
+    [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "designer-xone", input: "pinta la fila de la maqueta" }) }] })],
     [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "c1", name: "convertir_a_p", args: JSON.stringify({ medidas: [{ nombre: "icono de la fila", px: 24 }], ancho_maqueta: 420 }) }] })],
     [new AIMessageChunk({ content: "Convertido." })],
     [new AIMessageChunk({ content: "Listo." })],

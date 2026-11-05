@@ -101,6 +101,9 @@ Ante una discrepancia con el código, **el código manda**.
   pendientes la llama el código (`modeloLangchain.ts#alCerrar`), y sin ningún criterio marcado no pasa a la primera
   (`textoSinEvidencia`). Un encargo que nombra el plan sin su ruta también cae en la regla de una tarea
   (`core/encargoDeTarea.ts#planesPorSuNombre`).
+- **Quien prueba él mismo no lleva lo que no usa** (`propiasDe#pruebaElMismoDe`): ni `validar_fichero_xone` (sus escrituras
+  ya validan), ni `describe_image` (tiene `view_image`), ni `convertir_a_p`, ni la fecha; `generar_fondo_svg` no va a quien
+  puede llamar al diseñador. El desarrollador de serie no trae `openui-builder`: documentar es del documentador.
 - **`view_image`: quien prueba él mismo VE su captura** (`agent/grafo/verImagen.ts`, como Codex): la tool deja una marca
   con el id de la imagen y el adaptador (`modeloLangchain.ts#aMensajesDeLangchain`, `imagenDe`) la pone en un mensaje
   DETRÁS del bloque de respuestas de tool —nunca entre dos—, rehecha igual en cada llamada. **Con la API Responses va

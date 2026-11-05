@@ -10615,3 +10615,8 @@ Dos cambios: el desarrollador que prueba él mismo ya no lleva `xone_critica_vis
 `xone-probar --recargar` acepta iconos (`xone-recargar-android` ya los subía nombrados y relanzaba la app: «icons/ic_person.svg
 → relanzada la app», ~2 s), que era lo que le obligaba a desplegar entero cada SVG nuevo. Lo demás medido —lo aprendido
 inyectado entero en cada encargo (~4.900 tokens), un sistema de ~8.000 tokens y 23 tools (~6.000)— queda por hacer.
+
+Y las tools que el desarrollador no usó en sus 133 llamadas de la calculadora (`validar_fichero_xone`, `describe_image`,
+`generar_fondo_svg`, `convertir_a_p`, la fecha y, con la skill `openui-builder`, `get_openui_instructions`): de 22 a 16 tools
+y ~8.300 caracteres menos por llamada. `ask_user_question` se queda en el orquestador aunque sea una tarea de fondo: allí se
+contesta sola con la opción recomendada, y quitarla rompía ese camino.

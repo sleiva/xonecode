@@ -499,7 +499,8 @@ export function capacidadesDelEspecialista(
     // Quien da vueltas con el aparato (la shell del conductor o los scripts del desarrollador) ve las pasadas recortadas.
     ...(deps.vistaDelEncargo === true && (clase === "ejecuta" || agente.scripts === true) ? [capacidadDeVistaDelEncargo()] : []),
     capacidadDeRecortes(deps.backend),
-    capacidadDeFecha(),
+    // La fecha, no a quien prueba él mismo: 0 usos medidos en la calculadora (05-11-2026).
+    ...(agente.scripts === true ? [] : [capacidadDeFecha()]),
     deps.notas,
     // OpenUI lo trae su skill: quien la declara recibe la tool. Solo en nuestro motor —un hijo
     // externo no pasa por estas capabilities, y la skill le dice que sin la tool no lo use—.

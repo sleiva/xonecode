@@ -1224,12 +1224,14 @@ export const AGENTES_DE_SERIE: readonly Agente[] = [
     // Decisión suya (04-11-2026): medido con DeepSeek por Ollama, a su nivel por omisión pensaba 13-18 mil tokens por llamada.
     esfuerzo: "medium",
     soloLectura: false,
-    // `artifacts-builder` se queda: escribe documentos e informes. `archify` no, que los
+    // `openui-builder` no (decisión suya, 05-11-2026): documentar es de `document-writer`, y le traía `get_openui_instructions`
+    // en cada llamada sin usarla. `artifacts-builder` se queda de momento: se evalúa con una tarea de documentación.
+    // `archify` no, que los
     // diagramas son de `designer-xone` y su descripción son ~700 caracteres por llamada.
     // `xone-debugging` se quitó: 0 lecturas en seis pasadas, y su método es correr `xone-simulator`, que quien no tiene shell no puede.
     // `xone-hotswap` de serie, decisión suya (20-10-2026): es quien maqueta y comprueba su pantalla, y la skill le dice cómo
     // se toca, se captura y se recarga en el aparato. Con shell (Claude Code, `ejecucion`) también trae sus scripts.
-    skills: ["xone-development", "artifacts-builder", "openui-builder", "xone-hotswap"],
+    skills: ["xone-development", "artifacts-builder", "xone-hotswap"],
     // Corre él los scripts de `xone-hotswap` (`Agente.scripts`, `ejecutar_script`) sin tener shell: despliega, toca, lee
     // el log y captura. Decisión suya (21-10-2026: «busquemos lo más eficiente»): medido en Maset, cada prueba por el de
     // pruebas era un hijo nuevo de ~13 llamadas que volvía a desplegar y navegar, 25 en una tarea de dos pantallas.

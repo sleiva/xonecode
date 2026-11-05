@@ -1712,12 +1712,19 @@ export async function abrirSesionTrueforge(
       ? [crearProponerTareas((p) => void propuestasPorAnunciar.push(p)) as unknown as ToolDeLangchain]
       : []),
   ];
+  /**
+   * **Quien prueba él mismo (`scripts`) no lleva lo que no usa** (medido con la calculadora, 05-11-2026: 0 usos en 133
+   * llamadas, ~6.500 caracteres por llamada). `validar_fichero_xone`: sus `edit_file`/`write_file` ya validan en su
+   * respuesta. `describe_image`: ve la captura él con `view_image`. `convertir_a_p`: le llega la medida. Y `generar_fondo_svg`
+   * a quien puede llamar al diseñador, que es de quien son los fondos.
+   */
+  const pruebaElMismoDe = (agente: Agente): boolean => agente.scripts === true;
   const propiasDe = (agente: Agente): ToolDeLangchain[] => [
     crearBusquedaRegex(backend as never) as unknown as ToolDeLangchain,
     navegacion(),
-    validarFichero(),
+    ...(pruebaElMismoDe(agente) ? [] : [validarFichero()]),
     atributos,
-    describirImagen(),
+    ...(pruebaElMismoDe(agente) ? [] : [describirImagen()]),
     // VER él mismo la captura, como el `view_image` de Codex (`verImagen.ts`): a quien prueba él mismo.
     ...(agente.scripts === true ? [verImagen()] : []),
     ...(carpeta !== undefined && (agente.escribeEn ?? []).length > 0
@@ -1746,9 +1753,9 @@ export async function abrirSesionTrueforge(
         ]
       : []),
     // Fondos SVG: pura y sin red, sin puerto; a quien escribe el proyecto, como deepagents.
-    ...(recibeGenerarFondo(agente) ? [crearGenerarFondoSvg() as unknown as ToolDeLangchain] : []),
+    ...(recibeGenerarFondo(agente) && !(agente.llama ?? []).includes("designer-xone") ? [crearGenerarFondoSvg() as unknown as ToolDeLangchain] : []),
     // Las medidas de una maqueta a `p`: pura, a quien escribe el proyecto. La resolución la lee del app.xml de la raíz.
-    ...(recibeConvertirAP(agente)
+    ...(recibeConvertirAP(agente) && !pruebaElMismoDe(agente)
       ? [
           crearConvertirAP({
             raiz,
@@ -2424,7 +2431,7 @@ export async function abrirSesionTrueforge(
           compactionThresholdTokens: umbralDelRaiz(),
         }),
         // `ask_user_question`, SOLO en el raíz —la librería tampoco se la da a un hijo—: es el
-        // único que tiene a una persona delante.
+        // único que tiene a una persona delante. En una tarea de fondo también: allí se contesta SOLA con la recomendada.
         askUserQuestion(),
         // `create_sub_agent`: la delegación de TrueForge, un nivel y cinco a la vez como mucho.
         dynamicSubAgents({ sandboxAvailable: false, tracing: NOOP_AGENT_TRACING }),

@@ -164,10 +164,12 @@ describe("la skill que las reglas NOMBRAN existe, y dice lo que hace falta", () 
     expect(skill).toContain("que tú no la veas no significa que no");
   });
 
-  it("de serie la lleva quien lleva `artifacts-builder`: los que hacen artefactos", () => {
-    const html = AGENTES_DE_SERIE.filter((a) => a.skills.includes("artifacts-builder")).map((a) => a.nombre);
+  it("de serie la lleva quien lleva `artifacts-builder`, salvo el desarrollador: documentar es del documentador", () => {
+    const html = AGENTES_DE_SERIE.filter((a) => a.skills.includes("artifacts-builder") && a.nombre !== "developer-xone").map((a) => a.nombre);
     const openui = AGENTES_DE_SERIE.filter((a) => a.skills.includes(SKILL_DE_OPENUI)).map((a) => a.nombre);
     expect(openui.sort()).toEqual(html.sort());
+    expect(openui).toContain("document-writer");
+    expect(openui).not.toContain("developer-xone");
   });
 });
 
