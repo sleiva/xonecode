@@ -64,7 +64,9 @@ Ante una discrepancia con el código, **el código manda**.
   copia local») y las conversaciones nuevas, una fila de cifras (sin subir, tareas, gasto, planes), las tarjetas de los
   PLANES (`debajoDeLasCifras`) y el gasto por sesión. Sin cola llegada, sin tarjeta de tareas. **Los planes se releen** al quedar
   delante el Resumen (`alVerResumen`) y, con una tarea de FONDO trabajando en el proyecto, cada `MS_ENTRE_LECTURAS_DE_PLANES` y
-  una vez al terminar (`App.tsx#tareaDeFondoEnCurso`): su turno no es el de la ventana, y el fin de turno no lo releía. **Sin copia el panel abre SOLO el Resumen** (`App.tsx#panelSinCopia`) sin abrir nada en el
+  una vez al terminar (`App.tsx#tareaDeFondoEnCurso`): su turno no es el de la ventana, y el fin de turno no lo releía. Y
+  solo pinta los de SU proyecto (`planesDelActivo`, el `proyecto` que pone el servidor en `planes`): el store guarda los
+  últimos que llegaron, y un Resumen pintaba los de otro. **Sin copia el panel abre SOLO el Resumen** (`App.tsx#panelSinCopia`) sin abrir nada en el
   servidor, y dice por qué faltan Tareas y Conectores. «Abrir carpeta» (`accion: "abrirCarpeta"`)
   lo lanza el SERVIDOR (`comandoParaAbrirDirectorio`); **límite**: por un túnel abre en su máquina.
 - **Lo pendiente de subir es UNA foto** (`accion: "resumen"`, `FotoDelResumen`) en la respuesta del

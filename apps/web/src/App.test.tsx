@@ -2674,6 +2674,21 @@ describe("App: el panel del proyecto (IXCODE-11)", () => {
     }
   });
 
+  /** Visto en la consola (05-11-2026): el Resumen de Maset enseñaba el plan de la calculadora de MyAllXOne. */
+  it("el Resumen pinta los planes de SU proyecto, nunca los que llegaron de otro", () => {
+    const { store } = conProyectoAbierto();
+    fireEvent.click(enBarra("AppDemo"));
+    const plan = (proyecto: string) => ({
+      clase: "planes" as const,
+      proyecto,
+      planes: [{ nombre: "calculadora", ficheros: ["PLAN.md", "TASKS.md"], modificado: 1, tareas: { titulo: "Plan de la calculadora", tareas: [{ id: "1", titulo: "x", criterios: { hechos: 0, total: 1 } }] } }],
+    });
+    act(() => store.aplicar(plan("p2")));
+    expect(screen.queryByText(/Plan de la calculadora/)).toBeNull();
+    act(() => store.aplicar(plan("p1")));
+    expect(screen.getAllByText(/Plan de la calculadora/).length).toBeGreaterThan(0);
+  });
+
   it("ir al Resumen del proyecto relee los planes, cada vez que se vuelve a él", () => {
     const { enviar } = conProyectoAbierto();
     const pedidas = () => enviar.mock.calls.filter(([m]) => (m as { clase?: string }).clase === "planes").length;

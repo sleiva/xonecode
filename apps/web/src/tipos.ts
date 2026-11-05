@@ -944,7 +944,7 @@ export type MensajeAlCliente =
    *  no se pudo leer. El store lo valida campo a campo (`fotoDeColecciones.ts`). */
   | { clase: "colecciones"; foto?: FotoDeColecciones; error?: string }
   /** Los planes del proyecto (pestaña Planes). Validados en el store (`planesDelCable.ts`). */
-  | { clase: "planes"; planes?: PlanDelCable[]; error?: string }
+  | { clase: "planes"; proyecto?: string; planes?: PlanDelCable[]; error?: string }
   /** El gestor de tareas del proyecto (IXCODE-11): un mensaje, un campo por acción, y `error`
    *  con la acción que falló. Redeclarado de `transporte.ts`. */
   | {

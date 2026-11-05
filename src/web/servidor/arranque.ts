@@ -4998,7 +4998,9 @@ export function montarRutas(
       return;
     }
     try {
-      emitir({ clase: "planes", planes: opciones.planesDelProyecto(abierto.raiz) });
+      // Con el id del proyecto: el Resumen de OTRO proyecto no los pinta como suyos (`App.tsx#planesDelActivo`).
+      const proyecto = proyectoActivoDe(abierto);
+      emitir({ clase: "planes", ...(proyecto === undefined ? {} : { proyecto }), planes: opciones.planesDelProyecto(abierto.raiz) });
     } catch (error) {
       informar(`no se pudieron leer los planes (${codigoDe(error)})`);
       emitir({ clase: "planes", error: "no se pudieron leer los planes" });

@@ -1650,6 +1650,14 @@ export function App({
    * de esta ventana, así que ni el fin de turno ni el reloj de arriba lo releían. Medido en la consola (05-11-2026): el
    * proyecto se abrió sin plan, la tarea lo escribió después y el Resumen no lo enseñó hasta recargar.
    */
+  /**
+   * Los planes que pinta el Resumen del proyecto: solo si son SUYOS. El store guarda los últimos que llegaron, y al pasar
+   * de un Resumen a otro el nuevo pintaba los del anterior hasta la respuesta (o los del abierto en el servidor, si es otro).
+   */
+  const planesDelActivo =
+    estado.planes?.lista !== undefined && estado.planes.proyecto !== undefined && estado.planes.proyecto === proyectoActivoId
+      ? estado.planes.lista
+      : undefined;
   const tareaDeFondoEnCurso = tareasDelProyecto?.some((t) => t.estado === "en-proceso") === true;
   const habiaTareaDeFondo = useRef(false);
   useEffect(() => {
@@ -3727,7 +3735,7 @@ export function App({
               {...(entornoDelEscritorio === undefined ? {} : { entorno: entornoDelEscritorio.nombre })}
               // La rama solo si ya se midió (`sync`): no se pide aquí una medida para pintarla.
               {...(estado.sync?.rama === undefined ? {} : { rama: estado.sync.rama })}
-              {...(estado.planes?.lista === undefined ? {} : { planes: estado.planes.lista })}
+              {...(planesDelActivo === undefined ? {} : { planes: planesDelActivo })}
               // Lo de la copia, arriba del Resumen: la fila del proyecto ABIERTO en el alta.
               {...(identidadDelActivo === undefined
                 ? {}

@@ -2172,7 +2172,8 @@ describe("montarRutas — el cable, por fin conectado", () => {
       await asentar();
       expect(await enviarMensaje(accion, { clase: "planes" })).toBe(204);
       await asentar();
-      expect(cliente.recibidos.filter((x) => x.clase === "planes").at(-1)).toEqual({ clase: "planes", planes });
+      expect(cliente.recibidos.filter((x) => x.clase === "planes").at(-1)).toEqual({ clase: "planes", proyecto: "p1", planes });
+      // Con el id del proyecto abierto: el Resumen de otro no los pinta como suyos.
       falla = true;
       await enviarMensaje(accion, { clase: "planes" });
       await asentar();

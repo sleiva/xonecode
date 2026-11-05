@@ -673,7 +673,7 @@ export type MensajeAlCliente =
    * tareas leídas de su `TASKS.md` y el texto de su `PLAN.md`. Es lo que el plan DICE —estado y
    * casillas las marca el modelo—. Sin `planes` y con `error` si no se pudo leer.
    */
-  | { clase: "planes"; planes?: PlanEnDisco[]; error?: string }
+  | { clase: "planes"; proyecto?: string; planes?: PlanEnDisco[]; error?: string }
   /**
    * El gestor de tareas del proyecto abierto (IXCODE-11, panel del proyecto): UN mensaje con
    * campos opcionales, como `planes`, y cada acción del cliente rellena el suyo. `error` dice

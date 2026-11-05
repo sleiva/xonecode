@@ -367,7 +367,7 @@ export interface EstadoDelCliente {
    * Los planes del proyecto abierto (pestaña Planes), ya validados (`planesDelCable.ts`). Se tiran
    * con la sesión y sin cable. `lista` vacía es «no hay planes», y entonces no hay pestaña.
    */
-  planes?: { lista?: PlanDelCable[]; error?: string };
+  planes?: { lista?: PlanDelCable[]; error?: string; /** De qué proyecto son, si el servidor lo dijo. */ proyecto?: string };
   /**
    * El gestor de tareas del proyecto abierto (IXCODE-11, panel del proyecto), ya validado
    * (`gestorDelCable.ts`). El servidor contesta UN campo por acción, así que cada mensaje se
@@ -2053,13 +2053,14 @@ export function crearStoreDelCliente(): {
           return;
         }
         case "planes": {
-          const m = mensaje as { planes?: unknown; error?: unknown };
+          const m = mensaje as { planes?: unknown; error?: unknown; proyecto?: unknown };
           const lista = leerPlanesDelCable(m.planes);
           if (lista === undefined && typeof m.error !== "string") return;
           mutar({
             planes: {
               ...(lista === undefined ? {} : { lista }),
               ...(typeof m.error === "string" ? { error: m.error } : {}),
+              ...(typeof m.proyecto === "string" ? { proyecto: m.proyecto } : {}),
             },
           });
           return;
