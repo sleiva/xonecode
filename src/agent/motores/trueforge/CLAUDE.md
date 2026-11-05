@@ -26,8 +26,8 @@ Ante una discrepancia con el código, **el código manda**.
   **Parar mata al hijo** (`PeticionExterna.senal`); **dos hijos que escriben no corren a la vez** (`escritoresEnSerie`).
 - **Argumentos rotos** (`modeloLangchain.ts`): `invalid_tool_calls` y el JSON «reparado» de una respuesta cortada por el
   tope de salida van al núcleo CRUDOS, que devuelve el error del JSON; ni se tiran ni se ejecutan cortados. El corte se
-  reconoce en sus DOS formas (`cortadaPorTopeDeSalida`: `finish_reason` de los compatibles, `stop_reason` en
-  `additional_kwargs` de Anthropic), su respuesta lleva delante la nota de PARTIR el trabajo (`notaDelCorte`), y tras
+  reconoce en sus TRES formas (`cortadaPorTopeDeSalida`: `finish_reason` de los compatibles, `stop_reason` en
+  `additional_kwargs` de Anthropic, `status: incomplete` por `max_output_tokens` de la API Responses), su respuesta lleva delante la nota de PARTIR el trabajo (`notaDelCorte`), y tras
   `CORTES_SEGUIDOS_ANTES_DE_PARAR` cortes seguidos no se llama al modelo: el hilo cierra con texto.
 - **Un documento largo se escribe POR PARTES** (`write_file` con `append: true`, `core/anadirAFichero.ts`): solo
   documentos (`.md`, `/planes/`, `/doc/`), lo que se valida (`TASKS.md`) y se aprueba (`interrupts.ts#cambioDe`) es el

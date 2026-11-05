@@ -3,6 +3,7 @@ import winston from "winston";
 import { AIMessageChunk, type BaseMessage } from "@langchain/core/messages";
 import { AgentThread, AgentThreadOrchestrator, EventType, NOOP_AGENT_TRACING, ToolSet, toolResultResponse } from "./trueforge.js";
 import { ChatAnthropic } from "@langchain/anthropic";
+import { ChatOpenAI } from "@langchain/openai";
 import { CORTES_SEGUIDOS_ANTES_DE_PARAR, aMensajesDeLangchain, cortadaPorTopeDeSalida, modeloParaTrueforge } from "./modeloLangchain.js";
 
 /** Un modelo de LangChain de pega: por cada llamada, un guion de trozos. Apunta lo que recibe. */
@@ -258,6 +259,54 @@ describe("cortadaPorTopeDeSalida, contra el cliente de Anthropic de verdad", () 
   it("una respuesta que acabó bien no cuenta como cortada", () => {
     expect(cortadaPorTopeDeSalida(new AIMessageChunk({ content: "ok", additional_kwargs: { stop_reason: "end_turn" } }))).toBe(false);
     expect(cortadaPorTopeDeSalida(new AIMessageChunk({ content: "ok", response_metadata: { finish_reason: "stop" } }))).toBe(false);
+  });
+});
+
+/**
+ * La API Responses (`apiDeModelos: "responses"`): el corte solo consta en `status: "incomplete"` con
+ * `incomplete_details.reason: "max_output_tokens"`, y LangChain da el `write_file` a medias por bueno (señalado en una
+ * revisión y reproducido con el cliente de verdad, 05-11-2026).
+ */
+describe("cortadaPorTopeDeSalida, con la API Responses de verdad", () => {
+  const sse = (cortada: boolean): string => {
+    const ev = (o: { type: string }) => `event: ${o.type}\ndata: ${JSON.stringify(o)}\n\n`;
+    const resp = { id: "r1", object: "response", created_at: 0, model: "deepseek-flash", output: [], usage: null };
+    return [
+      ev({ type: "response.created", sequence_number: 0, response: { ...resp, status: "in_progress" } } as never),
+      ev({ type: "response.output_item.added", sequence_number: 1, output_index: 0, item: { type: "function_call", id: "fc1", call_id: "c1", name: "write_file", arguments: "" } } as never),
+      ev({ type: "response.function_call_arguments.delta", sequence_number: 2, output_index: 0, item_id: "fc1", delta: cortada ? '{"file_path":"/a.md","content":"medio fich' : '{"file_path":"/a.md","content":"entero"}' } as never),
+      ev(
+        (cortada
+          ? { type: "response.incomplete", sequence_number: 3, response: { ...resp, status: "incomplete", incomplete_details: { reason: "max_output_tokens" }, usage: { input_tokens: 10, output_tokens: 8, total_tokens: 18 } } }
+          : { type: "response.completed", sequence_number: 3, response: { ...resp, status: "completed", usage: { input_tokens: 10, output_tokens: 8, total_tokens: 18 } } }) as never
+      ),
+    ].join("");
+  };
+  const cliente = (cortada: boolean) =>
+    new ChatOpenAI({
+      model: "deepseek-flash",
+      apiKey: "sk-de-pega",
+      useResponsesApi: true,
+      configuration: { baseURL: "https://x", fetch: (async () => new Response(sse(cortada), { status: 200, headers: { "content-type": "text/event-stream" } })) as typeof fetch },
+    });
+
+  it("su stream incompleto por el tope se reconoce, aunque LangChain «repare» la llamada; uno completo, no", async () => {
+    for (const cortada of [true, false]) {
+      let acumulado: AIMessageChunk | undefined;
+      for await (const t of await cliente(cortada).stream("hola")) acumulado = acumulado === undefined ? t : acumulado.concat(t);
+      expect(acumulado?.tool_calls?.[0]?.name).toBe("write_file");
+      expect(cortadaPorTopeDeSalida(acumulado)).toBe(cortada);
+    }
+  });
+
+  it("y el adaptador de TrueForge entrega los argumentos CRUDOS, que fallan, con la nota del corte: no medio fichero", async () => {
+    const r = (await modeloParaTrueforge({ modelo: () => cliente(true) }).createNonStream({ messages: [{ role: "user", content: "escribe" }] } as never)) as {
+      output: { tool_calls?: { function: { name: string; arguments: string } }[] };
+    };
+    const llamada = r.output.tool_calls?.[0];
+    expect(llamada?.function.name).toBe("write_file");
+    expect(llamada?.function.arguments).toBe('{"file_path":"/a.md","content":"medio fich');
+    expect(() => JSON.parse(llamada!.function.arguments)).toThrow();
   });
 });
 

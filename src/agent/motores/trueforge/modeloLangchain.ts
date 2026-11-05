@@ -34,7 +34,8 @@ export const CORTES_SEGUIDOS_ANTES_DE_PARAR = 2;
 
 /**
  * ¿Acabó la respuesta por TOPE de salida? Cada cliente lo dice en un sitio: los compatibles con
- * OpenAI, `response_metadata.finish_reason: "length"`; `@langchain/anthropic` 1.5.2 en streaming deja
+ * OpenAI, `response_metadata.finish_reason: "length"`; su API Responses, `status: "incomplete"` con
+ * `incomplete_details.reason: "max_output_tokens"`; `@langchain/anthropic` 1.5.2 en streaming deja
  * el `stop_reason: "max_tokens"` del `message_delta` en `additional_kwargs` (medido con el cliente de
  * verdad: `response_metadata` no trae nada). Mirar solo el primero dejaba pasar los cortes de Claude, y
  * LangChain «reparaba» su `write_file`: medio fichero escrito sin avisar.
@@ -48,9 +49,16 @@ export const MARCA_DE_CORTE_POR_TOPE = "__xonecode_cortada_por_tope";
 
 export function cortadaPorTopeDeSalida(mensaje: AIMessageChunk | undefined): boolean {
   if (mensaje === undefined) return false;
-  const meta = mensaje.response_metadata as { finish_reason?: unknown; stop_reason?: unknown } | undefined;
+  const meta = mensaje.response_metadata as { finish_reason?: unknown; stop_reason?: unknown; status?: unknown; incomplete_details?: { reason?: unknown } } | undefined;
   const extra = mensaje.additional_kwargs as { stop_reason?: unknown } | undefined;
-  return meta?.finish_reason === "length" || meta?.stop_reason === "max_tokens" || extra?.stop_reason === "max_tokens";
+  return (
+    meta?.finish_reason === "length" ||
+    meta?.stop_reason === "max_tokens" ||
+    extra?.stop_reason === "max_tokens" ||
+    // La API Responses (`apiDeModelos: "responses"`): medido con el cliente de verdad, el corte solo consta así, y
+    // LangChain «repara» el `write_file` a medias como una llamada válida.
+    (meta?.status === "incomplete" && meta.incomplete_details?.reason === "max_output_tokens")
+  );
 }
 
 /** La ruta que nombran unos argumentos, aunque estén cortados: es lo que se lee primero. */
