@@ -50,8 +50,10 @@ export function textoDeCriticaRepetida(tarea: string): string {
 /** Para el desarrollador: su crítica de la tarea ya está gastada (la suya o la del orquestador). */
 export function textoDeCriticaRepetidaDelDesarrollador(tarea: string): string {
   const [plan, numero] = tarea.split("|");
+  // Sin plan, la clave es la del encargo (`sin-tarea|N`): no es una ruta. Medido: el cierre citó «/planes/sin-tarea/».
+  const cual = plan === "sin-tarea" ? "Este encargo" : `La tarea ${numero ?? ""} de /planes/${plan ?? ""}/`;
   return (
-    `La tarea ${numero ?? ""} de /planes/${plan ?? ""}/ ya pasó su crítica visual: UNA por tarea. Arregla lo que señaló en ROJO, ` +
+    `${cual} ya pasó su crítica visual: UNA por tarea. Arregla lo que señaló en ROJO, ` +
     "compruébalo con tu captura y `view_image`, y DEVUELVE diciendo qué quedó de lo que dijo: no hay otra crítica."
   );
 }

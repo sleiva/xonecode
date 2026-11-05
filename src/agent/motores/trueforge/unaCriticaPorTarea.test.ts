@@ -36,6 +36,9 @@ describe("el crítico del orquestador, una vez por tarea", () => {
     await unaCriticaPorTarea(critica as never, () => "calc|2", () => true, { criticadas }).invoke({ captura: "/b.png" });
     expect(String(await otra.invoke({ captura: "/b.png" }))).toContain("DEVUELVE diciendo qué quedó");
     expect(llamadas).toBe(2);
+    // Sin plan, la clave del encargo no se cita como ruta (medido: «/planes/sin-tarea/» en un cierre).
+    expect(textoDeCriticaRepetidaDelDesarrollador("sin-tarea|3")).toMatch(/^Este encargo ya pasó su crítica visual/);
+    expect(textoDeCriticaRepetidaDelDesarrollador("sin-tarea|3")).not.toContain("/planes/");
   });
 
   it("una crítica que FALLA no gasta la de su tarea: la siguiente corre", async () => {
