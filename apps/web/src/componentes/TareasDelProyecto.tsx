@@ -274,7 +274,11 @@ export function TareasDelProyecto({
   return (
     <section className={estilos.lista} aria-label="Tareas del proyecto">
       <div className={estilos.encabezado}>
-        <span className={estilos.rotulo}>Tareas en background</span>
+        {/* El ÚNICO título de la pestaña: el panel ya no pone otro encima (se leía dos veces). */}
+        <div className={estilos.cabecera}>
+          <h2 className={estilos.tituloDePestana}>Tareas en background</h2>
+          <p className={estilos.subtitulo}>Encargos que el agente trabaja solo, sin que tengas que quedarte mirando.</p>
+        </div>
         <div className={estilos.botones}>
           {alMirarGestor === undefined ? null : (
             <button
@@ -296,7 +300,7 @@ export function TareasDelProyecto({
             </button>
           )}
           {alNuevaTarea === undefined ? null : (
-            <button type="button" className={estilos.nueva} disabled={apagado} onClick={alNuevaTarea}>
+            <button type="button" className={estilos.crear} disabled={apagado} onClick={alNuevaTarea}>
               Nueva tarea
             </button>
           )}
@@ -327,11 +331,22 @@ export function TareasDelProyecto({
       {tareas === undefined || enCurso === undefined || finalizadas === undefined ? (
         <p className={estilos.aviso}>Consultando la cola de tareas de este proyecto…</p>
       ) : tareas.length === 0 ? (
-        <p className={estilos.aviso}>
-          Este proyecto todavía no tiene ninguna tarea en background. Pulsa «Nueva tarea» para
-          darle al agente un encargo que trabaje solo, sin que tengas que quedarte mirando: se
-          aplica sin pedir aprobación, porque la autorización es crearla.
-        </p>
+        <div className={estilos.vacia}>
+          <svg aria-hidden="true" className={estilos.iconoVacia} width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="4" y="4" width="16" height="16" rx="3" />
+            <path d="M8 12l3 3 5-6" />
+          </svg>
+          <h3 className={estilos.tituloVacia}>Todavía no hay tareas</h3>
+          <p className={estilos.textoVacia}>
+            Dale al agente un encargo que trabaje solo: se aplica sin pedir aprobación, porque la
+            autorización es crearla.
+          </p>
+          {alNuevaTarea === undefined ? null : (
+            <button type="button" className={estilos.nueva} disabled={apagado} onClick={alNuevaTarea}>
+              Crear la primera tarea
+            </button>
+          )}
+        </div>
       ) : (
         <>
         <div className={estilos.pestanas} role="tablist" aria-label="Tareas por estado">

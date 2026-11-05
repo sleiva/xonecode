@@ -37,8 +37,26 @@ export function QuienEjecutaTareas({
   donde: string;
 }) {
   if (corriendoAqui) return null;
+  // Una línea a la vista y la explicación entera detrás de «Por qué» (lienzo, «Tareas del
+  // proyecto, vacía»): el párrafo de cuatro líneas, en ámbar sobre blanco, no lo leía nadie.
+  // La línea corta NO repite frases del porqué: cada aviso se encuentra por un solo texto.
+  const resumen =
+    ejecutaOtroProceso === true
+      ? "Las corre otra consola de este equipo: aquí se ven, pero desde aquí no avanzan."
+      : ejecutaOtroProceso === false
+        ? "Ahora mismo nadie en esta máquina las está corriendo."
+        : "Quién las corre en esta máquina, ahora mismo, es una incógnita.";
   return (
-    <p className={estilos.aviso} role="note">
+    <details className={estilos.aviso} role="note">
+      <summary className={estilos.resumen}>
+        <svg className={estilos.icono} aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+          <circle cx="12" cy="12" r="9" />
+          <path d="M12 8v5M12 16h.01" />
+        </svg>
+        <span className={estilos.linea}>{resumen}</span>
+        <span className={estilos.porQue}>Por qué</span>
+      </summary>
+      <p className={estilos.detalle}>
       {ejecutaOtroProceso === true ? (
         <>
           Las tareas las ejecuta otro proceso: aquí se ven, pero {donde} no avanza — ábrelo
@@ -59,6 +77,7 @@ export function QuienEjecutaTareas({
           una que crees desde aquí puede quedarse en «Nuevo» sin que nadie la coja.
         </>
       )}
-    </p>
+      </p>
+    </details>
   );
 }

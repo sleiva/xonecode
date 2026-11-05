@@ -435,9 +435,12 @@ export function PanelDelProyecto({
           <>
             {/* Primero las tareas en BACKGROUND del proyecto —las que el agente hace solo, que
                 son del proyecto y no de una sesión— y debajo las del gestor (Jira/Notion). */}
+          {/* Rejilla 2fr/1fr (lienzo, «Tareas del proyecto, vacía») SOLO cuando el gestor es la
+              tarjeta corta de «sin vincular» (`:has` en la hoja): con vínculo, sus pendientes
+              necesitan el ancho y van debajo. El título lo pone la lista: aquí se leía dos veces. */}
+          <div className={estilos.rejillaDeTareas}>
             {tareasEnFondo === undefined ? null : (
-              <section className={estilos.seccion} aria-label="Tareas en background">
-                <h2 className={estilos.titulo}>Tareas en background</h2>
+              <section className={estilos.seccionDeTareas} aria-label="Tareas en background">
                 {tareasEnFondo}
               </section>
             )}
@@ -456,6 +459,7 @@ export function PanelDelProyecto({
             alIrAConectores={() => setPestana("conectores")}
             alAbrirAjustes={alAbrirAjustesDeConectores}
           />
+          </div>
           </>
         ) : pestana === "aprendido" && hayPestanaDeAprendido ? (
           <LoAprendido proyecto={copia!.proyecto.id} nombre={copia!.proyecto.nombre} conectado={conectado} alPedir={alAprendido!} />
@@ -860,12 +864,14 @@ function TareasDelGestor({
   // pendientes» sobre un proyecto sin gestor afirmaría que se preguntó a alguien.
   if (vinculo === undefined) {
     return (
-      <div className={estilos.seccion}>
+      <section className={estilos.gestorSinVincular} aria-label="Gestor de tareas">
+        <h3 className={estilos.tituloDeGestor}>Gestor de tareas</h3>
         <p className={estilos.aviso}>Este proyecto no tiene gestor de tareas.</p>
-        <button type="button" className={estilos.accion} onClick={alIrAConectores}>
+        <p className={estilos.aviso}>Con Jira o Notion, las tareas salen de sus incidencias y se marcan al empezar.</p>
+        <button type="button" className={estilos.enlace} onClick={alIrAConectores}>
           Vincular en Conectores
         </button>
-      </div>
+      </section>
     );
   }
 

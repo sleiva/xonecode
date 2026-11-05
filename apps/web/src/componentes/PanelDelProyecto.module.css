@@ -735,3 +735,68 @@
 .cuerpoDeServicio .casilla {
   white-space: nowrap;
 }
+
+/* La pestaña Tareas (lienzo, «Tareas del proyecto, vacía»). Apiladas por omisión; en dos
+   columnas solo cuando el gestor es la tarjeta corta de «sin vincular», que cabe en un tercio.
+   Con vínculo, sus pendientes llevan buscador y fichas y necesitan el ancho entero. */
+.rejillaDeTareas {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-24);
+}
+
+/* Dos columnas que se apilan solas cuando no caben (sin consulta de contenedor: el panel no
+   declara ninguno), 2:1 como en el lienzo. */
+.rejillaDeTareas:has(> .gestorSinVincular) {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.rejillaDeTareas:has(> .gestorSinVincular) > .seccionDeTareas {
+  flex: 2 1 420px;
+}
+
+.rejillaDeTareas:has(> .gestorSinVincular) > .gestorSinVincular {
+  flex: 1 1 220px;
+}
+
+.seccionDeTareas {
+  min-width: 0;
+}
+
+.gestorSinVincular {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--espacio-8);
+  padding: var(--espacio-16);
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: var(--radio-tarjeta);
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.tituloDeGestor {
+  margin: 0;
+  font-size: var(--tipo-cuerpo);
+  font-weight: var(--peso-fuerte);
+}
+
+/* Un enlace y no un botón a todo el ancho: lleva a otra pestaña, no hace nada aquí. */
+.enlace {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--xonecode-cian);
+  font-size: var(--tipo-control);
+  font-weight: var(--peso-medio);
+  cursor: pointer;
+}
+
+.enlace::after {
+  content: " →";
+}
+
+.enlace:hover {
+  text-decoration: underline;
+}

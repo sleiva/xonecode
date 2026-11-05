@@ -232,14 +232,14 @@ describe("TareasDelProyecto", () => {
     it("sin `tareas` (ausente), dice que está consultando y NO afirma que no hay ninguna", () => {
       render(<TareasDelProyecto />);
       expect(screen.getByText(/consultando/i)).toBeTruthy();
-      expect(screen.queryByText(/todavía no tiene ninguna/i)).toBeNull();
+      expect(screen.queryByText(/todavía no hay tareas/i)).toBeNull();
     });
 
     it("con `tareas={[]}` (vacío, ya medido), el estado vacío DICE cómo se crea una: no es un hueco", () => {
       render(<TareasDelProyecto tareas={[]} alNuevaTarea={vi.fn()} />);
       // Mutación obligatoria: quitar este texto tiene que tumbar el test. Un párrafo vacío,
       // o un `<div />` sin nada, no es un estado vacío que dice cómo se empieza.
-      expect(screen.getByText(/todavía no tiene ninguna/i)).toBeTruthy();
+      expect(screen.getByText(/todavía no hay tareas/i)).toBeTruthy();
       expect(screen.getByRole("button", { name: /nueva tarea/i })).toBeTruthy();
       expect(screen.queryByText(/consultando/i)).toBeNull();
     });

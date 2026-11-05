@@ -31,10 +31,57 @@
   padding-bottom: var(--espacio-12);
 }
 
-.rotulo {
+.cabecera {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-4);
+  min-width: 0;
+}
+
+.tituloDePestana {
+  margin: 0;
   color: var(--dsw-alias-label-primary);
-  font-size: var(--tipo-control);
+  font-size: var(--tipo-titulo);
   font-weight: var(--peso-fuerte);
+}
+
+.subtitulo {
+  margin: 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: var(--tipo-pequeno);
+}
+
+/* «Nueva tarea» es LA acción de la pestaña: primaria. «Mirar ahora», al lado, secundaria. */
+.crear {
+  composes: primario from "./Boton.module.css";
+}
+
+/* El estado vacío (lienzo, «Tareas del proyecto, vacía»): caja de trazo discontinuo, centrada,
+   con su propio botón para empezar. */
+.vacia {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--espacio-12);
+  padding: var(--espacio-32) var(--espacio-24);
+  border: 1px dashed var(--dsw-alias-border-l2);
+  border-radius: var(--radio-tarjeta);
+  text-align: center;
+}
+
+.iconoVacia {
+  color: var(--xonecode-cian);
+}
+
+.tituloVacia {
+  margin: 0;
+  font-size: var(--tipo-titulo);
+}
+
+.textoVacia {
+  margin: 0;
+  max-width: 440px;
+  color: var(--dsw-alias-label-secondary);
 }
 
 /* Mismo trazo que `.recargar` de `Revision.module.css`: es el mismo tipo de botón

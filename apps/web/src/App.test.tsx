@@ -2980,7 +2980,7 @@ describe("App: el panel del proyecto (IXCODE-11)", () => {
         })
       );
       // Llegó la cola, pero ninguna es de p1: el estado vacío, no «consultando».
-      expect(screen.getByText(/todavía no tiene ninguna/i)).toBeTruthy();
+      expect(screen.getByText(/todavía no hay tareas/i)).toBeTruthy();
 
       act(() =>
         store.aplicar({
@@ -3128,7 +3128,7 @@ describe("App: el panel del proyecto (IXCODE-11)", () => {
       expect(screen.getByText("Arregla el login")).toBeTruthy();
       act(() => store.aplicar({ clase: "tareas", concurrencia: 2, corriendoAqui: true, lista: [] }));
       expect(screen.getByRole("region", { name: "Tareas en background" })).toBeTruthy();
-      expect(screen.getByText(/todavía no tiene ninguna/i)).toBeTruthy();
+      expect(screen.getByText(/todavía no hay tareas/i)).toBeTruthy();
     });
 
     /**

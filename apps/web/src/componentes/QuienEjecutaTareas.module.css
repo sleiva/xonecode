@@ -1,15 +1,52 @@
-/* Alias comprobados contra `apps/web/estilos/design-platform.css`: state-warn-primary,
-   state-warn-label, bg-layer-1 — los mismos que usaban las dos copias de este aviso antes de
-   que fuera una pieza. Ningún color literal. */
+/* Alias comprobados contra `apps/web/estilos/design-platform.css`. El fondo es el ámbar
+   TERCIARIO (amber-100 en claro, amber-900 en oscuro) y el texto el del tema: el texto en
+   `warn-label` sobre blanco se leía mal (medido en Maset, pestaña Tareas). El ámbar se queda
+   en el icono. Ningún color literal. */
 
 .aviso {
-  margin: 0 0 12px;
-  padding: var(--espacio-8) var(--espacio-10);
-  border: 0.5px solid var(--dsw-alias-state-warn-primary);
-  border-radius: var(--radio-tarjeta);
-  background: var(--dsw-alias-bg-layer-1);
-  color: var(--dsw-alias-state-warn-label);
+  margin: 0 0 var(--espacio-12);
+  padding: var(--espacio-8) var(--espacio-12);
+  border-radius: var(--radio-control);
+  background: var(--dsw-alias-state-warn-tertiary);
+  color: var(--dsw-alias-label-primary);
   font-size: var(--tipo-pequeno);
   line-height: 1.5;
+}
+
+.resumen {
+  display: flex;
+  align-items: center;
+  gap: var(--espacio-10);
+  cursor: pointer;
+  list-style: none;
+}
+
+.resumen::-webkit-details-marker {
+  display: none;
+}
+
+.icono {
+  flex: none;
+  color: var(--dsw-alias-state-warn-label);
+}
+
+.linea {
+  flex: 1;
+  min-width: 0;
+}
+
+.porQue {
+  flex: none;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.aviso[open] .porQue {
+  text-decoration: none;
+}
+
+.detalle {
+  margin: var(--espacio-8) 0 0 var(--espacio-24);
+  color: var(--dsw-alias-label-secondary);
   max-width: 70ch;
 }
