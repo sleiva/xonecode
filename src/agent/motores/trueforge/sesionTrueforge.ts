@@ -400,6 +400,13 @@ export const TRABAJO_SIN_PERSONA = [
   "- Resuelve tú las dudas: elige la opción más razonable con lo que dicen el encargo, el plan y el proyecto, y sigue.",
   "  Pregunta solo si sin la respuesta no puedes hacer nada útil; si preguntas, marca tu opción recomendada con",
   "  `(Recommended)`: se contestará sola con ella.",
+  // Medido en la calculadora (05-11-2026, a1d717e8): el analista dejó «teclas ± % ( ) √ x² π pintadas y sin lógica», y el
+  // orquestador las hizo TODAS funcionales, quitó tres chips de la maqueta y le mandó fundir pantalla y lógica en una tarea:
+  // otra vuelta al analista y una T1 que ya no era la del encargo.
+  "- Las decisiones PENDIENTES de un plan se cierran con lo que PROPONE o ASUME quien lo escribió; si no propone nada, con",
+  "  la opción de MENOR alcance que cumpla el encargo. No añadas funciones que el encargo no pide, no quites piezas de la",
+  "  maqueta y no cambies cómo se reparten las tareas. Van en el encargo de la tarea a quien desarrolla: no devuelvas el",
+  "  plan al analista para reescribirlo.",
   "- Tu RESPUESTA FINAL es el resumen de la tarea, en tres apartados: lo que cambiaste (cada fichero y para qué), las",
   "  DECISIONES que tomaste tú sin preguntar (cada duda, lo que elegiste y por qué) y lo que QUEDA.",
   // Medido en Maset (login): «lo pendiente» mezclaba en una lista un fallo posible (la contraseña no se guardaba), un

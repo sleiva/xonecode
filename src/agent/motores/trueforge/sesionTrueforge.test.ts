@@ -4708,6 +4708,13 @@ describe("en una tarea: el plan asignado y la captura del desarrollador", () => 
     expect(t).toContain("`shot name=<control>`");
     expect(TRABAJO_SIN_PERSONA).toContain("NO delegues capturas ni pruebas en");
   });
+
+  // Medido en la calculadora (a1d717e8): las pendientes del plan, decididas a lo grande y con el plan rehecho.
+  it("en una tarea, las pendientes del plan se cierran con lo que propone el analista y sin ampliar el encargo", () => {
+    expect(TRABAJO_SIN_PERSONA).toContain("con lo que PROPONE o ASUME quien lo escribió");
+    expect(TRABAJO_SIN_PERSONA).toContain("No añadas funciones que el encargo no pide, no quites piezas de la");
+    expect(TRABAJO_SIN_PERSONA).toContain("no devuelvas el\n  plan al analista para reescribirlo");
+  });
 });
 
 describe("instalar el framework desde una tarea del agente (`instalar_framework`)", () => {

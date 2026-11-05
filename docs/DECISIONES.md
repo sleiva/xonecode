@@ -10643,3 +10643,17 @@ Resultado: 24.589 caracteres de sistema (−15.427, ~4.300 tokens por llamada). 
 (~7.500 caracteres que solo sirven en una tarea compleja). Para poner la cifra en su sitio: el 93 % de la entrada del
 orquestador en la pasada salió de caché, y su contexto medio era de ~50.000 tokens por llamada, la mayor parte lo que leyó
 y los informes de sus hijos.
+
+## En una tarea, las pendientes del plan se cierran sin ampliar el encargo (05-11-2026)
+
+Primera pasada tras recortar el orquestador (a1d717e8, parada a los 9,5 min). El analista dejó seis decisiones pendientes,
+cada una con su propuesta («teclas `± % ( ) √ x² π` pintadas y sin lógica: el encargo solo pide seis acciones»). El
+orquestador, con «elige tú la opción recomendada» en el encargo, decidió otra cosa: las hizo TODAS funcionales (añadió
+`1/x` y `ANS`), quitó `DEG`, `COPY` y `Tape` de la maqueta («no se dejan controles muertos», regla que no está en ningún
+prompt) y le devolvió el plan al analista para fundir pantalla y lógica en una tarea, contra `FIDELIDAD_DEL_PLAN`. Dos
+minutos más de analista, dos pendientes nuevas y una T1 que ya no era la del encargo. La pasada anterior traía pendientes
+asumidas y fue directa al desarrollador: no se puede atribuir al recorte ni descartar.
+
+`TRABAJO_SIN_PERSONA` ahora lo dice: lo que propone o asume quien escribió el plan; si no propone, el menor alcance que cumpla
+el encargo; sin funciones de más, sin quitar piezas de la maqueta, sin cambiar el reparto; en el encargo de la tarea, sin
+devolverle el plan al analista.

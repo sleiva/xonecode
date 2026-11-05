@@ -136,7 +136,9 @@ Ante una discrepancia con el código, **el código manda**.
 - **La receta del aparato está en el `--help` de `xone-hotswap`** (la app ya queda lanzada tras reiniciar/recargar,
   `screen` → `abrir` → `shot name=`), y **un `result:false` del servidor sale con 1**: medido, cuatro sintaxis de
   `launchApplication` a ciegas porque todas salían con 0. En una tarea el orquestador no delega pruebas en el
-  device-controller ni pide comprobar la rama (`TRABAJO_SIN_PERSONA`).
+  device-controller ni pide comprobar la rama (`TRABAJO_SIN_PERSONA`). Y las decisiones PENDIENTES del plan las cierra con lo
+  que propone el analista o, si no propone, con el menor alcance: sin funciones de más, sin quitar piezas de la maqueta, sin
+  rehacer el reparto de tareas ni devolverle el plan.
 - **Quien corre sus scripts PRUEBA ÉL** (`textoDelBucle#pruebaElMismo`, cuando lleva `ejecutar_script`): recarga,
   toca, lee el log y captura sin un hijo, y todo eso en UNA orden, `xone-probar` (`skills/xone-hotswap/lib/probar.mjs`:
   compone los scripts hermanos; el harness la reconoce como captura con `--captura` y como vuelta con `--recargar`,
