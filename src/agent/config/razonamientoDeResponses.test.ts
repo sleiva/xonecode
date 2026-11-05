@@ -48,6 +48,13 @@ describe("el razonamiento por la API Responses", () => {
     const yaVa = cuerpoConRazonamiento({ input: [{ type: "reasoning", id: "r1", summary: [{ type: "summary_text", text: "ya" }] }, cuerpo.input[1]] }, memoria, "deepseek") as { input: { type?: string; content?: unknown }[] };
     expect(yaVa.input.map((i) => i.type)).toEqual(["reasoning", "function_call"]);
     expect(yaVa.input[0]!.content).toEqual([{ type: "reasoning_text", text: "ya" }]);
+    // Con TEXTO del asistente antes de la llamada, delante del texto: detrás, DeepSeek da 400 (medido en la consola).
+    const conTexto = cuerpoConRazonamiento(
+      { input: [{ role: "user", content: "suma" }, { type: "message", role: "assistant", content: [{ type: "output_text", text: "Voy a sumar." }] }, cuerpo.input[1], { type: "function_call_output", call_id: "c1", output: "5" }, { role: "assistant", content: "Da 5." }] },
+      memoria,
+      "deepseek"
+    ) as { input: { type?: string; role?: string }[] };
+    expect(conTexto.input.map((i) => i.type ?? i.role)).toEqual(["user", "reasoning", "message", "function_call", "function_call_output", "assistant"]);
     // Sin nada guardado para ese `call_id`, nada; y lo que no es un cuerpo de Responses, tal cual.
     expect((cuerpoConRazonamiento({ input: [{ type: "function_call", call_id: "zz" }] }, memoria, "deepseek") as { input: unknown[] }).input).toHaveLength(1);
     expect(cuerpoConRazonamiento({ messages: [] }, memoria, "deepseek")).toEqual({ messages: [] });

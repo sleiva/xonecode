@@ -10584,3 +10584,11 @@ Se implementa detrás de `apiDeModelos: "responses"` en el `config.json`, sin va
 pensado por `call_id` y lo REPONE delante de esa llamada —TrueForge reconstruye los mensajes en cada vuelta y no llevaba
 el item `reasoning`—, y que en DeepSeek renombra `reasoning_text` a `reasoning_summary_text`. Por omisión sigue Chat: la
 comparación con la calculadora está por hacer.
+
+Primera pasada de la calculadora por Responses (tarea fda974bb), parada a los 16 min: el diseñador, el analista (cuatro
+veces) y el desarrollador volvieron con `400 The 'reasoning_text' in the thinking mode must be passed back to the API`, y el
+orquestador repetía los encargos. Medido contra la API después: DeepSeek acepta una vuelta SIN razonamiento, y acepta
+`reasoning → message → function_call`, pero da ese 400 con `message → reasoning → function_call`, y era lo que hacía la
+costura cuando el agente escribía un texto antes de llamar a una tool. Ahora el razonamiento va al principio de la vuelta
+del asistente, delante de su texto, uno por vuelta. Un `read ECONNRESET` del analista en la misma pasada queda sin
+explicar (una vez, sin repetir).

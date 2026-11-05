@@ -49,6 +49,10 @@ const textoDeContent = (content: unknown): string =>
     ? content.map((c) => ((c as { type?: unknown }).type === "reasoning_text" && typeof (c as { text?: unknown }).text === "string" ? (c as { text: string }).text : "")).join("")
     : "";
 
+/** ¿Es de la vuelta del asistente? Su texto (`message` de rol `assistant`, o el `{role: "assistant"}` corto), sus llamadas y su razonamiento. */
+const esDelAsistente = (x: Item): boolean =>
+  x.type === "function_call" || x.type === "reasoning" || ((x.type === "message" || x.type === undefined) && x.role === "assistant");
+
 /** Un item `reasoning` con `texto`, en el formato que espera cada proveedor. */
 export function itemDeRazonamiento(texto: string, formato: FormatoDeRazonamiento): Item {
   return formato === "deepseek"
@@ -72,11 +76,17 @@ export function cuerpoConRazonamiento(cuerpo: unknown, memoria: MemoriaDeRazonam
       continue;
     }
     if (item?.type === "function_call" && typeof item.call_id === "string") {
-      const anterior = salida.at(-1);
-      // Dentro de una misma vuelta (varias llamadas seguidas) va UNO, delante de la primera.
-      const yaVa = anterior?.type === "reasoning" || anterior?.type === "function_call";
+      /**
+       * Va al PRINCIPIO de la vuelta del asistente: delante de su texto, si lo dijo antes de llamar. Medido contra
+       * DeepSeek (05-11-2026): `message → reasoning → function_call` da 400 «The `reasoning_text` in the thinking mode
+       * must be passed back», y `reasoning → message → function_call`, 200; sin razonamiento, también 200. En la consola
+       * cayeron así el diseñador, el analista (cuatro veces) y el desarrollador. UNO por vuelta.
+       */
+      let inicio = salida.length;
+      while (inicio > 0 && esDelAsistente(salida[inicio - 1]!)) inicio--;
+      const yaVa = salida.slice(inicio).some((x) => x.type === "reasoning");
       const texto = memoria.de(item.call_id);
-      if (!yaVa && texto !== undefined) salida.push(itemDeRazonamiento(texto, formato));
+      if (!yaVa && texto !== undefined) salida.splice(inicio, 0, itemDeRazonamiento(texto, formato));
     }
     salida.push(item);
   }
