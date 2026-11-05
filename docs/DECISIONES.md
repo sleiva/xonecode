@@ -10561,3 +10561,6 @@ Dos huecos de los dos cambios de arriba, señalados en una revisión y COMPROBAD
   MISMA tarea de la pantalla la deja juzgar otra vez.
 - **Las capturas desplazaban a los casos**: con un tope común de doce, diez casos y ocho capturas dejaban 5 casos al
   auditor. Ahora van por separado: los casos primero y las capturas con su propio tope.
+- **Lo mismo en el crítico del orquestador** (`unaCriticaPorTarea`): gastaba la crítica de la tarea ANTES del resultado, y
+  tras una que no abría la captura la segunda contestaba «ya pasó su crítica visual». Ahora solo la gasta un veredicto; el
+  inicio del veredicto es una constante de `criticaVisual.ts` (`INICIO_DE_UN_VEREDICTO`), la que leen los dos controles.

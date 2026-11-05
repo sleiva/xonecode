@@ -91,6 +91,9 @@ const Entrada = z.object({
 });
 type Entrada = z.infer<typeof Entrada>;
 
+
+/** Cómo empieza lo que devuelve el crítico cuando HA JUZGADO: lo demás es un fallo o una negativa (`unaCriticaPorTarea`, `pantallaJuzgada`). */
+export const INICIO_DE_UN_VEREDICTO = "Veredicto visual de «";
 export interface DependenciasDeCritica {
   /** Los bytes de un artefacto, por su NOMBRE. Quien la monta sabe dónde está la carpeta. */
   leerArtefacto: (nombre: string) => Promise<Buffer>;
@@ -577,7 +580,7 @@ export function crearCriticaVisual(deps: DependenciasDeCritica) {
       const medidoEnRojo = geometria?.bloqueante === true || (comparacion !== undefined && comparacion.recortes.length > 0);
       const final = medidoEnRojo ? "rojo" : veredicto.veredicto;
       const lineas = [
-        `Veredicto visual de «${entrada.pantalla}»${comparado}: ${final}${medidoEnRojo && veredicto.veredicto !== "rojo" ? " (lo decide lo medido)" : ""}.`,
+        `${INICIO_DE_UN_VEREDICTO}${entrada.pantalla}»${comparado}: ${final}${medidoEnRojo && veredicto.veredicto !== "rojo" ? " (lo decide lo medido)" : ""}.`,
       ];
       if (geometria !== undefined) lineas.push("", ...geometria.lineas, "");
       if (comparacion !== undefined) {

@@ -1,4 +1,5 @@
 import { tool, type StructuredToolInterface } from "@langchain/core/tools";
+import { INICIO_DE_UN_VEREDICTO } from "../../grafo/criticaVisual.js";
 
 /**
  * **Una pantalla se juzga en SU tarea del plan.** Medido en la consola con la calculadora (05-11-2026, DeepSeek flash, tarea
@@ -74,9 +75,6 @@ export function textoDeMedidaInformativa(opciones: { captura: string; maqueta: s
     `Esa pantalla ya se juzgó en ${comoTarea(opciones.tarea)}: no retoques su aspecto si tu tarea no lo pide.`
   );
 }
-
-/** Cómo empieza lo que devuelve el crítico cuando HA JUZGADO (`criticaVisual.ts`): lo demás es un fallo o una negativa. */
-export const INICIO_DE_UN_VEREDICTO = "Veredicto visual de «";
 
 /**
  * El crítico que no vuelve a juzgar una maqueta ya juzgada en OTRA tarea (`PantallasJuzgadas`), y que apunta la crítica
