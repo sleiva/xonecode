@@ -148,6 +148,31 @@ export function usuarioDeGranja(cuerpo: unknown): { usuario: string; rol: "admin
   return { usuario: user, rol: role === "admin" ? "admin" : "normal" };
 }
 
+const ESCUCHA_SOLO_EN_SU_PC = 'La granja escucha solo en su propio PC salvo que su farm.config.json diga "host": "0.0.0.0" y "https": true.';
+const FIREWALL = "El firewall de ese PC (el de Windows) tiene que dejar pasar el 8090.";
+
+/**
+ * Qué mirar según el código de Node: cada uno apunta a un sitio distinto. Medido el 05-11-2026: un `EHOSTUNREACH` (este
+ * equipo no tiene camino hasta esa IP: otra red, sin VPN, el PC apagado) salía con el consejo de `farm.config.json`, que
+ * es el de un `ECONNREFUSED` (el PC contesta y nadie escucha en el 8090 hacia fuera).
+ */
+function causaDeNoResponde(codigo: string | undefined): string {
+  switch (codigo) {
+    case "EHOSTUNREACH":
+    case "ENETUNREACH":
+      return "Este equipo no llega a esa dirección: comprueba que estás en la red de la granja (o en su VPN), que su PC está encendido y que la IP no ha cambiado.";
+    case "ECONNREFUSED":
+      return `Su PC contesta, pero nadie escucha en ese puerto hacia fuera: ¿está arrancada la granja? ${ESCUCHA_SOLO_EN_SU_PC}`;
+    case "ETIMEDOUT":
+      return `No contestó a tiempo: lo habitual es un firewall que descarta la conexión. ${FIREWALL}`;
+    case "ENOTFOUND":
+    case "EAI_AGAIN":
+      return "No se encuentra ese nombre de equipo: revisa la dirección o usa su IP.";
+    default:
+      return `${ESCUCHA_SOLO_EN_SU_PC} ${FIREWALL}`;
+  }
+}
+
 /**
  * La frase de una prueba que NO conectó, para quien la pinta. La compone el servidor: el cliente
  * pinta el texto y no repite la regla.
@@ -157,11 +182,7 @@ export function motivoDePruebaDeGranja(prueba: Exclude<PruebaDeGranja, { estado:
     case "sin-configurar":
       return prueba.falta === "direccion" ? "Falta la dirección de la granja." : "Falta el token de acceso.";
     case "no-responde":
-      return (
-        `La granja no responde${prueba.codigo === undefined ? "" : ` (${prueba.codigo})`}. ` +
-        "Escucha solo en su propio PC salvo que su farm.config.json diga \"host\": \"0.0.0.0\" y \"https\": true, " +
-        "y el firewall de Windows deje pasar el 8090."
-      );
+      return `La granja no responde${prueba.codigo === undefined ? "" : ` (${prueba.codigo})`}. ${causaDeNoResponde(prueba.codigo)}`;
     case "token-rechazado":
       return "La granja no acepta el token (401): ha caducado, se ha revocado o su usuario ya no existe. Crea otro en la web de la granja y reemplázalo.";
     case "debe-cambiar-contrasena":

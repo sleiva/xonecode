@@ -109,6 +109,21 @@ describe("motivoDePruebaDeGranja", () => {
   it("dice el código de Node sin la dirección", () => {
     expect(motivoDePruebaDeGranja({ estado: "no-responde", codigo: "ECONNREFUSED" })).toContain("(ECONNREFUSED)");
   });
+  it("el consejo sigue al código: sin ruta es la red, rechazada es su configuración, sin contestar es el firewall", () => {
+    const motivo = (codigo?: string) => motivoDePruebaDeGranja({ estado: "no-responde", ...(codigo === undefined ? {} : { codigo }) });
+    // Medido el 05-11-2026: un EHOSTUNREACH salía con el consejo de farm.config.json, que es el de un ECONNREFUSED.
+    for (const c of ["EHOSTUNREACH", "ENETUNREACH"]) {
+      expect(motivo(c)).toContain("no llega a esa dirección");
+      expect(motivo(c)).not.toContain("farm.config.json");
+    }
+    expect(motivo("ECONNREFUSED")).toContain("farm.config.json");
+    expect(motivo("ECONNREFUSED")).not.toContain("firewall");
+    expect(motivo("ETIMEDOUT")).toContain("firewall");
+    expect(motivo("ENOTFOUND")).toContain("nombre");
+    // Un código que no se reconoce, o ninguno: las causas posibles, sin elegir una.
+    expect(motivo("EPROTO")).toContain("farm.config.json");
+    expect(motivo()).toContain("firewall");
+  });
   it("cada estado tiene su frase", () => {
     expect(motivoDePruebaDeGranja({ estado: "token-rechazado" })).toContain("401");
     expect(motivoDePruebaDeGranja({ estado: "sin-configurar", falta: "token" })).toContain("token");
