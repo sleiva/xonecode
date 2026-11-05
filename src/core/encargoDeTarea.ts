@@ -118,7 +118,10 @@ export function decidirEncargo(
       motivo: `${nombre} NO HA ARRANCADO: el encargo es trabajo del plan /planes/${plan}/ y no dice qué tarea. ${forma} Pendientes: ${pendientes}. ${siguiente}`,
     };
   }
-  const pedidas = [...new Set([...linea[1]!.matchAll(/\d+/g)].map((m) => clave(m[0])))];
+  // Solo los números del PRINCIPIO de la línea («1», «1, 2», «T1 y T2»): medido en la calculadora (05-11-2026), «TAREA: 1 —
+  // segunda vuelta… no empieces las tareas 02/03» y «TAREA: 02 — … la 01 ya está» no arrancaban por nombrar otras detrás.
+  const cabeza = /^\s*T?\d+(?:\s*(?:,|\by\b|\be\b|&|\+|\/)\s*T?\d+)*/i.exec(linea[1]!)?.[0] ?? linea[1]!;
+  const pedidas = [...new Set([...cabeza.matchAll(/\d+/g)].map((m) => clave(m[0])))];
   const nombradas = pedidas.map((c) => tareas.find((t) => clave(t.numero) === c)).filter((t): t is TareaDelPlan => t !== undefined);
   if (nombradas.length === 0) {
     return {

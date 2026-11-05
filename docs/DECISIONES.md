@@ -10657,3 +10657,23 @@ asumidas y fue directa al desarrollador: no se puede atribuir al recorte ni desc
 `TRABAJO_SIN_PERSONA` ahora lo dice: lo que propone o asume quien escribió el plan; si no propone, el menor alcance que cumpla
 el encargo; sin funciones de más, sin quitar piezas de la maqueta, sin cambiar el reparto; en el encargo de la tarea, sin
 devolverle el plan al analista.
+
+## La primera pasada entera, y una crítica por tarea antes de devolver (05-11-2026)
+
+Calculadora 0689dc23, con el orquestador recortado y la regla de las pendientes: **terminada en 45 min, las tres tareas
+«hecha» y las 23 casillas** con la auditoría de cierre (la anterior y la de Codex se pararon en la T2). Plan a los 4,1 min
+(6,5 antes, Codex 8,8); T2 en 3,2 min (~9,7 antes, Codex ~4,4) y T3 en 4,8, todo con recargas en caliente de ~3 s;
+`view_image` le llega al modelo (describe posiciones y colores que solo se ven en la imagen); 4 SVG recargados en caliente
+cambiaron 13.333 píxeles del teclado y ninguno fuera.
+
+Lo que costó: la T1, 17,1 min y **una vuelta visual entera de 10,4**. Sin crítico en su bucle, el desarrollador devolvió
+los operadores en verde azulado (la maqueta, gris); el crítico del orquestador dio rojo y la vuelta rehízo 14 SVG. Y el
+encargo traía tres órdenes que lo frenaban: «distancia por debajo del 10 %» (la persiguió; apuntó él que la desvían los
+datos de ejemplo y la barra del sistema), «el crítico en VERDE» (no lo tenía) y «despliega entero» (sacado de un aprendido
+que solo es cierto sin reabrir la vista: con `--recargar <hoja>.css --abrir`, el CSS se aplica, medido en el aparato).
+
+Elegido (opción b): el desarrollador que prueba él mismo pasa el crítico UNA vez antes de devolver, con el MISMO cupo que
+el del orquestador (`tareasCriticadas`), y arregla lo rojo con una recarga; la cifra le llega como dato (`comoDato`), su
+criterio y el del encargo ya no la ponen de tope, y recargar incluye el CSS. Descartada la (a), como Codex: más rápida,
+pero la pantalla se habría entregado con los operadores mal. Y la línea `TAREA:` cuenta solo los números de su principio:
+dos encargos no arrancaron por nombrar otra tarea detrás.

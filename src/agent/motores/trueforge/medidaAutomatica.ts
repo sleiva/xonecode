@@ -173,13 +173,23 @@ export function textoDeMedidaAutomatica(opciones: {
   pedirCritica: boolean;
   /** Qué ronda visual es esta para quien la recibe (1, 2…). Ausente: no se cuenta. */
   ronda?: number;
+  /**
+   * La cifra como DATO, no como condición de cierre: a quien prueba él mismo y mira su captura con `view_image`. Medido en
+   * la calculadora (05-11-2026, 0689dc23): con «NO cumple… no lo devuelvas así» persiguió la distancia varios minutos, y
+   * apuntó él que la desviaban los datos de ejemplo de la maqueta y la barra del sistema, que no son diseño.
+   */
+  comoDato?: boolean;
 }): string {
   const { comparacion: c } = opciones;
   const cumple = cumpleElCriterio(c);
   return [
     `[harness] Medida AUTOMÁTICA de la última captura que dejó ${opciones.quien} (/artefactos/${opciones.captura}) contra la maqueta ${opciones.maqueta}:`,
     ...informeDeComparacion(c),
-    cumple
+    opciones.comoDato === true && !cumple
+      ? `No llega al ${pct(CRITERIO_DE_DISTANCIA)} / ${pct(TOLERANCIA_DE_ENCAJE)} de encaje, y esa cifra es un DATO, no la condición para devolver: la desvían los datos de ` +
+        "ejemplo que pinta la maqueta y lo que no es diseño (la barra del sistema). Usa las diferencias CONCRETAS de arriba para saber dónde mirar; " +
+        "lo que decide es lo que ves con `view_image` junto a la maqueta y lo que señale el crítico."
+      : cumple
       ? `La estructura CUMPLE el criterio (< ${pct(CRITERIO_DE_DISTANCIA)} en vertical y en horizontal, y cada borde a ${pct(TOLERANCIA_DE_ENCAJE)} o menos del de la maqueta). Queda lo que esto no mide: el crítico.`
       : `NO cumple el criterio (< ${pct(CRITERIO_DE_DISTANCIA)} en vertical y en horizontal, y que ENCAJE en la pantalla: cada borde del contenido a ${pct(TOLERANCIA_DE_ENCAJE)} o menos del de la maqueta). No lo des por terminado ni lo devuelvas así: ` +
         "corrige tú, o encarga al diseñador las diferencias CONCRETAS de arriba (qué franja, qué falta o sobra), y vuelve a comprobar.",

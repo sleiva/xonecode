@@ -62,6 +62,10 @@ describe("la medida automática tras probar en el aparato", () => {
     const bien = textoDeMedidaAutomatica({ quien: "device-controller", captura: "i.png", maqueta: "/diseno/screen.png", comparacion: igual, pedirCritica: false });
     expect(bien).toContain("CUMPLE el criterio");
     expect(bien).not.toContain("xone_critica_visual: pásala");
+    // A quien prueba él mismo, la cifra como DATO: sin «no lo devuelvas así» (medido, la perseguía; 05-11-2026).
+    const dato = textoDeMedidaAutomatica({ quien: "developer-xone", captura: "c.png", maqueta: "/diseno/screen.png", comparacion: corta, pedirCritica: false, comoDato: true });
+    expect(dato).toContain("esa cifra es un DATO, no la condición para devolver");
+    expect(dato).not.toContain("No lo des por terminado ni lo devuelvas así");
   });
 
   it("el ENCAJE es condición: un contenido que no llega al borde de la maqueta NO cumple aunque las distancias sí", () => {

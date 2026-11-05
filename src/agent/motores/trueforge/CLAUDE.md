@@ -88,8 +88,8 @@ Ante una discrepancia con el código, **el código manda**.
 ## El bucle del desarrollador
 
 - **Encendido por omisión** (`XONECODE_BUCLE_DEL_DEVELOPER=0` lo apaga): quien declara `llama` en su `.md` recibe
-  `create_sub_agent` y SOLO esos especialistas (con artefactos, también `comparar_capturas`, y `xone_critica_visual` salvo a
-  quien prueba él mismo: ese se mira la captura con `view_image`, como Codex); un
+  `create_sub_agent` y SOLO esos especialistas (con artefactos, también `comparar_capturas` y `xone_critica_visual`; quien
+  prueba él mismo se mira la captura con `view_image` entre retoques, como Codex, y pasa el crítico UNA vez antes de devolver); un
   nombre fuera cae al ayudante genérico de solo lectura. El juez final revisa igual.
 - **El desarrollador CONTINUO, como Codex** (siempre encendido; `opciones.developerContinuo: false` lo apaga en
   los tests): el orquestador le manda UNA tarea por encargo, revisa su informe y le manda la siguiente al
@@ -144,9 +144,11 @@ Ante una discrepancia con el código, **el código manda**.
   compone los scripts hermanos; el harness la reconoce como captura con `--captura` y como vuelta con `--recargar`,
   `COMANDO_DE_CAPTURA`/`ORDEN_QUE_RECARGA`, y la ficha saca de su salida casos Y captura). **Y no tiene los scripts que
   `xone-probar` ya hace** (`core/comandoExterno.ts#SUSTITUIDOS_POR_PROBAR`, `scriptsDeTrueforge`): con ellos en la lista y
-  en el prompt no lo usaba; pedir uno devuelve la orden de `xone-probar` (`motivoDeScriptSustituido`); `comparar_capturas` y `view_image` entre retoques, sin crítico en su bucle
-  (el del orquestador, uno por tarea, y el del cierre siguen). `xone-probar --recargar` lleva también los ICONOS (los sube
-  y relanza la app): desplegar entero solo la primera vez o con fuentes nuevas. Cada `xone-recargar/desplegar-android` cuenta una vuelta. Sus scripts, sin `xone-a-utf8` (`scriptsDeTrueforge`): ese es del hijo de
+  en el prompt no lo usaba; pedir uno devuelve la orden de `xone-probar` (`motivoDeScriptSustituido`); `comparar_capturas` y `view_image` entre retoques, y el
+  crítico UNA vez por tarea antes de devolver, con el MISMO cupo que el del orquestador (`unaCriticaPorTarea`, `tareasCriticadas`;
+  sin plan, uno por encargo): lo rojo lo arregla él con una recarga y la del orquestador no abre otra vuelta. El del cierre sigue.
+  `xone-probar --recargar` lleva también los ICONOS (los sube y relanza la app) y el CSS (con `--abrir`, que reabre la vista, se
+  aplica): desplegar entero solo la primera vez o con fuentes nuevas. Cada `xone-recargar/desplegar-android` cuenta una vuelta. Sus scripts, sin `xone-a-utf8` (`scriptsDeTrueforge`): ese es del hijo de
   Claude Code, y aquí cada `.xne` se escribe en su codificación.
 - **Avisos por umbral, no «para»** (`textoDelBucle`, `capacidadDeAvisoDeVueltas`, `UMBRALES_DE_VUELTAS`): UN mensaje de
   «cambia de procedimiento». Ciclo de vida de `getControl`: `NUCLEO_XONE` y `errores-comunes.md`.
@@ -161,7 +163,8 @@ Ante una discrepancia con el código, **el código manda**.
 - **Un encargo de un plan es UNA tarea, en su línea `TAREA: <número>`** (`core/encargoDeTarea.ts#decidirEncargo`, en
   `crearHijo`): a quien marca el plan (`recibeMarcarCriterios`) o prueba en el aparato, y del orquestador, si nombra UN plan con tareas.
   Sin la línea, con varias o con una que no existe, NO arranca y se le devuelve el motivo; con una, el encargo lleva delante
-  su ficha. Solo cuenta la LÍNEA, nunca la prosa («T1 ya está; ahora T2» es correcto). Como el `task_name` de Codex.
+  su ficha. Solo cuenta la LÍNEA, nunca la prosa («T1 ya está; ahora T2» es correcto), y de la línea solo los números del
+  PRINCIPIO («`TAREA: 1` — no empieces la 02» es la 1; «`TAREA: 1 y 2`», dos). Como el `task_name` de Codex.
   También en una TAREA DE FONDO: sin ella el continuo no tiene tarea apuntada y hace el plan de golpe; lo que no arranca no
   gasta `TOPE_DE_ENCARGOS_AL_DESARROLLADOR`. **Límite**: dos planes en un encargo no se adivinan.
 - **Una tarea ABIERTA no se deja atrás en silencio** (`INTENTOS_POR_TAREA`, `tareaEncargadaDe`): a quien PRUEBA (`pruebaEnElAparato`: `scripts` o el `ejecucion` de Claude Code),
@@ -191,7 +194,8 @@ Ante una discrepancia con el código, **el código manda**.
 - **La pantalla la MIDE el harness tras cada prueba** (`medidaAutomatica.ts`): última captura contra la maqueta
   (`/diseno/`, `/adjuntos/`), sin modelo, con `CRITERIO_DE_DISTANCIA` y recordatorio del crítico; viaja al orquestador.
   **Y a quien prueba ÉL MISMO** (`scripts: true`), detrás de la salida de cada orden de captura
-  (`shellConMedidaTrasCapturar`, montada en `crearHijo`): sin eso medir quedaba en manos del modelo. **Límite**: el
+  (`shellConMedidaTrasCapturar`, montada en `crearHijo`): sin eso medir quedaba en manos del modelo. A él la cifra le llega
+  como DATO (`comoDato`), sin «no lo devuelvas así»: la perseguía con los datos de ejemplo de la maqueta en contra. **Límite**: el
   montaje en `crearHijo` no lo recorre un test (haría falta un `xone-captura-android` falso en el `PATH`).
   **Incluye el ENCAJE** (`TOLERANCIA_DE_ENCAJE`, `compararCapturas.ts#desajusteDeEncaje`, mediana de franjas a los lados)
   y **quita antes el MARCO lateral de la maqueta** (`sinMarcoLateral`, `ANCHO_MAXIMO_DEL_MARCO`).

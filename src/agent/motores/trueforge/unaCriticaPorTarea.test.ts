@@ -1,7 +1,7 @@
 import { tool } from "@langchain/core/tools";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { unaCriticaPorTarea } from "./unaCriticaPorTarea.js";
+import { textoDeCriticaRepetidaDelDesarrollador, unaCriticaPorTarea } from "./unaCriticaPorTarea.js";
 
 describe("el crítico del orquestador, una vez por tarea", () => {
   it("la primera crítica de una tarea pasa; la segunda, no; otra tarea vuelve a pasar; sin tarea no se limita", async () => {
@@ -18,6 +18,24 @@ describe("el crítico del orquestador, una vez por tarea", () => {
     await limitada.invoke({ captura: "/a.png" });
     await limitada.invoke({ captura: "/a.png" });
     expect(llamadas).toBe(4);
+  });
+
+  // Opción (b), medida en la calculadora (05-11-2026): la pasa el desarrollador antes de devolver y la del orquestador ya
+  // no abre otra vuelta entera.
+  it("el desarrollador y el orquestador comparten el cupo: si la pasó él, el orquestador no la repite, y al revés", async () => {
+    let llamadas = 0;
+    const critica = tool(async () => (llamadas++, "Veredicto visual de «calc»: verde."), { name: "xone_critica_visual", description: "x", schema: z.object({ captura: z.string() }) });
+    const criticadas = new Set<string>();
+    const delDesarrollador = unaCriticaPorTarea(critica as never, () => "calc|1", () => true, { criticadas, repetida: textoDeCriticaRepetidaDelDesarrollador });
+    const delOrquestador = unaCriticaPorTarea(critica as never, () => "calc|1", () => true, { criticadas });
+    expect(String(await delDesarrollador.invoke({ captura: "/a.png" }))).toContain("verde");
+    expect(String(await delOrquestador.invoke({ captura: "/a.png" }))).toContain("dilo como OBSERVACIÓN en tu cierre");
+    const otra = unaCriticaPorTarea(critica as never, () => "calc|2", () => true, { criticadas, repetida: textoDeCriticaRepetidaDelDesarrollador });
+    await delOrquestador.invoke({ captura: "/a.png" });
+    expect(llamadas).toBe(1);
+    await unaCriticaPorTarea(critica as never, () => "calc|2", () => true, { criticadas }).invoke({ captura: "/b.png" });
+    expect(String(await otra.invoke({ captura: "/b.png" }))).toContain("DEVUELVE diciendo qué quedó");
+    expect(llamadas).toBe(2);
   });
 
   it("una crítica que FALLA no gasta la de su tarea: la siguiente corre", async () => {

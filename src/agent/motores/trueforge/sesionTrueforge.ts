@@ -170,7 +170,7 @@ import { geometriaDeCaptura, geometriaDeCapturaYa } from "../../dispositivos/geo
 import { decodificarImagen } from "../../dispositivos/decodificarImagen.js";
 import { crearDescribirImagen } from "../../grafo/describirImagen.js";
 import { crearImagenesVistas, crearVerImagen } from "../../grafo/verImagen.js";
-import { unaCriticaPorTarea } from "./unaCriticaPorTarea.js";
+import { textoDeCriticaRepetidaDelDesarrollador, unaCriticaPorTarea } from "./unaCriticaPorTarea.js";
 import { conColaDelAparato } from "./colaDelAparato.js";
 import { conModoVigenteAlEscribir, conModoVigenteEnPropias } from "./modoVigenteAlEscribir.js";
 import { crearSerieDeEscrituras } from "../../../core/serieDeEscrituras.js";
@@ -296,7 +296,7 @@ export const PLAN_PRIMERO = [
   // la primera tarea en una vuelta. El nuestro, con el mismo plan delante, dejaba esas decisiones al desarrollador.
   "EL ENCARGO DE CADA TAREA: antes de mandarla, mira la última captura de la anterior junto a la maqueta y ábrelo con lo que le",
   "quedó por corregir. Deja TOMADAS las decisiones que el plan no fija —el texto exacto, el color, la proporción de cada zona, qué",
-  "hacer con lo que el proyecto no tiene— para que no las elija él, y di cómo se prueba (desplegar entero solo con FUENTES nuevas: un icono se recarga,",
+  "hacer con lo que el proyecto no tiene— para que no las elija él, y di cómo se prueba (desplegar entero solo con FUENTES nuevas: un icono y el CSS se recargan,",
   "cómo entrar en la app). Si la anterior volvió abierta y la mandas igualmente, el harness le arrastra sus criterios sin marcar.",
   // Medido en Maset (21-10-2026): el analista corre en Claude Code, no tiene Stitch, y escribió un DISENO.md deducido del
   // resumen del design system —«las 16 capturas NO están en el proyecto»—; las tareas lo siguieron como «fuente única».
@@ -690,7 +690,9 @@ export function textoDelBucle(
             "  que mide el harness; `xone-hotswap shot name=<control>` solo para un control suelto). MÍRALA tú con `view_image`, y lo que",
             "  veas mal mídelo en su geometría antes de tocar el CSS. Tras cada captura el harness te pone la MEDIDA contra la maqueta;",
             "  con ella, y mirando la captura Y la maqueta con `view_image`, arregla TODAS las diferencias en la misma ronda antes de otra",
-            `  captura. ${String(RONDAS_VISUALES)} rondas como mucho. \`describe_image\` no mide: no lo uses para pulir. Un icono nuevo se recarga con \`--recargar icons/…\`.`,
+            `  captura. ${String(RONDAS_VISUALES)} rondas como mucho. \`describe_image\` no mide: no lo uses para pulir. Un icono nuevo se recarga con \`--recargar icons/…\`,`,
+            // Medido en la calculadora (05-11-2026): con `--abrir`, que vuelve a abrir la vista, el CSS recargado se aplica.
+            "  y el CSS también (`--recargar <hoja>.css --abrir <Colección>`): desplegar entero solo la primera vez o con fuentes nuevas.",
             // Medido con Codex sobre la calculadora (04-11-2026), mismo modelo: sin esta regla la hizo «inspirada» en la maqueta
             // (sin cabecera, display ni banda); con ella, mirando captura y maqueta él mismo, salió fiel pieza a pieza.
             "- FIDELIDAD: una pantalla hecha desde una maqueta se construye lo más FIEL posible —la misma estructura, las mismas",
@@ -740,10 +742,13 @@ export function textoDelBucle(
                 "estructura contra la maqueta con números). La captura la haces tú y su salida dice dónde queda; pásala con `pantalla` y,",
                 "si hay diseño (/diseno/ o un adjunto), como `referencia`. Lo que digan esas dos herramientas manda sobre tu impresión: no",
                 "lo descartes como «no fiable»; si no estás de acuerdo, dilo con el dato.",
-                "El crítico cuesta un minuto y un modelo: pásalo UNA vez al CERRAR cada pantalla (y otra solo si arreglaste lo que dijo),",
-                "no tras cada retoque; para los retoques está `comparar_capturas`. El juicio es tuyo: no se lo devuelvas al que te encargó.",
-                "Y DECIDE si sigues: si da VERDE —aunque traiga «detalles»—, ENTREGA, que los detalles no justifican otra vuelta; si da ROJO,",
-                "arregla lo que señala y pásalo otra vez. El harness te corta tras unas vueltas (recargas o despliegues): no las gastes en pulir.",
+                // UNA por tarea y con el cupo del orquestador (`unaCriticaPorTarea`, `tareasCriticadas`): medido en la calculadora
+                // (05-11-2026), sin ella devolvía colores distintos y el rojo del orquestador costaba una vuelta entera.
+                "El crítico cuesta un minuto y un modelo: pásalo UNA sola vez por tarea, cuando la des por terminada y ANTES de devolver;",
+                "entre retoques mira tú la captura y la maqueta con `view_image`. El juicio es tuyo: no se lo devuelvas al que te encargó.",
+                "Si da VERDE —aunque traiga «detalles»—, ENTREGA, que los detalles no justifican otra vuelta. Si da ROJO, arregla lo que",
+                "señala, compruébalo con tu captura y `view_image`, y ENTREGA diciendo qué quedó: no hay segunda crítica. El harness te",
+                "corta tras unas vueltas (recargas o despliegues): no las gastes en pulir.",
               ]
             : [
                 "estructura contra la maqueta con números). Pídele al de pruebas una captura y que te diga su nombre; pásala con `pantalla` y,",
@@ -756,10 +761,15 @@ export function textoDelBucle(
       : []),
     "",
     "NO TERMINAS hasta que se cumpla el CRITERIO DE ACEPTACIÓN de tu encargo. Si el encargo no lo trae, es: (1) todas las casillas",
-    "de la tarea en el `TASKS.md` comprobadas, (2) la app arranca y hace lo que pide, y (3) con diseño, la distancia que mide",
-    "`comparar_capturas` por debajo del 10 % en vertical y en horizontal, que ENCAJE en la pantalla (cada borde del contenido a",
+    "de la tarea en el `TASKS.md` comprobadas, (2) la app arranca y hace lo que pide, y (3) con diseño,",
+    // Quien prueba él mismo la recibe como DATO (`comoDato`): medido, perseguía la cifra con los datos de ejemplo en contra.
+    ...(elMismo
+      ? ["la distancia de `comparar_capturas` como DATO (no es la condición: la desvían los datos de ejemplo), que ENCAJE en la pantalla (cada borde del contenido a"]
+      : ["la distancia que mide `comparar_capturas` por debajo del 10 % en vertical y en horizontal, que ENCAJE en la pantalla (cada borde del contenido a"]),
     ...(opciones.conCritica === true
-      ? ["un 3 % o menos del de la maqueta: que llegue a los lados y abajo como ella), y el crítico en VERDE: que respete el diseño. Sus DETALLES",
+      ? [elMismo
+          ? "un 3 % o menos del de la maqueta: que llegue a los lados y abajo como ella), y lo que el crítico señale en ROJO, arreglado. Sus DETALLES"
+          : "un 3 % o menos del de la maqueta: que llegue a los lados y abajo como ella), y el crítico en VERDE: que respete el diseño. Sus DETALLES",
          "no obligan a otra vuelta; dilos al devolver."]
       : ["un 3 % o menos del de la maqueta: que llegue a los lados y abajo como ella), y que, mirando la captura junto a la maqueta con",
          "`view_image`, estén todas sus piezas, colores, tipografías y proporciones. Lo que aún difiera, dilo al devolver."]),
@@ -829,8 +839,19 @@ export function notaDeDelegacion(
                 `BUCLE DEL DESARROLLADOR: developer-xone prueba lo que escribe él mismo, ${agentes.find((a) => a.nombre === "developer-xone")?.scripts === true ? "con los scripts de sus skills" : "llamando a device-controller"} (despliega, toca y lee`,
                 "el log), maqueta y arregla lo visual él mismo —designer-xone solo le hace iconos y fondos SVG—, y corrige hasta cumplir el CRITERIO DE ACEPTACIÓN que le des. Por eso",
                 "cada encargo a developer-xone lleva el CRITERIO ESCRITO y MEDIBLE: qué casillas del plan tiene que dejar comprobadas, qué",
-                "tiene que hacer la app, y, si hay diseño, que la distancia de `comparar_capturas` quede por debajo del 10 % en vertical y en",
-                "horizontal, que ENCAJE en la pantalla (cada borde a un 3 % o menos del de la maqueta) y que el crítico dé VERDE: sin diferencias de DISEÑO, los detalles no obligan (di dónde está la maqueta);",
+                ...(agentes.find((a) => a.nombre === "developer-xone")?.scripts === true
+                  ? [
+                      // Medido en la calculadora (05-11-2026, 0689dc23): «por debajo del 10 %» y «el crítico en VERDE» en el encargo, y él
+                      // perseguía la cifra —que desvían los datos de ejemplo— y pedía un crítico que no tenía.
+                      "tiene que hacer la app, y, si hay diseño, que ENCAJE en la pantalla (cada borde a un 3 % o menos del de la maqueta) y que lo",
+                      "que el crítico señale en ROJO quede arreglado: lo pasa ÉL una vez antes de devolverte (di dónde está la maqueta). La cifra de",
+                      "`comparar_capturas` es un DATO, no un criterio: no le pongas un tope. Y al decir cómo se prueba, que recargue en caliente lo",
+                      "editado (iconos y CSS incluidos): desplegar entero, solo la primera vez o con fuentes nuevas;",
+                    ]
+                  : [
+                      "tiene que hacer la app, y, si hay diseño, que la distancia de `comparar_capturas` quede por debajo del 10 % en vertical y en",
+                      "horizontal, que ENCAJE en la pantalla (cada borde a un 3 % o menos del de la maqueta) y que el crítico dé VERDE: sin diferencias de DISEÑO, los detalles no obligan (di dónde está la maqueta);",
+                    ]),
                 "en una LISTA con datos reales, lo vertical no (depende de cuántas filas haya). No se puede pedir",
               ]),
           opciones.conFuentes === true
@@ -1200,6 +1221,10 @@ export async function abrirSesionTrueforge(
   };
   /** La última tarea del plan que se le encargó a un especialista (`plan|número`): la del crítico de una vez (`unaCriticaPorTarea`). */
   let ultimaTareaEncargada: string | undefined;
+  /** Las tareas cuya crítica visual ya se pasó: UNA por tarea entre el desarrollador que prueba él mismo y el orquestador. */
+  const tareasCriticadas = new Set<string>();
+  /** Para el encargo sin plan del desarrollador: una crítica por encargo (cada `propiasDe` es un encargo). */
+  let encargosSinTarea = 0;
   /** Las maquetas ya juzgadas en su tarea del plan (`pantallaJuzgada.ts`): ni otro crítico ni otra ronda visual en las siguientes. */
   const pantallasJuzgadas = crearPantallasJuzgadas();
   /** La última tarea del plan encargada a cada agente que PRUEBA (`scripts`), con sus intentos en el turno (`INTENTOS_POR_TAREA`). */
@@ -1708,7 +1733,7 @@ export async function abrirSesionTrueforge(
       // Con el continuo, el crítico del raíz UNA vez por tarea (`unaCriticaPorTarea.ts`): las siguientes abrían vueltas.
       .map((t) =>
         developerContinuo && (t as { name?: string }).name === "xone_critica_visual"
-          ? (unaCriticaPorTarea(t as never, () => ultimaTareaEncargada, () => turnoConMaqueta) as unknown as ToolDeLangchain)
+          ? (unaCriticaPorTarea(t as never, () => ultimaTareaEncargada, () => turnoConMaqueta, { criticadas: tareasCriticadas }) as unknown as ToolDeLangchain)
           : t
       )
       .map(sinJuzgarPantallaDosVeces),
@@ -1820,12 +1845,21 @@ export async function abrirSesionTrueforge(
     // juzgar la pantalla con lo que el otro capture. El veredicto sigue siendo de un modelo aparte, no suyo, y el
     // juez final del arnés revisa igual (`textoDelBucle`).
     // Sin maqueta, ni crítico ni medida: no hay contra qué comparar; el juez del cierre revisa (`nombraUnaMaqueta`).
-    // Quien prueba ÉL MISMO (`scripts`) no lleva el crítico en su bucle, como Codex: se mira la captura con `view_image` y
-    // le queda `comparar_capturas`, que mide sin modelo. El del orquestador (uno por tarea) y el del cierre siguen.
+    // Quien prueba ÉL MISMO (`scripts`) se mira la captura con `view_image` entre retoques, como Codex, y pasa el crítico
+    // UNA vez antes de devolver, con el MISMO cupo que el del orquestador (`tareasCriticadas`): lo rojo lo arregla él con
+    // una recarga, sin otra vuelta entera. Sin plan, una por encargo.
     ...(conBucleDelDesarrollador && (agente.llama?.length ?? 0) > 0 && turnoConMaqueta
-      ? herramientasDeJuicio()
-          .filter((t) => agente.scripts !== true || (t as { name?: string }).name !== "xone_critica_visual")
-          .map(sinJuzgarPantallaDosVeces)
+      ? ((sinTarea) =>
+          herramientasDeJuicio()
+            .map((t) =>
+              agente.scripts === true && (t as { name?: string }).name === "xone_critica_visual"
+                ? (unaCriticaPorTarea(t as never, () => ultimaTareaEncargada ?? sinTarea, () => turnoConMaqueta, {
+                    criticadas: tareasCriticadas,
+                    repetida: textoDeCriticaRepetidaDelDesarrollador,
+                  }) as unknown as ToolDeLangchain)
+                : t
+            )
+            .map(sinJuzgarPantallaDosVeces))(`sin-tarea|${String(++encargosSinTarea)}`)
       : []),
   ];
   /**
@@ -2267,7 +2301,7 @@ export async function abrirSesionTrueforge(
             "",
             nota,
             anuncioDeSkills(agente, catalogo),
-            ...(conBucleDelDesarrollador && (agente.llama?.length ?? 0) > 0 ? ["", textoDelBucle(agente.llama ?? [], { conCritica: carpeta !== undefined && turnoConMaqueta && !nombres.includes(NOMBRE_EJECUTAR_SCRIPT), conMaqueta: turnoConMaqueta, conFuentes: opciones.fuentes !== undefined, pruebaElMismo: nombres.includes(NOMBRE_EJECUTAR_SCRIPT) })] : []),
+            ...(conBucleDelDesarrollador && (agente.llama?.length ?? 0) > 0 ? ["", textoDelBucle(agente.llama ?? [], { conCritica: carpeta !== undefined && turnoConMaqueta && nombres.includes("xone_critica_visual"), conMaqueta: turnoConMaqueta, conFuentes: opciones.fuentes !== undefined, pruebaElMismo: nombres.includes(NOMBRE_EJECUTAR_SCRIPT) })] : []),
             ...(continuoDelHilo ? ["", siguienteTareaDelDesarrollador ? TEXTO_DEL_DEVELOPER_CONTINUO_CON_SIGUIENTE : TEXTO_DEL_DEVELOPER_CONTINUO] : []),
             // A quien escribe el plan, en su SISTEMA: no depende de que abra la skill ni de lo que le diga el encargo.
             ...(agente.nombre === "analyst-xone" ? ["", FIDELIDAD_DEL_PLAN] : []),
@@ -2565,9 +2599,11 @@ export async function abrirSesionTrueforge(
         captura,
         maqueta: maqueta.virtual,
         comparacion,
-        // A quien prueba él mismo no se le pide el crítico: no lo tiene (lo mira con `view_image`).
+        // A quien prueba él mismo no se le pide el crítico tras cada captura: lo pasa UNA vez antes de devolver.
         pedirCritica: !propia && (critico === undefined || (escribio !== undefined && escribio > critico)),
         ronda,
+        // Y la cifra le llega como dato: con «no lo devuelvas así» la perseguía (`comoDato`).
+        comoDato: propia,
       });
     } catch (e) {
       anotarPaso("trueforge.medida", `no se pudo medir ${captura}: ${e instanceof Error ? e.message : String(e)}`)();

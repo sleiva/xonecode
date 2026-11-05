@@ -1902,8 +1902,8 @@ describe("una sesión con el motor TrueForge", () => {
       const sistema = vistos[1]!.join("\n");
       expect(sistema).toContain("PUEDES LLAMAR A: designer-xone,");
       expect(sistema).toContain("prueba TÚ en el aparato");
-      // Sin crítico en su bucle, como Codex (05-11-2026): se mira él la captura y la maqueta.
-      expect(toolsPorLlamada[1]).not.toContain("xone_critica_visual");
+      // Entre retoques se mira él la captura (como Codex) y pasa el crítico UNA vez antes de devolver (05-11-2026, opción b).
+      expect(toolsPorLlamada[1]).toContain("xone_critica_visual");
       // Ni lo que no usa (0 usos en 133 llamadas de la calculadora): sus escrituras ya validan, ve con `view_image`, los
       // fondos son del diseñador, le llega la medida y no necesita la fecha.
       for (const t of ["validar_fichero_xone", "describe_image", "generar_fondo_svg", "convertir_a_p", "get_current_datetime", "get_openui_instructions"]) {
@@ -1911,11 +1911,13 @@ describe("una sesión con el motor TrueForge", () => {
       }
       expect(toolsPorLlamada[1]).toEqual(expect.arrayContaining(["view_image", "xone_atributos", "regex_search", "xone_navegacion"]));
       expect(sistema).toContain("mirando la captura Y la maqueta con `view_image`");
-      expect(sistema).not.toContain("pásalo UNA vez al CERRAR cada pantalla");
+      expect(sistema).toContain("pásalo UNA sola vez por tarea, cuando la des por terminada y ANTES de devolver");
+      expect(sistema).toContain("no hay segunda crítica");
+      expect(sistema).toContain("y el CSS también (`--recargar <hoja>.css --abrir <Colección>`)");
       expect(sistema).not.toContain("llama al de pruebas");
     }, 30_000);
 
-    it("encendido y con carpeta de artefactos, el desarrollador que prueba él mismo recibe la medida y NO el crítico; el conductor, ninguno", async () => {
+    it("encendido y con carpeta de artefactos, el desarrollador que prueba él mismo recibe la medida y el crítico de una vez; el conductor, ninguno", async () => {
       const raiz = proyecto();
       const { m, vistos, toolsPorLlamada } = modelosConGuion(guion());
       const s = await abrirSesionTrueforge({
@@ -1924,8 +1926,8 @@ describe("una sesión con el motor TrueForge", () => {
       });
       await s.turno("haz la calculadora de la maqueta /diseno/screen.png", piel().p);
       expect(toolsPorLlamada[1]).toContain("comparar_capturas");
-      expect(toolsPorLlamada[1]).not.toContain("xone_critica_visual");
-      expect(vistos[1]!.join("\n")).not.toContain("PARA JUZGAR UNA PANTALLA");
+      expect(toolsPorLlamada[1]).toContain("xone_critica_visual");
+      expect(vistos[1]!.join("\n")).toContain("PARA JUZGAR UNA PANTALLA");
       // El de pruebas no juzga: saca las capturas.
       expect(toolsPorLlamada[2]).not.toContain("xone_critica_visual");
       expect(toolsPorLlamada[2]).not.toContain("comparar_capturas");
@@ -1966,8 +1968,9 @@ describe("una sesión con el motor TrueForge", () => {
       expect(sistema).toContain(`${String(RONDAS_VISUALES)} rondas como mucho`);
       expect(sistema).not.toContain("TRES vueltas");
       expect(sistema).toContain("diciendo QUÉ falta");
-      // El umbral es ALCANZABLE: mide con la herramienta y deja fuera lo que XOne no reproduce.
-      expect(sistema).toContain("por debajo del 10 %");
+      // La distancia, a quien prueba él mismo, como DATO: medido, perseguía la cifra (05-11-2026). Y deja fuera lo que XOne no reproduce.
+      expect(sistema).toContain("la distancia de `comparar_capturas` como DATO");
+      expect(sistema).not.toContain("por debajo del 10 %");
       expect(sistema).toContain("las tipografías del diseño");
     }, 30_000);
 
@@ -1991,7 +1994,10 @@ describe("una sesión con el motor TrueForge", () => {
       const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, bucleDelDesarrollador: true });
       await s.turno("haz la calculadora", piel().p);
       expect(vistos[0]!.join("\n")).toContain("CRITERIO ESCRITO y MEDIBLE");
-      expect(vistos[0]!.join("\n")).toContain("por debajo del 10 %");
+      // Al de serie, que prueba él mismo: sin tope de distancia ni «crítico en VERDE»; el crítico lo pasa él (05-11-2026).
+      expect(vistos[0]!.join("\n")).toContain("es un DATO, no un criterio: no le pongas un tope");
+      expect(vistos[0]!.join("\n")).toContain("lo pasa ÉL una vez antes de devolverte");
+      expect(vistos[0]!.join("\n")).not.toContain("por debajo del 10 %");
     }, 30_000);
 
     it("apagado (por omisión), el desarrollador no recibe la tool", async () => {

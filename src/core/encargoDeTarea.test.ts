@@ -65,6 +65,17 @@ describe("un encargo de un plan es UNA tarea", () => {
     expect(d.motivo).toContain("al mismo developer-xone: conserva lo que ya hizo");
   });
 
+  // Medido en la calculadora (05-11-2026): las dos veces el orquestador tuvo que reescribir la línea para que arrancara.
+  it("solo cuentan los números del PRINCIPIO de la línea: lo que sigue puede nombrar otras", () => {
+    for (const linea of ["TAREA: 1 — segunda vuelta, no empieces las tareas 02/03", "TAREA: 01 — «El display» (la 02 y la 03 después)"]) {
+      const d = decidirEncargo("developer-xone", `${linea}\n/planes/calculadora/`, leer);
+      expect(d.tipo).toBe("tarea");
+    }
+    for (const linea of ["TAREA: 1 y 2", "TAREA: T1/T2", "TAREA: 01 + 02"]) {
+      expect(decidirEncargo("developer-xone", `${linea}\n/planes/calculadora/`, leer).tipo).toBe("rechazo");
+    }
+  });
+
   it("una tarea que no existe no arranca", () => {
     const d = decidirEncargo("designer-xone", "TAREA: 9\n/planes/calculadora/", leer);
     expect(d).toEqual({ tipo: "rechazo", motivo: expect.stringContaining("«TAREA: 9» no es una tarea de /planes/calculadora/TASKS.md") });
