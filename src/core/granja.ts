@@ -154,13 +154,23 @@ const FIREWALL = "El firewall de ese PC (el de Windows) tiene que dejar pasar el
 /**
  * Qué mirar según el código de Node: cada uno apunta a un sitio distinto. Medido el 05-11-2026: un `EHOSTUNREACH` (este
  * equipo no tiene camino hasta esa IP: otra red, sin VPN, el PC apagado) salía con el consejo de `farm.config.json`, que
- * es el de un `ECONNREFUSED` (el PC contesta y nadie escucha en el 8090 hacia fuera).
+ * es el de un `ECONNREFUSED` (el PC contesta y nadie escucha en el 8090 hacia fuera). Y en un Mac, con el navegador
+ * llegando a la granja, el mismo código era la privacidad de Red local de macOS 27: `node` salía a internet y no
+ * llegaba a NADA de la red local, desde WebStorm (con su permiso encendido) y desde Terminal.app, mientras `/usr/bin/curl`
+ * sí llegaba. Un ejecutable sin identidad de app se deniega en silencio y el «+» de Ajustes no lo admite; lo arregló, sin
+ * reiniciar, una copia de `node` dentro de una `.app` con `NSLocalNetworkUsageDescription`, firmada ad hoc: el lanzador
+ * la monta y relanza con ella (`core/nodeDeRedLocal.ts`).
  */
 function causaDeNoResponde(codigo: string | undefined): string {
   switch (codigo) {
     case "EHOSTUNREACH":
     case "ENETUNREACH":
-      return "Este equipo no llega a esa dirección: comprueba que estás en la red de la granja (o en su VPN), que su PC está encendido y que la IP no ha cambiado.";
+      return (
+        "Este equipo no llega a esa dirección: comprueba que estás en la red de la granja (o en su VPN), que su PC está encendido y que la IP no ha cambiado. " +
+        "Si el navegador sí la abre, en un Mac es la privacidad de Red local: XOneCode corre como «XOneCode Node» y macOS lo pregunta " +
+        "una vez (también tras actualizar Node). Si no le diste a Permitir, actívalo en Ajustes del Sistema → Privacidad y seguridad → " +
+        "Red local → XOneCode Node y vuelve a probar; y si lo arrancaste con XONECODE_SIN_NODE_DE_RED_LOCAL=1, quítalo."
+      );
     case "ECONNREFUSED":
       return `Su PC contesta, pero nadie escucha en ese puerto hacia fuera: ¿está arrancada la granja? ${ESCUCHA_SOLO_EN_SU_PC}`;
     case "ETIMEDOUT":

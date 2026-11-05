@@ -115,6 +115,8 @@ describe("motivoDePruebaDeGranja", () => {
     for (const c of ["EHOSTUNREACH", "ENETUNREACH"]) {
       expect(motivo(c)).toContain("no llega a esa dirección");
       expect(motivo(c)).not.toContain("farm.config.json");
+      // Medido el mismo día: el navegador abría la granja y el servidor recibía EHOSTUNREACH. Era el permiso de Red local.
+      expect(motivo(c)).toContain("Red local → XOneCode Node");
     }
     expect(motivo("ECONNREFUSED")).toContain("farm.config.json");
     expect(motivo("ECONNREFUSED")).not.toContain("firewall");
