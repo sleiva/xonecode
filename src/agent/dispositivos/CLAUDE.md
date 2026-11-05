@@ -82,7 +82,11 @@ discrepancia, **el código manda**.
   un relé en loopback por sesión (`ws://127.0.0.1:<p>/granja/<clave>/hotswap`, en el fichero del aparato como `canal`) coge una
   copia libre en la primera conexión (medido: conectarse a la puerta COGE la copia) y mantiene UNA conexión hacia la granja
   (una segunda ECHA a la primera; sin conexión, a los diez minutos la granja la libera y la BORRA), repartiendo las
-  respuestas en orden FIFO. **Dos sesiones no se pisan una copia** (`enOrden`, `copiasDeOtras`): con el MISMO token la granja no
+  respuestas en orden FIFO. **En un Mac, XOneCode corre con un `node` envuelto en una app** (`core/nodeDeRedLocal.ts`,
+  `agent/config/nodeDeRedLocal.ts`, relanzado en `bin.ts` antes de cargar nada): en macOS 27 un `node` suelto no llega a la
+  red local (`EHOSTUNREACH`, sin aviso y sin poder darle permiso), y una `.app` con `NSLocalNetworkUsageDescription` sí. Se
+  ADOPTA la que hay, se rehace al cambiar el `node`, y el aviso solo sale ABRIÉNDOLA (`open -n`), no ejecutándola; falla abierto,
+  `XONECODE_SIN_NODE_DE_RED_LOCAL=1` lo apaga. **Dos sesiones no se pisan una copia** (`enOrden`, `copiasDeOtras`): con el MISMO token la granja no
   dice «ocupada», ECHA a la anterior; coger una NUEVA va de una en una en el proceso y se salta las de otras sesiones (otro
   proceso con el mismo token no se ve: límite). **Sin copias libres, CREA una** (`telefonoParaCrearCopia`,
   `crearCopiaEnGranja`: `POST /api/devices/:serial/copies` con `count + 1`, que un usuario normal puede subir y deja la nueva
