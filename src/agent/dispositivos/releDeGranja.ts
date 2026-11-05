@@ -20,12 +20,14 @@ import { randomBytes } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { Duplex } from "node:stream";
 import { WebSocketServer } from "ws";
-import { EnrutadorDeCanal, copiaRecienCreada, copiasLibres, mismaCopia, nombreDeCopia, telefonoParaCrearCopia, type CopiaDeGranja } from "../../core/canalDeGranja.js";
+import { EnrutadorDeCanal, copiaRecienCreada, copiasLibres, mismaCopia, nombreDeCopia, RESOLUCION_DE_LA_COPIA, resolucionQuePoner, telefonoParaCrearCopia, type CopiaDeGranja } from "../../core/canalDeGranja.js";
 import {
   abrirCanalDeGranja,
   hablarConGranja,
+  configDeGranja,
   crearCopiaEnGranja,
   liberarCopiaDeGranja,
+  ponerResolucionDeCopia,
   pedirAGranja,
   rutaDeCopia,
   type AbrirCanalDeGranja,
@@ -63,6 +65,9 @@ export interface DependenciasDeCopias {
   liberar?: (c: ConexionDeGranja, copia: CopiaDeGranja) => Promise<{ ok: true } | { ok: false; motivo: string }>;
   /** `POST /api/devices/:serial/copies` (`crearCopiaEnGranja`): sin copias libres, se pide una más. */
   crearCopia?: (c: ConexionDeGranja, serial: string, count: number) => Promise<{ ok: true } | { ok: false; motivo: string }>;
+  /** `GET /api/config` y `POST …/settings` (`configDeGranja`, `ponerResolucionDeCopia`): una copia `native`, a resolución de móvil. */
+  leerConfig?: (c: ConexionDeGranja) => Promise<unknown>;
+  ponerResolucion?: (c: ConexionDeGranja, copia: CopiaDeGranja, resolucion: string) => Promise<{ ok: true } | { ok: false; motivo: string }>;
   /** Cuánto se espera a que arranque la copia creada (`TOPE_DE_CREAR_COPIA_MS`); los tests lo acortan. */
   topeDeCrearCopia?: number;
   informar: (texto: string) => void;
@@ -112,6 +117,8 @@ export function crearGestorDeCopias(deps: DependenciasDeCopias): GestorDeCopias 
   const liberarEnGranja = deps.liberar ?? liberarCopiaDeGranja;
   const crearCopia = deps.crearCopia ?? crearCopiaEnGranja;
   const topeDeCrearCopia = deps.topeDeCrearCopia ?? TOPE_DE_CREAR_COPIA_MS;
+  const leerConfig = deps.leerConfig ?? configDeGranja;
+  const ponerResolucion = deps.ponerResolucion ?? ponerResolucionDeCopia;
   const topeDeSaludo = deps.topeDeSaludo ?? TOPE_DE_SALUDO_DE_GRANJA_MS;
   const pausaDeReintento = deps.pausaDeReintento ?? PAUSA_DE_REINTENTO_DE_GRANJA_MS;
 
@@ -188,6 +195,20 @@ export function crearGestorDeCopias(deps: DependenciasDeCopias): GestorDeCopias 
       }
       return r;
     };
+    /**
+     * Una copia en `native` pasa a resolución de móvil (`resolucionQuePoner`): en un plegable, `native` es casi cuadrada.
+     * Se pide al COGERLA, antes del primer despliegue; con protocolo 5 la app sigue abierta y se recoloca. Si falla, se
+     * dice y se sigue: la copia vale igual.
+     */
+    const ajustarResolucion = async (copia: CopiaDeGranja): Promise<void> => {
+      const estadoAhora = await pedirEstado(conexion);
+      // Primero si está en `native` (sin presets que valgan, todo vale): solo entonces se piden los presets.
+      if (resolucionQuePoner(estadoAhora, { resolutions: [{ id: "native" }, { id: RESOLUCION_DE_LA_COPIA }] }, copia) === undefined) return;
+      const resolucion = resolucionQuePoner(estadoAhora, await leerConfig(conexion), copia);
+      if (resolucion === undefined) return;
+      const r = await ponerResolucion(conexion, copia, resolucion);
+      deps.informar(r.ok ? `granja: ${nombreDeCopia(copia)} a ${resolucion} (estaba en la nativa del teléfono)` : `granja: no se pudo poner ${resolucion} a ${nombreDeCopia(copia)}: ${r.motivo}`);
+    };
     /** Una copia que ya es nuestra (cogida al conectarse): se apunta y se dice, salude o no. */
     const apuntar = (copia: CopiaDeGranja): void => {
       if (e.copia !== undefined && mismaCopia(e.copia, copia)) return;
@@ -243,6 +264,7 @@ export function crearGestorDeCopias(deps: DependenciasDeCopias): GestorDeCopias 
       // Abierta = nuestra, aunque no saludara: se apunta para que el fin del turno la libere.
       if (r === "ok" || r.cogida === true) apuntar(copia);
       if (r !== "ok") return r;
+      await ajustarResolucion(copia);
       return copia;
     }
   };

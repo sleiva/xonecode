@@ -90,6 +90,26 @@ export function copiaRecienCreada(estado: unknown, serial: string, numero: numbe
   return c !== undefined && c.state === "running" && c.hotswap?.ok !== false ? { serial, numero, telefono } : undefined;
 }
 
+/** La resolución que se le pone a una copia `native`: la de un móvil, 9:16, como las maquetas de teléfono. */
+export const RESOLUCION_DE_LA_COPIA = "1080p";
+
+/**
+ * ¿Hay que ponerle resolución a esa copia, y cuál? Solo si está en `native` —la pantalla física del teléfono— y la
+ * granja tiene el preset. Medido el 05-11-2026: en un SM-F946B (plegable) `native` daba 1808×2176, casi cuadrada, y
+ * la calculadora de una maqueta de móvil salía con el teclado cortado y el crítico en rojo dos vueltas. Un preset
+ * elegido por alguien (no `native`) no se toca. `undefined` = no hay nada que cambiar.
+ */
+export function resolucionQuePoner(estado: unknown, config: unknown, copia: CopiaDeGranja, deseada = RESOLUCION_DE_LA_COPIA): string | undefined {
+  const presets = (config as { resolutions?: unknown } | null)?.resolutions;
+  if (!Array.isArray(presets) || !presets.some((p) => (p as { id?: unknown } | null)?.id === deseada)) return undefined;
+  const dispositivos = (estado as { devices?: unknown } | null)?.devices;
+  if (!Array.isArray(dispositivos)) return undefined;
+  const t = dispositivos.find((d) => (d as { serial?: unknown } | null)?.serial === copia.serial) as { slots?: unknown } | undefined;
+  const slot = Array.isArray(t?.slots) ? (t.slots.find((x) => (x as { number?: unknown } | null)?.number === copia.numero) as { settings?: { resolution?: unknown } } | undefined) : undefined;
+  const actual = slot?.settings?.resolution;
+  return actual === "native" ? deseada : undefined;
+}
+
 export function mismaCopia(a: CopiaDeGranja, b: CopiaDeGranja): boolean {
   return a.serial === b.serial && a.numero === b.numero;
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { crearCopiaEnGranja, probarGranja, type Hablar, type ResultadoDeHablar } from "./granjaEnRed.js";
+import { crearCopiaEnGranja, ponerResolucionDeCopia, probarGranja, type Hablar, type ResultadoDeHablar } from "./granjaEnRed.js";
 
 const HUELLA = Array.from({ length: 32 }, () => "AB").join(":");
 const OTRA = Array.from({ length: 32 }, () => "CD").join(":");
@@ -113,6 +113,13 @@ describe("crear una copia en la granja (`POST /api/devices/:serial/copies`)", ()
     const puerto = (servidor.address() as { port: number }).port;
     return { conexion: { direccion: `http://127.0.0.1:${puerto}`, token: "xfarm_T" }, vistas, cerrar: () => new Promise((x) => servidor.close(x)) };
   }
+
+  it("la resolución de una copia va a su `settings` con JSON; 200 es ok", async () => {
+    const g = await granjaLocal(200);
+    expect(await ponerResolucionDeCopia(g.conexion, { serial: "F 1", numero: 2, telefono: "SM-F946B" }, "1080p")).toEqual({ ok: true });
+    expect(g.vistas).toEqual([{ metodo: "POST", ruta: "/api/devices/F%201/slots/2/settings", tipo: "application/json", auth: "Bearer xfarm_T", cuerpo: '{"resolution":"1080p"}' }]);
+    await g.cerrar();
+  });
 
   it("pide count con JSON y el token; 202 es ok, y 507/409/403 se dicen con su motivo", async () => {
     const bien = await granjaLocal(202);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { EnrutadorDeCanal, copiaRecienCreada, copiasLibres, nombreDeCopia, telefonoParaCrearCopia } from "./canalDeGranja.js";
+import { EnrutadorDeCanal, copiaRecienCreada, copiasLibres, nombreDeCopia, resolucionQuePoner, telefonoParaCrearCopia } from "./canalDeGranja.js";
 
 const telefono = (serial: string, modelo: string, estado: string, slots: unknown[]) => ({ serial, state: estado, info: { model: modelo }, slots });
 
@@ -106,5 +106,18 @@ describe("crear una copia cuando no hay libres", () => {
     expect(copiaRecienCreada(estado("running", false), "B", 2, "Pixel 8")).toBeUndefined();
     expect(copiaRecienCreada(estado("running"), "B", 2, "Pixel 8")).toEqual({ serial: "B", numero: 2, telefono: "Pixel 8" });
     expect(copiaRecienCreada(estado("running"), "B", 3, "Pixel 8")).toBeUndefined();
+  });
+});
+
+describe("la resolución de una copia", () => {
+  const copia = { serial: "F", numero: 1, telefono: "SM-F946B" };
+  const estado = (resolution?: string) => ({ devices: [{ serial: "F", slots: [{ number: 1, ...(resolution === undefined ? {} : { settings: { resolution } }) }] }] });
+  const config = { resolutions: [{ id: "native" }, { id: "1080p" }, { id: "720p" }] };
+  it("solo una `native`, y solo si la granja tiene el preset", () => {
+    expect(resolucionQuePoner(estado("native"), config, copia)).toBe("1080p");
+    expect(resolucionQuePoner(estado("720p"), config, copia)).toBeUndefined();
+    expect(resolucionQuePoner(estado(), config, copia)).toBeUndefined();
+    expect(resolucionQuePoner(estado("native"), { resolutions: [{ id: "native" }] }, copia)).toBeUndefined();
+    expect(resolucionQuePoner(estado("native"), undefined, copia)).toBeUndefined();
   });
 });

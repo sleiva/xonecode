@@ -85,7 +85,10 @@ discrepancia, **el código manda**.
   respuestas en orden FIFO. **Sin copias libres, CREA una** (`telefonoParaCrearCopia`,
   `crearCopiaEnGranja`: `POST /api/devices/:serial/copies` con `count + 1`, que un usuario normal puede subir y deja la nueva
   a su nombre) en el teléfono `ready` con más sitio (`copiesFit`), espera a que su slot esté `running`
-  (`TOPE_DE_CREAR_COPIA_MS`) y la coge; un `507` (sin RAM) o un `409` se dicen. Un emulador apagado no se arranca desde aquí. `reset` en el `finally` del turno (`vestibulo.alAcabarTurno`) y al cerrar la consola.
+  (`TOPE_DE_CREAR_COPIA_MS`) y la coge; un `507` (sin RAM) o un `409` se dicen. Un emulador apagado no se arranca desde aquí. **Una copia en `native` pasa a
+  `1080p` al cogerla** (`resolucionQuePoner`, `ponerResolucionDeCopia`, `POST …/settings`): en un plegable `native` es casi
+  cuadrada y una maqueta de móvil salía cortada. Un preset elegido por alguien no se toca. **Límite**: no se elige según la
+  maqueta (una de tableta, horizontal, también va a `1080p`). `reset` en el `finally` del turno (`vestibulo.alAcabarTurno`) y al cerrar la consola.
   `file_upload`/`file_download`/`screenshot`/`restart` van por el mismo relé. **Todo sin adb** (`skills/xone-hotswap/lib/granja.mjs`):
   desplegar = subir el ZIP **con `bd/`** (la copia empieza VACÍA en cada turno; `empaquetarProyecto({conBase})`) + `launchApplication`,
   sin reiniciar; captura por la API (JPEG, con diálogos); log por `getLog` (solo de esa copia; su `exception` trae un aviso falso

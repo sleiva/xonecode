@@ -10687,3 +10687,9 @@ los que ya existían. El protocolo de la granja (§5) deja a un usuario normal S
 y las nuevas quedan a su nombre: ahora, sin libres, se pide `count + 1` en el teléfono con más sitio, se espera a que ese
 slot esté `running` y se coge; al acabar el turno se libera (`reset`) como cualquier otra y queda libre para la siguiente.
 Arrancar un emulador apagado queda fuera: es una acción de teléfono y, por rol, de un admin.
+
+Y la RESOLUCIÓN (mismo día): la copia creada en el SM-F946B (plegable) llevaba el preset por omisión de esta granja,
+`native`, que es la pantalla física: 1808×2176, casi cuadrada. La calculadora, hecha desde una maqueta de móvil, salía con
+la última fila del teclado cortada y el crítico en rojo dos vueltas. La granja cambia la resolución de una copia sin
+recrear la pantalla (`POST …/slots/:n/settings`, presets de `/api/config`), así que al coger una copia en `native` se le
+pone `1080p` (1080×1920, 9:16). Un preset que alguien eligió no se toca. Falta elegirlo según la maqueta (tableta).

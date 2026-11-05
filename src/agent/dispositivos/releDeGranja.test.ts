@@ -68,6 +68,8 @@ function gestor(abrir: (copia: CopiaDeGranja) => Promise<CanalDeGranja | FalloDe
     informar: (t) => void informes.push(t),
     alCambiarCopia: (_s, copia) => void cambios.push(copia),
     topeDeSaludo: 50,
+    // Sin red en `npm test`: los presets, de mentira.
+    leerConfig: async () => ({ resolutions: [{ id: "native" }, { id: "1080p" }] }),
     ...extra,
   });
   return { g, informes, liberadas, cambios };
@@ -150,6 +152,22 @@ describe("el gestor de copias de la granja", () => {
     expect(informes.join("\n")).toContain("no había copias libres; se crea la copia 3 en Pixel 8");
     await g.liberar("s1");
     expect(liberadas).toEqual([{ serial: "B", numero: 3, telefono: "Pixel 8" }]);
+  });
+
+  // Medido el 05-11-2026: la copia del SM-F946B (plegable) en `native` era 1808×2176 y la calculadora salía cortada.
+  it("una copia en `native` pasa a 1080p al cogerla; una con otro preset no se toca", async () => {
+    const conAjuste = (resolution: string) => ({ devices: [{ serial: "F", state: "ready", info: { model: "SM-F946B" }, slots: [{ number: 1, owner: null, state: "running", settings: { resolution } }] }] });
+    for (const [actual, esperado] of [["native", [["F", 1, "1080p"]]], ["720p", []]] as const) {
+      const puestas: [string, number, string][] = [];
+      const f = canalFalso();
+      const { g, informes } = gestor(async () => f.canal, {
+        pedirEstado: async () => conAjuste(actual),
+        ponerResolucion: async (_c, copia, r) => (puestas.push([copia.serial, copia.numero, r]), { ok: true }),
+      });
+      await g.conectarCliente("s1", cliente().c);
+      expect(puestas).toEqual(esperado);
+      if (actual === "native") expect(informes.join("\n")).toContain("SM-F946B · copia 1 a 1080p (estaba en la nativa del teléfono)");
+    }
   });
 
   it("si la copia no se puede crear (507) o no arranca a tiempo, se dice el motivo", async () => {

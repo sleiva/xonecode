@@ -240,6 +240,27 @@ export async function crearCopiaEnGranja(conexion: ConexionDeGranja, serial: str
   return { ok: false, motivo: `la granja contestó ${r.http}` };
 }
 
+/** `GET /api/config` (presets de resolución), o `undefined` si no contestó. */
+export async function configDeGranja(conexion: ConexionDeGranja): Promise<unknown> {
+  const r = await hablarConGranja({ base: conexion.direccion, ruta: "/api/config", token: conexion.token, ...(conexion.huella === undefined ? {} : { huellaAceptada: conexion.huella }) });
+  return r.tipo === "respuesta" && r.http === 200 ? r.cuerpo : undefined;
+}
+
+/** Pone la resolución de una copia: `POST …/slots/:n/settings` con `{resolution}` (protocolo, §5). Nunca lanza. */
+export async function ponerResolucionDeCopia(conexion: ConexionDeGranja, copia: CopiaDeGranja, resolucion: string): Promise<{ ok: true } | { ok: false; motivo: string }> {
+  const r = await pedirAGranja(conexion, {
+    metodo: "POST",
+    ruta: `${rutaDeCopia(copia)}/settings`,
+    cabeceras: { "content-type": "application/json" },
+    cuerpo: Buffer.from(JSON.stringify({ resolution: resolucion })),
+    tope: TOPE_DE_LIBERAR_MS,
+  });
+  if (r.tipo === "huella-distinta") return { ok: false, motivo: "el certificado de la granja ha cambiado" };
+  if (r.tipo === "sin-respuesta") return { ok: false, motivo: `la granja no responde${r.codigo === undefined ? "" : ` (${r.codigo})`}` };
+  r.respuesta.resume();
+  return r.http === 200 ? { ok: true } : { ok: false, motivo: `la granja contestó ${r.http}` };
+}
+
 /** El canal hotswap de una copia, abierto por la puerta de la granja. */
 export interface CanalDeGranja {
   enviar(texto: string): void;
