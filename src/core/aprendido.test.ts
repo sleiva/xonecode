@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   bloqueDeAprendido,
+  indiceDeAprendidoDeXone,
   conAprendizaje,
   interpretarAprendido,
   motivoDeAprendizajeInaceptable,
@@ -83,6 +84,13 @@ describe("lo aprendido en un proyecto", () => {
     expect(bloqueDeAprendido([], deXone)).not.toContain("EN ESTE PROYECTO");
     expect(bloqueDeAprendido([], deXone)).toContain("LO APRENDIDO DE XONE");
     expect(bloqueDeAprendido([], [])).toBeUndefined();
+  });
+
+  it("al orquestador, lo de XOne solo por sus temas; sin nada, nada", () => {
+    const indice = indiceDeAprendidoDeXone([a("imgbk anula border-corner-radius", "en un frame"), a("ui.hideGroup con G mayúscula", "x")])!;
+    expect(indice).toContain("- imgbk anula border-corner-radius\n- ui.hideGroup con G mayúscula");
+    expect(indice).not.toContain("en un frame");
+    expect(indiceDeAprendidoDeXone([])).toBeUndefined();
   });
 
   it("el cuándo apuntar explica los dos alcances, y que en XOne no van datos del proyecto", () => {

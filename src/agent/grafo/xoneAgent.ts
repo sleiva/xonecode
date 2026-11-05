@@ -141,8 +141,21 @@ export interface OpcionesDelAgente {
  */
 export const PERFIL_DEL_ORQUESTADOR: QuienDecidePermisos = { nombre: "orquestador", soloLectura: true };
 
-export function promptOrquestador(agentes: readonly Agente[]): string {
+/**
+ * Lo que cambia en TrueForge, que comparte este prompt con deepagents (legacy, no se toca): con qué tool se delega —sin
+ * esto hacía falta una nota más traduciendo `task`—, que el desarrollador PRUEBA ÉL —la regla de «escribe y luego
+ * `device-controller` lo comprueba» contradecía dos párrafos más abajo a la del bucle y a su ficha— y que el crítico ya
+ * tiene su bloque (`BUCLE_DE_CALIDAD`), así que aquí no se repite.
+ */
+export interface OpcionesDelOrquestador {
+  delegaCon?: string;
+  pruebaElDesarrollador?: boolean;
+  conBucleDeCalidad?: boolean;
+}
+
+export function promptOrquestador(agentes: readonly Agente[], opciones: OpcionesDelOrquestador = {}): string {
   const hay = (n: string): boolean => agentes.some((a) => a.nombre === n);
+  const conTask = (opciones.delegaCon ?? "task") === "task";
   return [
     "Eres el orquestador de un harness de desarrollo para la plataforma XOne.",
     // El mapa lo ve él TAMBIÉN, y no solo los especialistas: desde que contesta lo que puede
@@ -165,7 +178,7 @@ export function promptOrquestador(agentes: readonly Agente[]): string {
     "pasos, o cuando haga falta el criterio de un especialista.",
     agentes.length === 0
       ? "AVISO: ahora mismo no hay ningún especialista dado de alta, así que no puedes delegar en nadie. Dilo en vez de intentar resolverlo tú."
-      : `Los especialistas disponibles son: ${agentes.map((a) => a.nombre).join(", ")}. La ficha de cada uno —qué sabe hacer y qué devuelve— va en la descripción de \`task\`; léela antes de elegir.`,
+      : `Los especialistas disponibles son: ${agentes.map((a) => a.nombre).join(", ")}. La ficha de cada uno —qué sabe hacer y qué devuelve— va ${conTask ? "en la descripción de `task`" : "más abajo, con cómo delegar"}; léela antes de elegir.`,
     /**
      * **Que puede ENCADENARLOS, y que la cadena la compone él.**
      *
@@ -257,7 +270,14 @@ export function promptOrquestador(agentes: readonly Agente[]): string {
      * los fallos visuales. Por eso se decide contra el encargo y no contra el fichero.
      */
     hay("developer-xone") && hay("device-controller")
-      ? "Si el encargo incluye PROBARLO en un móvil o emulador, son DOS pasos y en este orden: `developer-xone` escribe, y luego `device-controller` lo despliega y lo comprueba. Dile SIEMPRE a qué pantalla o colección tiene que llegar, no solo «pruébalo». Si la persona nombra un fichero SUYO por su ruta absoluta (`/Users/...`, `/tmp/...`), NO está en el proyecto y no hace falta delegar en nadie para leerlo: tráetelo con `traer_de_la_maquina`, que lo copia a `/artefactos/` y te dice con qué nombre queda; a partir de ahí se abre como cualquier artefacto, y si es un `.zip` quien tenga shell lo descomprime ahí mismo. Si tienes `xone_critica_visual`, pásale la captura que deje: ve fallos de pintado que ninguna comprobación estática detecta, y si te pide otra pantalla, encárgasela al conductor y vuelve. Y si el encargo traía un DISEÑO o una MAQUETA, pásasela SIEMPRE en `referencia`: sin ella su verde solo dice que nada está roto, no que la pantalla se parezca a lo que te pidieron. De lo que saque, MANDA A CORREGIR solo lo que sirva al encargo que te hicieron: un defecto que ya estaba ahí y que tu cambio no ha causado NO se arregla, se CUENTA en tu respuesta para que lo decida quien te encargó el trabajo. Y no des por buena una pantalla que nadie ha mirado."
+      ? (opciones.pruebaElDesarrollador === true
+          ? "Si el encargo incluye PROBARLO en un móvil o emulador, lo prueba `developer-xone` él mismo mientras escribe: no mandes después a `device-controller` a comprobarlo. `device-controller` es para probar SIN cambiar nada: reproducir un fallo, traer el log, hacer capturas. A los dos, dile SIEMPRE a qué pantalla o colección tienen que llegar, no solo «pruébalo»."
+          : "Si el encargo incluye PROBARLO en un móvil o emulador, son DOS pasos y en este orden: `developer-xone` escribe, y luego `device-controller` lo despliega y lo comprueba. Dile SIEMPRE a qué pantalla o colección tiene que llegar, no solo «pruébalo».") +
+        " Si la persona nombra un fichero SUYO por su ruta absoluta (`/Users/...`, `/tmp/...`), NO está en el proyecto y no hace falta delegar en nadie para leerlo: tráetelo con `traer_de_la_maquina`, que lo copia a `/artefactos/` y te dice con qué nombre queda; a partir de ahí se abre como cualquier artefacto, y si es un `.zip` quien tenga shell lo descomprime ahí mismo." +
+        (opciones.conBucleDeCalidad === true
+          ? " De lo que saque el crítico, MANDA A CORREGIR"
+          : " Si tienes `xone_critica_visual`, pásale la captura que deje: ve fallos de pintado que ninguna comprobación estática detecta, y si te pide otra pantalla, encárgasela al conductor y vuelve. Y si el encargo traía un DISEÑO o una MAQUETA, pásasela SIEMPRE en `referencia`: sin ella su verde solo dice que nada está roto, no que la pantalla se parezca a lo que te pidieron. De lo que saque, MANDA A CORREGIR") +
+        " solo lo que sirva al encargo que te hicieron: un defecto que ya estaba ahí y que tu cambio no ha causado NO se arregla, se CUENTA en tu respuesta para que lo decida quien te encargó el trabajo. Y no des por buena una pantalla que nadie ha mirado."
       : "",
     /**
      * **Un artefacto NO se revisa visualmente** (IXCODE-9). Medido: el diseñador entregó un
@@ -271,7 +291,7 @@ export function promptOrquestador(agentes: readonly Agente[]): string {
       ? "Un ARTEFACTO de la sesión (un HTML, un diagrama, un informe) NO se revisa visualmente: no pidas capturas de él ni se lo mandes a `device-controller`, que es SOLO para la app en el aparato. Entrégalo tal cual, aunque quien lo hizo diga que no lo ha podido previsualizar."
       : "",
     "Los especialistas no comparten el transcript: al encadenarlos, incluye en la descripción",
-    "de la siguiente `task` un bloque `HANDOFF DE ANÁLISIS` compacto con los hechos verificados,",
+    `${conTask ? "de la siguiente `task`" : "del siguiente encargo"} un bloque \`HANDOFF DE ANÁLISIS\` compacto con los hechos verificados,`,
     "rutas/evidencias y lagunas. No pidas al siguiente especialista redescubrir esos hechos.",
     "Cuando varias tareas sean independientes, delégalas EN EL MISMO mensaje para",
     "que corran a la vez.",

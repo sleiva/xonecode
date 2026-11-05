@@ -10620,3 +10620,26 @@ Y las tools que el desarrollador no usó en sus 133 llamadas de la calculadora (
 `generar_fondo_svg`, `convertir_a_p`, la fecha y, con la skill `openui-builder`, `get_openui_instructions`): de 22 a 16 tools
 y ~8.300 caracteres menos por llamada. `ask_user_question` se queda en el orquestador aunque sea una tarea de fondo: allí se
 contesta sola con la opción recomendada, y quitarla rompía ese camino.
+
+## El orquestador atiende cualquier cosa: lo que sobraba en su sistema (05-11-2026)
+
+Medido con la misma sonda offline (la primera llamada del orquestador con la calculadora): sistema de 40.016 caracteres y
+15 tools (14.401). Se miró contra los encargos que atiende —una pregunta, un retoque de un botón o un color, una tarea
+compleja con maqueta y plan, documentar, arreglar un error—, no solo contra la calculadora: una tool que allí no usó
+(`apuntar_aprendizaje`, `traer_de_la_maquina`, `xone_atributos`…) sirve en otro encargo y se queda.
+
+- **Lo aprendido de XOne iba ENTERO: 18.114 caracteres, el 45 % del sistema.** Son apuntes de cómo ESCRIBIR XOne, el
+  orquestador no escribe y quien lo hace ya lo recibe entero con su encargo. Ahora va por sus TEMAS
+  (`indiceDeAprendidoDeXone`): basta para no apuntarlo dos veces y para contestar lo sencillo; el detalle, a un especialista.
+- **El prompt del reparto es el de deepagents y en TrueForge se contradecía**: «`developer-xone` escribe y luego
+  `device-controller` lo comprueba» frente al bucle y la ficha del desarrollador («PRUEBA ÉL, no mandes a device-controller»);
+  hablaba de `task` y hacía falta otra nota traduciéndolo; y repetía la regla del crítico que ya va en `BUCLE_DE_CALIDAD`.
+  Con `OpcionesDelOrquestador` TrueForge dice lo suyo; deepagents queda igual. El orquestador razonaba ~840 tokens por
+  llamada frente a ~130 de Codex: si esto lo baja está por medir.
+- **La ficha del desarrollador seguía ofreciendo fondos SVG** tras quitarle `generar_fondo_svg`: la regla es una
+  (`llamaAlDisenador`) en la tool y en la ficha.
+
+Resultado: 24.589 caracteres de sistema (−15.427, ~4.300 tokens por llamada). Queda por decidir lo de maqueta y plan
+(~7.500 caracteres que solo sirven en una tarea compleja). Para poner la cifra en su sitio: el 93 % de la entrada del
+orquestador en la pasada salió de caché, y su contexto medio era de ~50.000 tokens por llamada, la mayor parte lo que leyó
+y los informes de sus hijos.

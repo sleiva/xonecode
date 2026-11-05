@@ -35,6 +35,25 @@ describe("promptOrquestador", () => {
   });
   const PROMPT_ORQUESTADOR = promptOrquestador(CUATRO);
 
+  /**
+   * TrueForge comparte este prompt con deepagents, y le decía tres cosas que allí no son verdad: delegar con `task` (hacía
+   * falta otra nota para traducirlo), «escribe y luego `device-controller` lo comprueba» (su desarrollador PRUEBA ÉL) y la
+   * regla del crítico, que ya tiene su bloque. Medido en la calculadora (05-11-2026).
+   */
+  it("en TrueForge: delega con su tool, el desarrollador prueba él y el crítico no se repite; deepagents, igual que antes", () => {
+    const tf = promptOrquestador(CUATRO, { delegaCon: "create_sub_agent", pruebaElDesarrollador: true, conBucleDeCalidad: true });
+    expect(tf).not.toContain("`task`");
+    expect(tf).toContain("del siguiente encargo un bloque `HANDOFF DE ANÁLISIS`");
+    expect(tf).not.toMatch(/luego `device-controller` lo despliega/);
+    expect(tf).toMatch(/lo prueba `developer-xone` él mismo/);
+    expect(tf).not.toMatch(/Si tienes `xone_critica_visual`/);
+    expect(tf).toMatch(/De lo que saque el crítico, MANDA A CORREGIR solo lo que sirva al encargo/);
+    expect(tf).toMatch(/traer_de_la_maquina/);
+    expect(PROMPT_ORQUESTADOR).toContain("en la descripción de `task`");
+    expect(PROMPT_ORQUESTADOR).toMatch(/luego `device-controller` lo despliega/);
+    expect(PROMPT_ORQUESTADOR).toMatch(/Si tienes `xone_critica_visual`.*De lo que saque, MANDA A CORREGIR solo/);
+  });
+
   it("nombra a los especialistas que HAY, no a una lista escrita a mano", () => {
     // Era una constante que nombraba a los cuatro a pelo. Desde que son ficheros que el
     // usuario escribe y borra, eso se queda mintiendo el primer día.

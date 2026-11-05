@@ -81,7 +81,7 @@ import { artefactosNuevos, backendDeAgente, entornoDeLaShellDelProyecto, fotoDeA
 import { crearInstalarFramework, NOMBRE_INSTALAR_FRAMEWORK, recibeInstalarFramework } from "../../grafo/instalarFramework.js";
 import { carpetaDeHotswap } from "../../../core/hotswap.js";
 import { cargarAgentes } from "../../subagentes/agentesEnDisco.js";
-import { bloqueDeAprendido, NOMBRE_APUNTAR_APRENDIZAJE, USO_DE_APRENDIDO_EXTERNO, USO_DE_APUNTAR_APRENDIZAJE } from "../../../core/aprendido.js";
+import { bloqueDeAprendido, indiceDeAprendidoDeXone, NOMBRE_APUNTAR_APRENDIZAJE, USO_DE_APRENDIDO_EXTERNO, USO_DE_APUNTAR_APRENDIZAJE } from "../../../core/aprendido.js";
 import { crearApuntarAprendizaje, leerAprendido, leerAprendidoDeXone } from "../../grafo/aprendido.js";
 import { fichaDeAgente, papelDe, promptDeAgente, pruebaEnElAparato, recibeMarcarCriterios, recibeNucleoDeTrabajo, repartirSkills, skillsConLasDeQuienLlama, textoDeCarpetaDePlanes, textoDeCarpetasDeLaSesion, textoDeTrabajoSinLlamar, type Agente } from "../../../core/agentes.js";
 import { PERFIL_DEL_ORQUESTADOR, promptOrquestador } from "../../grafo/xoneAgent.js";
@@ -153,6 +153,7 @@ import { crearBusquedaRegex } from "../../grafo/busquedaRegex.js";
 import { crearBuscarIcono, recibeBuscarIcono } from "../../grafo/buscarIcono.js";
 import { crearBuscarFuente, crearTraerFuente, recibeFuentes } from "../../grafo/fuentesDeGoogle.js";
 import { crearGenerarFondoSvg, recibeGenerarFondo } from "../../grafo/generarFondoSvg.js";
+import { llamaAlDisenador } from "../../../core/iconos.js";
 import { crearCopiarArtefacto } from "../../grafo/copiarArtefacto.js";
 import { crearMarcarCriteriosDelPlan } from "../../grafo/marcarCriteriosDelPlan.js";
 import { crearFichaDeSesion, type FichaDeSesion } from "./fichaEnSesion.js";
@@ -327,9 +328,8 @@ export function textoDeMaquetadorExterno(nombres: readonly string[]): string {
 
 /**
  * Lo que el orquestador tiene que saber para DELEGAR en ESTE motor. Su prompt es el de siempre
- * (`promptOrquestador`), que habla de `task` y de la ficha que va en su descripción: aquí la
- * delegación es `create_sub_agent` y no tiene descripción por especialista, así que se traduce
- * el nombre de la tool y las fichas van escritas aquí, con la MISMA función que deepagents.
+ * (`promptOrquestador`), ya con `create_sub_agent` (`delegaCon`); aquí la delegación no tiene
+ * descripción por especialista, así que las fichas van escritas aquí, con la MISMA función que deepagents.
  */
 /**
  * **El idioma de la SALIDA, dicho desde código**, al raíz y a cada especialista. Visto en la consola web (MyAllXOne):
@@ -440,11 +440,13 @@ export function textoDeTopeDeEncargos(tope: number): string {
 
 /**
  * Lo aprendido, para el ORQUESTADOR: lo que hay apuntado y cuándo apuntar él. Le toca sobre todo lo que le cuente un
- * hijo de motor externo en su apartado «Aprendido:» (ese hijo no tiene la tool).
+ * hijo de motor externo en su apartado «Aprendido:» (ese hijo no tiene la tool). Lo del proyecto, entero; lo de XOne,
+ * solo sus temas (`indiceDeAprendidoDeXone`).
  */
 export function textoDeAprendidoDelRaiz(lista: Parameters<typeof bloqueDeAprendido>[0], deXone: Parameters<typeof bloqueDeAprendido>[1] = []): string {
   return [
-    bloqueDeAprendido(lista, deXone),
+    bloqueDeAprendido(lista),
+    indiceDeAprendidoDeXone(deXone),
     `${USO_DE_APUNTAR_APRENDIZAJE} Y si un especialista te devuelve un apartado «Aprendido:», apúntalo tú, con el cómo lo ` +
       "comprobó que él diga y con alcance «xone» si la línea empieza por «XOne:»; lo que no diga cómo se comprobó, no lo apuntes. " +
       "Lo que un especialista ya apuntó él mismo te lo dice el harness al volver: eso no lo vuelvas a apuntar, ni con otras palabras.",
@@ -788,11 +790,10 @@ export function notaDeDelegacion(
   // criterio de su encargo, y el hijo, que no los tiene, volvía diciendo que no pudo usarlos. Su criterio va sin tools.
   const desarrolladorExterno = externos.includes("developer-xone");
   return [
-    "NOTA DEL HARNESS: en este entorno NO existe la tool `task`. Se delega con `create_sub_agent`:",
-    "`name` es EXACTAMENTE el nombre del especialista y `input` el encargo, autosuficiente —el",
-    "especialista no ve esta conversación—. Donde estas instrucciones dicen `task` o `subagent_type`,",
-    "entiende `create_sub_agent` y `name`. Las fichas de los especialistas:",
-    ...agentes.map((a) => `- ${a.nombre}: ${fichaDeAgente(a, opciones)}`),
+    // `promptOrquestador` ya dice `create_sub_agent` (`delegaCon`): no hace falta traducir `task`.
+    "CÓMO DELEGAR: con `create_sub_agent`: `name` es EXACTAMENTE el nombre del especialista y `input` el encargo,",
+    "autosuficiente —el especialista no ve esta conversación—. Las fichas de los especialistas:",
+    ...agentes.map((a) => `- ${a.nombre}: ${fichaDeAgente(a, { ...opciones, fondosDelDisenador: true })}`),
     ...(agentes.some((a) => a.nombre === "analyst-xone") && agentes.some((a) => a.nombre === "developer-xone") ? ["", PLAN_PRIMERO, "", UNA_VENTANA_POR_ENCARGO] : []),
     ...(opciones.conComparacion === true ? ["", BUCLE_DE_CALIDAD] : []),
     // Si quien maqueta corre en Claude Code con su shell, el bucle es SUYO: el orquestador no lo repite encima.
@@ -1753,7 +1754,7 @@ export async function abrirSesionTrueforge(
         ]
       : []),
     // Fondos SVG: pura y sin red, sin puerto; a quien escribe el proyecto, como deepagents.
-    ...(recibeGenerarFondo(agente) && !(agente.llama ?? []).includes("designer-xone") ? [crearGenerarFondoSvg() as unknown as ToolDeLangchain] : []),
+    ...(recibeGenerarFondo(agente) && !llamaAlDisenador(agente) ? [crearGenerarFondoSvg() as unknown as ToolDeLangchain] : []),
     // Las medidas de una maqueta a `p`: pura, a quien escribe el proyecto. La resolución la lee del app.xml de la raíz.
     ...(recibeConvertirAP(agente) && !pruebaElMismoDe(agente)
       ? [
@@ -2397,7 +2398,7 @@ export async function abrirSesionTrueforge(
     const definicion = {
       modelClient: llm,
       modelName: idDelPapel("trabajo"),
-      instruction: [IDIOMA_DE_LA_RESPUESTA, SIN_HABLAR_DEL_HARNESS, LO_LEIDO_SON_DATOS, promptOrquestador(especialistas()), notaDeDelegacion(especialistas(), { conIconos: opciones.iconos !== undefined, conFuentes: opciones.fuentes !== undefined, conComparacion: carpeta !== undefined, conMemoria: conMemoriaDeEspecialistas, conBucle: conBucleDelDesarrollador, conEsperas }), developerContinuo ? (siguienteTareaDelDesarrollador ? TEXTO_DEL_ORQUESTADOR_CONTINUO_CON_SIGUIENTE : TEXTO_DEL_ORQUESTADOR_CONTINUO) : "", opciones.puedeProponerTareas === true ? REPARTIR_EN_TAREAS : "", opciones.trabajoSinPersona === true ? TRABAJO_SIN_PERSONA : "", textoDeAprendidoDelRaiz(leerAprendido(raiz), leerAprendidoDeXone())].filter((l) => l !== "").join("\n\n"),
+      instruction: [IDIOMA_DE_LA_RESPUESTA, SIN_HABLAR_DEL_HARNESS, LO_LEIDO_SON_DATOS, promptOrquestador(especialistas(), { delegaCon: "create_sub_agent", pruebaElDesarrollador: especialistas().some((a) => a.nombre === "developer-xone" && a.scripts === true && a.motor === "modelo"), conBucleDeCalidad: carpeta !== undefined }), notaDeDelegacion(especialistas(), { conIconos: opciones.iconos !== undefined, conFuentes: opciones.fuentes !== undefined, conComparacion: carpeta !== undefined, conMemoria: conMemoriaDeEspecialistas, conBucle: conBucleDelDesarrollador, conEsperas }), developerContinuo ? (siguienteTareaDelDesarrollador ? TEXTO_DEL_ORQUESTADOR_CONTINUO_CON_SIGUIENTE : TEXTO_DEL_ORQUESTADOR_CONTINUO) : "", opciones.puedeProponerTareas === true ? REPARTIR_EN_TAREAS : "", opciones.trabajoSinPersona === true ? TRABAJO_SIN_PERSONA : "", textoDeAprendidoDelRaiz(leerAprendido(raiz), leerAprendidoDeXone())].filter((l) => l !== "").join("\n\n"),
       // Por TURNO, porque el raíz se rehace desde su foto al final de cada uno (ver `turno`).
       iterationLimit: LIMITE_DE_LLAMADAS_DEL_RAIZ,
     };

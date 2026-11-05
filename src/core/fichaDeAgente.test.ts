@@ -65,6 +65,16 @@ describe("fichaDeAgente", () => {
     expect(ficha).toMatch(/sin pasar por la aprobación|sin aprobación/i);
   });
 
+  /** Medido tras quitarle `generar_fondo_svg` al desarrollador: su ficha seguía diciendo «encárgale esos fondos a él». */
+  it("en TrueForge, quien puede llamar al diseñador no ofrece fondos SVG; el diseñador sí", () => {
+    const desarrollador = agente({ nombre: "developer-xone", soloLectura: false, llama: ["designer-xone"] });
+    const disenador = agente({ nombre: "designer-xone", soloLectura: false, escribeEn: ["/icons/", "/fonts/"] });
+    expect(fichaDeAgente(desarrollador, { fondosDelDisenador: true })).not.toMatch(/fondos SVG/);
+    expect(fichaDeAgente(disenador, { fondosDelDisenador: true })).toMatch(/fondos SVG/);
+    // Sin la opción (deepagents, donde sí la lleva), sigue diciéndolo.
+    expect(fichaDeAgente(desarrollador)).toMatch(/fondos SVG/);
+  });
+
   it("y quien no ejecuta no lo insinúa", () => {
     expect(fichaDeAgente(agente())).not.toMatch(/ejecuta comandos/);
   });

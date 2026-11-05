@@ -36,6 +36,15 @@ export const NOMBRE_BUSCAR_ICONO = "buscar_icono";
  * Solo llega a `motor: "modelo"`: un especialista de motor externo corre en otro proceso y no
  * recibe tools propias (la ficha lo comprueba aparte).
  */
+/**
+ * **En TrueForge los fondos SVG son del diseñador**: quien puede llamarlo (`llama` lo nombra) no lleva `generar_fondo_svg`
+ * (`sesionTrueforge.ts#propiasDe`) y su ficha no lo ofrece. La misma regla en los dos sitios: la ficha decía «encárgale esos
+ * fondos a él» al desarrollador que ya no tenía la tool.
+ */
+export function llamaAlDisenador(a: Pick<Agente, "llama">): boolean {
+  return (a.llama ?? []).includes("designer-xone");
+}
+
 export function recibeBuscarIcono(a: Pick<Agente, "soloLectura" | "ejecucion" | "escribeEn">): boolean {
   if (a.soloLectura || a.ejecucion === true) return false;
   // Sin `escribeEn` escribe el proyecto entero; con él, solo si una de sus carpetas cubre `icons/` —el diseñador, que

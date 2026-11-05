@@ -103,7 +103,10 @@ Ante una discrepancia con el código, **el código manda**.
   (`core/encargoDeTarea.ts#planesPorSuNombre`).
 - **Quien prueba él mismo no lleva lo que no usa** (`propiasDe#pruebaElMismoDe`): ni `validar_fichero_xone` (sus escrituras
   ya validan), ni `describe_image` (tiene `view_image`), ni `convertir_a_p`, ni la fecha; `generar_fondo_svg` no va a quien
-  puede llamar al diseñador. El desarrollador de serie no trae `openui-builder`: documentar es del documentador.
+  puede llamar al diseñador (`core/iconos.ts#llamaAlDisenador`, la misma regla en su ficha: `fondosDelDisenador`). El desarrollador de serie no trae `openui-builder`: documentar es del documentador.
+- **El prompt del orquestador es el de deepagents con las TRES diferencias de este motor** (`OpcionesDelOrquestador`):
+  delega con `create_sub_agent` (sin nota que traduzca `task`), el desarrollador que prueba él mismo no tiene detrás a
+  `device-controller` comprobándolo, y la regla del crítico no se repite si va `BUCLE_DE_CALIDAD`. deepagents, igual.
 - **`view_image`: quien prueba él mismo VE su captura** (`agent/grafo/verImagen.ts`, como Codex): la tool deja una marca
   con el id de la imagen y el adaptador (`modeloLangchain.ts#aMensajesDeLangchain`, `imagenDe`) la pone en un mensaje
   DETRÁS del bloque de respuestas de tool —nunca entre dos—, rehecha igual en cada llamada. **Con la API Responses va

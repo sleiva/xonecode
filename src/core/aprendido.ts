@@ -170,6 +170,21 @@ export function bloqueDeAprendido(delProyecto: readonly Aprendizaje[], deXone: r
   return partes.length === 0 ? undefined : partes.join("\n\n");
 }
 
+/**
+ * **Lo de XOne, al ORQUESTADOR, solo por sus TEMAS.** Son apuntes de cómo ESCRIBIR XOne, y el orquestador no escribe: quien
+ * lo hace lo recibe ENTERO con su encargo (`bloqueDeAprendido`). Medido con la calculadora (05-11-2026): entero era el 45 %
+ * de su sistema (18.114 de 40.016 caracteres) en cada llamada. El tema basta para saber que existe, no repetirlo al
+ * apuntar y contestar lo sencillo; el detalle lo tiene cualquier especialista.
+ */
+export function indiceDeAprendidoDeXone(deXone: readonly Aprendizaje[]): string | undefined {
+  if (deXone.length === 0) return undefined;
+  return [
+    "LO APRENDIDO DE XONE, por sus temas (el texto entero, con cómo se comprobó, le llega a cada especialista con su encargo; " +
+      "si necesitas el detalle de uno para contestar, pregúntaselo a quien lo recibe):",
+    ...deXone.map((a) => `- ${a.tema}`),
+  ].join("\n");
+}
+
 /** Cuándo apuntar, para quien tiene la tool: una tool sin un «cuándo» no se usa. */
 export const USO_DE_APUNTAR_APRENDIZAJE =
   `Cuando descubras algo que otro encargo va a necesitar, apúntalo con \`${NOMBRE_APUNTAR_APRENDIZAJE}\` en cuanto lo ` +

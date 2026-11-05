@@ -4100,7 +4100,7 @@ describe("lo APRENDIDO del proyecto llega delante de cada encargo, y quien traba
     const global = join(homedir(), ".xonecode");
     mkdirSync(global, { recursive: true });
     const fichero = join(global, "aprendido-xone.json");
-    writeFileSync(fichero, JSON.stringify([{ tema: "imgbk anula border-corner-radius", texto: "en un frame", cuando: "2026-10-23T08:00:00.000Z" }]));
+    writeFileSync(fichero, JSON.stringify([{ tema: "imgbk anula border-corner-radius", texto: "en un frame con zorropato", cuando: "2026-10-23T08:00:00.000Z" }]));
     try {
       const { m, vistos } = modelosConGuion([
         [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "developer-xone", input: "pinta el menú" }) }] })],
@@ -4109,9 +4109,12 @@ describe("lo APRENDIDO del proyecto llega delante de cada encargo, y quien traba
       ]);
       const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO });
       await s.turno("pinta el menú", piel().p);
-      expect(vistos[0]![0]).toContain("LO APRENDIDO DE XONE");
+      expect(vistos[0]![0]).toContain("LO APRENDIDO DE XONE, por sus temas");
+      // Al orquestador, solo el TEMA: el texto es para quien escribe (05-11-2026, el 45 % de su sistema).
+      expect(vistos[0]![0]).toContain("- imgbk anula border-corner-radius\n");
+      expect(vistos[0]![0]).not.toContain("zorropato");
       expect(vistos[1]![0]).not.toContain("LO APRENDIDO DE XONE");
-      expect(vistos[1]!.slice(1).join("\n")).toContain("- imgbk anula border-corner-radius: en un frame");
+      expect(vistos[1]!.slice(1).join("\n")).toContain("- imgbk anula border-corner-radius: en un frame con zorropato");
     } finally {
       rmSync(fichero, { force: true });
     }

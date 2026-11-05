@@ -17,7 +17,7 @@
  */
 
 import { esEsfuerzo, esPensamiento, type Esfuerzo, type Pensamiento } from "./esfuerzo.js";
-import { recibeBuscarIcono } from "./iconos.js";
+import { llamaAlDisenador, recibeBuscarIcono } from "./iconos.js";
 import { METODO_DE_COMPARACION_VISUAL } from "./metodoDeComparacionVisual.js";
 import { recibeFuentes } from "./fuentes.js";
 import { NUCLEO_XONE, NUCLEO_XONE_EXTERNO } from "./nucleoXone.js";
@@ -569,7 +569,7 @@ export interface Lectura {
  */
 export const SKILL_DE_OPENUI = "openui-builder";
 
-export function fichaDeAgente(agente: Agente, opciones: { conIconos?: boolean; conFuentes?: boolean } = {}): string {
+export function fichaDeAgente(agente: Agente, opciones: { conIconos?: boolean; conFuentes?: boolean; fondosDelDisenador?: boolean } = {}): string {
   const capacidades: string[] = [];
   /**
    * **Quien EJECUTA es su propio caso, y confundirlo con «escribe» miente dos veces.**
@@ -634,9 +634,10 @@ export function fichaDeAgente(agente: Agente, opciones: { conIconos?: boolean; c
   /**
    * Los fondos SVG (degradados, sombras, resplandor) van SIEMPRE con quien escribe el proyecto:
    * la tool es pura y sin red, no depende de ningún puerto. Se dice por lo mismo que arriba: el
-   * orquestador no ve las tools del especialista, y sin esta línea no sabría a quién pedirlos.
+   * orquestador no ve las tools del especialista, y sin esta línea no sabría a quién pedirlos. Con `fondosDelDisenador`
+   * (TrueForge), no a quien puede llamar al diseñador: no lleva la tool (`llamaAlDisenador`).
    */
-  if (agente.motor === "modelo" && recibeBuscarIcono(agente)) {
+  if (agente.motor === "modelo" && recibeBuscarIcono(agente) && !(opciones.fondosDelDisenador === true && llamaAlDisenador(agente))) {
     capacidades.push(
       "genera fondos SVG (degradados, sombras y resplandores) para frames y botones, que XOne no trae: encárgale esos fondos a él"
     );
