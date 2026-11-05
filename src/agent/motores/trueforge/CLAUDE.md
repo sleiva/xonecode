@@ -102,7 +102,8 @@ Ante una discrepancia con el código, **el código manda**.
   (`core/encargoDeTarea.ts#planesPorSuNombre`).
 - **`view_image`: quien prueba él mismo VE su captura** (`agent/grafo/verImagen.ts`, como Codex): la tool deja una marca
   con el id de la imagen y el adaptador (`modeloLangchain.ts#aMensajesDeLangchain`, `imagenDe`) la pone en un mensaje
-  DETRÁS del bloque de respuestas de tool —nunca entre dos—, rehecha igual en cada llamada. `describe_image` sigue: es
+  DETRÁS del bloque de respuestas de tool —nunca entre dos—, rehecha igual en cada llamada. **Con la API Responses va
+  DENTRO de la respuesta de la tool**, como en Codex (`input_image`, `detail: high`, `aMensajesDeLangchain#enLaRespuesta`). `describe_image` sigue: es
   otro modelo que la cuenta en texto.
 - **En AUTÓNOMO, un hijo escribe sin la interrupción de aprobación** (`escribeSinPreguntar`, fijado al NACER el hijo): la
   de la librería solo se atiende al acabar la ejecución entera, y la escritura esperaba a sus hermanos. Lo escrito sale

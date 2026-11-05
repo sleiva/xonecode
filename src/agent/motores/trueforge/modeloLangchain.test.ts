@@ -362,6 +362,53 @@ describe("view_image en la conversación", () => {
     expect(aMensajesDeLangchain(mensajes).map((m) => m.getType())).toEqual(["human", "ai", "tool", "tool", "ai"]);
   });
 
+  it("con la API Responses va DENTRO de la respuesta de la tool, como Codex, sin mensaje aparte", () => {
+    const mensajes = [
+      { role: "user", content: "prueba" },
+      { role: "assistant", content: "", tool_calls: [{ id: "a", type: "function", function: { name: "view_image", arguments: "{}" } }, { id: "b", type: "function", function: { name: "ls", arguments: "{}" } }] },
+      { role: "tool", tool_call_id: "a", content: "⟦imagen:0123456789abcdef⟧ /artefactos/c.png va justo debajo" },
+      { role: "tool", tool_call_id: "b", content: "x" },
+    ] as never;
+    const r = aMensajesDeLangchain(mensajes, (id) => (id === "0123456789abcdef" ? IMG : undefined), { enLaRespuesta: true });
+    expect(r.map((m) => m.getType())).toEqual(["human", "ai", "tool", "tool"]);
+    expect(r[2]!.content).toEqual([
+      { type: "input_text", text: "⟦imagen:0123456789abcdef⟧ /artefactos/c.png va justo debajo" },
+      { type: "input_image", image_url: "data:image/png;base64,AAAA", detail: "high" },
+    ]);
+    expect(r[3]!.content).toBe("x");
+  });
+
+  it("y por el cliente de Responses de verdad, la petición la lleva en `function_call_output`", async () => {
+    const cuerpos: { input?: { type?: string; role?: string; output?: unknown; content?: unknown }[] }[] = [];
+    const fin = `event: response.completed\ndata: ${JSON.stringify({ type: "response.completed", sequence_number: 0, response: { id: "r", object: "response", created_at: 0, model: "deepseek-flash", status: "completed", output: [], usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 } } })}\n\n`;
+    const cliente = new ChatOpenAI({
+      model: "deepseek-flash",
+      apiKey: "sk-de-pega",
+      useResponsesApi: true,
+      configuration: {
+        baseURL: "https://x",
+        fetch: (async (_u: unknown, init?: { body?: unknown }) => {
+          cuerpos.push(JSON.parse(String(init?.body)));
+          return new Response(fin, { status: 200, headers: { "content-type": "text/event-stream" } });
+        }) as typeof fetch,
+      },
+    });
+    await modeloParaTrueforge({ modelo: () => cliente, imagenDe: (id) => (id === "0123456789abcdef" ? IMG : undefined) }).createNonStream({
+      messages: [
+        { role: "user", content: "mira" },
+        { role: "assistant", content: "", tool_calls: [{ id: "a", type: "function", function: { name: "view_image", arguments: "{}" } }] },
+        { role: "tool", tool_call_id: "a", content: "⟦imagen:0123456789abcdef⟧ /artefactos/c.png" },
+      ],
+    } as never);
+    const entrada = cuerpos[0]!.input!;
+    const salida = entrada.find((i) => i.type === "function_call_output");
+    expect(salida?.output).toEqual([
+      { type: "input_text", text: "⟦imagen:0123456789abcdef⟧ /artefactos/c.png" },
+      { type: "input_image", image_url: "data:image/png;base64,AAAA", detail: "high" },
+    ]);
+    expect(JSON.stringify(entrada.filter((i) => i.role === "user"))).not.toContain("base64");
+  });
+
   it("una imagen que ya no está se dice en texto, sin romper la conversación", () => {
     const r = aMensajesDeLangchain([{ role: "tool", tool_call_id: "a", content: "⟦imagen:ffffffffffffffff⟧" }] as never, () => undefined);
     expect(JSON.stringify(r[1]!.content)).toContain("ya no está");

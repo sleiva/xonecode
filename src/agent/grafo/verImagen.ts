@@ -14,7 +14,8 @@ import { NOMBRE_TRAER } from "./traerDeLaMaquina.js";
  *
  * En la API de chat el resultado de una tool es TEXTO (por eso `describe_image` es una llamada aparte). Aquí la tool deja
  * una MARCA con el id de la imagen y el adaptador del modelo (`modeloLangchain.ts#aMensajesDeLangchain`) pone la imagen
- * de verdad en un mensaje justo detrás de los resultados de tools —donde Codex la pone en la respuesta de la tool—. La
+ * de verdad en un mensaje justo detrás de los resultados de tools —donde Codex la pone en la respuesta de la tool, y donde
+ * la pone también la API Responses (`modeloLangchain.ts#aMensajesDeLangchain`, `enLaRespuesta`)—. La
  * conversación guarda solo la marca; la imagen se rehace IGUAL en cada llamada (por su id, del registro), y el prefijo
  * no cambia para la caché.
  */

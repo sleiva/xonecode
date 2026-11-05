@@ -130,10 +130,32 @@ function argumentosDe(json: string): Record<string, unknown> {
  */
 export function aMensajesDeLangchain(
   mensajes: readonly MensajeOpenAi[],
-  imagenDe?: (id: string) => { base64: string; mime: string; ruta: string } | undefined
+  imagenDe?: (id: string) => { base64: string; mime: string; ruta: string } | undefined,
+  /**
+   * La imagen DENTRO de la respuesta de la tool, como Codex (`function_call_output` con `input_image`, `detail: high`):
+   * solo con la API Responses, que la admite ahí (medido con DeepSeek: con el formato nativo la ve; con `image_url`
+   * LangChain la mandaba como texto). Sin esto, el mensaje aparte de siempre (Chat no la admite en una respuesta).
+   */
+  { enLaRespuesta = false }: { enLaRespuesta?: boolean } = {}
 ): BaseMessage[] {
   const convertidos = convertirMensajes(mensajes);
   if (imagenDe === undefined) return convertidos;
+  if (enLaRespuesta) {
+    return convertidos.map((m, i) => {
+      const original = mensajes[i];
+      if (original?.role !== "tool") return m;
+      const texto = textoDeContenido(original.content);
+      const ids = [...texto.matchAll(MARCA_DE_IMAGEN)].map((x) => x[1]!);
+      if (ids.length === 0) return m;
+      const partes: unknown[] = [{ type: "input_text", text: texto }];
+      for (const id of ids) {
+        const imagen = imagenDe(id);
+        if (imagen === undefined) partes.push({ type: "input_text", text: `(la imagen ${id} ya no está: pídela otra vez con view_image)` });
+        else partes.push({ type: "input_image", image_url: `data:${imagen.mime};base64,${imagen.base64}`, detail: "high" });
+      }
+      return new ToolMessage({ tool_call_id: original.tool_call_id ?? "", content: partes as never });
+    });
+  }
   const salida: BaseMessage[] = [];
   let pendientes: string[] = [];
   const soltar = () => {
@@ -239,6 +261,8 @@ export function modeloParaTrueforge(opciones: {
         return nota === undefined ? m : { ...m, content: `${nota}\n\n${textoDeContenido(m.content)}` };
       }),
       opciones.imagenDe,
+      // Con la API Responses, la imagen va DENTRO de la respuesta de `view_image`, como en Codex.
+      { enLaRespuesta: (base as { useResponsesApi?: unknown }).useResponsesApi === true },
     );
     const senal = opciones.senal?.();
     const id = `xc-${++secuencia}`;
