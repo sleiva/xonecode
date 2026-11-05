@@ -9,7 +9,7 @@
 .tareas {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--espacio-10);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -18,11 +18,11 @@
 .tarea {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 8px 10px;
+  gap: var(--espacio-4);
+  padding: var(--espacio-8) var(--espacio-10);
   border-left: 2px solid var(--dsw-alias-border-l2);
   background: var(--dsw-alias-bg-layer-1);
-  border-radius: 0 8px 8px 0;
+  border-radius: 0 var(--radio-tarjeta) var(--radio-tarjeta) 0;
 }
 
 .titulo {

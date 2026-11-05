@@ -15,7 +15,7 @@
    rojo da ~5.7:1: el mismo cambio ya hecho en `Chat.module.css#.error` y en
    `Aprobacion.module.css` por la misma razón, ahora que solo hay un tema que servir. */
 .avisoDeConexion :global(div) {
-  padding: 8px 16px;
+  padding: var(--espacio-8) var(--espacio-16);
   text-align: center;
   font-size: var(--tipo-control);
   background: var(--dsw-alias-state-error-secondary);

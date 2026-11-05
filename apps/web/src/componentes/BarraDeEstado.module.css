@@ -4,8 +4,8 @@
 .barra {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 12px;
+  gap: var(--espacio-6);
+  padding: var(--espacio-4) var(--espacio-12);
   height: 24px;
   font-size: var(--tipo-pequeno);
   background: var(--dsw-alias-bg-layer-1);

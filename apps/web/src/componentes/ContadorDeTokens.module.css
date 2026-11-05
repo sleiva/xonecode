@@ -21,13 +21,13 @@
 .contador {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--espacio-4);
   font-family: var(--ds-font-family-code);
   font-size: var(--tipo-mini);
   /* Sin `margin-left: auto`: el empuje al borde derecho lo hace la caja de `.acciones` de
      `Compositor.module.css`, y con dos `auto` el hueco se repartía y esto quedaba suelto. */
-  padding: 3px 8px;
-  border-radius: 999px;
+  padding: var(--espacio-2) var(--espacio-8);
+  border-radius: var(--radio-pastilla);
   background: var(--dsw-alias-state-business-tertiary);
   color: var(--dsw-alias-state-business-primary);
   white-space: nowrap;
@@ -37,7 +37,7 @@
 .separador {
   color: inherit;
   opacity: 0.55;
-  padding: 0 1px;
+  padding: 0 var(--espacio-2);
 }
 
 .cifra {

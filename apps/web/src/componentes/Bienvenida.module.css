@@ -7,7 +7,7 @@
 .bienvenida {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--espacio-4);
 }
 
 .saludo {

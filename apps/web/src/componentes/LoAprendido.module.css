@@ -4,7 +4,7 @@
 .aprendido {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: var(--espacio-12);
 }
 
 .barra {
@@ -12,14 +12,14 @@
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 8px 16px;
+  gap: var(--espacio-8) var(--espacio-16);
 }
 
 .alcances {
   display: inline-flex;
-  gap: 4px;
-  padding: 3px;
-  border-radius: 8px;
+  gap: var(--espacio-4);
+  padding: var(--espacio-2);
+  border-radius: var(--radio-tarjeta);
   border: 0.5px solid var(--dsw-alias-border-l2);
   background: var(--dsw-alias-bg-layer-2);
 }
@@ -27,10 +27,10 @@
 .alcance {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
+  gap: var(--espacio-6);
+  padding: var(--espacio-6) var(--espacio-12);
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radio-control);
   background: none;
   color: var(--dsw-alias-label-secondary);
   font: inherit;
@@ -44,8 +44,8 @@
 }
 
 .cuenta {
-  padding: 1px 7px;
-  border-radius: 999px;
+  padding: var(--espacio-2) var(--espacio-6);
+  border-radius: var(--radio-pastilla);
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-secondary);
   font-size: var(--tipo-mini);
@@ -54,7 +54,7 @@
 .buscar {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--espacio-8);
   color: var(--dsw-alias-label-secondary);
   font-size: var(--tipo-pequeno);
 }
@@ -62,8 +62,8 @@
 .buscar input {
   width: 240px;
   max-width: 60vw;
-  padding: 6px 10px;
-  border-radius: 6px;
+  padding: var(--espacio-6) var(--espacio-10);
+  border-radius: var(--radio-control);
   border: 0.5px solid var(--dsw-alias-border-l2);
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-primary);
@@ -73,7 +73,7 @@
 .aviso {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--espacio-6);
   margin: 0;
   color: var(--dsw-alias-label-tertiary);
   font-size: var(--tipo-pequeno);
@@ -89,7 +89,7 @@
 .lista {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--espacio-10);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -98,9 +98,9 @@
 .entrada {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 14px 16px;
-  border-radius: 10px;
+  gap: var(--espacio-10);
+  padding: var(--espacio-12) var(--espacio-16);
+  border-radius: var(--radio-tarjeta);
   border: 0.5px solid var(--dsw-alias-border-l2);
   background: var(--dsw-alias-bg-layer-2);
 }
@@ -109,14 +109,14 @@
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 16px;
+  gap: var(--espacio-16);
   flex-wrap: wrap;
 }
 
 .cuerpo {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--espacio-6);
   min-width: 0;
   flex: 1 1 360px;
 }
@@ -124,7 +124,7 @@
 .titulo {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--espacio-8);
   flex-wrap: wrap;
 }
 
@@ -135,8 +135,8 @@
 }
 
 .pastilla {
-  padding: 2px 8px;
-  border-radius: 999px;
+  padding: var(--espacio-2) var(--espacio-8);
+  border-radius: var(--radio-pastilla);
   font-size: var(--tipo-mini);
   font-weight: var(--peso-fuerte);
   color: var(--dsw-alias-state-business-primary);
@@ -168,7 +168,7 @@
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 6px;
+  gap: var(--espacio-6);
 }
 
 .secundario {
@@ -186,21 +186,21 @@
 .editor {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--espacio-10);
 }
 
 .editor label {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--espacio-4);
   color: var(--dsw-alias-label-secondary);
   font-size: var(--tipo-pequeno);
 }
 
 .editor input,
 .editor textarea {
-  padding: 7px 10px;
-  border-radius: 6px;
+  padding: var(--espacio-6) var(--espacio-10);
+  border-radius: var(--radio-control);
   border: 0.5px solid var(--dsw-alias-border-l2);
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-primary);
@@ -217,18 +217,18 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--espacio-12);
   flex-wrap: wrap;
-  padding: 10px 12px;
-  border-radius: 8px;
+  padding: var(--espacio-10) var(--espacio-12);
+  border-radius: var(--radio-tarjeta);
   border: 0.5px solid var(--dsw-alias-state-error-secondary);
   color: var(--dsw-alias-state-error-primary);
 }
 
 /* El `código` que escribe el agente (`trozosConCodigo`): monoespaciado, sobre la capa de debajo. */
 .codigo {
-  padding: 1px 5px;
-  border-radius: 4px;
+  padding: var(--espacio-2) var(--espacio-4);
+  border-radius: var(--radio-mini);
   background: var(--dsw-alias-bg-layer-1);
   font-family: var(--ds-font-family-code);
   font-size: 0.92em;

@@ -7,7 +7,7 @@
 .escritorio {
   flex: 1 1 auto;
   overflow-y: auto;
-  padding: 40px 24px;
+  padding: 40px var(--espacio-24);
 }
 
 /* La misma columna acotada y centrada que usa el transcript: la pantalla no cambia de eje
@@ -41,11 +41,11 @@
 .entorno {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--espacio-10);
   margin: 20px 0 0;
-  padding: 12px 14px;
+  padding: var(--espacio-12) var(--espacio-12);
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 12px;
+  border-radius: var(--radio-tarjeta);
   background: var(--dsw-alias-bg-layer-2);
   font-size: var(--tipo-pequeno);
 }
@@ -116,7 +116,7 @@
 .rejilla {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 12px;
+  gap: var(--espacio-12);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -126,9 +126,9 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  padding: 14px;
+  padding: var(--espacio-12);
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 12px;
+  border-radius: var(--radio-tarjeta);
   background: var(--dsw-alias-bg-layer-2);
   overflow: hidden;
 }
@@ -164,7 +164,7 @@
   flex-wrap: wrap;
   align-items: baseline;
   justify-content: space-between;
-  gap: 4px 8px;
+  gap: var(--espacio-4) var(--espacio-8);
 }
 
 /* Los que quedan fuera de la elección: UNA línea con la cuenta y el camino a Ajustes, no
@@ -213,7 +213,7 @@
   flex: none;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: var(--espacio-4);
   /* Inter y no monoespaciada: es un ESTADO, no un dato (la misma pastilla que el Resumen,
      `ResumenDeProyecto.module.css#pastilla`). Gris secundario: el terciario no llega a 4,5:1 a 12px. */
   color: var(--dsw-alias-label-secondary);
@@ -226,8 +226,8 @@
    Sigue valiendo lo de antes —«sin descargar» no es un problema y no se pinta en rojo—,
    y ahora además la asimetría dice cuál de los dos es el estado que habilita algo. */
 .marca[data-local] {
-  padding: 2px 8px;
-  border-radius: 999px;
+  padding: var(--espacio-2) var(--espacio-8);
+  border-radius: var(--radio-pastilla);
   background: var(--dsw-alias-state-success-tertiary);
   color: var(--dsw-alias-state-success-primary);
 }
@@ -245,7 +245,7 @@
    fila. (Antes lo que variaba era la lista de sesiones, que ya no está aquí.) */
 .accionesDeTarjeta {
   display: flex;
-  gap: 6px;
+  gap: var(--espacio-6);
   margin-top: auto;
 }
 
@@ -289,7 +289,7 @@
   flex-wrap: wrap;
   align-items: flex-end;
   justify-content: space-between;
-  gap: 12px 24px;
+  gap: var(--espacio-12) var(--espacio-24);
 }
 
 .portada .entorno {
@@ -302,18 +302,18 @@
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--espacio-12);
   margin: 0 0 24px;
-  padding: 14px 16px;
+  padding: var(--espacio-12) var(--espacio-16);
   border: 1px solid var(--xonecode-cian);
-  border-radius: 12px;
+  border-radius: var(--radio-tarjeta);
   background: var(--dsw-alias-bg-layer-2);
 }
 
 .cuerpoDeTrabajando {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: var(--espacio-2);
   min-width: 0;
 }
 
@@ -340,7 +340,7 @@
 .dosColumnas {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
-  gap: 16px;
+  gap: var(--espacio-16);
   align-items: start;
   margin-top: 24px;
 }
@@ -361,7 +361,7 @@
 .resumenDeTareas.resumenDeTareas {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--espacio-12);
   margin: 0;
 }
 
@@ -369,7 +369,7 @@
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--espacio-12);
 }
 
 .tituloDeResumen {
@@ -382,16 +382,16 @@
 .cifrasDeTareas {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
+  gap: var(--espacio-8);
   margin: 0;
 }
 
 .cifrasDeTareas > div {
   display: flex;
   flex-direction: column-reverse;
-  padding: 8px 10px;
+  padding: var(--espacio-8) var(--espacio-10);
   border-top: 3px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
+  border-radius: var(--radio-tarjeta);
   background: var(--dsw-alias-bg-layer-1);
 }
 
@@ -423,7 +423,7 @@
 .listaDeTareas {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--espacio-6);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -433,9 +433,9 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  padding: 7px 10px;
-  border-radius: 8px;
+  gap: var(--espacio-10);
+  padding: var(--espacio-6) var(--espacio-10);
+  border-radius: var(--radio-tarjeta);
   background: var(--dsw-alias-bg-layer-1);
   font-size: var(--tipo-control);
 }

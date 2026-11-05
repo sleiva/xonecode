@@ -30,7 +30,7 @@
 .barraSuperior.barraSuperior {
   background: var(--xonecode-barra);
   border-bottom: 1px solid var(--xonecode-barra-borde);
-  padding-bottom: 12px;
+  padding-bottom: var(--espacio-12);
 }
 
 /* La hairline de `.header::after` es la separación de la hoja copiada; sobre el azul sobra
@@ -61,7 +61,7 @@
 .estado {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--espacio-6);
   font-size: var(--tipo-pequeno);
   line-height: 22px;
   flex-shrink: 0;
@@ -91,10 +91,10 @@
    mockup— porque plegada la barra no está: su botón se iría con ella y no habría por
    dónde volver. Sobre el azul, en el mismo tono apagado que las pestañas. */
 .plegar {
-  padding: 2px 8px;
+  padding: var(--espacio-2) var(--espacio-8);
   margin-right: 4px;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radio-control);
   background: none;
   color: var(--xonecode-barra-texto-suave);
   font: inherit;
@@ -114,11 +114,11 @@
 .temaGrupo {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
-  padding: 2px;
+  gap: var(--espacio-2);
+  padding: var(--espacio-2);
   margin-right: 10px;
   border: 1px solid var(--xonecode-barra-borde);
-  border-radius: 8px;
+  border-radius: var(--radio-tarjeta);
 }
 
 /* El filo va PUESTO también en el botón apagado, del color del propio carril —la misma
@@ -132,7 +132,7 @@
   width: 24px;
   height: 22px;
   border: 1px solid var(--xonecode-barra);
-  border-radius: 6px;
+  border-radius: var(--radio-control);
   background: none;
   color: var(--xonecode-barra-texto-suave);
   cursor: pointer;
@@ -152,10 +152,10 @@
 .ajustes {
   display: inline-flex;
   align-items: center;
-  padding: 4px;
+  padding: var(--espacio-4);
   margin-right: 10px;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radio-control);
   background: none;
   color: var(--xonecode-barra-texto-suave);
   cursor: pointer;
@@ -211,7 +211,7 @@
 .marcaEnlace:focus-visible {
   outline: 2px solid var(--xonecode-cian);
   outline-offset: 2px;
-  border-radius: 4px;
+  border-radius: var(--radio-mini);
 }
 
 /* El símbolo de la marca, sobre una placa CLARA y no suelto sobre el azul.
@@ -224,8 +224,8 @@
 .simbolo {
   flex-shrink: 0;
   margin-right: 8px;
-  padding: 2px;
-  border-radius: 6px;
+  padding: var(--espacio-2);
+  border-radius: var(--radio-control);
   background: var(--xonecode-barra-placa);
   vertical-align: middle;
 }

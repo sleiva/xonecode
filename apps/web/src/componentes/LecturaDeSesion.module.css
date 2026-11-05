@@ -7,13 +7,13 @@
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 8px 12px;
+  gap: var(--espacio-8) var(--espacio-12);
   width: calc(100% - 2 * var(--dsh-composer-side-clearance));
   max-width: calc(var(--dsh-composer-card-max-width) - 2 * var(--dsh-composer-side-clearance));
   margin: 0 auto 16px;
-  padding: 10px 12px;
+  padding: var(--espacio-10) var(--espacio-12);
   border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 12px;
+  border-radius: var(--radio-tarjeta);
   background: var(--dsw-alias-bg-layer-2);
 }
 
@@ -26,14 +26,14 @@
 
 .acciones {
   display: flex;
-  gap: 6px;
+  gap: var(--espacio-6);
 }
 
 .boton,
 .principal {
-  padding: 5px 10px;
+  padding: var(--espacio-4) var(--espacio-10);
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
+  border-radius: var(--radio-control);
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-primary);
   font: inherit;
@@ -75,5 +75,5 @@
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding: 12px 16px;
+  padding: var(--espacio-12) var(--espacio-16);
 }

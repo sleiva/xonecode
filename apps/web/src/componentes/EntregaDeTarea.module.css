@@ -5,7 +5,7 @@
 .entrega {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--espacio-2);
   margin: 4px 0 0;
 }
 
@@ -29,7 +29,7 @@
    gris de un detalle más. */
 .salvedad {
   margin: 2px 0 0;
-  padding: 4px 6px;
+  padding: var(--espacio-4) var(--espacio-6);
   border-left: 2px solid var(--dsw-alias-state-warn-primary);
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-state-warn-label);
@@ -38,7 +38,7 @@
 
 .hallazgos {
   margin: 2px 0 0;
-  padding-left: 14px;
+  padding-left: var(--espacio-12);
   color: var(--dsw-alias-label-tertiary);
   font-size: var(--tipo-mini);
 }

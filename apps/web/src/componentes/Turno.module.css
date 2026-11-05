@@ -6,11 +6,11 @@
 .raiz {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: var(--espacio-16);
   box-sizing: border-box;
   height: 100%;
   overflow-y: auto;
-  padding: 16px 20px 24px;
+  padding: var(--espacio-16) var(--espacio-16) var(--espacio-24);
   color: var(--dsw-alias-label-primary);
   font-size: var(--tipo-control);
 }
@@ -23,7 +23,7 @@
 .navegacion {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--espacio-6);
 }
 
 .cual {
@@ -46,7 +46,7 @@
   height: 26px;
   padding: 0;
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 7px;
+  border-radius: var(--radio-control);
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-secondary);
   font: inherit;
@@ -64,18 +64,18 @@
 .cifras {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
+  gap: var(--espacio-8);
   margin: 0;
 }
 
 .cifra {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--espacio-2);
   min-width: 0;
-  padding: 10px 12px;
+  padding: var(--espacio-10) var(--espacio-12);
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 10px;
+  border-radius: var(--radio-tarjeta);
   background: var(--dsw-alias-bg-layer-1);
 }
 
@@ -102,7 +102,7 @@
 .seccion {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--espacio-8);
 }
 
 .titulo {
@@ -121,7 +121,7 @@
 .modelos {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--espacio-8);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -131,8 +131,8 @@
 .modelo {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  row-gap: 4px;
-  column-gap: 10px;
+  row-gap: var(--espacio-4);
+  column-gap: var(--espacio-10);
 }
 
 .nombreDeModelo {
@@ -157,7 +157,7 @@
   display: block;
   height: 6px;
   overflow: hidden;
-  border-radius: 3px;
+  border-radius: var(--radio-mini);
   background: var(--dsw-alias-bg-layer-3);
 }
 
@@ -165,7 +165,7 @@
 .rellenoContexto {
   display: block;
   height: 100%;
-  border-radius: 3px;
+  border-radius: var(--radio-mini);
 }
 
 .relleno {
@@ -183,7 +183,7 @@
 .verificador {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--espacio-8);
   margin: 0;
   color: var(--dsw-alias-label-secondary);
 }

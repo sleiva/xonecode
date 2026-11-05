@@ -43,7 +43,7 @@
 */
 
 .globo {
-  padding: 10px 14px;
+  padding: var(--espacio-10) var(--espacio-12);
   line-height: 1.5;
 }
 
@@ -71,13 +71,13 @@
 .usuario {
   display: grid;
   grid-template-columns: 28px minmax(0, 1fr);
-  column-gap: 10px;
+  column-gap: var(--espacio-10);
   margin-bottom: 0;
   align-self: stretch;
   box-sizing: border-box;
-  padding: 12px 14px 14px;
+  padding: var(--espacio-12) var(--espacio-12) var(--espacio-12);
   border: 1px solid var(--dsw-alias-border-l3);
-  border-radius: 12px;
+  border-radius: var(--radio-tarjeta);
   background: var(--dsw-alias-bg-layer-2);
   color: var(--dsw-alias-label-primary);
 }
@@ -92,7 +92,7 @@
 .delAgente {
   display: grid;
   grid-template-columns: 28px minmax(0, 1fr);
-  column-gap: 12px;
+  column-gap: var(--espacio-12);
   align-self: stretch;
 }
 
@@ -138,7 +138,7 @@
 }
 
 .cuerpoDeLaPersona {
-  gap: 2px;
+  gap: var(--espacio-2);
 }
 
 /* Dentro del bloque del agente todo arranca en la MISMA vertical que su nombre: la respuesta y
@@ -191,9 +191,9 @@
 .adjuntosDelMensaje {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--espacio-2);
   margin: 6px 0 0;
-  padding: 6px 0 0;
+  padding: var(--espacio-6) 0 0;
   border-top: 0.5px solid var(--dsw-alias-border-l2);
   list-style: none;
 }
@@ -237,7 +237,7 @@
 .error {
   align-self: flex-start;
   max-width: 70ch;
-  border-radius: 10px;
+  border-radius: var(--radio-tarjeta);
   background: var(--dsw-alias-state-error-secondary);
   color: var(--dsw-alias-label-primary);
 }
@@ -264,7 +264,7 @@
    línea vive DENTRO del relleno (x = 5–7 px) y el aro de cada paso cabe entero encima. */
 .trabajo {
   margin: 2px 0;
-  padding: 0 0 0 18px;
+  padding: 0 0 0 var(--espacio-16);
   list-style: none;
   background: linear-gradient(var(--dsw-alias-border-l2), var(--dsw-alias-border-l2)) no-repeat 5px 0 / 2px 100%;
   font-family: var(--ds-font-family-code);
@@ -392,7 +392,7 @@
    rótulo de quién trabaja, y un filete debajo que lo separa de las tools. */
 .memoriaDelTurno {
   margin: 0 0 4px;
-  padding-bottom: 4px;
+  padding-bottom: var(--espacio-4);
   border-bottom: 1px solid var(--dsw-alias-border-l2);
   color: var(--dsw-alias-label-secondary);
   font-size: var(--tipo-pequeno);
@@ -408,14 +408,14 @@
 }
 
 .fase {
-  padding-left: 12px;
+  padding-left: var(--espacio-12);
 }
 
 /* El razonamiento, plegado por omisión: puede ser larguísimo y no es la respuesta. Se abre
    quien quiera verlo. `<details>` nativo — sin JavaScript ni estado que mantener. */
 .pensando {
   margin: 2px 0;
-  padding-left: 12px;
+  padding-left: var(--espacio-12);
 }
 
 .resumen {
@@ -442,7 +442,7 @@
 .pensando .textoTenue {
   white-space: pre-wrap;
   border-left: 2px solid var(--dsw-alias-border-l2);
-  padding-left: 10px;
+  padding-left: var(--espacio-10);
 }
 
 /* El cuerpo del tramo de pulso, cuando está abierto. */
@@ -459,8 +459,8 @@
 .detalleDePulso {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding-top: 4px;
+  gap: var(--espacio-2);
+  padding-top: var(--espacio-4);
   max-height: 176px;
   overflow-y: auto;
 }
@@ -470,7 +470,7 @@
    carril) para leerse como un hito más del turno, sin aro: no es una llamada. */
 .pensadoPlegado {
   margin: 0;
-  padding-left: 18px;
+  padding-left: var(--espacio-16);
 }
 
 .resumenPensado {
@@ -506,7 +506,7 @@
 .pensado {
   white-space: pre-wrap;
   border-left: 2px solid var(--dsw-alias-border-l2);
-  padding-left: 10px;
+  padding-left: var(--espacio-10);
 }
 
 /* La fila de acciones del mensaje: su hora y su botón de copiar, SIEMPRE a la vista (IXCODE-24,
@@ -515,7 +515,7 @@
   display: flex;
   justify-content: flex-end;
   align-items: center;
-  gap: 8px;
+  gap: var(--espacio-8);
   margin-top: 4px;
 }
 
@@ -538,8 +538,8 @@
    aviso de alcance de un agente externo (`Agentes.module.css#aviso`). */
 .relectura {
   margin: 12px 0 0;
-  padding: 8px 12px;
-  border-radius: 8px;
+  padding: var(--espacio-8) var(--espacio-12);
+  border-radius: var(--radio-tarjeta);
   background: var(--dsw-alias-state-warn-tertiary);
   color: var(--dsw-alias-state-warn-label);
   font-size: var(--tipo-pequeno);
@@ -552,8 +552,8 @@
    él mismo ayer. La lista de nombres va en mono porque son rutas, dato de máquina. */
 .trabajoAlAbrir {
   margin: 12px 0 0;
-  padding: 8px 12px;
-  border-radius: 8px;
+  padding: var(--espacio-8) var(--espacio-12);
+  border-radius: var(--radio-tarjeta);
   background: var(--dsw-alias-state-warn-tertiary);
   color: var(--dsw-alias-state-warn-label);
   font-size: var(--tipo-pequeno);
@@ -562,7 +562,7 @@
 
 .trabajoAlAbrir ul {
   margin: 6px 0 0;
-  padding-left: 18px;
+  padding-left: var(--espacio-16);
 }
 
 .trabajoAlAbrir li {
@@ -589,10 +589,10 @@
 .sinAprobacion {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
+  gap: var(--espacio-8);
   margin: 12px 0 0;
-  padding: 8px 12px;
-  border-radius: 8px;
+  padding: var(--espacio-8) var(--espacio-12);
+  border-radius: var(--radio-control);
   background: var(--dsw-alias-state-error-secondary);
   color: var(--dsw-alias-label-primary);
   font-size: var(--tipo-pequeno);
@@ -610,7 +610,7 @@
 .cerrarAviso {
   flex: none;
   border: none;
-  padding: 0 2px;
+  padding: 0 var(--espacio-2);
   background: none;
   color: inherit;
   font: inherit;
@@ -653,7 +653,7 @@
 .artefactosDelTramo {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--espacio-6);
   align-items: flex-start;
   width: 100%;
 }
@@ -677,12 +677,12 @@
 .capturas {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--espacio-8);
   align-items: flex-end;
   /* El mismo sangrado que el tramo de trabajo (`.pensando`): sin él las miniaturas salían
      12 px a la izquierda del triángulo de «Trabajo del agente» y del texto del mensaje,
      descolgadas de la columna. Medido en pantalla. */
-  padding-left: 12px;
+  padding-left: var(--espacio-12);
 }
 
 /* Altura fija y ancho automático: una captura de móvil es muy vertical y un diagrama muy
@@ -697,7 +697,7 @@
   max-width: 200px;
   object-fit: contain;
   border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
+  border-radius: var(--radio-tarjeta);
   background: var(--dsw-alias-bg-layer-2);
 }
 
@@ -714,7 +714,7 @@
   align-items: center;
   justify-content: center;
   width: 160px;
-  padding: 8px;
+  padding: var(--espacio-8);
   box-sizing: border-box;
   color: var(--dsw-alias-label-tertiary);
   font-size: var(--tipo-pequeno);
@@ -729,7 +729,7 @@
   background: none;
   cursor: pointer;
   line-height: 0;
-  border-radius: 8px;
+  border-radius: var(--radio-control);
 }
 
 .capturaAbrir:hover .captura,
@@ -744,10 +744,10 @@
   width: 100%;
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px 8px 4px 4px;
+  gap: var(--espacio-4);
+  padding: var(--espacio-4) var(--espacio-8) var(--espacio-4) var(--espacio-4);
   border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 10px;
+  border-radius: var(--radio-tarjeta);
   background: var(--dsw-alias-bg-layer-2);
 }
 
@@ -759,9 +759,9 @@
   flex: 1 1 auto;
   min-width: 0;
   align-items: center;
-  gap: 10px;
-  padding: 6px 8px;
-  border-radius: 8px;
+  gap: var(--espacio-10);
+  padding: var(--espacio-6) var(--espacio-8);
+  border-radius: var(--radio-tarjeta);
 }
 
 .artefactoIcono {
@@ -774,7 +774,7 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
-  gap: 1px;
+  gap: var(--espacio-2);
 }
 
 .artefactoNombre {
@@ -818,7 +818,7 @@
   display: inline-flex;
   flex: none;
   align-items: center;
-  gap: 4px;
+  gap: var(--espacio-4);
   margin-left: auto;
   font-size: var(--tipo-pequeno);
   color: var(--dsw-alias-label-secondary);
@@ -887,10 +887,10 @@
   box-sizing: border-box;
   width: 100%;
   max-width: 70ch;
-  padding: 10px 14px;
+  padding: var(--espacio-10) var(--espacio-12);
   border: 1px solid var(--dsw-alias-border-l2);
   border-left: 3px solid var(--dsw-alias-state-error-primary);
-  border-radius: 10px;
+  border-radius: var(--radio-tarjeta);
   background: var(--dsw-alias-bg-layer-2);
   color: var(--dsw-alias-label-primary);
   font-size: var(--tipo-control);
@@ -908,7 +908,7 @@
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--espacio-6);
 }
 
 /* Texto y botones en la misma fila mientras quepan; en estrecho, los botones bajan. */
@@ -916,7 +916,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: 4px 10px;
+  gap: var(--espacio-4) var(--espacio-10);
 }
 
 .hallazgoTexto {
@@ -933,7 +933,7 @@
 
 .hallazgoAcciones {
   display: flex;
-  gap: 6px;
+  gap: var(--espacio-6);
 }
 
 /* El mismo botón secundario que Ajustes/Agentes/etc. (`Boton.module.css#secundario`). */
@@ -989,9 +989,9 @@
   box-sizing: border-box;
   min-width: 18px;
   height: 18px;
-  padding: 0 5px;
+  padding: 0 var(--espacio-4);
   border: 2px solid var(--dsw-alias-bg-layer-1);
-  border-radius: 9px;
+  border-radius: var(--radio-pastilla);
   background: var(--xonecode-azul);
   color: var(--xonecode-sobre-azul);
   font-size: var(--tipo-mini);
@@ -1024,14 +1024,14 @@
   grid-row: 1;
   box-sizing: border-box;
   max-width: min(640px, 100%);
-  padding: 6px 14px 10px;
+  padding: var(--espacio-6) var(--espacio-12) var(--espacio-10);
   border: 1px solid var(--dsw-alias-border-l3);
-  border-radius: 14px 4px 14px 14px;
+  border-radius: var(--radio-tarjeta) var(--radio-mini) var(--radio-tarjeta) var(--radio-tarjeta);
   background: var(--xonecode-fila-elegida);
 }
 
 .usuario .autor.autor {
-  gap: 4px;
+  gap: var(--espacio-4);
   min-height: 24px;
 }
 
@@ -1040,10 +1040,10 @@
 .tramo > .resumen {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 12px;
+  gap: var(--espacio-6);
+  padding: var(--espacio-4) var(--espacio-12);
   border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 999px;
+  border-radius: var(--radio-pastilla);
   background: var(--dsw-alias-bg-layer-2);
   color: var(--dsw-alias-label-secondary);
   list-style: none;
@@ -1073,9 +1073,9 @@
    la izquierda, separados por un filete; «Copiar» sin caja a la derecha. */
 .acciones.acciones {
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--espacio-12);
   margin-top: 8px;
-  padding-top: 6px;
+  padding-top: var(--espacio-6);
   border-top: 0.5px solid var(--dsw-alias-border-l2);
 }
 
@@ -1083,7 +1083,7 @@
   display: inline-flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px 0;
+  gap: var(--espacio-4) 0;
   min-width: 0;
   color: var(--dsw-alias-label-tertiary);
   font-size: var(--tipo-pequeno);
@@ -1093,14 +1093,14 @@
 /* Cada dato con su icono, y entre uno y otro un filete vertical. */
 .datosDelPie > * + * {
   margin-left: 10px;
-  padding-left: 10px;
+  padding-left: var(--espacio-10);
   border-left: 1px solid var(--dsw-alias-border-l2);
 }
 
 .cifraDelPie {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: var(--espacio-4);
 }
 
 .datosDelPie .hora {
@@ -1123,6 +1123,6 @@
   grid-row: 2;
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--espacio-10);
   margin-top: 4px;
 }

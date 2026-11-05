@@ -2,7 +2,7 @@
    label-tertiary. Los `--shiki-*` vienen de `estilos/shiki.css`. */
 
 .visor {
-  padding: 0 16px 16px;
+  padding: 0 var(--espacio-16) var(--espacio-16);
   /* Sin ligaduras, como el editor: «-->» como flecha escondería el `--` que XOne no admite dentro
      de un comentario XML. */
   font-variant-ligatures: none;
@@ -16,7 +16,7 @@
 
 .bloque :global(pre) {
   margin: 0;
-  padding: 8px 0;
+  padding: var(--espacio-8) 0;
   overflow: auto;
   font-family: var(--ds-font-family-code);
   font-size: var(--tipo-pequeno);
@@ -50,9 +50,9 @@
    no. En mono como el código, y con la numeración que no se selecciona. */
 .extracto {
   margin: 12px 0 8px;
-  padding: 6px 0;
+  padding: var(--espacio-6) 0;
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
+  border-radius: var(--radio-tarjeta);
   font-family: var(--ds-font-family-code);
   font-size: var(--tipo-pequeno);
   line-height: 1.6;

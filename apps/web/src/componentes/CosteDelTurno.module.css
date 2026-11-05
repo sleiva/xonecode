@@ -12,7 +12,7 @@
   /* Los alias que había aquí (`text-tertiary` y `text-secondary`) no existen en ninguna paleta y resolvían a nada; estos son los que se querían. */
   display: inline-flex;
   align-items: center;
-  gap: 3px;
+  gap: var(--espacio-2);
   font-family: var(--ds-font-family-code);
   font-size: var(--tipo-mini);
   color: var(--dsw-alias-label-tertiary);

@@ -7,11 +7,11 @@
   z-index: 1;
   flex-shrink: 0;
   margin: 0;
-  padding: 0 24px 12px;
+  padding: 0 var(--espacio-24) var(--espacio-12);
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: var(--espacio-8);
   font-size: var(--tipo-control);
   text-align: center;
   color: var(--xonecode-splash-texto-suave);

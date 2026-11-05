@@ -3,14 +3,14 @@
 .visor {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--espacio-10);
   box-sizing: border-box;
   max-width: 100%;
   max-height: 100%;
   margin: 0;
-  padding: 12px;
+  padding: var(--espacio-12);
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 12px;
+  border-radius: var(--radio-dialogo);
   background: var(--dsw-alias-bg-layer-2);
 }
 
@@ -23,7 +23,7 @@
   max-height: calc(100vh - 140px);
   margin: 0 auto;
   object-fit: contain;
-  border-radius: 6px;
+  border-radius: var(--radio-control);
   background: var(--dsw-alias-bg-layer-1);
 }
 
@@ -31,7 +31,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: var(--espacio-8);
 }
 
 /* El nombre es DATO DE MÁQUINA (un timestamp la mitad de las veces): mono, y cede él. */
@@ -51,7 +51,7 @@
   display: flex;
   flex: none;
   align-items: center;
-  gap: 6px;
+  gap: var(--espacio-6);
 }
 
 .contador {
@@ -65,7 +65,7 @@
 .acciones {
   display: flex;
   flex: none;
-  gap: 8px;
+  gap: var(--espacio-8);
 }
 
 .enlace {

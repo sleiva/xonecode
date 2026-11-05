@@ -217,6 +217,7 @@ Ante una discrepancia con el código, **el código manda**.
 
 - **Ningún tamaño ni peso de letra suelto en `src/`**: salen de `--tipo-*` y `--peso-*` (`estilos/tipografia.css`); lo
   que queda fuera (la marca, los glifos) va con su motivo en `estilosDelCliente.test.ts`. La monoespaciada, solo para DATOS; un `<h2>`, `--tipo-titulo`.
+  El espaciado, `--espacio-N` (salvo alineaciones de más de 24); el radio, por PAPEL (`--radio-control`, `-tarjeta`…).
 - **Ningún color literal fuera de `estilos/marca.css`, `splash.css` y `src/temas.ts`**
   (`Barra.test.tsx`, todos los `.module.css`, `transparent` incluido). El cian es ACENTO, no texto.
 - **Un tema por MODO** (`src/temas.ts`, `estilos/temas.css`, `apariencia.ts`): semillas

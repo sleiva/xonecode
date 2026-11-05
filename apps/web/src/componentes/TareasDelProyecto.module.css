@@ -7,7 +7,7 @@
    campo de feedback ya no viven aquí — son de `AccionesDeTarea.module.css` desde Task 13. */
 
 .lista {
-  padding: 16px;
+  padding: var(--espacio-16);
   overflow-y: auto;
   /* El contenedor de las filas finalizadas (`@container tareas`): en un panel estrecho se quitan su frase y sus fechas. */
   container-type: inline-size;
@@ -27,8 +27,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding-bottom: 12px;
+  gap: var(--espacio-12);
+  padding-bottom: var(--espacio-12);
 }
 
 .rotulo {
@@ -66,7 +66,7 @@
 .filas {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--espacio-8);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -78,16 +78,16 @@
   gap: 0;
   overflow: hidden;
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
+  border-radius: var(--radio-tarjeta);
 }
 
 .fila {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
-  padding: 10px 12px;
+  gap: var(--espacio-10);
+  padding: var(--espacio-10) var(--espacio-12);
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 10px;
+  border-radius: var(--radio-tarjeta);
   background: var(--dsw-alias-bg-layer-1);
 }
 
@@ -115,7 +115,7 @@
 }
 
 .fila[data-estado="requiere-atencion"] .punto {
-  border-radius: 2px;
+  border-radius: var(--radio-mini);
   transform: rotate(45deg);
   border-color: var(--dsw-alias-state-warn-primary);
   background: var(--dsw-alias-state-warn-primary);
@@ -124,7 +124,7 @@
 .cuerpo {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--espacio-2);
   min-width: 0;
   flex: 1;
 }
@@ -135,7 +135,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: 6px;
+  gap: var(--espacio-6);
 }
 
 .titulo {
@@ -163,7 +163,7 @@
   display: flex;
   align-items: center;
   flex-shrink: 0;
-  gap: 6px;
+  gap: var(--espacio-6);
 }
 
 /* El grupo de `AccionesDeTarea`, pegado al borde DERECHO de la fila, como «Nueva tarea» encima.
@@ -244,7 +244,7 @@
   position: absolute;
   inset: -0.5px;
   border-radius: inherit;
-  padding: 2px;
+  padding: var(--espacio-2);
   background: conic-gradient(
     from var(--xonecode-angulo),
     var(--dsw-alias-border-l2) 0deg,
@@ -285,7 +285,7 @@
 .pestanas {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: var(--espacio-4);
   border-bottom: 1px solid var(--dsw-alias-border-l2);
   margin-bottom: 12px;
 }
@@ -293,8 +293,8 @@
 .pestana {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
+  gap: var(--espacio-8);
+  padding: var(--espacio-8) var(--espacio-12);
   border: none;
   margin-bottom: -1px;
   background: none;
@@ -314,8 +314,8 @@
 }
 
 .cuenta {
-  padding: 0 6px;
-  border-radius: 999px;
+  padding: 0 var(--espacio-6);
+  border-radius: var(--radio-pastilla);
   background: var(--dsw-alias-state-business-tertiary);
   color: var(--dsw-alias-state-business-primary);
   font-size: var(--tipo-mini);
@@ -348,10 +348,10 @@
 .lineaFinalizada {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--espacio-12);
   width: 100%;
   min-height: 40px;
-  padding: 0 12px;
+  padding: 0 var(--espacio-12);
   border: none;
   background: none;
   color: inherit;
@@ -397,15 +397,15 @@
 .cuentas {
   display: flex;
   flex: none;
-  gap: 6px;
+  gap: var(--espacio-6);
   font-size: var(--tipo-mini);
   font-weight: var(--peso-fuerte);
   white-space: nowrap;
 }
 
 .cuentas > span {
-  padding: 1px 7px;
-  border-radius: 4px;
+  padding: var(--espacio-2) var(--espacio-6);
+  border-radius: var(--radio-mini);
 }
 
 .cuentaCritica {
@@ -469,16 +469,16 @@
 }
 
 .critico {
-  padding: 10px 12px;
+  padding: var(--espacio-10) var(--espacio-12);
   border: 0.5px solid var(--dsw-alias-state-error-primary);
-  border-radius: 8px;
+  border-radius: var(--radio-tarjeta);
   background: var(--dsw-alias-state-error-secondary);
 }
 
 .critico ul,
 .listaObservaciones {
   margin: 0;
-  padding-left: 18px;
+  padding-left: var(--espacio-16);
   line-height: 1.55;
 }
 
@@ -519,7 +519,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: var(--espacio-8);
 }
 
 /* Fechas y entrega, en la misma línea y en segundo plano. Lo de `EntregaDeTarea` se aplana aquí: en la otra pestaña
@@ -529,7 +529,7 @@
   flex: 1 1 280px;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: 2px 12px;
+  gap: var(--espacio-2) var(--espacio-12);
   min-width: 0;
   color: var(--dsw-alias-label-tertiary);
   font-size: var(--tipo-mini);
@@ -538,7 +538,7 @@
 .meta > div {
   flex-direction: row;
   flex-wrap: wrap;
-  gap: 2px 12px;
+  gap: var(--espacio-2) var(--espacio-12);
   margin: 0;
 }
 
@@ -546,7 +546,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: var(--espacio-6);
   margin-left: auto;
 }
 
@@ -569,8 +569,8 @@
 .desplegado {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 8px 12px 14px 32px;
+  gap: var(--espacio-12);
+  padding: var(--espacio-8) var(--espacio-12) var(--espacio-12) var(--espacio-32);
   border-top: 0.5px solid var(--dsw-alias-border-l2);
   font-size: var(--tipo-pequeno);
 }
@@ -582,9 +582,9 @@
 
 /* La clave del ticket del gestor: una píldora discreta junto al título, enlace si lo hay. */
 .ticket {
-  padding: 0 6px;
+  padding: 0 var(--espacio-6);
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 999px;
+  border-radius: var(--radio-pastilla);
   color: var(--dsw-alias-label-secondary);
   font-size: var(--tipo-mini);
   font-variant-numeric: tabular-nums;
@@ -599,7 +599,7 @@ a.ticket:hover {
 /* «Mirar ahora» y «Nueva tarea», juntos a la derecha de la cabecera. */
 .botones {
   display: flex;
-  gap: 6px;
+  gap: var(--espacio-6);
 }
 
 /* Borrar una finalizada: discreto hasta pedir confirmación; entonces, el rojo de siempre. */
@@ -613,7 +613,7 @@ a.ticket:hover {
   display: inline-flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: var(--espacio-8);
   margin-left: auto;
   color: var(--dsw-alias-label-secondary);
   font-size: var(--tipo-pequeno);
@@ -625,7 +625,7 @@ a.ticket:hover {
 
 /* Una CONTINUACIÓN (reencolada) cuelga de la tarea de arriba: sangría por nivel y su «↳». */
 .finalizada[data-profundidad="1"] .lineaFinalizada {
-  padding-left: 32px;
+  padding-left: var(--espacio-32);
 }
 
 .finalizada[data-profundidad="2"] .lineaFinalizada {
@@ -650,10 +650,10 @@ a.ticket:hover {
 .confirmarReversion {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 10px 12px;
+  gap: var(--espacio-8);
+  padding: var(--espacio-10) var(--espacio-12);
   border: 0.5px solid var(--xonecode-rojo);
-  border-radius: 8px;
+  border-radius: var(--radio-tarjeta);
 }
 
 .confirmarReversion p {
@@ -673,7 +673,7 @@ a.ticket:hover {
 .grupo {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--espacio-8);
   margin-bottom: 18px;
 }
 
@@ -682,7 +682,7 @@ a.ticket:hover {
   flex-wrap: wrap;
   align-items: baseline;
   justify-content: space-between;
-  gap: 4px 12px;
+  gap: var(--espacio-4) var(--espacio-12);
 }
 
 .rotuloDeGrupo {
@@ -740,7 +740,7 @@ a.ticket:hover {
 
 .flechas {
   display: inline-flex;
-  gap: 4px;
+  gap: var(--espacio-4);
 }
 
 .flecha {
@@ -749,14 +749,14 @@ a.ticket:hover {
 
 .flecha.flecha {
   min-width: 28px;
-  padding: 2px 6px;
+  padding: var(--espacio-2) var(--espacio-6);
 }
 
 /* Las cifras de la que trabaja: lleva, tokens y caché, grandes y en columnas fijas. */
 .cifrasEnMarcha {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 28px;
+  gap: var(--espacio-4) 28px;
   margin: 4px 0 2px;
 }
 

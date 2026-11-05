@@ -14,7 +14,7 @@
   place-items: center;
   width: 100%;
   height: 100%;
-  padding: 24px;
+  padding: var(--espacio-24);
   /* NO `--dsw-alias-bg-overlay`: ese alias de la paleta copiada es un gris OPACO —medido,
      un 233/236/242 sin canal alfa— y tapaba la pantalla entera, así que la ventana quedaba
      flotando sobre un fondo liso, sin la aplicación detrás. Ver `estilos/marca.css`. */
@@ -24,11 +24,11 @@
 .ventana {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--espacio-6);
   width: min(420px, 100%);
-  padding: 20px;
+  padding: var(--espacio-16);
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 16px;
+  border-radius: var(--radio-dialogo);
   background: var(--dsw-alias-bg-layer-1);
 }
 
@@ -55,9 +55,9 @@
 .campo {
   box-sizing: border-box;
   width: 100%;
-  padding: 8px 10px;
+  padding: var(--espacio-8) var(--espacio-10);
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
+  border-radius: var(--radio-control);
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-primary);
   font: inherit;
@@ -68,7 +68,7 @@
 .acciones {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
+  gap: var(--espacio-8);
   margin-top: 14px;
 }
 
@@ -116,7 +116,7 @@
 .carga {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--espacio-8);
   margin: 6px 0 8px;
   color: var(--dsw-alias-label-secondary);
   font-size: var(--tipo-pequeno);

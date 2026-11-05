@@ -23,8 +23,8 @@
    `Skills.module.css` y por el mismo motivo. */
 .problemas {
   margin: 0 0 14px;
-  padding: 10px 12px;
-  border-radius: 10px;
+  padding: var(--espacio-10) var(--espacio-12);
+  border-radius: var(--radio-tarjeta);
   background: var(--dsw-alias-state-error-secondary);
   color: var(--dsw-alias-label-primary);
   font-size: var(--tipo-pequeno);
@@ -35,8 +35,8 @@
    fallo del que haya que huir de la ventana, es información de la última cosa que se pidió. */
 .estado {
   margin: 0 0 14px;
-  padding: 10px 12px;
-  border-radius: 10px;
+  padding: var(--espacio-10) var(--espacio-12);
+  border-radius: var(--radio-tarjeta);
   background: var(--dsw-alias-state-warn-tertiary);
   color: var(--dsw-alias-state-warn-label);
   font-size: var(--tipo-pequeno);
@@ -58,23 +58,23 @@
 .filas {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--espacio-8);
   margin: 0 0 18px;
   padding: 0;
   list-style: none;
 }
 
 .fila {
-  padding: 10px 12px;
+  padding: var(--espacio-10) var(--espacio-12);
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 10px;
+  border-radius: var(--radio-tarjeta);
   background: var(--dsw-alias-bg-layer-2);
 }
 
 .cabeceraDeFila {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--espacio-8);
   flex-wrap: wrap;
 }
 
@@ -93,8 +93,8 @@
 
 .autenticacion {
   flex: none;
-  padding: 1px 6px;
-  border-radius: 999px;
+  padding: var(--espacio-2) var(--espacio-6);
+  border-radius: var(--radio-pastilla);
   background: var(--dsw-alias-bg-module-platform);
   color: var(--dsw-alias-label-tertiary);
   font-size: var(--tipo-pequeno);
@@ -115,8 +115,8 @@
  */
 .pastilla {
   flex: none;
-  padding: 1px 8px;
-  border-radius: 999px;
+  padding: var(--espacio-2) var(--espacio-8);
+  border-radius: var(--radio-pastilla);
   font-size: var(--tipo-mini);
   font-weight: var(--peso-fuerte);
   white-space: nowrap;
@@ -166,9 +166,9 @@
    `composes` solo se admite sobre un selector de una única clase local. */
 .accionDeFila.accionDeFila {
   flex: none;
-  padding: 4px 10px;
+  padding: var(--espacio-4) var(--espacio-10);
   border: 0.5px solid var(--dsw-alias-border-l4);
-  border-radius: 8px;
+  border-radius: var(--radio-control);
   background: var(--dsw-alias-button-elevated-fill);
   color: var(--dsw-alias-label-primary);
   font: inherit;
@@ -198,23 +198,23 @@
 /* El desplegable de tools. Misma forma que `Skills.module.css#.cuerpo`. */
 .cuerpo {
   margin: 10px 0 0;
-  padding-top: 10px;
+  padding-top: var(--espacio-10);
   border-top: 0.5px solid var(--dsw-alias-border-l2);
 }
 
 .tools {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--espacio-6);
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
 .tool {
-  padding: 6px 8px;
+  padding: var(--espacio-6) var(--espacio-8);
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
+  border-radius: var(--radio-tarjeta);
   background: var(--dsw-alias-bg-layer-1);
 }
 
@@ -229,8 +229,8 @@
    que NO exige vigilancia. */
 .soloLectura {
   margin-left: 8px;
-  padding: 1px 6px;
-  border-radius: 999px;
+  padding: var(--espacio-2) var(--espacio-6);
+  border-radius: var(--radio-pastilla);
   background: var(--dsw-alias-state-success-tertiary);
   color: var(--dsw-alias-state-success-primary);
   font-size: var(--tipo-pequeno);
@@ -253,7 +253,7 @@
 .formulario {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--espacio-6);
   margin-top: 16px;
 }
 
@@ -300,5 +300,5 @@
 .botones {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
+  gap: var(--espacio-8);
 }

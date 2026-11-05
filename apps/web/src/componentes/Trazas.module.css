@@ -25,9 +25,9 @@
 .barra {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--espacio-10);
   flex: none;
-  padding: 8px 12px;
+  padding: var(--espacio-8) var(--espacio-12);
   border-bottom: 0.5px solid var(--dsw-alias-border-l2);
 }
 
@@ -35,9 +35,9 @@
   flex: 1 1 auto;
   min-width: 0;
   max-width: 320px;
-  padding: 5px 10px;
+  padding: var(--espacio-4) var(--espacio-10);
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
+  border-radius: var(--radio-control);
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-primary);
   font: inherit;
@@ -67,7 +67,7 @@
   flex: 1 1 auto;
   min-width: 0;
   overflow-y: auto;
-  padding: 8px;
+  padding: var(--espacio-8);
 }
 
 .grupo {
@@ -82,11 +82,11 @@
   z-index: 1;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--espacio-8);
   width: 100%;
-  padding: 5px 8px;
+  padding: var(--espacio-4) var(--espacio-8);
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radio-control);
   background: var(--dsw-alias-bg-layer-2);
   color: var(--dsw-alias-label-secondary);
   font: inherit;
@@ -112,11 +112,11 @@
 .fila {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--espacio-12);
   width: 100%;
-  padding: 4px 8px;
+  padding: var(--espacio-4) var(--espacio-8);
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radio-control);
   background: none;
   color: var(--dsw-alias-label-secondary);
   font: inherit;
@@ -143,7 +143,7 @@
   bottom: 4px;
   left: 0;
   width: 2px;
-  border-radius: 2px;
+  border-radius: var(--radio-mini);
   background: var(--xonecode-cian);
 }
 
@@ -171,8 +171,8 @@
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
-  padding: 1px 6px;
-  border-radius: 6px;
+  padding: var(--espacio-2) var(--espacio-6);
+  border-radius: var(--radio-control);
   background: var(--dsw-alias-bg-module-platform);
   color: var(--dsw-alias-label-secondary);
   font-size: var(--tipo-mini);
@@ -273,9 +273,9 @@
 .cabeceraDePanel {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--espacio-8);
   flex: none;
-  padding: 10px 12px;
+  padding: var(--espacio-10) var(--espacio-12);
 }
 
 .situacion {
@@ -284,9 +284,9 @@
 
 .cerrar {
   margin-left: auto;
-  padding: 2px 6px;
+  padding: var(--espacio-2) var(--espacio-6);
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radio-control);
   background: none;
   color: var(--dsw-alias-label-tertiary);
   font: inherit;
@@ -300,9 +300,9 @@
 
 .pestanasDePanel {
   display: flex;
-  gap: 4px;
+  gap: var(--espacio-4);
   flex: none;
-  padding: 0 12px;
+  padding: 0 var(--espacio-12);
   border-bottom: 0.5px solid var(--dsw-alias-border-l2);
 }
 
@@ -312,7 +312,7 @@
    color se nombra por alias o no se nombra—, y aquí además el alias dice mejor lo que pasa,
    que es que el filete se confunde con el fondo. */
 .pestanaDePanel {
-  padding: 6px 8px;
+  padding: var(--espacio-6) var(--espacio-8);
   border: none;
   border-bottom: 2px solid var(--dsw-alias-bg-layer-1);
   background: none;
@@ -333,7 +333,7 @@
 .fallo {
   flex: none;
   margin: 0;
-  padding: 10px 12px 0;
+  padding: var(--espacio-10) var(--espacio-12) 0;
   color: var(--dsw-alias-state-error-primary);
 }
 
@@ -344,7 +344,7 @@
   flex: 1 1 auto;
   min-height: 0;
   margin: 0;
-  padding: 12px;
+  padding: var(--espacio-12);
   overflow: auto;
   color: var(--dsw-alias-label-primary);
   font: inherit;
@@ -353,7 +353,7 @@
 }
 
 .tiempos {
-  padding: 12px;
+  padding: var(--espacio-12);
 }
 
 .dato {
@@ -370,7 +370,7 @@
 .nota,
 .vacio {
   margin: 0;
-  padding: 12px;
+  padding: var(--espacio-12);
   color: var(--dsw-alias-label-tertiary);
   line-height: 1.5;
 }

@@ -26,7 +26,7 @@
    hover): la de abrir ocupa todo lo que sobra, la acción se queda con su ancho. Su
    `.projectRow` es una sola caja flex y esto solo reparte el hueco dentro. */
 .filaConAccion {
-  padding-right: 4px;
+  padding-right: var(--espacio-4);
 }
 
 /* La fila bajo el ratón, en el mismo azul que la elegida pero a la mitad de carga
@@ -43,7 +43,7 @@
      es estar. */
 .filaConAccion.filaConAccion:hover:not(.filaAbierta):not(.sesionAbierta) {
   background: var(--xonecode-fila-hover);
-  border-radius: 8px;
+  border-radius: var(--radio-control);
 }
 
 /* El proyecto ABIERTO: fondo y el nombre en NEGRITA, y ninguna barra de cian.
@@ -64,7 +64,7 @@
 .filaAbierta.filaAbierta.filaAbierta {
   position: relative;
   background: var(--dsw-alias-interactive-bg-hover);
-  border-radius: 8px;
+  border-radius: var(--radio-tarjeta);
 }
 
 /* El nombre del proyecto activo. Es la otra mitad de su marca ahora que el filo de cian se
@@ -112,7 +112,7 @@
 .iconoDeApp {
   display: block;
   object-fit: contain;
-  border-radius: 3px;
+  border-radius: var(--radio-mini);
 }
 
 .cuerpoDeFila {
@@ -120,7 +120,7 @@
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--espacio-6);
   padding: 0;
   overflow: hidden;
 }
@@ -131,12 +131,12 @@
 .entorno {
   width: calc(100% - 4px);
   margin: 0 2px 8px;
-  padding: 6px 8px;
+  padding: var(--espacio-6) var(--espacio-8);
   box-sizing: border-box;
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-primary);
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
+  border-radius: var(--radio-tarjeta);
   font: inherit;
 }
 
@@ -145,7 +145,7 @@
    tamaño; esto solo lo mete debajo de su fila de proyecto en vez de al margen de la
    lista. */
 .sinSesiones {
-  padding: 4px 12px 8px 30px;
+  padding: var(--espacio-4) var(--espacio-12) var(--espacio-8) 30px;
   font-style: italic;
 }
 
@@ -156,8 +156,8 @@
    sin inventar un tono nuevo. */
 .avisoOcultos {
   margin: 6px 10px 8px;
-  padding: 8px 10px;
-  border-radius: 8px;
+  padding: var(--espacio-8) var(--espacio-10);
+  border-radius: var(--radio-tarjeta);
   background: var(--dsw-alias-bg-layer-2);
   border: 0.5px solid var(--dsw-alias-border-l2);
 }
@@ -220,7 +220,7 @@
 .sesionAbierta.sesionAbierta.sesionAbierta {
   position: relative;
   background: var(--xonecode-fila-elegida);
-  border-radius: 8px;
+  border-radius: var(--radio-tarjeta);
 }
 
 .sesionAbierta::before {
@@ -230,7 +230,7 @@
   bottom: 4px;
   left: 0;
   width: 2px;
-  border-radius: 2px;
+  border-radius: var(--radio-mini);
   /* El ACENTO, y por su nombre. Antes decía `button-primary-fill` y salía cian de rebote,
      porque `estilos/marca.css` tenía ese alias secuestrado. Desde el rediseño el relleno
      primario es el negro del tema y el cian se quedó SOLO de acento, así que un filo que
@@ -366,7 +366,7 @@
 .filaDeEntorno {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--espacio-8);
   min-width: 0;
   margin: 0 2px 8px;
 }
@@ -403,8 +403,8 @@
 
 .marcaDeTarea {
   margin-left: auto;
-  padding: 2px 5px;
-  border-radius: 4px;
+  padding: var(--espacio-2) var(--espacio-4);
+  border-radius: var(--radio-mini);
   /* El mismo par `warn` del aviso de árbol sucio del chat: no es un error ni un estado
      concedido, es de quién es la fila. */
   background: var(--dsw-alias-state-warn-tertiary);
@@ -418,7 +418,7 @@
 .fichaDeSesion {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--espacio-6);
   margin-left: auto;
 }
 
@@ -485,8 +485,8 @@
 .filaConRama.filaConRama {
   height: auto;
   min-height: 34px;
-  padding-top: 4px;
-  padding-bottom: 4px;
+  padding-top: var(--espacio-4);
+  padding-bottom: var(--espacio-4);
 }
 
 /* La rama: más pequeña y más apagada que el nombre, y en letra de máquina, que es la regla del

@@ -63,10 +63,10 @@
   box-sizing: border-box;
   min-height: 0;
   overflow: auto;
-  padding: 18px;
+  padding: var(--espacio-16);
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: var(--espacio-16);
   border-left: 0.5px solid var(--dsw-alias-border-l2);
   background: var(--dsw-alias-bg-layer-1);
 }
@@ -74,7 +74,7 @@
 .cabecera {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--espacio-6);
 }
 
 .rotulo {
@@ -97,14 +97,14 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: var(--espacio-8);
   color: var(--dsw-alias-label-secondary);
   font-size: var(--tipo-pequeno);
 }
 
 .ticket {
-  padding: 2px 8px;
-  border-radius: 6px;
+  padding: var(--espacio-2) var(--espacio-8);
+  border-radius: var(--radio-control);
   background: var(--dsw-alias-bg-layer-2);
   color: var(--dsw-alias-label-primary);
   font-family: var(--ds-font-family-code);
@@ -113,7 +113,7 @@
 .seccion {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--espacio-6);
 }
 
 .texto {
@@ -139,9 +139,9 @@
 }
 
 .encargo {
-  padding: 10px 12px;
+  padding: var(--espacio-10) var(--espacio-12);
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 10px;
+  border-radius: var(--radio-tarjeta);
   background: var(--dsw-alias-bg-layer-2);
   color: var(--dsw-alias-label-primary);
   font-size: var(--tipo-control);
@@ -150,7 +150,7 @@
 
 .adjuntos {
   margin: 0;
-  padding-left: 18px;
+  padding-left: var(--espacio-16);
   color: var(--dsw-alias-label-primary);
   font-size: var(--tipo-control);
 }

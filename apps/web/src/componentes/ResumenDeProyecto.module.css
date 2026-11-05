@@ -9,7 +9,7 @@
 .pastillas {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--espacio-6);
 }
 
 /* La pastilla de estado. Mono y en versalitas —la regla del rediseño: la letra de máquina
@@ -19,9 +19,9 @@
 .pastilla {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 3px 9px;
-  border-radius: 999px;
+  gap: var(--espacio-4);
+  padding: var(--espacio-2) var(--espacio-8);
+  border-radius: var(--radio-pastilla);
   font-size: var(--tipo-pequeno);
   font-weight: var(--peso-medio);
   white-space: nowrap;
@@ -45,7 +45,7 @@
 .acciones {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--espacio-8);
 }
 
 .secundario {
@@ -78,7 +78,7 @@
 .cifras {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 12px;
+  gap: var(--espacio-12);
   margin: 0 0 20px;
 }
 
@@ -89,10 +89,10 @@
 .tarjeta.tarjeta {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--espacio-6);
   margin: 0;
   min-width: 0;
-  padding: 14px 16px;
+  padding: var(--espacio-12) var(--espacio-16);
 }
 
 /* Letra de máquina en versalitas, como las pastillas: marca lo que es rótulo de un dato. */
@@ -170,16 +170,16 @@
   display: inline-flex;
   align-items: baseline;
   flex-wrap: wrap;
-  gap: 4px 6px;
+  gap: var(--espacio-4) var(--espacio-6);
   min-width: 0;
 }
 
 .botones {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--espacio-6);
   margin-top: auto;
-  padding-top: 6px;
+  padding-top: var(--espacio-6);
 }
 
 /* ── Arriba: la copia y las conversaciones nuevas, lado a lado ──────────────────────────── */
@@ -187,7 +187,7 @@
   margin: 0 0 20px;
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 12px;
+  gap: var(--espacio-12);
   align-items: stretch;
 }
 
@@ -198,7 +198,7 @@
 .copia {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--espacio-10);
 }
 
 .girando {
@@ -239,7 +239,7 @@
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: var(--espacio-10);
   color: var(--dsw-alias-label-primary);
   font-size: var(--tipo-control);
 }

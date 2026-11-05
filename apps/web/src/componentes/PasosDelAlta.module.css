@@ -13,7 +13,7 @@
 .paso {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--espacio-6);
 }
 
 /* El conector entre dos marcadores: una línea de 24px, gris mientras el paso anterior no
@@ -21,7 +21,7 @@
    convierte una fila de puntos sueltos en una progresión que se lee de izquierda a
    derecha. */
 .paso[data-conector] {
-  padding-left: 6px;
+  padding-left: var(--espacio-6);
 }
 
 .paso[data-conector]::before {
@@ -100,7 +100,7 @@
 .volver {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--espacio-6);
   margin: 0;
   padding: 0;
   border: none;

@@ -38,7 +38,7 @@
   /* La CAJA es el conjunto: mismo filo y mismo baño que una pastilla suelta, porque para
      quien mira esto ES una pastilla — una con dos mitades. */
   border: 1px solid color-mix(in srgb, var(--xonecode-cian) 70%, var(--dsw-alias-border-l2));
-  border-radius: 8px;
+  border-radius: var(--radio-tarjeta);
   background: var(--xonecode-fila-hover);
 }
 
@@ -77,10 +77,10 @@
      tres. Antes era un botón de texto suelto y le bastaba el relleno. */
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 4px 8px;
+  gap: var(--espacio-4);
+  padding: var(--espacio-4) var(--espacio-8);
   border: 1px solid color-mix(in srgb, var(--xonecode-cian) 70%, var(--dsw-alias-border-l2));
-  border-radius: 8px;
+  border-radius: var(--radio-control);
   /*
    * El baño de cian de las filas de la barra, que ya viene AJUSTADO por tema (7% en claro,
    * 13% en oscuro): reusarlo es lo que evita inventar un segundo cian translúcido que en
@@ -109,9 +109,9 @@
   min-width: 260px;
   max-height: 320px;
   margin-bottom: 6px;
-  padding: 6px;
+  padding: var(--espacio-6);
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 12px;
+  border-radius: var(--radio-dialogo);
   background: var(--dsw-alias-bg-layer-1);
   overflow-y: auto;
 }
@@ -141,11 +141,11 @@
 .proveedor {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--espacio-6);
   width: 100%;
-  padding: 6px 8px;
+  padding: var(--espacio-6) var(--espacio-8);
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radio-control);
   background: none;
   color: var(--dsw-alias-label-primary);
   font: inherit;
@@ -192,7 +192,7 @@
 .modelos {
   display: flex;
   flex-direction: column;
-  padding-left: 14px;
+  padding-left: var(--espacio-12);
   /* Alto propio: la lista de un proveedor (Ollama trae 26) se desplaza dentro de su
      sitio y los demás proveedores siguen a la vista. */
   max-height: 200px;
@@ -201,7 +201,7 @@
 
 /* El título del menú y la marca del proveedor en vigor. */
 .titulo {
-  padding: 4px 8px 6px;
+  padding: var(--espacio-4) var(--espacio-8) var(--espacio-6);
   color: var(--dsw-alias-label-tertiary);
   font-size: var(--tipo-mini);
   font-weight: var(--peso-fuerte);
@@ -214,9 +214,9 @@
 }
 
 .modelo {
-  padding: 5px 8px;
+  padding: var(--espacio-4) var(--espacio-8);
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radio-control);
   background: none;
   color: var(--dsw-alias-label-secondary);
   font: inherit;
@@ -254,9 +254,9 @@
   box-sizing: border-box;
   width: calc(100% - 8px);
   margin: 2px 0 4px 4px;
-  padding: 4px 8px;
+  padding: var(--espacio-4) var(--espacio-8);
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 6px;
+  border-radius: var(--radio-control);
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-primary);
   font: inherit;
@@ -287,7 +287,7 @@
   width: 100%;
   box-sizing: border-box;
   margin: 4px 0 0;
-  padding: 6px 10px;
+  padding: var(--espacio-6) var(--espacio-10);
   border: none;
   border-top: 0.5px solid var(--dsw-alias-border-l2);
   background: none;

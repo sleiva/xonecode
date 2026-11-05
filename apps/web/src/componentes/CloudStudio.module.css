@@ -6,8 +6,8 @@
 .panel {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 16px 20px;
+  gap: var(--espacio-12);
+  padding: var(--espacio-16) var(--espacio-16);
   max-width: 72ch;
 }
 
@@ -26,7 +26,7 @@
   display: flex;
   align-items: baseline;
   flex-wrap: wrap;
-  gap: 4px 12px;
+  gap: var(--espacio-4) var(--espacio-12);
 }
 
 .proyecto {
@@ -62,7 +62,7 @@
 .botones {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--espacio-8);
 }
 
 /* Las dos acciones llevan el AZUL de la marca con su letra encima —el par que ya está
@@ -78,9 +78,9 @@
    cable para arreglar dos palabras de la pantalla. */
 .subir,
 .bajar {
-  padding: 6px 14px;
+  padding: var(--espacio-6) var(--espacio-12);
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radio-control);
   background: var(--xonecode-azul);
   color: var(--xonecode-sobre-azul);
   font: inherit;
@@ -101,8 +101,8 @@
    DIRECCIÓN, y se lee como el `git pull` que esta operación no es. */
 .nota {
   margin: 0;
-  padding: 8px 12px;
-  border-radius: 8px;
+  padding: var(--espacio-8) var(--espacio-12);
+  border-radius: var(--radio-tarjeta);
   background: var(--dsw-alias-bg-layer-2);
   color: var(--dsw-alias-label-secondary);
   font-size: var(--tipo-pequeno);
@@ -115,7 +115,7 @@
 .registro {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--espacio-6);
 }
 
 /* Una operación, plegable. El triángulo del `<summary>` se deja como viene, y eso obliga a no
@@ -124,12 +124,12 @@
    sello son dos `<span>` en línea, que es todo lo que hace falta. */
 .operacion {
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
+  border-radius: var(--radio-tarjeta);
   background: var(--dsw-alias-bg-layer-1);
 }
 
 .cabeceraDeOperacion {
-  padding: 6px 12px;
+  padding: var(--espacio-6) var(--espacio-12);
   color: var(--dsw-alias-label-secondary);
   font-size: var(--tipo-pequeno);
   cursor: pointer;
@@ -157,9 +157,9 @@
   max-height: 220px;
   overflow: auto;
   margin: 0;
-  padding: 8px 12px;
+  padding: var(--espacio-8) var(--espacio-12);
   border-top: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 0 0 8px 8px;
+  border-radius: 0 0 var(--radio-tarjeta) var(--radio-tarjeta);
   background: var(--dsw-alias-bg-layer-2);
   color: var(--dsw-alias-label-secondary);
   font-family: var(--ds-font-family-code);

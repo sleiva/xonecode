@@ -47,7 +47,7 @@
 .enlace {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
+  gap: var(--espacio-8);
 }
 
 .enlace > :last-child {

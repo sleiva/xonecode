@@ -4,7 +4,7 @@
 .boton {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--espacio-6);
 }
 
 .boton:disabled {

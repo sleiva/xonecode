@@ -10718,3 +10718,13 @@ Y los títulos de tarjeta, en una segunda pasada por SIGNIFICADO y no por valor:
 el nombre de cada proyecto del Escritorio y otros cuatro `<h2>` iban a 14, el tamaño del texto que tenían debajo, y no se
 distinguían de él. Pasan a `--tipo-titulo`, y un test recorre cada `<h2>` de los componentes (siguiendo `composes`) para
 que uno nuevo no vuelva a nacer con el tamaño del cuerpo.
+
+Después, el espaciado y el radio. MEDIDO el espaciado (padding y gap): 8, 6, 10, 12 y 4 px son casi todo, y la escala del
+lienzo (4…32) dejaba fuera el 6 y el 10 —casi 300 usos—. Se cambió la escala, no la consola: pasos de 2 (2…12, 16, 24,
+32, `--espacio-N` = N px), migrada 1:1; solo la cola suelta (1, 3, 5, 7, 9, 14, 18, 20, 22) fue al paso más cercano,
+1–2 px cada uno. Lo de más de 24 fuera de la escala NO es espaciado sino ALINEACIÓN —la sangría de 28px que deja sitio a
+un icono, 52/72px que cuadran con una columna— y se quedó literal: la primera pasada lo llevó a 24/32 y montaba el texto
+sobre el icono. El radio, en cambio, sí se veía desigual (controles a 8 y a 6, tarjetas a 8, 10 y 12) y no se podía
+migrar por valor: un 8 era un botón o una tarjeta. Se clasificó por PAPEL —mini 4, control 6 (también chips, estados y
+filtros de ese tamaño), tarjeta 10, diálogo 12, pastilla 999— y se cambian a la vista los botones de 8 a 6, las
+tarjetas de 8/12 a 10 y los diálogos de 16 a 12. Fuera, la caja del chat (20px) y la placa del logotipo.

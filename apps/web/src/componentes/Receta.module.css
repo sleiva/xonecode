@@ -2,9 +2,9 @@
    label-primary/secondary/tertiary. */
 .receta {
   margin: 12px 0 4px;
-  padding: 12px 14px;
+  padding: var(--espacio-12) var(--espacio-12);
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 10px;
+  border-radius: var(--radio-tarjeta);
   background: var(--dsw-alias-bg-layer-1);
 }
 
@@ -26,7 +26,7 @@
 
 .despues {
   margin-top: 12px;
-  padding-top: 10px;
+  padding-top: var(--espacio-10);
   border-top: 0.5px solid var(--dsw-alias-border-l2);
 }
 
@@ -35,7 +35,7 @@
    aquí significa «no es un requisito». */
 .aparte {
   margin-top: 12px;
-  padding-top: 10px;
+  padding-top: var(--espacio-10);
   border-top: 0.5px solid var(--dsw-alias-border-l2);
 }
 
@@ -52,12 +52,12 @@
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--espacio-12);
 }
 
 .paso {
   display: flex;
-  gap: 10px;
+  gap: var(--espacio-10);
 }
 
 /* El número es la POSICIÓN, y el orden importa aquí: el paso 3 no funciona sin el 2. Va en
@@ -80,7 +80,7 @@
 .pasoTitulo {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--espacio-8);
   margin: 0;
   color: var(--dsw-alias-label-primary);
   font-size: var(--tipo-pequeno);
@@ -126,10 +126,10 @@
 
 .comandos {
   margin: 0;
-  padding: 8px 34px 8px 10px;
+  padding: var(--espacio-8) 34px var(--espacio-8) var(--espacio-10);
   overflow-x: auto;
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
+  border-radius: var(--radio-tarjeta);
   background: var(--dsw-alias-bg-layer-2);
   color: var(--dsw-alias-label-secondary);
   font-family: var(--ds-font-family-code);
@@ -148,14 +148,14 @@
 .trabajo {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--espacio-6);
   margin-top: 8px;
 }
 
 .estado {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--espacio-8);
   margin: 0;
   color: var(--dsw-alias-label-secondary);
   font-size: var(--tipo-mini);
@@ -198,9 +198,9 @@
   margin: 0;
   max-height: 8.5em;
   overflow: auto;
-  padding: 8px 10px;
+  padding: var(--espacio-8) var(--espacio-10);
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
+  border-radius: var(--radio-tarjeta);
   background: var(--dsw-alias-bg-layer-2);
   color: var(--dsw-alias-label-tertiary);
   font-family: var(--ds-font-family-code);

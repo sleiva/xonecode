@@ -2,7 +2,7 @@
 .lista {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--espacio-6);
   margin: 8px 0;
   min-width: 0;
 }
@@ -18,15 +18,15 @@
 .etiquetas {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--espacio-6);
   margin: 0;
 }
 
 /* Una pastilla por etiqueta: de dónde sale la versión, si es la recomendada o la instalada. */
 .etiqueta {
-  padding: 1px 8px;
+  padding: var(--espacio-2) var(--espacio-8);
   border: 1px solid var(--dsw-alias-label-tertiary);
-  border-radius: 999px;
+  border-radius: var(--radio-pastilla);
   font-size: var(--tipo-pequeno);
   color: var(--dsw-alias-label-secondary);
 }
@@ -40,7 +40,7 @@
 .casilla {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--espacio-8);
   margin-top: 6px;
   font-size: var(--tipo-control);
   color: var(--dsw-alias-label-secondary);

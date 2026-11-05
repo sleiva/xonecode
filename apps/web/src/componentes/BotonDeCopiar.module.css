@@ -11,9 +11,9 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 4px 6px;
+  padding: var(--espacio-4) var(--espacio-6);
   border: 0.5px solid var(--dsw-alias-border-l4);
-  border-radius: 6px;
+  border-radius: var(--radio-control);
   background: var(--dsw-alias-button-elevated-fill);
   color: var(--dsw-alias-label-secondary);
   cursor: pointer;
@@ -38,11 +38,11 @@
 .botonDelPie {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--espacio-6);
   height: 26px;
-  padding: 0 10px;
+  padding: 0 var(--espacio-10);
   border: 0;
-  border-radius: 7px;
+  border-radius: var(--radio-control);
   background: none;
   color: var(--dsw-alias-label-tertiary);
   font: inherit;

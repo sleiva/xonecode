@@ -37,8 +37,8 @@
    de `Chat.module.css#.error` y `Aprobacion.module.css`. */
 .problemas {
   margin: 0 0 14px;
-  padding: 10px 12px 10px 28px;
-  border-radius: 10px;
+  padding: var(--espacio-10) var(--espacio-12) var(--espacio-10) 28px;
+  border-radius: var(--radio-tarjeta);
   background: var(--dsw-alias-state-error-secondary);
   color: var(--dsw-alias-label-primary);
   font-size: var(--tipo-pequeno);
@@ -48,23 +48,23 @@
 .filas {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--espacio-8);
   margin: 0 0 14px;
   padding: 0;
   list-style: none;
 }
 
 .fila {
-  padding: 10px 12px;
+  padding: var(--espacio-10) var(--espacio-12);
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 10px;
+  border-radius: var(--radio-tarjeta);
   background: var(--dsw-alias-bg-layer-2);
 }
 
 .cabeceraDeFila {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--espacio-8);
 }
 
 .nombre {
@@ -84,8 +84,8 @@
 .lectura,
 .ejecucion {
   flex: none;
-  padding: 1px 6px;
-  border-radius: 999px;
+  padding: var(--espacio-2) var(--espacio-6);
+  border-radius: var(--radio-pastilla);
   font-size: var(--tipo-pequeno);
   font-weight: var(--peso-medio);
   white-space: nowrap;
@@ -130,9 +130,9 @@
 .confirmar {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--espacio-10);
   margin: 10px 0 0;
-  padding-top: 10px;
+  padding-top: var(--espacio-10);
   border-top: 0.5px solid var(--dsw-alias-border-l2);
   color: var(--dsw-alias-label-secondary);
   font-size: var(--tipo-pequeno);
@@ -172,7 +172,7 @@
   height: 32px;
   padding: 0;
   border: 0.5px solid var(--dsw-alias-border-l4);
-  border-radius: 8px;
+  border-radius: var(--radio-control);
   background: var(--dsw-alias-button-elevated-fill);
   color: var(--dsw-alias-label-secondary);
   cursor: pointer;
@@ -203,17 +203,17 @@
 .formulario {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 14px;
+  gap: var(--espacio-12);
+  padding: var(--espacio-12);
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 10px;
+  border-radius: var(--radio-tarjeta);
   background: var(--dsw-alias-bg-layer-2);
 }
 
 .campo {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: var(--espacio-4);
 }
 
 /*
@@ -232,9 +232,9 @@
 .campo input {
   box-sizing: border-box;
   width: 100%;
-  padding: 7px 10px;
+  padding: var(--espacio-6) var(--espacio-10);
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
+  border-radius: var(--radio-control);
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-primary);
   font: inherit;
@@ -255,7 +255,7 @@
 .casilla {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--espacio-8);
   color: var(--dsw-alias-label-secondary);
   font-size: var(--tipo-pequeno);
 }
@@ -265,9 +265,9 @@
 .instrucciones {
   box-sizing: border-box;
   width: 100%;
-  padding: 8px 10px;
+  padding: var(--espacio-8) var(--espacio-10);
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
+  border-radius: var(--radio-tarjeta);
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-primary);
   font-family: var(--ds-font-family-code);
@@ -292,7 +292,7 @@
 .botones {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
+  gap: var(--espacio-8);
 }
 
 
@@ -301,8 +301,8 @@
    creer que hay que arreglar algo. */
 .aviso {
   margin: 0;
-  padding: 8px 10px;
-  border-radius: 8px;
+  padding: var(--espacio-8) var(--espacio-10);
+  border-radius: var(--radio-tarjeta);
   background: var(--dsw-alias-state-warn-tertiary);
   color: var(--dsw-alias-state-warn-label);
   font-size: var(--tipo-pequeno);
@@ -351,9 +351,9 @@
 .restaurar {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--espacio-10);
   margin: 10px 0 0;
-  padding-top: 10px;
+  padding-top: var(--espacio-10);
   border-top: 0.5px solid var(--dsw-alias-border-l2);
   color: var(--dsw-alias-label-tertiary);
   font-size: var(--tipo-pequeno);
@@ -367,9 +367,9 @@
  */
 .accionDeFila.accionDeFila {
   flex: none;
-  padding: 4px 10px;
+  padding: var(--espacio-4) var(--espacio-10);
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
+  border-radius: var(--radio-control);
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-primary);
   font-size: var(--tipo-pequeno);
@@ -394,7 +394,7 @@
   /* El alias que había aquí (`border-secondary`) no existe en ninguna paleta y resolvía a nada; este es el que se quería. */
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: var(--espacio-4);
   border-bottom: 1px solid var(--dsw-alias-border-l2);
   margin-bottom: 14px;
 }
@@ -402,8 +402,8 @@
 .pestana {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
+  gap: var(--espacio-8);
+  padding: var(--espacio-8) var(--espacio-12);
   border: none;
   margin-bottom: -1px;
   background: none;
@@ -425,8 +425,8 @@
    del par `state-business-*` que la de Entornos y la del gasto del compositor. Un CERO no se
    pinta: una pestaña vacía es su rótulo a secas, y su panel lo dice con palabras. */
 .cuenta {
-  padding: 0 6px;
-  border-radius: 999px;
+  padding: 0 var(--espacio-6);
+  border-radius: var(--radio-pastilla);
   background: var(--dsw-alias-state-business-tertiary);
   color: var(--dsw-alias-state-business-primary);
   font-size: var(--tipo-mini);
@@ -438,7 +438,7 @@
 .panelDePestana {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--espacio-6);
 }
 
 /*
@@ -467,13 +467,13 @@
 .listaDeSkills {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--espacio-2);
   max-height: 220px;
   margin: 0;
-  padding: 6px;
+  padding: var(--espacio-6);
   overflow: auto;
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
+  border-radius: var(--radio-tarjeta);
   background: var(--dsw-alias-bg-layer-1);
   list-style: none;
 }
@@ -483,9 +483,9 @@
 .casillaDeSkill {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
-  padding: 5px 6px;
-  border-radius: 6px;
+  gap: var(--espacio-8);
+  padding: var(--espacio-4) var(--espacio-6);
+  border-radius: var(--radio-control);
   cursor: pointer;
 }
 
@@ -518,7 +518,7 @@
   display: grid;
   grid-template-columns: auto auto 1fr;
   align-items: baseline;
-  gap: 2px 8px;
+  gap: var(--espacio-2) var(--espacio-8);
   min-width: 0;
 }
 

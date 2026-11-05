@@ -13,10 +13,10 @@
 .pista {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
-  padding: 2px;
+  gap: var(--espacio-2);
+  padding: var(--espacio-2);
   border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 10px;
+  border-radius: var(--radio-tarjeta);
   /*
    * El baño de cian de las filas de la barra, que ya viene AJUSTADO por tema. Era
    * `bg-layer-2` y en tema claro es casi blanco: sobre la tarjeta, el carril desaparecía y
@@ -29,9 +29,9 @@
 .mitad {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: var(--espacio-4);
   height: 24px;
-  padding: 0 8px;
+  padding: 0 var(--espacio-8);
   /*
    * El filo va PUESTO también en la mitad apagada, del color del carril: así la caja mide
    * lo mismo en los dos estados y la mitad puesta no da un salto de un píxel al cambiar.
@@ -41,7 +41,7 @@
    * existe, no como un color inventado.)
    */
   border: 1px solid var(--xonecode-fila-hover);
-  border-radius: 8px;
+  border-radius: var(--radio-control);
   background: none;
   color: var(--dsw-alias-label-tertiary);
   font: inherit;

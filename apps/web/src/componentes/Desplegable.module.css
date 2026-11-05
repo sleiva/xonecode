@@ -17,7 +17,7 @@
   width: 100%;
   min-width: 0;
   appearance: none;
-  padding-right: 32px;
+  padding-right: var(--espacio-32);
 }
 
 /* El ASPECTO común: los valores de los campos de texto de Ajustes
@@ -27,9 +27,9 @@
    pisarían según el orden del bundle). El hueco de la flecha lo da `.select.select`. */
 .aspecto {
   box-sizing: border-box;
-  padding: 4px 8px;
+  padding: var(--espacio-4) var(--espacio-8);
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 6px;
+  border-radius: var(--radio-control);
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-primary);
   font: inherit;

@@ -6,20 +6,20 @@
 .tarjeta {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: var(--espacio-12);
   box-sizing: border-box;
   width: min(580px, 100%);
   margin: 0 auto;
-  padding: 18px 18px 16px;
+  padding: var(--espacio-16) var(--espacio-16) var(--espacio-16);
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 12px;
+  border-radius: var(--radio-tarjeta);
   background: var(--dsw-alias-bg-layer-2);
 }
 
 .cabecera {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--espacio-2);
 }
 
 .titulo {
@@ -45,7 +45,7 @@
 
 .tabla th,
 .tabla td {
-  padding: 8px 10px;
+  padding: var(--espacio-8) var(--espacio-10);
   border-bottom: 0.5px solid var(--dsw-alias-border-l2);
   text-align: right;
   white-space: nowrap;
@@ -92,17 +92,17 @@
 }
 
 .total th:first-child {
-  border-radius: 8px 0 0 8px;
+  border-radius: var(--radio-tarjeta) 0 0 var(--radio-tarjeta);
 }
 
 .total td:last-child {
-  border-radius: 0 8px 8px 0;
+  border-radius: 0 var(--radio-tarjeta) var(--radio-tarjeta) 0;
 }
 
 .marca {
   margin-left: 6px;
-  padding: 1px 6px;
-  border-radius: 999px;
+  padding: var(--espacio-2) var(--espacio-6);
+  border-radius: var(--radio-pastilla);
   font-size: var(--tipo-mini);
   background: var(--dsw-alias-state-business-tertiary);
   color: var(--dsw-alias-state-business-primary);

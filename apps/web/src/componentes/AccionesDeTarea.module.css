@@ -13,7 +13,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: var(--espacio-6);
 }
 
 /* La regla de `Barra`/`Escritorio`: se apaga lo que manda algo al servidor, y se DICE por
@@ -27,9 +27,9 @@
 }
 
 .boton {
-  padding: 4px 8px;
+  padding: var(--espacio-4) var(--espacio-8);
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
+  border-radius: var(--radio-control);
   background: var(--dsw-alias-bg-layer-2);
   color: var(--dsw-alias-label-primary);
   font: inherit;
@@ -63,7 +63,7 @@
   display: flex;
   flex-direction: column;
   flex-basis: 100%;
-  gap: 4px;
+  gap: var(--espacio-4);
 }
 
 .etiquetaFeedback {
@@ -72,9 +72,9 @@
 }
 
 .campoFeedback {
-  padding: 6px 8px;
+  padding: var(--espacio-6) var(--espacio-8);
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
+  border-radius: var(--radio-control);
   background: var(--dsw-alias-bg-layer-2);
   color: var(--dsw-alias-label-primary);
   font: inherit;
@@ -88,9 +88,9 @@
 
 .botonFeedback {
   align-self: flex-start;
-  padding: 4px 8px;
+  padding: var(--espacio-4) var(--espacio-8);
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
+  border-radius: var(--radio-control);
   background: var(--dsw-alias-bg-layer-2);
   color: var(--dsw-alias-label-primary);
   font: inherit;
@@ -144,7 +144,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px 10px;
+  gap: var(--espacio-4) var(--espacio-10);
   margin: 2px 0 6px;
 }
 
@@ -172,7 +172,7 @@
   position: sticky;
   bottom: 0;
   margin: 14px -20px -20px;
-  padding: 10px 20px 20px;
+  padding: var(--espacio-10) var(--espacio-16) var(--espacio-16);
   border-top: 0.5px solid var(--dsw-alias-border-l2);
   background: var(--dsw-alias-bg-layer-1);
 }
@@ -191,7 +191,7 @@
 
 /* «Regenerar el encargo», en una franja discreta. */
 .regenerar.regenerar {
-  padding: 8px 10px;
+  padding: var(--espacio-8) var(--espacio-10);
   border: 1px dashed var(--dsw-alias-border-l2);
-  border-radius: 8px;
+  border-radius: var(--radio-tarjeta);
 }

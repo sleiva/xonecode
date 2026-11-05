@@ -37,9 +37,9 @@
    ahora): en oscuro es un gris bastante más claro que capa-1 Y que la fila; en claro sigue
    siendo blanco, así que no cambia nada ahí — el borde es quien hace el trabajo en claro. */
 .secundario {
-  padding: 6px 10px;
+  padding: var(--espacio-6) var(--espacio-10);
   border: 0.5px solid var(--dsw-alias-border-l4);
-  border-radius: 8px;
+  border-radius: var(--radio-control);
   background: var(--dsw-alias-button-elevated-fill);
   color: var(--dsw-alias-label-primary);
   font: inherit;
@@ -65,9 +65,9 @@
    clase porque es redondo y de tamaño fijo —una forma distinta, no un color distinto—, pero
    lee las MISMAS variables. */
 .primario {
-  padding: 6px 10px;
+  padding: var(--espacio-6) var(--espacio-10);
   border: 0.5px solid var(--xonecode-azul);
-  border-radius: 8px;
+  border-radius: var(--radio-control);
   background: var(--xonecode-azul);
   color: var(--xonecode-sobre-azul);
   font: inherit;
@@ -92,9 +92,9 @@
    relleno: el manual pinta el botón destructivo con un tinte de fondo al 12% de su rojo, no
    solo contorno — el tinte se deriva en `marca.css` con `color-mix`, no aquí. */
 .peligro {
-  padding: 6px 10px;
+  padding: var(--espacio-6) var(--espacio-10);
   border: 0.5px solid var(--xonecode-rojo);
-  border-radius: 8px;
+  border-radius: var(--radio-control);
   background: var(--xonecode-rojo-fondo);
   color: var(--xonecode-rojo);
   font: inherit;
@@ -116,9 +116,9 @@
    una acción que COMPRUEBA algo, no que avanza (ese es `.primario`) ni que lo destruye
    (`.peligro`) — mismo contorno + tinte que `.peligro`, en verde. */
 .exito {
-  padding: 6px 10px;
+  padding: var(--espacio-6) var(--espacio-10);
   border: 0.5px solid var(--xonecode-verde);
-  border-radius: 8px;
+  border-radius: var(--radio-control);
   background: var(--xonecode-verde-fondo);
   color: var(--xonecode-verde);
   font: inherit;
@@ -139,7 +139,7 @@
    Guardar el wizard...), no una fila apretada de botones. Va DESPUÉS de los cuatro roles a
    propósito — ver la nota de especificidad arriba. */
 .grande {
-  padding: 8px 16px;
+  padding: var(--espacio-8) var(--espacio-16);
 }
 
 /* El QUINTO rol: un botón SUELTO de icono o glifo —la «×» de un aviso que se descarta—, sin
@@ -147,9 +147,9 @@
    los hace leerse como botón; este vive DENTRO de otra cosa (un aviso, una fila) y solo se
    nota al pasar el ratón. `TarjetaDeJira.module.css#cerrarAviso` es su primer consumidor. */
 .icono {
-  padding: 0 4px;
+  padding: 0 var(--espacio-4);
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radio-control);
   background: none;
   color: var(--dsw-alias-label-tertiary);
   font: inherit;

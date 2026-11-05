@@ -20,7 +20,7 @@
   place-items: center;
   width: 100%;
   height: 100%;
-  padding: 24px;
+  padding: var(--espacio-24);
   /* NO `--dsw-alias-bg-overlay`: ese alias de la paleta copiada es un gris OPACO —medido,
      un 233/236/242 sin canal alfa— y tapaba la pantalla entera, así que la ventana quedaba
      flotando sobre un fondo liso, sin la aplicación detrás. Ver `estilos/marca.css`. */
@@ -44,7 +44,7 @@
   height: min(720px, 86vh);
   max-height: 100%;
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 16px;
+  border-radius: var(--radio-dialogo);
   background: var(--dsw-alias-bg-layer-1);
   overflow: hidden;
 }
@@ -52,10 +52,10 @@
 .navegacion {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--espacio-2);
   flex-shrink: 0;
   width: 200px;
-  padding: 16px 10px;
+  padding: var(--espacio-16) var(--espacio-10);
   border-right: 0.5px solid var(--dsw-alias-border-l2);
   background: var(--dsw-alias-bg-layer-2);
 }
@@ -66,9 +66,9 @@
 .marcaDeAjustes {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--espacio-10);
   margin: 4px 8px 12px;
-  padding-bottom: 14px;
+  padding-bottom: var(--espacio-12);
   border-bottom: 0.5px solid var(--dsw-alias-border-l2);
 }
 
@@ -82,7 +82,7 @@
   flex: none;
   width: 30px;
   height: 30px;
-  border-radius: 9px;
+  border-radius: var(--radio-tarjeta);
   background: var(--dsw-alias-state-business-tertiary);
   color: var(--dsw-alias-state-business-primary);
 }
@@ -108,10 +108,10 @@
 .seccion {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
+  gap: var(--espacio-10);
+  padding: var(--espacio-8) var(--espacio-10);
   border: none;
-  border-radius: 999px;
+  border-radius: var(--radio-pastilla);
   background: none;
   color: var(--dsw-alias-label-secondary);
   font: inherit;
@@ -142,7 +142,7 @@
 
 .panel {
   flex: 1;
-  padding: 20px 24px;
+  padding: var(--espacio-16) var(--espacio-24);
   overflow-y: auto;
 }
 
@@ -162,7 +162,7 @@
 .filas {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--espacio-8);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -173,10 +173,10 @@
 .fila {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 12px 14px;
+  gap: var(--espacio-10);
+  padding: var(--espacio-12) var(--espacio-12);
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 12px;
+  border-radius: var(--radio-tarjeta);
   background: var(--dsw-alias-bg-layer-2);
 }
 
@@ -188,7 +188,7 @@
 .cabeceraDeFila {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--espacio-10);
 }
 
 .nombre {
@@ -201,7 +201,7 @@
 .textoDeProyecto {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--espacio-2);
   min-width: 0;
 }
 
@@ -226,7 +226,7 @@
 .identidad {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: var(--espacio-2);
   min-width: 0;
   margin-right: auto;
 }
@@ -249,7 +249,7 @@
   display: flex;
   flex-shrink: 0;
   align-items: center;
-  gap: 6px;
+  gap: var(--espacio-6);
 }
 
 /* La URL del entorno, en mono. `.detalle` no vale para esto aunque sea el hueco de al lado:
@@ -346,7 +346,7 @@
 .confirmacion {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--espacio-8);
   margin: 10px 0 0;
   color: var(--dsw-alias-state-error-primary);
   font-size: var(--tipo-pequeno);
@@ -355,7 +355,7 @@
 .formulario {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--espacio-6);
   margin-top: 16px;
 }
 
@@ -393,9 +393,9 @@
   position: absolute;
   top: 12px;
   right: 14px;
-  padding: 4px 8px;
+  padding: var(--espacio-4) var(--espacio-8);
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radio-control);
   background: none;
   color: var(--dsw-alias-label-secondary);
   font: inherit;
@@ -427,7 +427,7 @@
 .filaDePapel {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--espacio-12);
 }
 
 .nombreDePapel {
@@ -440,7 +440,7 @@
 .casilla {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--espacio-8);
   width: 100%;
   cursor: pointer;
 }
@@ -451,7 +451,7 @@
 .botones {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
+  gap: var(--espacio-8);
 }
 
 /* Un enlace de texto dentro de una nota: «Refrescar», al lado de la hora de la foto.
@@ -508,9 +508,9 @@
 .comando {
   flex-shrink: 0;
   max-width: 100%;
-  padding: 4px 8px;
+  padding: var(--espacio-4) var(--espacio-8);
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 6px;
+  border-radius: var(--radio-control);
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-secondary);
   font-family: var(--ds-font-family-code);
@@ -542,7 +542,7 @@
   height: 28px;
   padding: 0;
   border: 0.5px solid var(--dsw-alias-border-l4);
-  border-radius: 8px;
+  border-radius: var(--radio-control);
   background: var(--dsw-alias-button-elevated-fill);
   color: var(--dsw-alias-label-secondary);
   cursor: pointer;
@@ -564,7 +564,7 @@
    que el botón se lea como parte del campo, y no como una acción suelta al lado. */
 .campoConBoton {
   display: flex;
-  gap: 8px;
+  gap: var(--espacio-8);
   align-items: center;
 }
 
@@ -592,7 +592,7 @@
 .casillaEnLinea {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--espacio-4);
   cursor: pointer;
 }
 
@@ -609,7 +609,7 @@
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 4px 14px;
+  gap: var(--espacio-4) var(--espacio-12);
   margin: 0 0 14px;
   color: var(--dsw-alias-label-tertiary);
   font-size: var(--tipo-pequeno);
@@ -645,7 +645,7 @@
 .filaDeConcurrencia {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--espacio-10);
   margin: 8px 0;
   color: var(--dsw-alias-label-primary);
   font-size: var(--tipo-control);
@@ -653,9 +653,9 @@
 
 .filaDeConcurrencia input {
   width: 56px;
-  padding: 4px 8px;
+  padding: var(--espacio-4) var(--espacio-8);
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 6px;
+  border-radius: var(--radio-control);
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-primary);
   font: inherit;
@@ -675,7 +675,7 @@
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 4px;
+  gap: var(--espacio-4);
   margin: 8px 0;
   color: var(--dsw-alias-label-primary);
   font-size: var(--tipo-control);
@@ -690,7 +690,7 @@
 .accionesDeWorkspace {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
+  gap: var(--espacio-8);
   margin: 0 0 8px;
 }
 
@@ -698,9 +698,9 @@
   box-sizing: border-box;
   width: 100%;
   min-width: 0;
-  padding: 4px 8px;
+  padding: var(--espacio-4) var(--espacio-8);
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 6px;
+  border-radius: var(--radio-control);
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-primary);
   font-family: var(--ds-font-family-code);
@@ -741,7 +741,7 @@
 .pestanas {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: var(--espacio-4);
   border-bottom: 1px solid var(--dsw-alias-border-l2);
   margin-bottom: 14px;
 }
@@ -749,8 +749,8 @@
 .pestana {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
+  gap: var(--espacio-8);
+  padding: var(--espacio-8) var(--espacio-12);
   border: none;
   /* El filo de la elegida se pinta con `box-shadow` inset y no con `border-bottom`, por dos
      razones: un borde exige el `transparent` de reserva en las no elegidas —y `transparent`
@@ -795,8 +795,8 @@
    píldora es lo que ya significa «un número al lado de un nombre» en esta consola. Se dibuja
    SOLO cuando hay algo que contar: un cero no se pinta. */
 .cuenta {
-  padding: 0 6px;
-  border-radius: 999px;
+  padding: 0 var(--espacio-6);
+  border-radius: var(--radio-pastilla);
   background: var(--dsw-alias-state-business-tertiary);
   color: var(--dsw-alias-state-business-primary);
   font-size: var(--tipo-mini);
@@ -808,7 +808,7 @@
 .panelDePestana {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--espacio-6);
 }
 
 /* Los proyectos de un entorno, partidos por dueño (propios / compartidos).
@@ -826,16 +826,16 @@
 .cabeceraDeProyectos {
   display: flex;
   align-items: baseline;
-  gap: 12px;
+  gap: var(--espacio-12);
 }
 
 /* El mismo botón secundario de Revisión, Ficheros y CloudStudio, y a propósito: «volver a
    mirar» es la MISMA acción en todas las pestañas y no hay motivo para que se vea distinta. */
 .recargar {
   margin-left: auto;
-  padding: 4px 10px;
+  padding: var(--espacio-4) var(--espacio-10);
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
+  border-radius: var(--radio-control);
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-secondary);
   font: inherit;
@@ -856,14 +856,14 @@
 .columnasDeProyectos {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 16px;
+  gap: var(--espacio-16);
   align-items: start;
 }
 
 .columnaDeProyectos {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--espacio-8);
   min-width: 0;
 }
 
@@ -878,7 +878,7 @@
   color: var(--dsw-alias-label-secondary);
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--espacio-6);
 }
 
 /* La cuenta es un dato secundario del encabezado: se lee después del título, no antes. */
@@ -908,9 +908,9 @@
 .filtroDeProyectos {
   box-sizing: border-box;
   width: 100%;
-  padding: 4px 8px 4px 26px;
+  padding: var(--espacio-4) var(--espacio-8) var(--espacio-4) 26px;
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 6px;
+  border-radius: var(--radio-control);
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-primary);
   font: inherit;
@@ -924,7 +924,7 @@
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 4px;
+  gap: var(--espacio-4);
   margin: 0 0 8px;
   color: var(--dsw-alias-label-primary);
   font-size: var(--tipo-control);
@@ -936,7 +936,7 @@
 
 .campoDeNombreConBoton {
   display: flex;
-  gap: 8px;
+  gap: var(--espacio-8);
   align-items: center;
 }
 
@@ -945,9 +945,9 @@
   flex: 1;
   width: auto;
   min-width: 0;
-  padding: 4px 8px;
+  padding: var(--espacio-4) var(--espacio-8);
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 6px;
+  border-radius: var(--radio-control);
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-primary);
   font: inherit;
@@ -973,7 +973,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px 12px;
+  gap: var(--espacio-8) var(--espacio-12);
   margin-bottom: 12px;
 }
 
@@ -1005,9 +1005,9 @@
    papelera — mismo criterio que `.destructiva` (`AccionDeSesion.module.css`,
    `AccionesDeTarea.module.css`). El rojo de marca, no el genérico de la paleta copiada. */
 .quitarLleno {
-  padding: 4px 10px;
+  padding: var(--espacio-4) var(--espacio-10);
   border: 0.5px solid var(--xonecode-rojo);
-  border-radius: 8px;
+  border-radius: var(--radio-control);
   background: var(--xonecode-rojo);
   color: var(--dsw-alias-label-primary-inverted);
   font: inherit;
@@ -1027,10 +1027,10 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  padding: 10px 12px;
+  gap: var(--espacio-8);
+  padding: var(--espacio-10) var(--espacio-12);
   border: 0.5px solid var(--dsw-alias-state-warn-label);
-  border-radius: 8px;
+  border-radius: var(--radio-tarjeta);
   background: var(--dsw-alias-state-warn-tertiary);
   color: var(--dsw-alias-state-warn-label);
 }
@@ -1062,7 +1062,7 @@
   flex-basis: 100%;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--espacio-8);
   font-size: var(--tipo-pequeno);
 }
 
@@ -1073,9 +1073,9 @@
 .escribirNombre > input {
   flex: 1;
   min-width: 160px;
-  padding: 4px 8px;
+  padding: var(--espacio-4) var(--espacio-8);
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 6px;
+  border-radius: var(--radio-control);
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-primary);
   font-family: var(--ds-font-family-code);
@@ -1089,7 +1089,7 @@
 .filas.tablaDeAvd {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto auto auto auto auto;
-  gap: 8px 10px;
+  gap: var(--espacio-8) var(--espacio-10);
   /* Contenedor de la consulta de abajo (que solo alcanza a los DESCENDIENTES: las filas). */
   container-type: inline-size;
 }
@@ -1104,7 +1104,7 @@
 .identidadDeAvd {
   display: flex;
   align-items: baseline;
-  gap: 10px;
+  gap: var(--espacio-10);
   min-width: 0;
   overflow-wrap: anywhere;
 }
@@ -1136,7 +1136,7 @@
   .fila.filaDeAvd {
     display: flex;
     flex-wrap: wrap;
-    row-gap: 8px;
+    row-gap: var(--espacio-8);
   }
 
   .fila.filaDeAvd > :empty {
@@ -1155,7 +1155,7 @@
 .enMarcha {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--espacio-8);
   margin: 8px 0 0;
   color: var(--dsw-alias-label-secondary);
   font-size: var(--tipo-control);
@@ -1190,12 +1190,12 @@
 .sinGuardar {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--espacio-8);
   /* Hueco por ABAJO también: los botones van justo debajo y, pegados, parecían parte del aviso. */
   margin: 8px 0 14px;
-  padding: 8px 12px;
+  padding: var(--espacio-8) var(--espacio-12);
   border: 1px solid var(--dsw-alias-state-warn-primary);
-  border-radius: 8px;
+  border-radius: var(--radio-tarjeta);
   background: var(--dsw-alias-state-warn-tertiary);
   color: var(--dsw-alias-state-warn-label);
   font-size: var(--tipo-control);
@@ -1208,8 +1208,8 @@
   max-height: 160px;
   overflow-y: auto;
   margin: 8px 0 0;
-  padding: 8px 12px 8px 28px;
-  border-radius: 8px;
+  padding: var(--espacio-8) var(--espacio-12) var(--espacio-8) 28px;
+  border-radius: var(--radio-tarjeta);
   background: var(--dsw-alias-bg-layer-1);
   font-family: var(--ds-font-family-code);
   font-size: var(--tipo-pequeno);

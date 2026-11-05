@@ -11,7 +11,7 @@
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--espacio-8);
   min-width: 0;
   font-size: var(--tipo-mini);
   color: var(--dsw-alias-label-secondary);
@@ -20,7 +20,7 @@
 .campo {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--espacio-4);
 }
 
 /* Cinco cifras y nada más, en el estilo de los campos de Ajustes (el label compone

@@ -5,7 +5,7 @@
   flex: 1 1 auto;
   min-width: 0;
   overflow: auto;
-  padding: 0 16px 24px;
+  padding: 0 var(--espacio-16) var(--espacio-24);
   color: var(--dsw-alias-label-primary);
   font-size: var(--tipo-control);
   line-height: 1.6;
@@ -13,7 +13,7 @@
 
 .aviso {
   margin: 0;
-  padding: 16px;
+  padding: var(--espacio-16);
   color: var(--dsw-alias-label-secondary);
   font-size: var(--tipo-control);
 }
@@ -21,8 +21,8 @@
 .elegir {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  padding-top: 10px;
+  gap: var(--espacio-6);
+  padding-top: var(--espacio-10);
 }
 
 /* El mismo botón secundario que Ajustes/Agentes/etc. (`Boton.module.css#secundario`). */
@@ -43,8 +43,8 @@
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: 4px 12px;
-  padding: 10px 0;
+  gap: var(--espacio-4) var(--espacio-12);
+  padding: var(--espacio-10) 0;
   border-bottom: 0.5px solid var(--dsw-alias-border-l2);
   background: var(--dsw-alias-bg-layer-1);
 }
@@ -85,9 +85,9 @@
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: 4px 10px;
+  gap: var(--espacio-4) var(--espacio-10);
   width: 100%;
-  padding: 8px 0 2px;
+  padding: var(--espacio-8) 0 var(--espacio-2);
   border: none;
   background: none;
   color: var(--dsw-alias-label-primary);
@@ -110,9 +110,9 @@
 }
 
 .estado {
-  padding: 0 6px;
+  padding: 0 var(--espacio-6);
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 6px;
+  border-radius: var(--radio-control);
   color: var(--dsw-alias-label-secondary);
   font-size: var(--tipo-mini);
 }
@@ -133,12 +133,12 @@
 }
 
 .ficha {
-  padding: 4px 0 12px;
+  padding: var(--espacio-4) 0 var(--espacio-12);
 }
 
 .markdown {
   max-width: 78ch;
-  padding-top: 8px;
+  padding-top: var(--espacio-8);
 }
 
 /* Un código en línea largo del plan —`ExecuteNode(cambiarMenu('UTILIDADES',…))`— no puede
@@ -201,7 +201,7 @@
 .barra {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--espacio-8);
   margin: 0 0 8px;
 }
 
@@ -209,13 +209,13 @@
   flex: 1 1 auto;
   height: 6px;
   overflow: hidden;
-  border-radius: 3px;
+  border-radius: var(--radio-mini);
   background: var(--xonecode-verde-fondo);
 }
 
 .relleno {
   height: 100%;
-  border-radius: 3px;
+  border-radius: var(--radio-mini);
   background: var(--xonecode-verde);
   transition: width 300ms ease;
 }

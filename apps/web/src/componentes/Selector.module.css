@@ -14,12 +14,12 @@
 .selector {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--espacio-8);
   width: min(480px, 100%);
   margin: 0 auto;
-  padding: 12px;
+  padding: var(--espacio-12);
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 12px;
+  border-radius: var(--radio-dialogo);
   background: var(--dsw-alias-bg-layer-2);
 }
 
@@ -58,7 +58,7 @@
 .opciones {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--espacio-4);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -82,11 +82,11 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 2px;
+  gap: var(--espacio-2);
   width: 100%;
-  padding: 8px 10px;
+  padding: var(--espacio-8) var(--espacio-10);
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
+  border-radius: var(--radio-control);
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-primary);
   font: inherit;
@@ -120,9 +120,9 @@
    se quiere que nadie pulse por descuido era justo la que más peso visual tenía. Ahora
    es texto con solo `label-secondary`, más apagado que `.etiqueta` de las opciones. */
 .cancelar {
-  padding: 6px 8px;
+  padding: var(--espacio-6) var(--espacio-8);
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radio-control);
   background: none;
   color: var(--dsw-alias-label-secondary);
   font: inherit;

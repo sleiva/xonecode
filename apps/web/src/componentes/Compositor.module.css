@@ -21,7 +21,7 @@
 .envoltura {
   max-width: var(--dsh-composer-card-max-width);
   margin: 0 auto;
-  padding: 0 var(--dsh-composer-side-clearance) 16px;
+  padding: 0 var(--dsh-composer-side-clearance) var(--espacio-16);
   width: 100%;
   box-sizing: border-box;
 }
@@ -98,8 +98,8 @@
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 8px;
-  padding: 10px 14px 8px;
+  gap: var(--espacio-8);
+  padding: var(--espacio-10) var(--espacio-12) var(--espacio-8);
   border-bottom: 0.5px solid var(--dsw-alias-border-l2);
 }
 
@@ -179,7 +179,7 @@
    * por el motivo de antes —se sumaba al `min-height` y dejaba aire muerto debajo—: el
    * hueco de arriba y de abajo lo dan las bandas vecinas.
    */
-  padding: 10px 14px 0;
+  padding: var(--espacio-10) var(--espacio-12) 0;
   background: none;
   color: var(--dsw-alias-label-primary);
   border: none;
@@ -227,9 +227,9 @@
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  gap: 8px;
+  gap: var(--espacio-8);
   /* Su propio relleno, por lo mismo que el campo: la tarjeta ya no lo tiene. */
-  padding: 8px 10px 10px 14px;
+  padding: var(--espacio-8) var(--espacio-10) var(--espacio-10) var(--espacio-12);
   /*
    * Y cuando no cabe, la fila se PARTE en dos: las pastillas arriba y el gasto con el botón
    * abajo, que el `auto` de `.acciones` sigue pegando al borde derecho. Antes no envolvía y
@@ -255,7 +255,7 @@
   align-items: center;
   justify-content: flex-end;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--espacio-8);
   margin-left: auto;
   flex: none;
 }
@@ -320,20 +320,20 @@
   right: 12px;
   bottom: 100%;
   margin: 0 0 4px;
-  padding: 4px;
+  padding: var(--espacio-4);
   list-style: none;
   background: var(--dsw-alias-bg-layer-2);
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
+  border-radius: var(--radio-tarjeta);
   max-height: 200px;
   overflow-y: auto;
 }
 
 .sugerencia {
   display: flex;
-  gap: 8px;
-  padding: 6px 8px;
-  border-radius: 6px;
+  gap: var(--espacio-8);
+  padding: var(--espacio-6) var(--espacio-8);
+  border-radius: var(--radio-control);
 }
 
 .sugerencia:hover {
@@ -402,7 +402,7 @@
   position: absolute;
   inset: -6px;
   border-radius: inherit;
-  padding: 6px;
+  padding: var(--espacio-6);
   background: var(--xonecode-cian);
   opacity: 0.18;
   filter: blur(10px);
@@ -424,7 +424,7 @@
   inset: 0;
   border-radius: inherit;
   /* 2px y no 1: a un píxel el destello se pierde en cuanto la pantalla escala. */
-  padding: 2px;
+  padding: var(--espacio-2);
   /* El arco es más ancho y llega hasta el blanco-cian del splash en la cresta: un destello
      que solo sube al cian de marca se confunde con el borde de foco del propio campo. */
   background: conic-gradient(
@@ -513,15 +513,15 @@
   display: flex;
   flex-direction: column;
   margin: 0;
-  padding: 0 14px 6px;
+  padding: 0 var(--espacio-12) var(--espacio-6);
   list-style: none;
 }
 
 .ficha {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 3px 0;
+  gap: var(--espacio-8);
+  padding: var(--espacio-2) 0;
   font-size: var(--tipo-pequeno);
 }
 
@@ -532,7 +532,7 @@
   height: 32px;
   object-fit: cover;
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 4px;
+  border-radius: var(--radio-mini);
   background: var(--dsw-alias-bg-layer-1);
 }
 

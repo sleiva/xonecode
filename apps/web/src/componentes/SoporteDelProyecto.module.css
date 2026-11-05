@@ -5,14 +5,14 @@
 .soporte {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--espacio-16);
 }
 
 .barra {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px 16px;
+  gap: var(--espacio-8) var(--espacio-16);
 }
 
 /* Un enlace de descarga con la forma del botón principal: exportar es la acción de la pestaña. */
@@ -33,7 +33,7 @@
 .filtro {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--espacio-6);
   color: var(--dsw-alias-label-secondary);
   font-size: var(--tipo-pequeno);
 }
@@ -54,7 +54,7 @@
 .grupo {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--espacio-8);
 }
 
 .tituloDeGrupo {
@@ -70,7 +70,7 @@
   padding: 0;
   list-style: none;
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 10px;
+  border-radius: var(--radio-tarjeta);
   background: var(--dsw-alias-bg-layer-2);
 }
 
@@ -81,8 +81,8 @@
 .cabecera {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
+  gap: var(--espacio-10);
+  padding: var(--espacio-8) var(--espacio-12);
   min-width: 0;
 }
 
@@ -90,8 +90,8 @@
    dice además con palabras, nunca solo con el color. */
 .insignia {
   flex: none;
-  padding: 2px 8px;
-  border-radius: 999px;
+  padding: var(--espacio-2) var(--espacio-8);
+  border-radius: var(--radio-pastilla);
   font-size: var(--tipo-pequeno);
   font-weight: var(--peso-medio);
   white-space: nowrap;
@@ -152,9 +152,9 @@ button.titulo:hover {
 .hallazgos {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--espacio-4);
   margin: 0;
-  padding: 0 12px 10px 24px;
+  padding: 0 var(--espacio-12) var(--espacio-10) var(--espacio-24);
   color: var(--dsw-alias-label-secondary);
   font-size: var(--tipo-pequeno);
 }

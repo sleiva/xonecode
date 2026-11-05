@@ -4,7 +4,7 @@
 .envoltura {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--espacio-8);
   margin-left: auto;
 }
 
@@ -54,7 +54,7 @@
 .resultado {
   display: inline-flex;
   align-items: baseline;
-  gap: 6px;
+  gap: var(--espacio-6);
   min-width: 0;
   color: var(--dsw-alias-state-error-primary);
   font-size: var(--tipo-mini);

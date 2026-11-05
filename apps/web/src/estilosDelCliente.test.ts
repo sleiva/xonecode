@@ -195,6 +195,55 @@ describe("la escala tipográfica", () => {
     expect([...new Set(fuera)]).toEqual([]);
   });
 
+  /**
+   * Un px suelto MAYOR de 24 y fuera de la escala no es espaciado sino ALINEACIÓN: la sangría
+   * que deja sitio a un icono (28px a la izquierda) o que cuadra con una columna (52px, 72px).
+   * Llevarlo al paso más cercano montaba el texto sobre el icono; se queda literal. Lo pequeño
+   * suelto (un 5px, un 14px) sí es el desorden que esta escala quita.
+   */
+  const esAlineacion = (pieza: string): boolean => {
+    const m = /^(\d+)px$/.exec(pieza);
+    return m !== null && Number(m[1]) > 24 && ![32].includes(Number(m[1]));
+  };
+
+  it("el espaciado (padding, gap) de src/ lee un --espacio-*: ningún px suelto salvo 0 y las alineaciones", () => {
+    const sueltos: string[] = [];
+    for (const propiedad of ["padding(?:-[a-z]+)?", "gap", "row-gap", "column-gap"]) {
+      for (const d of declaracionesDe(propiedad)) {
+        for (const pieza of d.valor.split(/\s+/)) {
+          if (pieza === "0" || esAlineacion(pieza) || /^var\(--(espacio-\d+|dsh-[a-z-]+)\)$/.test(pieza)) continue;
+          sueltos.push(`${d.fichero}: ${d.valor}`);
+          break;
+        }
+      }
+    }
+    expect([...new Set(sueltos)]).toEqual([]);
+  });
+
+  const RADIOS_FUERA_DE_ESCALA: Record<string, string> = {
+    "Compositor.module.css: 20px": "la caja del chat: su forma redondeada es la de la marca, no la de un campo",
+    "Marca.module.css: 12px": "la placa del logotipo",
+    "Marca.module.css: 20px": "la placa del logotipo grande del splash",
+  };
+
+  it("el radio de src/ lee un --radio-* (o es un círculo, 50%, o 0), salvo la marca", () => {
+    const sueltos = declaracionesDe("border-radius")
+      .filter((d) => !d.valor.split(/\s+/).every((p) => /^(0|50%|inherit|var\(--radio-[a-z]+\))$/.test(p)))
+      .map((d) => `${d.fichero}: ${d.valor}`)
+      .filter((clave) => !(clave in RADIOS_FUERA_DE_ESCALA));
+    expect([...new Set(sueltos)]).toEqual([]);
+  });
+
+  it("los tokens de espacio y radio que se usan están declarados en tipografia.css", () => {
+    const tipografia = sinComentarios(readFileSync(join(ESTILOS, "tipografia.css"), "utf8"));
+    const usados = new Set(
+      ["padding(?:-[a-z]+)?", "gap", "row-gap", "column-gap", "border-radius"]
+        .flatMap((p) => declaracionesDe(p))
+        .flatMap((d) => [...d.valor.matchAll(/var\((--(?:espacio|radio)-[a-z0-9]+)\)/g)].map((m) => m[1]!)),
+    );
+    expect([...usados].filter((t) => !new RegExp(`${t}\\s*:`).test(tipografia))).toEqual([]);
+  });
+
   it("las excepciones siguen existiendo: una que ya no está no se queda en la lista", () => {
     const presentes = new Set([...declaracionesDe("font-size")].map((d) => `${d.fichero}: ${d.valor}`));
     expect(Object.keys(TAMANOS_FUERA_DE_ESCALA).filter((k) => !presentes.has(k))).toEqual([]);

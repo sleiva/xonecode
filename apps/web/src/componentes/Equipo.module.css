@@ -7,16 +7,16 @@
    nivel que «qué entorno hay», y se lee con la misma forma. */
 .equipo {
   margin: 24px 0 0;
-  padding: 14px;
+  padding: var(--espacio-12);
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 12px;
+  border-radius: var(--radio-tarjeta);
   background: var(--dsw-alias-bg-layer-2);
 }
 
 .cabecera {
   display: flex;
   align-items: baseline;
-  gap: 10px;
+  gap: var(--espacio-10);
 }
 
 .titulo {
@@ -43,7 +43,7 @@
 .bloques {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 12px 24px;
+  gap: var(--espacio-12) var(--espacio-24);
   margin-top: 12px;
 }
 
@@ -82,8 +82,8 @@
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: 4px 8px;
-  padding: 4px 0;
+  gap: var(--espacio-4) var(--espacio-8);
+  padding: var(--espacio-4) 0;
   font-size: var(--tipo-pequeno);
 }
 
@@ -127,7 +127,7 @@
 
 .detalle {
   flex-basis: 100%;
-  padding-left: 16px;
+  padding-left: var(--espacio-16);
   color: var(--dsw-alias-label-tertiary);
   font-size: var(--tipo-mini);
 }

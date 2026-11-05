@@ -14,15 +14,15 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
-  padding: 32px 24px 0;
+  gap: var(--espacio-8);
+  padding: var(--espacio-32) var(--espacio-24) 0;
   box-sizing: border-box;
 }
 
 .fila {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--espacio-10);
 }
 
 /* La placa del símbolo: MEDIDA del fichero de origen (fondo, borde y resplandor), sin el
@@ -90,12 +90,12 @@
    separación la pone el `gap` de `.contenido`, que es quien la centra. */
 .grande {
   padding: 0;
-  gap: 12px;
+  gap: var(--espacio-12);
 }
 
 .grande .fila {
   flex-direction: column;
-  gap: 16px;
+  gap: var(--espacio-16);
 }
 
 .grande .placa {

@@ -10,7 +10,7 @@
 .wizard {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--espacio-6);
 }
 
 .etiqueta {
@@ -30,9 +30,9 @@
   /* Sin reset global en este cliente: sin esto, 100% + padding + borde se sale de su caja. */
   box-sizing: border-box;
   width: 100%;
-  padding: 8px 10px;
+  padding: var(--espacio-8) var(--espacio-10);
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
+  border-radius: var(--radio-control);
   background: var(--dsw-alias-bg-layer-2);
   color: var(--dsw-alias-label-primary);
   font: inherit;
@@ -58,7 +58,7 @@
 .acciones {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
+  gap: var(--espacio-8);
   margin-top: 16px;
 }
 

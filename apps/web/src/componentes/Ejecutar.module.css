@@ -12,19 +12,19 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
   align-items: start;
-  gap: 20px;
-  padding: 16px 20px;
+  gap: var(--espacio-16);
+  padding: var(--espacio-16) var(--espacio-16);
   overflow-y: auto;
 }
 
 .columna {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: var(--espacio-12);
   min-width: 0;
-  padding: 16px 18px;
+  padding: var(--espacio-16) var(--espacio-16);
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 12px;
+  border-radius: var(--radio-tarjeta);
 }
 
 .tituloDeColumna {
@@ -40,11 +40,11 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: var(--espacio-10);
   width: 100%;
-  padding: 6px 10px;
+  padding: var(--espacio-6) var(--espacio-10);
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
+  border-radius: var(--radio-control);
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-secondary);
   font: inherit;
@@ -71,13 +71,13 @@
 .textoDeOpcion {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--espacio-2);
   min-width: 0;
   overflow-wrap: anywhere;
 }
 
 .grupo {
-  padding: 6px 2px 0;
+  padding: var(--espacio-6) var(--espacio-2) 0;
   color: var(--dsw-alias-label-secondary);
   font-size: var(--tipo-mini);
   font-weight: var(--peso-fuerte);
@@ -109,7 +109,7 @@
 .veredicto {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--espacio-8);
 }
 
 /* La app manda y el proyecto le sigue: son la misma frase —«qué se va a lanzar, y de dónde
@@ -118,7 +118,7 @@
   display: flex;
   align-items: baseline;
   flex-wrap: wrap;
-  gap: 4px 12px;
+  gap: var(--espacio-4) var(--espacio-12);
   margin: 0;
 }
 
@@ -154,7 +154,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: var(--espacio-8);
   margin: 0;
   color: var(--dsw-alias-label-secondary);
   font-size: var(--tipo-pequeno);
@@ -166,9 +166,9 @@
 .faltas {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--espacio-6);
   margin: 0;
-  padding-left: 18px;
+  padding-left: var(--espacio-16);
 }
 
 .falta {
@@ -180,16 +180,16 @@
 .acciones {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--espacio-8);
 }
 
 /* El botón principal lleva el AZUL de la marca con su letra encima —el par medido para
    sostener texto blanco, el mismo de «Subir» en la banda de CloudStudio—, y el cian se queda
    para el hover: acento, sin nada que sostener. */
 .ejecutar {
-  padding: 6px 14px;
+  padding: var(--espacio-6) var(--espacio-12);
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radio-control);
   background: var(--xonecode-azul);
   color: var(--xonecode-sobre-azul);
   font: inherit;
@@ -214,7 +214,7 @@
   display: flex;
   flex-direction: column;
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
+  border-radius: var(--radio-tarjeta);
   background: var(--dsw-alias-bg-layer-1);
   overflow: hidden;
 }
@@ -223,9 +223,9 @@
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 4px 12px;
+  gap: var(--espacio-4) var(--espacio-12);
   margin: 0;
-  padding: 6px 12px;
+  padding: var(--espacio-6) var(--espacio-12);
 }
 
 .fase {
@@ -256,7 +256,7 @@
    color del texto normal, porque un verde que grita no hace falta para decir que fue bien. */
 .desenlace {
   margin: 0;
-  padding: 0 12px 8px;
+  padding: 0 var(--espacio-12) var(--espacio-8);
   color: var(--dsw-alias-label-secondary);
   font-size: var(--tipo-pequeno);
   line-height: 1.6;
@@ -275,7 +275,7 @@
    monoespaciada: es una línea del framework, y su valor es que se puede copiar y buscar. */
 .lectura {
   margin: 0;
-  padding: 0 12px 8px;
+  padding: 0 var(--espacio-12) var(--espacio-8);
   color: var(--dsw-alias-label-tertiary);
   font-family: var(--ds-font-family-code);
   font-size: var(--tipo-mini);
@@ -287,7 +287,7 @@
    larga se parta en vez de sacar scroll horizontal dentro de la tarjeta. */
 .lineas {
   margin: 0;
-  padding: 8px 12px;
+  padding: var(--espacio-8) var(--espacio-12);
   border-top: 0.5px solid var(--dsw-alias-border-l2);
   background: var(--dsw-alias-bg-layer-2);
   color: var(--dsw-alias-label-secondary);
@@ -301,7 +301,7 @@
 .dispositivos {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--espacio-8);
 }
 
 /* El rótulo de la sección, con el mismo trazo que el de la cabecera de Tareas del proyecto:
@@ -315,7 +315,7 @@
 .lista {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--espacio-4);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -324,15 +324,15 @@
 .fila {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--espacio-8);
 }
 
 /* Una fila de dispositivo es un botón cuando se puede elegir, y un texto cuando no: el mismo
    trazo de la fila de `VerificarDispositivo`, para que la misma información se lea igual. */
 .dispositivo {
-  padding: 4px 10px;
+  padding: var(--espacio-4) var(--espacio-10);
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
+  border-radius: var(--radio-tarjeta);
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-secondary);
   font: inherit;

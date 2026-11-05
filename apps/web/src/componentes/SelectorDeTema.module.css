@@ -5,7 +5,7 @@
 .fila {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--espacio-6);
 }
 
 .rotulo {
@@ -17,17 +17,17 @@
 .opciones {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: var(--espacio-10);
 }
 
 .opcion {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
-  padding: 4px;
+  gap: var(--espacio-4);
+  padding: var(--espacio-4);
   border: 2px solid var(--dsw-alias-border-l2);
-  border-radius: 10px;
+  border-radius: var(--radio-tarjeta);
   background: var(--dsw-alias-bg-layer-1);
   cursor: pointer;
 }
@@ -47,8 +47,8 @@
   justify-content: space-between;
   width: 84px;
   height: 52px;
-  padding: 8px;
-  border-radius: 6px;
+  padding: var(--espacio-8);
+  border-radius: var(--radio-control);
   background: var(--muestra-fondo, var(--dsw-alias-bg-base));
   box-sizing: border-box;
 }
@@ -56,14 +56,14 @@
 .linea {
   width: 70%;
   height: 6px;
-  border-radius: 3px;
+  border-radius: var(--radio-mini);
   background: var(--muestra-texto, var(--dsw-alias-label-secondary));
 }
 
 .pastilla {
   width: 32px;
   height: 10px;
-  border-radius: 5px;
+  border-radius: var(--radio-control);
   background: var(--muestra-acento, var(--xonecode-cian));
 }
 

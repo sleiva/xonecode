@@ -45,7 +45,7 @@
   box-sizing: border-box;
   width: 100%;
   height: 100%;
-  padding: 24px;
+  padding: var(--espacio-24);
   /* NO `--dsw-alias-bg-overlay`: ese alias de la paleta copiada es un gris OPACO —medido,
      un 233/236/242 sin canal alfa— y tapaba la pantalla entera, así que la ventana quedaba
      flotando sobre un fondo liso, sin la aplicación detrás. Ver `estilos/marca.css`. */
@@ -58,7 +58,7 @@
   width: min(880px, 100%);
   max-height: 100%;
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 12px;
+  border-radius: var(--radio-tarjeta);
   background: var(--dsw-alias-bg-layer-1);
 }
 
@@ -66,8 +66,8 @@
 .cabecera {
   display: flex;
   align-items: flex-start;
-  gap: 14px;
-  padding: 18px 22px 16px;
+  gap: var(--espacio-12);
+  padding: var(--espacio-16) var(--espacio-24) var(--espacio-16);
   border-bottom: 0.5px solid var(--dsw-alias-border-l2);
 }
 
@@ -78,7 +78,7 @@
   justify-content: center;
   width: 36px;
   height: 36px;
-  border-radius: 10px;
+  border-radius: var(--radio-tarjeta);
   background: var(--dsw-alias-state-warn-tertiary);
   color: var(--dsw-alias-state-warn-label);
 }
@@ -120,7 +120,7 @@
   box-sizing: border-box;
   width: 240px;
   margin: 0;
-  padding: 10px;
+  padding: var(--espacio-10);
   list-style: none;
   align-self: stretch;
   border-right: 0.5px solid var(--dsw-alias-border-l2);
@@ -130,14 +130,14 @@
 .ficha {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--espacio-8);
   box-sizing: border-box;
   width: 100%;
-  padding: 8px 10px;
+  padding: var(--espacio-8) var(--espacio-10);
   /* El borde del color del fondo de la lista: invisible hasta que se elige, sin que la fila
      salte medio píxel al elegirla (y sin `transparent`, que aquí es un color literal). */
   border: 0.5px solid var(--dsw-alias-bg-layer-2);
-  border-radius: 8px;
+  border-radius: var(--radio-control);
   background: none;
   color: var(--dsw-alias-label-primary);
   font: inherit;
@@ -176,7 +176,7 @@
 .cuenta {
   display: inline-flex;
   flex: none;
-  gap: 6px;
+  gap: var(--espacio-6);
   font-size: var(--tipo-pequeno);
   font-variant-numeric: tabular-nums;
 }
@@ -192,7 +192,7 @@
 .pendiente {
   flex: 1 1 auto;
   min-width: 0;
-  padding: 12px 18px 16px;
+  padding: var(--espacio-12) var(--espacio-16) var(--espacio-16);
 }
 
 /* Encima del diff: la ruta, lo que dice el pendiente y la cuenta, en una fila. */
@@ -200,7 +200,7 @@
   display: flex;
   align-items: baseline;
   flex-wrap: wrap;
-  gap: 4px 10px;
+  gap: var(--espacio-4) var(--espacio-10);
   margin: 0 0 8px;
   font-size: var(--tipo-control);
 }
@@ -216,8 +216,8 @@
 }
 
 .diff {
-  padding: 8px 0;
-  border-radius: 8px;
+  padding: var(--espacio-8) 0;
+  border-radius: var(--radio-tarjeta);
   background: var(--dsw-alias-bg-layer-2);
   font-family: var(--ds-font-family-code);
   /* Las líneas largas se PARTEN (`.textoDeLinea`) en vez de desbordar: medido en una captura
@@ -228,8 +228,8 @@
 
 .linea {
   display: flex;
-  gap: 8px;
-  padding: 0 12px;
+  gap: var(--espacio-8);
+  padding: 0 var(--espacio-12);
   color: var(--dsw-alias-label-secondary);
 }
 
@@ -262,7 +262,7 @@
   display: block;
   width: 100%;
   box-sizing: border-box;
-  padding: 1px 12px;
+  padding: var(--espacio-2) var(--espacio-12);
   border: 0;
   background: var(--dsw-alias-bg-layer-3);
   color: var(--dsw-alias-label-tertiary);
@@ -313,7 +313,7 @@
 
 /* Lo que cambió DENTRO de una línea modificada (`cambioEnLinea.ts`). */
 .cambio {
-  border-radius: 3px;
+  border-radius: var(--radio-mini);
   color: inherit;
 }
 
@@ -335,15 +335,15 @@
    explica por qué el modal sigue ahí después de haber pulsado. */
 .fallo {
   margin: 0;
-  padding: 8px 20px;
+  padding: var(--espacio-8) var(--espacio-16);
   color: var(--dsw-alias-state-error-primary);
 }
 
 .acciones {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
-  padding: 12px 20px;
+  gap: var(--espacio-8);
+  padding: var(--espacio-12) var(--espacio-16);
   border-top: 0.5px solid var(--dsw-alias-border-l2);
   background: var(--dsw-alias-bg-layer-3);
 }

@@ -45,7 +45,7 @@
   box-sizing: border-box;
   width: 100%;
   height: 100%;
-  padding: 24px;
+  padding: var(--espacio-24);
   /* NO `--dsw-alias-bg-overlay`: ese alias de la paleta copiada es un gris OPACO —medido,
      233/236/242 sin canal alfa— y tapaba la pantalla entera, así que la ventana quedaba
      flotando sobre un fondo liso, sin la aplicación detrás. Ver `estilos/marca.css`. */
@@ -62,12 +62,12 @@
 .pregunta {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--espacio-8);
   width: min(480px, 100%);
   margin: 0 auto;
-  padding: 12px;
+  padding: var(--espacio-12);
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 12px;
+  border-radius: var(--radio-tarjeta);
   background: var(--dsw-alias-bg-layer-2);
 }
 
@@ -108,7 +108,7 @@
 .fila {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--espacio-8);
 }
 
 /* El plan de una decisión —lo que se va a subir—, en mono, que es lo que este cliente
@@ -126,10 +126,10 @@
 .plan {
   max-height: 240px;
   margin: 0;
-  padding: 8px 10px;
+  padding: var(--espacio-8) var(--espacio-10);
   overflow: auto;
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
+  border-radius: var(--radio-tarjeta);
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-secondary);
   font-family: var(--ds-font-family-code);
@@ -160,7 +160,7 @@
 .decisiones {
   display: flex;
   justify-content: center;
-  gap: 8px;
+  gap: var(--espacio-8);
 }
 
 /* Cancelar, el mismo botón secundario de siempre (`Boton.module.css#secundario`) — con
@@ -204,9 +204,9 @@
 .envoltorio input {
   box-sizing: border-box;
   width: 100%;
-  padding: 8px 10px;
+  padding: var(--espacio-8) var(--espacio-10);
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
+  border-radius: var(--radio-control);
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-primary);
   font: inherit;
@@ -230,7 +230,7 @@
    contorno, no relleno. Los mismos alias que `Boton.module.css#secundario`, para que sean el
    mismo botón y no dos que se parecen. */
 .pregunta[data-anidado] .accion {
-  padding: 6px 12px;
+  padding: var(--espacio-6) var(--espacio-12);
   border-color: var(--dsw-alias-border-l4);
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-primary);
@@ -257,7 +257,7 @@
 .herramientas {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--espacio-12);
 }
 
 .cuenta {
@@ -288,13 +288,13 @@
 .ramaNueva {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--espacio-6);
 }
 
 .casillaDeRama {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--espacio-8);
   color: var(--dsw-alias-label-primary);
   font-size: var(--tipo-control);
   cursor: pointer;
@@ -303,9 +303,9 @@
 .nombreDeRama {
   box-sizing: border-box;
   width: 100%;
-  padding: 6px 10px;
+  padding: var(--espacio-6) var(--espacio-10);
   border: 0.5px solid var(--dsw-alias-border-l3);
-  border-radius: 8px;
+  border-radius: var(--radio-tarjeta);
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-primary);
   font: inherit;
@@ -328,7 +328,7 @@
 .avance {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--espacio-10);
   margin: 0;
   color: var(--dsw-alias-label-secondary);
   font-size: var(--tipo-pequeno);
@@ -339,7 +339,7 @@
   flex: 1;
   height: 6px;
   border: none;
-  border-radius: 3px;
+  border-radius: var(--radio-mini);
   overflow: hidden;
   appearance: none;
   background: var(--dsw-alias-bg-layer-2);
@@ -363,10 +363,10 @@
 .arbol {
   min-height: 0;
   max-height: min(420px, 60vh);
-  padding: 4px;
+  padding: var(--espacio-4);
   overflow: auto;
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
+  border-radius: var(--radio-tarjeta);
   background: var(--dsw-alias-bg-layer-1);
 }
 
@@ -379,7 +379,7 @@
   flex-shrink: 0;
   width: 18px;
   height: 18px;
-  border-radius: 5px;
+  border-radius: var(--radio-control);
   font-family: var(--ds-font-family-code);
   font-size: var(--tipo-mini);
   font-weight: var(--peso-fuerte);
@@ -425,8 +425,8 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
-  padding: 12px 8px 4px;
+  gap: var(--espacio-6);
+  padding: var(--espacio-12) var(--espacio-8) var(--espacio-4);
   text-align: center;
 }
 

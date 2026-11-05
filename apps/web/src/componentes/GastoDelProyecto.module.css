@@ -6,20 +6,20 @@
 .gasto {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--espacio-10);
 }
 
 .totales {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px 28px;
+  gap: var(--espacio-8) 28px;
   margin: 0;
 }
 
 .total {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--espacio-2);
 }
 
 .rotulo {
@@ -53,7 +53,7 @@
 
 .leyenda {
   display: flex;
-  gap: 16px;
+  gap: var(--espacio-16);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -64,13 +64,13 @@
 .leyenda li {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--espacio-6);
 }
 
 .muestra {
   width: 10px;
   height: 10px;
-  border-radius: 3px;
+  border-radius: var(--radio-mini);
 }
 
 .muestra[data-serie="modelo"],
@@ -87,7 +87,7 @@
    es el único filo. Nada de rejilla: con diez columnas y un tooltip, sobra. */
 .lienzo {
   position: relative;
-  padding-top: 16px;
+  padding-top: var(--espacio-16);
 }
 
 .maximo {
@@ -102,7 +102,7 @@
 .columnas {
   display: flex;
   align-items: flex-end;
-  gap: 6px;
+  gap: var(--espacio-6);
   height: 120px;
   border-bottom: 1px solid var(--dsw-alias-border-l2);
 }
@@ -115,7 +115,7 @@
   justify-content: center;
   height: 100%;
   min-width: 0;
-  border-radius: 6px 6px 0 0;
+  border-radius: var(--radio-control) var(--radio-control) 0 0;
   outline: none;
   cursor: default;
 }
@@ -135,7 +135,7 @@
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
-  gap: 2px;
+  gap: var(--espacio-2);
   width: min(28px, 70%);
   height: 100%;
 }
@@ -146,7 +146,7 @@
 }
 
 .segmento:first-child {
-  border-radius: 4px 4px 0 0;
+  border-radius: var(--radio-mini) var(--radio-mini) 0 0;
 }
 
 /* Por ENCIMA del área de las barras, pegado a la derecha: dentro de ella tapaba la más alta
@@ -157,11 +157,11 @@
   right: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--espacio-2);
   max-width: 60%;
-  padding: 8px 10px;
+  padding: var(--espacio-8) var(--espacio-10);
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
+  border-radius: var(--radio-tarjeta);
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-secondary);
   font-size: var(--tipo-pequeno);
@@ -196,7 +196,7 @@
 
 .tabla th,
 .tabla td {
-  padding: 4px 6px;
+  padding: var(--espacio-4) var(--espacio-6);
   border-bottom: 0.5px solid var(--dsw-alias-border-l2);
   text-align: left;
 }

@@ -1,7 +1,7 @@
 .envoltura {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--espacio-6);
   margin-top: 10px;
 }
 
@@ -20,7 +20,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: var(--espacio-6);
   font-size: var(--tipo-pequeno);
   color: var(--dsw-alias-label-secondary);
 }
@@ -51,7 +51,7 @@
 
 .log {
   margin: 0;
-  padding: 6px 8px;
+  padding: var(--espacio-6) var(--espacio-8);
   max-height: 96px;
   overflow: auto;
   font-family: var(--ds-font-family-code);
