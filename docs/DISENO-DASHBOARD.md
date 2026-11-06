@@ -81,3 +81,19 @@ En orden de valor por línea:
   `bg-slate-100`.
 - El mockup está en inglés («Workspaces», «New Session», «Settings»); el producto está en
   castellano.
+
+## El Escritorio como centro de control (noviembre de 2026)
+
+Elegido en el lienzo de diseño entre tres variantes de funciones (bandeja primero, por proyecto, centro de
+control): la **C**, por fases. La fase 1 es solo cliente y pinta lo que ya viaja:
+
+- **Cifras arriba**, solo las que tienen dato: en marcha (con la cola), te esperan, terminadas y aparatos
+  listos (arrancados o conectados, de la foto de la máquina). Sin cola o sin foto, su cifra no sale.
+- **Lo que te espera** (`loQueTeEspera`): una `nuevo` con `esperaPorTi`, una `requiere-atencion` y una
+  `terminada` de las últimas 24 h con el juez en rojo o indeterminado o con críticos. Una terminada en verde
+  NO entra: ningún campo dice que alguien la tenga pendiente.
+- Los proyectos, en filas en la columna principal; Tu equipo, en la lateral.
+
+Lo que la C enseñaba y aún no viaja al Escritorio, y por eso no se pinta (ni a cero): ficheros sin subir de
+todos los proyectos, gasto de la semana en euros, preguntas pendientes en sesiones, incidencias del gestor
+asignadas, lo aprendido nuevo y los aparatos de la granja. Cada uno es una fase con su reunión en el servidor.

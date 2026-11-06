@@ -545,7 +545,7 @@ describe("Escritorio: tareas en cifras", () => {
     ({ id: "t", proyecto: "p1", proyectoNombre: "Tienda", titulo: "T", peticion: "", encargo: "", adjuntos: [], estado: "nuevo", creada: "2026-10-21T10:00:00Z", ...t }) as TareaDelCable;
   const cola = (lista: TareaDelCable[]) => ({ lista, concurrencia: 1, corriendoAqui: true });
 
-  it("plegado de entrada: cuatro cifras y la lista corta; «Ver el tablero» lo despliega y «Ver en cifras» lo pliega", () => {
+  it("plegado de entrada: las cifras y la bandeja; «Ver el tablero» lo despliega y «Ver en cifras» lo pliega", () => {
     render(
       <Escritorio
         alNuevaSesion={() => {}}
@@ -554,16 +554,76 @@ describe("Escritorio: tareas en cifras", () => {
         tareas={cola([tarea({ id: "a", titulo: "Listados", estado: "en-proceso", empezada: new Date().toISOString(), sesion: "s" }), tarea({ id: "b", titulo: "Entrega" }), tarea({ id: "c", estado: "terminada" })])}
       />
     );
-    const resumen = screen.getByRole("region", { name: "Tareas" });
-    expect(resumen.textContent).toContain("en cola1");
-    expect(resumen.textContent).toContain("en marcha1");
-    expect(resumen.textContent).toContain("terminadas1");
-    expect(resumen.textContent).toContain("Entrega · Tienda");
+    const cifras = screen.getByText("En marcha").closest("dl")!;
+    expect(cifras.textContent).toContain("En marcha1");
+    expect(cifras.textContent).toContain("1 en cola");
+    expect(cifras.textContent).toContain("Terminadas1");
+    expect(cifras.textContent).toContain("Te esperan0");
+    // Sin dispositivos no hay cifra de aparatos: no se pinta un cero que nadie ha medido.
+    expect(cifras.textContent).not.toContain("Aparatos");
+    expect(screen.getByRole("region", { name: "Lo que te espera" }).textContent).toContain("Nada pendiente de ti.");
     expect(screen.queryByRole("region", { name: "Tareas en background" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Ver el tablero" }));
     expect(screen.getByRole("region", { name: "Tareas en background" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Ver en cifras" }));
-    expect(screen.getByRole("region", { name: "Tareas" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Lo que te espera" })).toBeTruthy();
+  });
+
+  it("la bandeja: lo que espera a una persona, primero lo que bloquea, y una terminada en verde NO entra", () => {
+    const alRevisar = vi.fn();
+    const hace = (ms: number) => new Date(Date.now() - ms).toISOString();
+    render(
+      <Escritorio
+        alNuevaSesion={() => {}}
+        alAbrirAjustes={() => {}}
+        proyectos={[{ id: "p1", nombre: "Tienda", local: true }]}
+        alAbrirRevisionDeTarea={alRevisar}
+        tareas={cola([
+          tarea({ id: "r", titulo: "Login rojo", estado: "terminada", acabada: hace(60_000), sesion: "s1", veredicto: { veredicto: "rojo", resumen: "El verificador falla." } }),
+          tarea({ id: "v", titulo: "Login verde", estado: "terminada", acabada: hace(60_000), veredicto: { veredicto: "verde", resumen: "Bien." } }),
+          tarea({ id: "vieja", titulo: "Rojo de la semana pasada", estado: "terminada", acabada: hace(8 * 86_400_000), veredicto: { veredicto: "rojo", resumen: "x" } }),
+          tarea({ id: "p", titulo: "Parada", estado: "requiere-atencion", motivo: "Pide feedback." }),
+          tarea({ id: "e", titulo: "Bloqueada", esperaPorTi: { motivo: "otra consola trabaja", ceder: true } }),
+        ])}
+      />
+    );
+    const bandeja = screen.getByRole("region", { name: "Lo que te espera" });
+    const filas = within(bandeja).getAllByRole("listitem").map((li) => li.textContent);
+    expect(filas).toHaveLength(3);
+    expect(filas[0]).toContain("Bloqueada");
+    expect(filas[0]).toContain("Esperando: otra consola trabaja");
+    expect(filas[1]).toContain("Pide feedback.");
+    expect(filas[2]).toContain("El verificador falla.");
+    expect(bandeja.textContent).not.toContain("Login verde");
+    expect(bandeja.textContent).not.toContain("semana pasada");
+    expect(screen.getByText("Te esperan").closest("div")!.textContent).toContain("3");
+    fireEvent.click(within(bandeja).getByRole("button", { name: "Revisar" }));
+    expect(alRevisar).toHaveBeenCalledWith("p1", "s1");
+    fireEvent.click(within(bandeja).getByRole("button", { name: "Atender" }));
+    expect(screen.getByRole("region", { name: "Tareas en background" })).toBeTruthy();
+  });
+
+  it("los aparatos se cuentan solo con la foto de la máquina: arrancados o conectados", () => {
+    render(
+      <Escritorio
+        alNuevaSesion={() => {}}
+        alAbrirAjustes={() => {}}
+        proyectos={[]}
+        dispositivos={{
+          sistema: "macos",
+          herramientas: [],
+          avds: [],
+          recetas: [],
+          medido: new Date().toISOString(),
+          dispositivos: [
+            { id: "a", nombre: "pixel8", clase: "emulador", estado: "arrancado" },
+            { id: "b", nombre: "iPhone", clase: "simulador", estado: "apagado" },
+          ],
+        } as never}
+      />
+    );
+    expect(screen.getByText("Aparatos listos").closest("div")!.textContent).toContain("1");
+    expect(screen.queryByText("En marcha")).toBeNull();
   });
 
   it("«Trabajando ahora» dice la que trabaja, lo que lleva y cuántas esperan en su proyecto; sin ninguna, no sale", () => {

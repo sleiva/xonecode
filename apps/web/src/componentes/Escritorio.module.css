@@ -13,12 +13,12 @@
 /* La misma columna acotada y centrada que usa el transcript: la pantalla no cambia de eje
    al abrir una sesión, solo de contenido. */
 .contenido {
-  width: min(880px, 100%);
+  width: min(1080px, 100%);
   margin: 0 auto;
 }
 
 .portada {
-  margin-bottom: 28px;
+  margin-bottom: var(--espacio-24);
 }
 
 .saludo {
@@ -35,19 +35,16 @@
 }
 
 /* El entorno activo: el punto verde dice que hay uno resuelto, no que se haya hecho ping —
-   con la URL al lado, que es lo que de verdad lo identifica.
-   El rediseño lo saca de ser una línea suelta y lo mete en una tira con borde, que es lo
-   que lo separa del saludo y lo empareja con las tarjetas de abajo. */
+   con la URL al lado, que es lo que de verdad lo identifica. Una LÍNEA bajo el saludo y no una
+   caja (lienzo C): el selector de la barra lateral ya es la caja, y aquí repetirla pesaba más
+   que el saludo. */
 .entorno {
   display: flex;
   align-items: center;
-  gap: var(--espacio-10);
-  margin: 20px 0 0;
-  padding: var(--espacio-12) var(--espacio-12);
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: var(--radio-tarjeta);
-  background: var(--dsw-alias-bg-layer-2);
-  font-size: var(--tipo-pequeno);
+  gap: var(--espacio-8);
+  margin: var(--espacio-6) 0 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: var(--tipo-control);
 }
 
 /* La barrita entre el nombre y la URL, como en el mockup: son dos datos distintos y sin
@@ -57,7 +54,7 @@
   display: inline-block;
   width: 1px;
   height: 12px;
-  margin: 0 0 -2px 10px;
+  margin: 0 0 -2px var(--espacio-8);
   background: var(--dsw-alias-border-l2);
 }
 
@@ -76,15 +73,14 @@
 
 /* Apagados sin conexión: lo que manda algo al servidor no puede fingir que funciona. */
 .empezar:disabled,
-.empezarTarea:disabled,
-.sesion:disabled {
+.empezarTarea:disabled {
   opacity: 0.45;
   cursor: not-allowed;
 }
 
 .entornoNombre {
   color: var(--dsw-alias-label-primary);
-  font-weight: var(--peso-fuerte);
+  font-weight: var(--peso-medio);
 }
 
 /* Mono, y por el token: una URL es dato de máquina, no prosa. Es la regla tipográfica que
@@ -111,189 +107,115 @@
   cursor: pointer;
 }
 
-/* Rejilla que se adapta sola: con una ventana estrecha cae a una columna sin media queries
-   que haya que mantener a mano. */
-.rejilla {
+/* ── El Escritorio como centro de control (lienzo, «C · Centro de control», 06-11-2026). ───── */
+
+/* Las cifras de arriba: tantas como datos haya (dos, tres o cuatro), repartiéndose el ancho en
+   columnas IGUALES — con flex, a 1024 caían tres y una suelta a todo el ancho. */
+.cifras {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
   gap: var(--espacio-12);
-  margin: 0;
-  padding: 0;
-  list-style: none;
+  margin: 0 0 var(--espacio-24);
 }
 
-.tarjeta {
-  position: relative;
+.cifra {
   display: flex;
+  min-width: 0;
   flex-direction: column;
-  padding: var(--espacio-12);
+  padding: var(--espacio-12) var(--espacio-16);
   border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: var(--radio-tarjeta);
   background: var(--dsw-alias-bg-layer-2);
-  overflow: hidden;
 }
 
-.tarjeta:hover {
-  border-color: var(--xonecode-cian);
-}
-
-/* El filo de acento del rediseño, y SOLO en la que tiene copia local. Es la única tarjeta
-   sobre la que empezar no descarga nada, así que es la única que se distingue de lejos —
-   con el mismo cian que marca la fila activa de la barra, que es el papel que le queda al
-   acento desde que el primario es negro (`estilos/marca.css`).
-
-   Va en un `::before` y no en un `border-top`: un borde de 2px en una sola tarjeta le
-   cambia la altura interior respecto de las de al lado, y la rejilla dejaba de alinear las
-   cabeceras por una fila de dos píxeles. */
-.tarjeta[data-local]::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: var(--xonecode-cian);
-}
-
-.cabeceraDeTarjeta {
-  display: flex;
-  /* Con salto de línea: si el nombre y las etiquetas no caben juntos, las etiquetas bajan
-     a una segunda fila y el nombre se lee ENTERO. Medido a 1440 px: cuatro nombres de
-     proyecto salían cortados («PlaemerWebTe…») porque las etiquetas ganaban sitio al
-     nombre, que es lo único que identifica la tarjeta. */
-  flex-wrap: wrap;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--espacio-4) var(--espacio-8);
-}
-
-/* Los que quedan fuera de la elección: UNA línea con la cuenta y el camino a Ajustes, no
-   una segunda rejilla de tarjetas. Discreta a propósito —es un dato de contexto, no una
-   sección— pero presente: callar que el entorno tiene más haría creer que no los tiene. */
-.resto {
-  margin: 20px 0 0;
+.cifra dt {
+  order: 0;
   color: var(--dsw-alias-label-tertiary);
   font-size: var(--tipo-pequeno);
-  line-height: 1.6;
 }
 
-/* El nombre es el ÚNICO que cede a lo ancho. Sin esto, medido en pantalla, un nombre largo
-   («PlaemerWebTestAsync») empujaba a «sin descargar» fuera de la tarjeta y lo dejaba
-   cortado a media palabra: de las tres piezas de la fila, la que se puede acortar sin
-   perder sentido es la que el ojo ya reconoce por el principio. */
-.nombreDeProyecto {
+.cifra dd {
   margin: 0;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   color: var(--dsw-alias-label-primary);
-  font-size: var(--tipo-titulo);
+  font-size: var(--tipo-display);
   font-weight: var(--peso-fuerte);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.3;
 }
 
-/* Sin color de estado para «sin descargar»: no es un problema, es un hecho — y pintarlo en
-   rojo diría que algo va mal. Solo el que YA está en el equipo se destaca. */
-/* Compartido CONTIGO: un icono pegado al nombre, y nada para lo propio —tener proyectos
-   tuyos es lo normal, lo que cambia cómo trabajas es que sea de otro—. El color es el que
-   tenía la pastilla «compartido» a la que sustituye, y el mismo que en la barra lateral.
-   Va pegado al nombre y no en la esquina: ahí vive «en tu equipo», que contesta otra
-   pregunta. El `margin-right: auto` es lo que los separa — la cabecera es `space-between`,
-   y con tres hijos el del medio se quedaría flotando en mitad de la fila. `align-self`
-   porque la cabecera alinea por la LÍNEA BASE, y un icono no tiene. */
-.compartido {
-  flex: none;
-  display: inline-flex;
-  align-self: center;
-  margin-right: auto;
-  color: var(--dsw-alias-state-business-primary);
+/* El color solo cuando la cifra no es cero: un cero en ámbar avisaría de algo que no pasa. */
+.cifra[data-tono="marcha"] dd:not(.notaDeCifra) {
+  color: var(--xonecode-cian);
 }
 
-.marca {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  gap: var(--espacio-4);
-  /* Inter y no monoespaciada: es un ESTADO, no un dato (la misma pastilla que el Resumen,
-     `ResumenDeProyecto.module.css#pastilla`). Gris secundario: el terciario no llega a 4,5:1 a 12px. */
-  color: var(--dsw-alias-label-secondary);
-  font-size: var(--tipo-pequeno);
-  font-weight: var(--peso-medio);
-  white-space: nowrap;
+.cifra[data-tono="espera"] dd:not(.notaDeCifra) {
+  color: var(--dsw-alias-state-warn-primary);
 }
 
-/* Lo bajado se enseña como pastilla con punto; lo que falta por bajar, en texto pelado.
-   Sigue valiendo lo de antes —«sin descargar» no es un problema y no se pinta en rojo—,
-   y ahora además la asimetría dice cuál de los dos es el estado que habilita algo. */
-.marca[data-local] {
-  padding: var(--espacio-2) var(--espacio-8);
-  border-radius: var(--radio-pastilla);
-  background: var(--dsw-alias-state-success-tertiary);
+.cifra[data-tono="listos"] dd:not(.notaDeCifra) {
   color: var(--dsw-alias-state-success-primary);
 }
 
-.marca[data-local]::before {
-  content: "";
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--dsw-alias-state-success-primary);
-}
-
-/* `margin-top: auto` pega las acciones al fondo de la tarjeta: sea la tarjeta más alta o
-   más baja —el nombre puede envolver a dos líneas—, quedan a la misma altura en toda la
-   fila. (Antes lo que variaba era la lista de sesiones, que ya no está aquí.) */
-.accionesDeTarjeta {
-  display: flex;
-  gap: var(--espacio-6);
-  margin-top: auto;
-}
-
-/* El azul de marca, el MISMO que `Boton.module.css#primario` — no el negro/blanco genérico
-   del tema copiado. */
-.empezar {
-  composes: primario from "./Boton.module.css";
-}
-
-/*
- * «Nueva tarea» es la SEGUNDA acción de la tarjeta, y va secundaria a propósito: la primaria
- * sigue siendo sentarse a trabajar. Y esta autoriza al agente a escribir sin aprobación —lo
- * dice su ventana—, así que no puede además ser el botón que el pulgar pulsa por inercia. El
- * mismo botón secundario que Ajustes/Agentes/etc. (`Boton.module.css#secundario`).
- */
-.empezarTarea {
-  composes: secundario from "./Boton.module.css";
-}
-
-.pie {
-  margin: 24px 0 0;
+.cifra dd.notaDeCifra {
+  overflow: hidden;
   color: var(--dsw-alias-label-tertiary);
   font-size: var(--tipo-pequeno);
+  font-weight: var(--peso-normal);
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.modelo {
-  color: var(--dsw-alias-label-secondary);
-  font-weight: var(--peso-fuerte);
-}
-
-/* La marca del entorno en la línea de la portada. No se encoge: es lo primero que
-   identifica de qué servidor se habla, y un icono a medias no identifica nada. */
-.iconoDeEntorno {
-  flex-shrink: 0;
-}
-
-/* ── El Escritorio de su lienzo (21-10-2026). La barra lateral no se toca (petición suya). ───── */
-/* El saludo a la izquierda y el entorno a su lado; en estrecho, debajo. */
-.portada.portada {
+/* Dos columnas: el trabajo y una lateral de 300. El `flex-grow` de 999 hace que en una fila la
+   lateral se quede en su base y la principal se lleve el resto; al no caber, las dos van a
+   todo el ancho, sin media query que mantener. */
+.panel {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: var(--espacio-12) var(--espacio-24);
+  align-items: flex-start;
+  gap: var(--espacio-24);
 }
 
-.portada .entorno {
+.principal {
+  display: flex;
+  flex: 999 1 480px;
+  flex-direction: column;
+  gap: var(--espacio-16);
+  min-width: 0;
+}
+
+.lateral {
+  display: flex;
+  flex: 1 1 300px;
+  flex-direction: column;
+  gap: var(--espacio-16);
+  min-width: 0;
+}
+
+/* El tablero abierto son cuatro columnas: la principal ocupa la fila y la lateral baja. */
+.panel[data-tablero] > .principal {
+  flex-basis: 100%;
+}
+
+/* Doble clase: `.equipo` trae su `margin-top`, y con la misma especificidad ganaba según el
+   orden de las hojas en el bundle. */
+.lateral.lateral > * {
+  margin-top: 0;
+}
+
+.cabeceraDeBloque {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--espacio-12);
+  margin-bottom: var(--espacio-8);
+}
+
+.tituloDeBloque {
   margin: 0;
+  color: var(--dsw-alias-label-primary);
+  font-size: var(--tipo-titulo);
+  font-weight: var(--peso-fuerte);
 }
 
 /* «Trabajando ahora»: la tarea en marcha, con el filo del acento. */
@@ -303,7 +225,6 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--espacio-12);
-  margin: 0 0 24px;
   padding: var(--espacio-12) var(--espacio-16);
   border: 1px solid var(--xonecode-cian);
   border-radius: var(--radio-tarjeta);
@@ -336,128 +257,209 @@
   font-size: var(--tipo-pequeno);
 }
 
-/* Tareas y Tu equipo, en DOS columnas cuando cabe; el tablero desplegado ocupa la fila entera. */
-.dosColumnas {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
-  gap: var(--espacio-16);
-  /* Las dos tarjetas a la MISMA altura y con el borde de arriba alineado (lienzo, «Tu
-     equipo»): `start` dejaba Tareas corta al lado de un Equipo largo. */
-  align-items: stretch;
-  margin-top: 24px;
-}
-
-/* Doble clase: `.equipo` trae su `margin-top` y, con la misma especificidad, ganaba según el
-   orden de las hojas en el bundle — Tu equipo salía 24px más abajo que Tareas. */
-.dosColumnas.dosColumnas > * {
+/* La bandeja: una lista con borde, una fila por tarea y su acción a la derecha. */
+.bandeja {
   min-width: 0;
-  margin-top: 0;
 }
 
-.dosColumnas > section[aria-label="Tareas en background"] {
-  grid-column: 1 / -1;
-}
-
-.resumenDeTareas {
-  composes: equipo from "./Equipo.module.css";
-}
-
-.resumenDeTareas.resumenDeTareas {
-  display: flex;
-  flex-direction: column;
-  gap: var(--espacio-12);
-  margin: 0;
-}
-
-.cabeceraDeResumen {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--espacio-12);
-}
-
-.tituloDeResumen {
-  margin: 0;
-  color: var(--dsw-alias-label-primary);
-  font-size: var(--tipo-titulo);
-  font-weight: var(--peso-fuerte);
-}
-
-.cifrasDeTareas {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--espacio-8);
-  margin: 0;
-}
-
-.cifrasDeTareas > div {
-  display: flex;
-  flex-direction: column-reverse;
-  padding: var(--espacio-8) var(--espacio-10);
-  border-top: 3px solid var(--dsw-alias-border-l2);
-  border-radius: var(--radio-tarjeta);
-  background: var(--dsw-alias-bg-layer-1);
-}
-
-.cifrasDeTareas > div[data-tono="marcha"] {
-  border-top-color: var(--xonecode-cian);
-}
-
-.cifrasDeTareas > div[data-tono="pausa"] {
-  border-top-color: var(--dsw-alias-state-warn-primary);
-}
-
-.cifrasDeTareas > div[data-tono="hechas"] {
-  border-top-color: var(--dsw-alias-state-success-primary);
-}
-
-.cifrasDeTareas dt {
-  color: var(--dsw-alias-label-tertiary);
-  font-size: var(--tipo-pequeno);
-}
-
-.cifrasDeTareas dd {
-  margin: 0;
-  color: var(--dsw-alias-label-primary);
-  font-size: var(--tipo-display);
-  font-weight: var(--peso-fuerte);
-  font-variant-numeric: tabular-nums;
-}
-
-.listaDeTareas {
-  display: flex;
-  flex-direction: column;
-  gap: var(--espacio-6);
+.listaDeEspera {
   margin: 0;
   padding: 0;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: var(--radio-tarjeta);
+  background: var(--dsw-alias-bg-layer-2);
   list-style: none;
 }
 
-.listaDeTareas > li {
+.filaDeEspera {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--espacio-10);
-  padding: var(--espacio-6) var(--espacio-10);
-  border-radius: var(--radio-tarjeta);
-  background: var(--dsw-alias-bg-layer-1);
-  font-size: var(--tipo-control);
+  gap: var(--espacio-12);
+  padding: var(--espacio-10) var(--espacio-16);
 }
 
-.tituloDeTareaCorta {
+.filaDeEspera + .filaDeEspera {
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+.iconoDeEspera {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radio-control);
+  background: var(--dsw-alias-state-warn-tertiary);
+  color: var(--dsw-alias-state-warn-primary);
+  font-size: var(--tipo-control);
+  font-weight: var(--peso-fuerte);
+}
+
+.filaDeEspera[data-clase="avisos"] .iconoDeEspera {
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.textoDeEspera {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
   min-width: 0;
+}
+
+.tituloDeEspera,
+.detalleDeEspera {
   overflow: hidden;
-  color: var(--dsw-alias-label-primary);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.proyectoDeTarea,
-.estadoDeTareaCorta {
-  color: var(--dsw-alias-label-tertiary);
+.tituloDeEspera {
+  color: var(--dsw-alias-label-primary);
+  font-weight: var(--peso-medio);
 }
 
-.estadoDeTareaCorta {
-  flex-shrink: 0;
+.detalleDeEspera {
+  color: var(--dsw-alias-label-tertiary);
   font-size: var(--tipo-pequeno);
+}
+
+/* Los proyectos, en la principal: una lista con borde, como la bandeja, y una fila por proyecto
+   con el nombre, el estado de su copia y sus dos acciones a la derecha. */
+.proyectos {
+  min-width: 0;
+}
+
+.listaDeProyectos {
+  margin: 0;
+  padding: 0;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: var(--radio-tarjeta);
+  background: var(--dsw-alias-bg-layer-2);
+  list-style: none;
+}
+
+.proyecto {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--espacio-8) var(--espacio-16);
+  padding: var(--espacio-10) var(--espacio-16);
+}
+
+.proyecto + .proyecto {
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+.cabeceraDeProyecto {
+  display: flex;
+  flex: 1 1 240px;
+  align-items: center;
+  gap: var(--espacio-6);
+  min-width: 0;
+}
+
+/* El nombre es el ÚNICO que cede a lo ancho: de las piezas de la fila, la que se puede
+   acortar sin perder sentido es la que el ojo ya reconoce por el principio. */
+.nombreDeProyecto {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--dsw-alias-label-primary);
+  font-size: var(--tipo-cuerpo);
+  font-weight: var(--peso-fuerte);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Compartido CONTIGO: el mismo icono y color que la barra lateral; nada para lo propio. */
+.compartido {
+  display: inline-flex;
+  flex: none;
+  color: var(--dsw-alias-state-business-primary);
+}
+
+/* El estado de la copia: punto con texto en los dos casos, relleno si está bajada y hueco si
+   no. «Sin descargar» no es un problema y no va en rojo. */
+.marca {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--espacio-6);
+  margin-left: auto;
+  color: var(--dsw-alias-label-secondary);
+  font-size: var(--tipo-pequeno);
+  white-space: nowrap;
+}
+
+.marca::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  box-sizing: border-box;
+  border: 1px solid var(--dsw-alias-label-tertiary);
+  border-radius: 50%;
+}
+
+.marca[data-local]::before {
+  border: none;
+  background: var(--dsw-alias-state-success-primary);
+}
+
+.accionesDeProyecto {
+  display: flex;
+  flex: none;
+  gap: var(--espacio-6);
+}
+
+/* El azul de marca, el MISMO que `Boton.module.css#primario`. */
+.empezar {
+  composes: primario from "./Boton.module.css";
+}
+
+/* «Nueva tarea» va secundaria a propósito: autoriza al agente a escribir sin aprobación, así
+   que no puede ser el botón que el pulgar pulsa por inercia. */
+.empezarTarea {
+  composes: secundario from "./Boton.module.css";
+}
+
+/* Los que quedan fuera de la elección: UNA línea con la cuenta y el camino a Ajustes. */
+.resto {
+  margin: 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: var(--tipo-pequeno);
+}
+
+.pie {
+  margin: var(--espacio-8) 0 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: var(--tipo-pequeno);
+}
+
+.modelo {
+  color: var(--dsw-alias-label-secondary);
+  font-weight: var(--peso-fuerte);
+}
+
+/* La marca del entorno en la línea de la portada. No se encoge: es lo primero que
+   identifica de qué servidor se habla. */
+.iconoDeEntorno {
+  flex-shrink: 0;
+}
+
+/* La bandeja vacía, en la misma caja que la llena: que no cambie la forma de la pantalla
+   según haya o no algo pendiente. */
+.bandeja > .vacio {
+  padding: var(--espacio-12) var(--espacio-16);
+  border: 0.5px dashed var(--dsw-alias-border-l2);
+  border-radius: var(--radio-tarjeta);
+  color: var(--dsw-alias-label-tertiary);
+  font-size: var(--tipo-control);
+}
+
+/* Doble clase, por lo mismo que la lateral: el tablero (`Kanban`) trae su propio margen de
+   arriba, y aquí el hueco lo pone el `gap` de la columna. */
+.principal.principal > * {
+  margin-top: 0;
 }

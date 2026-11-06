@@ -30,6 +30,10 @@ import { EnMarcha } from "./TareasDelProyecto.js";
  * y ver dieciocho es no haber elegido. Pero la cuenta no se calla: sin ella, el escritorio
  * afirmaría que el entorno solo tiene estos.
  *
+ * **Es un centro de control** (lienzo, «C · Centro de control», noviembre de 2026): cifras arriba, «Lo que te
+ * espera» (`loQueTeEspera`) y los proyectos en la columna principal, y Tu equipo en la lateral. Lo que la C
+ * enseñaba y no viaja todavía —sin subir, gasto, gestor, aprendido, granja— no se pinta: `docs/DISENO-DASHBOARD.md`.
+ *
  * Y no se pinta NADA del mockup que no tenga dato detrás. El panel de dispositivos
  * (`Equipo.tsx`) existe desde que el servidor MIDE la máquina (`core/dispositivos.ts`:
  * sistema, adb/emulator, simuladores y dispositivos iOS); «Build & Run» y cualquier acción
@@ -182,17 +186,12 @@ export function Escritorio({
     <div className={estilos.escritorio}>
       <div className={estilos.contenido}>
         <header className={estilos.portada}>
-          <div>
-            <h1 className={estilos.saludo}>{nombre === undefined ? "Hola" : `Hola, ${nombre}`}</h1>
-            <p className={estilos.subtitulo}>
-              Elige un proyecto para empezar a trabajar, o sigue una conversación de antes.
-            </p>
-          </div>
+          <h1 className={estilos.saludo}>{nombre === undefined ? "Hola" : `Hola, ${nombre}`}</h1>
           {entorno === undefined ? null : (
             <p className={estilos.entorno}>
               {/* La marca del entorno, delante de su punto de conexión: la primera dice de
                   QUÉ servidor se habla y el segundo si se le está hablando. */}
-              <IconoDeEntorno entorno={entorno.id} size={20} className={estilos.iconoDeEntorno} />
+              <IconoDeEntorno entorno={entorno.id} size={16} className={estilos.iconoDeEntorno} />
               <span className={estilos.punto} data-sin-conexion={apagado ? "" : undefined} aria-hidden="true" />
               <span className={estilos.entornoNombre}>{entorno.nombre}</span>
               <span className={estilos.entornoUrl}>{entorno.url}</span>
@@ -200,161 +199,133 @@ export function Escritorio({
           )}
         </header>
 
-        {tareas === undefined ? null : (
-          <TrabajandoAhora
-            tareas={tareas.lista}
-            proyectos={proyectos}
-            {...(alIrAlChatDeTarea === undefined ? {} : { alIrAlChat: alIrAlChatDeTarea })}
-          />
-        )}
+        <Cifras {...(tareas === undefined ? {} : { tareas: tareas.lista })} {...(dispositivos === undefined ? {} : { dispositivos })} />
 
-        {proyectos.length === 0 ? (
-          // Los dos vacíos NO son el mismo, y se distinguen: sin entorno no hay a quién
-          // preguntarle por proyectos; con entorno y sin proyectos, el que no tiene es él.
-          <p className={estilos.vacio}>
-            {entorno === undefined
-              ? "No hay ningún entorno registrado todavía. Se registra en Ajustes, con su URL."
-              : "Este entorno no ha devuelto ningún proyecto."}{" "}
-            <button type="button" className={estilos.enlace} onClick={alAbrirAjustes}>
-              Abrir Ajustes
-            </button>
-          </p>
-        ) : (
-          <>
-          <section aria-label="proyectos elegidos">
-          <ul className={estilos.rejilla}>
-            {destacados.map((p) => {
-              return (
-                <li key={p.id} className={estilos.tarjeta} data-local={p.local === true ? "" : undefined}>
-                  <div className={estilos.cabeceraDeTarjeta}>
-                    <h2 className={estilos.nombreDeProyecto}>{p.nombre}</h2>
-                    {/*
-                      De quién es, pegado al NOMBRE — mientras que «en tu equipo» se queda
-                      en su esquina. Son dos preguntas distintas y no pueden compartir sitio:
-                      una es de quién es el proyecto allá arriba, la otra si está bajado
-                      aquí. El MISMO icono que la barra lateral, y solo para lo compartido:
-                      lo propio es lo normal y no lleva nada. Aquí la tarjeta no es un botón,
-                      así que el icono lleva su propio nombre accesible.
-                    */}
-                    {p.compartido === true ? (
-                      <span className={estilos.compartido} role="img" aria-label="compartido contigo" title="Compartido contigo">
-                        <IconoCompartido size={16} />
-                      </span>
-                    ) : null}
-                    {/* «En tu equipo» es un dato del servidor, no una promesa: es si existe
-                        su copia local, que es lo que decide si empezar baja algo o no. */}
-                    <span className={estilos.marca} data-local={p.local === true ? "" : undefined}>
-                      {p.local === true ? "en tu equipo" : "sin descargar"}
-                    </span>
-                  </div>
-                  {/*
-                    **Las sesiones NO se pintan aquí**, y eso lo pidió el usuario. Estaban
-                    las cuatro últimas de cada proyecto, o sea la misma lista que la barra
-                    lateral tiene entera y ordenada por último turno — dos sitios para lo
-                    mismo, y el de aquí siempre peor: recortado a cuatro y con el orden de
-                    alta. La tarjeta es para EMPEZAR algo en ese proyecto (sus dos botones);
-                    seguir una conversación es de la barra, que es donde vive esa lista.
-                  */}
-                  <div className={estilos.accionesDeTarjeta}>
-                    <button
-                      type="button"
-                      className={estilos.empezar}
-                      disabled={apagado}
-                      onClick={() => alNuevaSesion(p.id)}
-                    >
-                      Nueva sesión
-                    </button>
-                    {/* Crear una tarea manda algo al servidor, así que se apaga sin cable —
-                        igual que «Nueva sesión»—, y no se pinta si nadie la atiende. */}
-                    {alNuevaTarea === undefined ? null : (
-                      <button
-                        type="button"
-                        className={estilos.empezarTarea}
-                        disabled={apagado}
-                        onClick={() => alNuevaTarea(p.id)}
-                      >
-                        Nueva tarea
+        {/* Dos columnas, la del trabajo y una lateral de 300 con Tu equipo (lienzo, «C · Centro de control»; los proyectos van en la principal, en filas, porque con sus dos botones cada uno alargaban la lateral el doble que la principal). Con el tablero
+            abierto, la del trabajo ocupa la fila entera y la lateral baja: el kanban son cuatro columnas. */}
+        <div className={estilos.panel} data-tablero={verTablero && tareas !== undefined ? "" : undefined}>
+          <div className={estilos.principal}>
+            {tareas === undefined ? null : (
+              <TrabajandoAhora
+                tareas={tareas.lista}
+                proyectos={proyectos}
+                {...(alIrAlChatDeTarea === undefined ? {} : { alIrAlChat: alIrAlChatDeTarea })}
+              />
+            )}
+            {/*
+              Ausente no es «no hay ninguna» —es «no ha llegado la cola»—, la misma regla que la foto
+              de la máquina, así que se dice en vez de afirmar una bandeja vacía que nadie ha medido.
+            */}
+            {tareas === undefined ? (
+              <p className={estilos.vacio}>Todavía no ha llegado la cola de tareas en background.</p>
+            ) : !verTablero ? (
+              <LoQueTeEspera
+                tareas={tareas.lista}
+                proyectos={proyectos}
+                alVerTablero={() => setVerTablero(true)}
+                {...(alAbrirRevisionDeTarea === undefined ? {} : { alRevisar: alAbrirRevisionDeTarea })}
+              />
+            ) : (
+              <Kanban
+                cola={tareas}
+                {...(alAbrirSesionDeTarea === undefined ? {} : { alAbrirSesion: alAbrirSesionDeTarea })}
+                {...(alAbrirRevisionDeTarea === undefined ? {} : { alAbrirRevision: alAbrirRevisionDeTarea })}
+                {...(alReintentarTarea === undefined ? {} : { alReintentar: alReintentarTarea })}
+                {...(alDescartarTarea === undefined ? {} : { alDescartar: alDescartarTarea })}
+                {...(alTerminarTarea === undefined ? {} : { alTerminar: alTerminarTarea })}
+                {...(alEnviarFeedback === undefined ? {} : { alEnviarFeedback })}
+                // «Ver lo que hace»: Task 17 lo movió DENTRO de la tarjeta de la cola —
+                // `MirarTarea` lo monta `Kanban`, aquí solo se reenvía con sus nombres.
+                {...(alMirarTarea === undefined ? {} : { alMirar: alMirarTarea })}
+                {...(alDejarDeMirarTarea === undefined ? {} : { alDejarDeMirar: alDejarDeMirarTarea })}
+                {...(alIrAlChatDeTarea === undefined ? {} : { alIrAlChat: alIrAlChatDeTarea })}
+                {...(mirandoTarea === undefined ? {} : { mirando: mirandoTarea })}
+                {...(mirada === undefined ? {} : { mirada })}
+                conectado={conectado}
+                alPlegar={() => setVerTablero(false)}
+              />
+            )}
+
+            {proyectos.length === 0 ? (
+              // Los dos vacíos NO son el mismo, y se distinguen: sin entorno no hay a quién
+              // preguntarle por proyectos; con entorno y sin proyectos, el que no tiene es él.
+              <p className={estilos.vacio}>
+                {entorno === undefined
+                  ? "No hay ningún entorno registrado todavía. Se registra en Ajustes, con su URL."
+                  : "Este entorno no ha devuelto ningún proyecto."}{" "}
+                <button type="button" className={estilos.enlace} onClick={alAbrirAjustes}>
+                  Abrir Ajustes
+                </button>
+              </p>
+            ) : (
+              <section className={estilos.proyectos} aria-label="proyectos elegidos">
+                <div className={estilos.cabeceraDeBloque}>
+                  <h2 className={estilos.tituloDeBloque}>Proyectos</h2>
+                  {/* Los que quedan FUERA se cuentan, no se pintan: callarlos haría creer que el entorno solo
+                      tiene estos, y pintarlos todos desharía la elección. */}
+                  {otros.length === 0 ? null : (
+                    <p className={estilos.resto}>
+                      {otros.length === 1 ? "Otro proyecto del entorno" : `Otros ${otros.length} proyectos del entorno`}{" · "}
+                      <button type="button" className={estilos.enlace} onClick={alAbrirAjustes}>
+                        Elígelos en Ajustes
                       </button>
-                    )}
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-          </section>
-          {/*
-            Los que quedan FUERA se cuentan, no se pintan.
+                    </p>
+                  )}
+                </div>
+                <ul className={estilos.listaDeProyectos}>
+                  {destacados.map((p) => (
+                    <li key={p.id} className={estilos.proyecto} data-local={p.local === true ? "" : undefined}>
+                      <div className={estilos.cabeceraDeProyecto}>
+                        <h3 className={estilos.nombreDeProyecto}>{p.nombre}</h3>
+                        {/* De quién es, pegado al NOMBRE; «en tu equipo» es si su copia está bajada
+                            aquí, que es lo que decide si empezar descarga algo. Dos preguntas, dos sitios. */}
+                        {p.compartido === true ? (
+                          <span className={estilos.compartido} role="img" aria-label="compartido contigo" title="Compartido contigo">
+                            <IconoCompartido size={14} />
+                          </span>
+                        ) : null}
+                        <span className={estilos.marca} data-local={p.local === true ? "" : undefined}>
+                          {p.local === true ? "en tu equipo" : "sin descargar"}
+                        </span>
+                      </div>
+                      {/* Sin las sesiones: seguir una conversación es de la barra lateral, que tiene la lista entera. */}
+                      <div className={estilos.accionesDeProyecto}>
+                        <button type="button" className={estilos.empezar} disabled={apagado} onClick={() => alNuevaSesion(p.id)}>
+                          Nueva sesión
+                        </button>
+                        {/* Crear una tarea manda algo al servidor: se apaga sin cable, y no se pinta si nadie la atiende. */}
+                        {alNuevaTarea === undefined ? null : (
+                          <button type="button" className={estilos.empezarTarea} disabled={apagado} onClick={() => alNuevaTarea(p.id)}>
+                            Nueva tarea
+                          </button>
+                        )}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
 
-            Antes se pintaban debajo con su propia rejilla de tarjetas, y eso deshacía la
-            elección: el escritorio enseñaba los dieciocho proyectos del entorno y el
-            grupo elegido se perdía entre ellos. Elegir cuatro y ver dieciocho es no haber
-            elegido.
+            {/* El modelo, dicho una vez y donde se va a usar. Ausente = no hay sesión abierta y
+                no se afirma ninguno, la misma regla que la pastilla del compositor. */}
+            {modelo === undefined ? null : (
+              <p className={estilos.pie}>
+                Trabajará con <span className={estilos.modelo}>{modelo}</span>. Se cambia en Ajustes o
+                desde la pastilla del compositor.
+              </p>
+            )}
+          </div>
 
-            Pero **contarlos y decir dónde se eligen no es negociable**, y es la misma regla
-            que ya cumple la barra lateral: callarlos haría creer que el entorno solo tiene
-            estos. La cifra va con un botón a Ajustes y no con la frase «se eligen en
-            Ajustes» a secas — es donde hay que ir, así que se va desde aquí.
-          */}
-          {otros.length === 0 ? null : (
-            <p className={estilos.resto}>
-              {otros.length === 1 ? "Otro proyecto del entorno" : `Otros ${otros.length} proyectos del entorno`} sin
-              enseñar{" "}
-              <button type="button" className={estilos.enlace} onClick={alAbrirAjustes}>
-                Elígelos en Ajustes
-              </button>
-            </p>
-          )}
-          </>
-        )}
+          <aside className={estilos.lateral}>
+            <Equipo
+              {...(dispositivos === undefined ? {} : { informe: dispositivos })}
+              conectado={!apagado}
+              {...(alActualizarDispositivos === undefined ? {} : { alActualizar: alActualizarDispositivos })}
+              {...(alVerificarDispositivo === undefined ? {} : { alVerificar: alVerificarDispositivo })}
+            />
 
-        {/*
-          Las tareas en background, entre lo elegido y «Tu equipo»: son de la aplicación,
-          igual que el resto de este panel. Ausente no es «no hay ninguna» —es «no ha
-          llegado la cola»—, la misma regla que la foto de la máquina de más abajo, así que
-          se dice en vez de afirmar un kanban vacío que nadie ha medido.
-        */}
-        <div className={estilos.dosColumnas}>
-        {tareas === undefined ? (
-          <p className={estilos.vacio}>Todavía no ha llegado la cola de tareas en background.</p>
-        ) : !verTablero ? (
-          <ResumenDeTareas tareas={tareas.lista} proyectos={proyectos} alVerTablero={() => setVerTablero(true)} />
-        ) : (
-          <Kanban
-            cola={tareas}
-            {...(alAbrirSesionDeTarea === undefined ? {} : { alAbrirSesion: alAbrirSesionDeTarea })}
-            {...(alAbrirRevisionDeTarea === undefined ? {} : { alAbrirRevision: alAbrirRevisionDeTarea })}
-            {...(alReintentarTarea === undefined ? {} : { alReintentar: alReintentarTarea })}
-            {...(alDescartarTarea === undefined ? {} : { alDescartar: alDescartarTarea })}
-            {...(alTerminarTarea === undefined ? {} : { alTerminar: alTerminarTarea })}
-            {...(alEnviarFeedback === undefined ? {} : { alEnviarFeedback })}
-            // «Ver lo que hace»: Task 17 lo movió DENTRO de la tarjeta de la cola —
-            // `MirarTarea` lo monta `Kanban`, aquí solo se reenvía con sus nombres.
-            {...(alMirarTarea === undefined ? {} : { alMirar: alMirarTarea })}
-            {...(alDejarDeMirarTarea === undefined ? {} : { alDejarDeMirar: alDejarDeMirarTarea })}
-            {...(alIrAlChatDeTarea === undefined ? {} : { alIrAlChat: alIrAlChatDeTarea })}
-            {...(mirandoTarea === undefined ? {} : { mirando: mirandoTarea })}
-            {...(mirada === undefined ? {} : { mirada })}
-            conectado={conectado}
-            alPlegar={() => setVerTablero(false)}
-          />
-        )}
-
-        <Equipo
-          {...(dispositivos === undefined ? {} : { informe: dispositivos })}
-          conectado={!apagado}
-          {...(alActualizarDispositivos === undefined ? {} : { alActualizar: alActualizarDispositivos })}
-          {...(alVerificarDispositivo === undefined ? {} : { alVerificar: alVerificarDispositivo })}
-        />
+          </aside>
         </div>
-
-        {/* El modelo, dicho una vez y donde se va a usar. Ausente = no hay sesión abierta y
-            no se afirma ninguno, la misma regla que la pastilla del compositor. */}
-        {modelo === undefined ? null : (
-          <p className={estilos.pie}>
-            Trabajará con <span className={estilos.modelo}>{modelo}</span>. Se cambia en Ajustes o
-            desde la pastilla del compositor.
-          </p>
-        )}
       </div>
     </div>
   );
@@ -400,58 +371,147 @@ function TrabajandoAhora({
   );
 }
 
+/** Una fila de «Lo que te espera»: QUÉ tarea, de qué clase y la frase que lo explica. */
+export interface Espera {
+  tarea: TareaDelCable;
+  clase: "espera" | "pausa" | "avisos";
+  detalle: string;
+}
+
+/** Cuánto sigue en la bandeja una terminada con avisos: lo de ayer aún se revisa, lo de la semana pasada ya no espera. */
+export const VENTANA_DE_AVISOS_MS = 24 * 60 * 60 * 1000;
+
 /**
- * Las tareas en CIFRAS (su lienzo): cuántas en cola, en marcha, en pausa y terminadas, y la lista corta de las que no han
- * terminado. Para actuar sobre una, «Ver el tablero» despliega el kanban de siempre.
+ * **Lo que espera a una PERSONA**, y solo lo que un campo de la tarea dice (lienzo, «C · Centro de control»):
+ *
+ * - `espera`: una `nuevo` con `esperaPorTi` — el SERVIDOR dice que no arranca sin alguien de esta consola.
+ * - `pausa`: una `requiere-atencion` — parada, con su `motivo` si lo trae.
+ * - `avisos`: una `terminada` en las últimas `VENTANA_DE_AVISOS_MS` cuyo juez dijo rojo o no se entendió, o que se
+ *   cerró con críticos. Una terminada en verde NO es «por revisar»: ningún campo dice que alguien la tenga pendiente,
+ *   y pintarlas todas convertiría la bandeja en el histórico.
+ *
+ * Primero lo que bloquea (espera, pausa) y después lo que solo avisa.
  */
-function ResumenDeTareas({
+export function loQueTeEspera(tareas: readonly TareaDelCable[], ahora: number): Espera[] {
+  const filas: Espera[] = [];
+  for (const t of tareas) {
+    if (t.estado === "nuevo" && t.esperaPorTi !== undefined) {
+      filas.push({ tarea: t, clase: "espera", detalle: `Esperando: ${t.esperaPorTi.motivo}` });
+    } else if (t.estado === "requiere-atencion") {
+      filas.push({ tarea: t, clase: "pausa", detalle: t.motivo ?? "En pausa." });
+    } else if (t.estado === "terminada" && t.acabada !== undefined && ahora - Date.parse(t.acabada) <= VENTANA_DE_AVISOS_MS) {
+      const criticos = t.cierre?.criticos.length ?? 0;
+      const juezEnContra = t.veredicto !== undefined && t.veredicto.veredicto !== "verde";
+      if (juezEnContra || criticos > 0) {
+        filas.push({
+          tarea: t,
+          clase: "avisos",
+          detalle: juezEnContra
+            ? t.veredicto!.resumen
+            : criticos === 1
+              ? "Se cerró con 1 crítico."
+              : `Se cerró con ${criticos} críticos.`,
+        });
+      }
+    }
+  }
+  const orden = { espera: 0, pausa: 1, avisos: 2 } as const;
+  return filas.sort((a, b) => orden[a.clase] - orden[b.clase]);
+}
+
+/**
+ * **Las cifras de arriba**, y solo las que tienen dato detrás: sin cola no hay cifras de tareas, sin foto de la máquina
+ * no hay de aparatos. Lo que el lienzo ponía y aún no viaja (sin subir, gasto) no se pinta — ni a cero.
+ */
+function Cifras({ tareas, dispositivos }: { tareas?: readonly TareaDelCable[]; dispositivos?: InformeDeDispositivos }) {
+  if (tareas === undefined && dispositivos === undefined) return null;
+  const de = (e: TareaDelCable["estado"]) => (tareas ?? []).filter((t) => t.estado === e).length;
+  const espera = tareas === undefined ? [] : loQueTeEspera(tareas, Date.now());
+  const pausas = espera.filter((e) => e.clase !== "avisos").length;
+  const avisos = espera.length - pausas;
+  const listos = dispositivos?.dispositivos.filter((d) => d.estado === "conectado" || d.estado === "arrancado").length ?? 0;
+  const cifras: { rotulo: string; valor: number; nota: string; tono?: string }[] = [];
+  if (tareas !== undefined) {
+    const cola = de("nuevo");
+    cifras.push(
+      { rotulo: "En marcha", valor: de("en-proceso"), nota: cola === 0 ? "nada en cola" : `${cola} en cola`, tono: "marcha" },
+      {
+        rotulo: "Te esperan",
+        valor: espera.length,
+        nota: espera.length === 0 ? "nada pendiente" : [pausas > 0 ? `${pausas} paradas` : "", avisos > 0 ? `${avisos} con avisos` : ""].filter(Boolean).join(" · "),
+        tono: "espera",
+      },
+      { rotulo: "Terminadas", valor: de("terminada"), nota: "en la cola" },
+    );
+  }
+  if (dispositivos !== undefined) {
+    cifras.push({ rotulo: "Aparatos listos", valor: listos, nota: "encendidos", tono: "listos" });
+  }
+  return (
+    <dl className={estilos.cifras} aria-label="Resumen">
+      {cifras.map((c) => (
+        <div key={c.rotulo} className={estilos.cifra} data-tono={c.valor > 0 ? c.tono : undefined}>
+          <dt>{c.rotulo}</dt>
+          <dd>{c.valor}</dd>
+          <dd className={estilos.notaDeCifra}>{c.nota}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+/**
+ * **La bandeja** (lienzo C): lo que `loQueTeEspera` devuelve, una fila por tarea con UNA acción. Lo que pide más que un
+ * botón —contestar, reintentar, dar por bueno— vive en el tablero, y la acción lleva allí; una terminada con avisos se
+ * revisa en su pestaña Revisión si tiene sesión.
+ */
+function LoQueTeEspera({
   tareas,
   proyectos,
   alVerTablero,
+  alRevisar,
 }: {
   tareas: readonly TareaDelCable[];
   proyectos: readonly { id: string; nombre: string }[];
   alVerTablero: () => void;
+  alRevisar?: (proyecto: string, sesion: string) => void;
 }) {
-  const de = (e: TareaDelCable["estado"]) => tareas.filter((t) => t.estado === e).length;
-  const cifras: [string, number, string][] = [
-    ["en cola", de("nuevo"), "cola"],
-    ["en marcha", de("en-proceso"), "marcha"],
-    ["en pausa", de("requiere-atencion"), "pausa"],
-    ["terminadas", de("terminada"), "hechas"],
-  ];
-  const vivas = tareas.filter((t) => t.estado !== "terminada").slice(0, 5);
+  const filas = loQueTeEspera(tareas, Date.now());
   return (
-    <section className={estilos.resumenDeTareas} aria-label="Tareas">
-      <div className={estilos.cabeceraDeResumen}>
-        <h2 className={estilos.tituloDeResumen}>Tareas</h2>
+    <section className={estilos.bandeja} aria-label="Lo que te espera">
+      <div className={estilos.cabeceraDeBloque}>
+        <h2 className={estilos.tituloDeBloque}>Lo que te espera</h2>
         <button type="button" className={estilos.enlace} onClick={alVerTablero}>
           Ver el tablero
         </button>
       </div>
-      <dl className={estilos.cifrasDeTareas}>
-        {cifras.map(([rotulo, n, tono]) => (
-          <div key={rotulo} data-tono={tono}>
-            <dt>{rotulo}</dt>
-            <dd>{n}</dd>
-          </div>
-        ))}
-      </dl>
-      {vivas.length === 0 ? (
-        <p className={estilos.vacio}>Ninguna pendiente.</p>
+      {filas.length === 0 ? (
+        <p className={estilos.vacio}>Nada pendiente de ti.</p>
       ) : (
-        <ul className={estilos.listaDeTareas}>
-          {vivas.map((t) => (
-            <li key={t.id} data-estado={t.estado}>
-              <span className={estilos.tituloDeTareaCorta}>
-                {t.titulo}
-                <span className={estilos.proyectoDeTarea}>{` · ${nombreDelProyecto(proyectos, t.proyecto, t.proyectoNombre)}`}</span>
-              </span>
-              <span className={estilos.estadoDeTareaCorta}>
-                {t.estado === "en-proceso" ? "en marcha" : t.estado === "requiere-atencion" ? "en pausa" : "en cola"}
-              </span>
-            </li>
-          ))}
+        <ul className={estilos.listaDeEspera}>
+          {filas.map(({ tarea: t, clase, detalle }) => {
+            const revisar = clase === "avisos" && alRevisar !== undefined && t.sesion !== undefined;
+            return (
+              <li key={t.id} className={estilos.filaDeEspera} data-clase={clase}>
+                <span className={estilos.iconoDeEspera} aria-hidden="true">
+                  {clase === "avisos" ? "!" : clase === "pausa" ? "‖" : "?"}
+                </span>
+                <span className={estilos.textoDeEspera}>
+                  <span className={estilos.tituloDeEspera}>{t.titulo}</span>
+                  <span className={estilos.detalleDeEspera}>
+                    {`${nombreDelProyecto(proyectos, t.proyecto, t.proyectoNombre)} · ${detalle}`}
+                  </span>
+                </span>
+                <button
+                  type="button"
+                  className={estilos.empezarTarea}
+                  onClick={() => (revisar ? alRevisar!(t.proyecto, t.sesion!) : alVerTablero())}
+                >
+                  {revisar ? "Revisar" : clase === "pausa" ? "Atender" : "Ver en el tablero"}
+                </button>
+              </li>
+            );
+          })}
         </ul>
       )}
     </section>
