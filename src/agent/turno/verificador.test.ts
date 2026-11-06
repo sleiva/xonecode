@@ -124,4 +124,22 @@ describe("comoLanzarElSimulador: el xone-linter del PAQUETE, no el del PATH", ()
     expect(fallo).toBeInstanceOf(ErrorDelSimulador);
     expect((fallo as Error).message).not.toContain("ENOENT");
   });
+
+  it("un .js en una SUBCARPETA no tumba la validación (soporte BusmeLasVegas, xone-linter ≥ 1.5.1)", async () => {
+    // Medido en una tarea de Windows: `tmpx/dump.js` (restos de volcados) y xone-linter 1.5.0 lo buscaba en la RAÍZ
+    // —`join(raiz, entry.name)` con un Dirent de `glob`— y el turno cerraba con «no se pudo verificar: ENOENT … dump.js».
+    const { mkdtempSync, mkdirSync, writeFileSync, rmSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const raiz = mkdtempSync(join(tmpdir(), "sim-sub-"));
+    try {
+      writeFileSync(join(raiz, "app.xml"), `<?xml version="1.0" encoding="UTF-8"?>\n<xml><app prefix="gen" version="1.0.0"></app></xml>\n`);
+      mkdirSync(join(raiz, "tmpx"));
+      writeFileSync(join(raiz, "tmpx", "dump.js"), "var a = 1;\n");
+      const informe = await new SimuladorVerifier().verificar(raiz);
+      expect(informe.hallazgos.some((h) => h.mensaje.includes("ENOENT"))).toBe(false);
+    } finally {
+      rmSync(raiz, { recursive: true, force: true });
+    }
+  });
 });
