@@ -5,12 +5,13 @@
 
 /* La misma tira con borde que el entorno activo: es información de la máquina, al mismo
    nivel que «qué entorno hay», y se lee con la misma forma. */
+/* La caja de Tu equipo, y la de las tarjetas del Resumen del proyecto, que componen ESTA: el papel (fondo, sombra,
+   borde de luz) es el de `Superficie`; aquí solo el hueco y el relleno, que `Superficie` no declara. Clase SIMPLE a
+   propósito: quien compone esto (`.tarjeta.tarjeta`, `.bloque.bloque`) rehace el margen con la clase doblada y gana. */
 .equipo {
+  composes: superficie from "./Superficie.module.css";
   margin: 24px 0 0;
   padding: var(--espacio-12);
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: var(--radio-tarjeta);
-  background: var(--dsw-alias-bg-layer-2);
 }
 
 .cabecera {

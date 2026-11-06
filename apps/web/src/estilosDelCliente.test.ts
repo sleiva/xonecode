@@ -297,6 +297,8 @@ describe("el puente de temas", () => {
       "barra-placa": "la placa del símbolo es blanca siempre, resuelve en :root",
       angulo: "un ángulo de degradado, no es un color",
       "icono-": "colores de tipo de fichero (y la máscara de `icono-copiar`): son de la marca, no del tema; validados en claro y oscuro",
+      "relieve-": "derivados declarados en `estilos/relieve.css` sobre `body`: se recalculan con los colores del tema, sin puente propio",
+      mascara: "el canal alfa de una máscara (`Superficie.module.css`): no se pinta, solo recorta",
     };
     const excepcion = (n: string): boolean =>
       Object.keys(EXCEPCIONES).some((k) => (k.endsWith("-") ? n.startsWith(k) : n === k));

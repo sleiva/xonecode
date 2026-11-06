@@ -1,0 +1,126 @@
+/* NUESTRO. El RELIEVE de la consola: el estilo «AC3» elegido en el lienzo de diseño (06-11-2026) — la A
+ * (elevación con sombra teñida de la marca) con los degradados de la C (halo de fondo, borde de luz, primario
+ * azul → cian).
+ *
+ * Por qué un fichero aparte y en `body`, y no en el `:root` de `marca.css`: el oscuro por omisión («Azul noche»)
+ * y cualquier otro tema pasan por el PUENTE (`temas.css`), que redefine `--xonecode-azul`, `--xonecode-cian` y
+ * las capas en el `body`. Una custom property con `var()` se resuelve donde se DECLARA: declaradas en `:root`, estas
+ * se quedarían con los colores de XOneCode dentro de cualquier tema. Declaradas en `body`, se recalculan con los del
+ * tema que esté puesto, y el puente no tiene que repetirlas (`estilosDelCliente.test.ts` lo sabe: prefijo
+ * `relieve-`).
+ *
+ * Ningún color literal: todo sale de `--xonecode-*` y `--dsw-alias-*`, con `transparent` como segundo color de
+ * un `color-mix` — la misma regla que el puente. */
+
+body {
+  /* El fondo: dos halos de luz de la marca, cian arriba a la izquierda y azul abajo a la derecha. */
+  --xonecode-relieve-halo:
+    radial-gradient(900px 520px at 0% 0%, color-mix(in srgb, var(--xonecode-cian) 18%, transparent), transparent 62%),
+    radial-gradient(800px 600px at 100% 70%, color-mix(in srgb, var(--xonecode-azul) 12%, transparent), transparent 62%);
+
+  /* La tarjeta: superficie sólida, sombra en dos capas TEÑIDA del azul de marca, y un borde de luz en degradado. */
+  --xonecode-relieve-superficie: var(--dsw-alias-bg-layer-2);
+  --xonecode-relieve-superficie-hover: var(--dsw-alias-bg-layer-2);
+  --xonecode-relieve-sombra:
+    0 1px 2px color-mix(in srgb, var(--xonecode-azul) 6%, transparent),
+    0 8px 24px color-mix(in srgb, var(--xonecode-azul) 10%, transparent);
+  --xonecode-relieve-sombra-hover:
+    0 2px 6px color-mix(in srgb, var(--xonecode-azul) 8%, transparent),
+    0 18px 40px color-mix(in srgb, var(--xonecode-azul) 16%, transparent);
+  --xonecode-relieve-borde: linear-gradient(
+    160deg,
+    color-mix(in srgb, var(--xonecode-cian) 55%, transparent),
+    color-mix(in srgb, var(--xonecode-cian) 12%, transparent) 50%,
+    color-mix(in srgb, var(--xonecode-azul) 28%, transparent)
+  );
+  --xonecode-relieve-borde-hover: linear-gradient(
+    160deg,
+    color-mix(in srgb, var(--xonecode-cian) 85%, transparent),
+    color-mix(in srgb, var(--xonecode-cian) 25%, transparent) 50%,
+    color-mix(in srgb, var(--xonecode-azul) 45%, transparent)
+  );
+
+  /* El primario: degradado azul de marca → cian, con sombra de color y un filo de luz arriba. */
+  --xonecode-relieve-primario: linear-gradient(
+    110deg,
+    var(--xonecode-azul) 0%,
+    color-mix(in srgb, var(--xonecode-azul) 55%, var(--xonecode-cian)) 50%,
+    var(--xonecode-cian) 100%
+  );
+  --xonecode-relieve-primario-texto: var(--xonecode-sobre-azul);
+  --xonecode-relieve-primario-sombra:
+    inset 0 1px 0 color-mix(in srgb, var(--xonecode-sobre-azul) 18%, transparent),
+    0 4px 12px color-mix(in srgb, var(--xonecode-azul) 30%, transparent);
+  --xonecode-relieve-primario-sombra-hover:
+    inset 0 1px 0 color-mix(in srgb, var(--xonecode-sobre-azul) 25%, transparent),
+    0 8px 22px color-mix(in srgb, var(--xonecode-cian) 38%, transparent);
+
+  /* El secundario: un anillo fino y una sombra corta, en vez del borde plano. */
+  --xonecode-relieve-secundario-sombra:
+    0 0 0 1px color-mix(in srgb, var(--xonecode-azul) 12%, transparent),
+    0 2px 6px color-mix(in srgb, var(--xonecode-azul) 8%, transparent);
+  --xonecode-relieve-secundario-sombra-hover:
+    0 0 0 1px color-mix(in srgb, var(--xonecode-azul) 20%, transparent),
+    0 6px 14px color-mix(in srgb, var(--xonecode-azul) 12%, transparent);
+
+  /* Los velos de las cifras y el icono de las filas que piden algo. */
+  --xonecode-relieve-velo-marcha: linear-gradient(160deg, color-mix(in srgb, var(--xonecode-cian) 18%, transparent), transparent 65%);
+  --xonecode-relieve-velo-espera: linear-gradient(160deg, color-mix(in srgb, var(--dsw-alias-state-warn-primary) 18%, transparent), transparent 65%);
+  --xonecode-relieve-velo-listo: linear-gradient(160deg, color-mix(in srgb, var(--dsw-alias-state-success-primary) 16%, transparent), transparent 65%);
+  --xonecode-relieve-velo-neutro: linear-gradient(160deg, color-mix(in srgb, var(--xonecode-azul) 14%, transparent), transparent 65%);
+  --xonecode-relieve-icono: linear-gradient(135deg, var(--xonecode-cian), var(--xonecode-azul));
+  --xonecode-relieve-pestana: linear-gradient(90deg, var(--xonecode-azul), var(--xonecode-cian));
+}
+
+/* En oscuro la sombra no separa nada sobre un fondo casi negro: lo hacen la superficie algo translúcida (el halo se
+   adivina detrás), un filo de luz arriba y el borde de luz más encendido. El primario sale del cian, que es el que
+   brilla sobre oscuro; el azul de marca se hunde. */
+body[data-ds-dark-theme] {
+  --xonecode-relieve-halo:
+    radial-gradient(900px 560px at 0% 0%, color-mix(in srgb, var(--xonecode-cian) 22%, transparent), transparent 62%),
+    radial-gradient(820px 640px at 100% 70%, color-mix(in srgb, var(--xonecode-cian-oscuro) 18%, transparent), transparent 62%);
+  --xonecode-relieve-superficie: color-mix(in srgb, var(--dsw-alias-bg-layer-2) 82%, transparent);
+  --xonecode-relieve-superficie-hover: color-mix(in srgb, var(--dsw-alias-bg-layer-2) 88%, var(--xonecode-cian));
+  --xonecode-relieve-sombra:
+    inset 0 1px 0 color-mix(in srgb, var(--xonecode-cian) 10%, transparent),
+    0 12px 32px color-mix(in srgb, var(--dsw-alias-bg-base) 70%, transparent);
+  --xonecode-relieve-sombra-hover:
+    inset 0 1px 0 color-mix(in srgb, var(--xonecode-cian) 14%, transparent),
+    0 14px 36px color-mix(in srgb, var(--xonecode-cian) 12%, transparent);
+  --xonecode-relieve-borde: linear-gradient(
+    160deg,
+    color-mix(in srgb, var(--xonecode-cian) 45%, transparent),
+    color-mix(in srgb, var(--xonecode-cian) 8%, transparent) 45%,
+    color-mix(in srgb, var(--xonecode-cian-oscuro) 28%, transparent)
+  );
+  --xonecode-relieve-borde-hover: linear-gradient(
+    160deg,
+    color-mix(in srgb, var(--xonecode-cian) 90%, transparent),
+    color-mix(in srgb, var(--xonecode-cian) 25%, transparent) 50%,
+    color-mix(in srgb, var(--xonecode-cian-oscuro) 60%, transparent)
+  );
+  /* Del cian HUNDIDO en el fondo al cian: así sale el degradado también en los temas oscuros cuyo azul y cian son el
+     mismo acento («Azul noche»), donde mezclar azul con cian no daba nada. El texto, el claro del tema: sobre la mitad
+     oscura el `sobre-azul` de esos temas (oscuro) no se leía. */
+  --xonecode-relieve-primario: linear-gradient(
+    110deg,
+    color-mix(in srgb, var(--xonecode-cian) 38%, var(--dsw-alias-bg-base)) 0%,
+    color-mix(in srgb, var(--xonecode-cian) 62%, var(--dsw-alias-bg-base)) 55%,
+    color-mix(in srgb, var(--xonecode-cian) 85%, var(--dsw-alias-bg-base)) 100%
+  );
+  --xonecode-relieve-primario-texto: var(--dsw-alias-label-primary);
+  --xonecode-relieve-primario-sombra:
+    inset 0 1px 0 color-mix(in srgb, var(--dsw-alias-label-primary) 16%, transparent),
+    0 6px 18px color-mix(in srgb, var(--xonecode-cian) 32%, transparent);
+  --xonecode-relieve-primario-sombra-hover:
+    inset 0 1px 0 color-mix(in srgb, var(--dsw-alias-label-primary) 22%, transparent),
+    0 8px 26px color-mix(in srgb, var(--xonecode-cian) 50%, transparent);
+  --xonecode-relieve-secundario-sombra:
+    inset 0 1px 0 color-mix(in srgb, var(--dsw-alias-label-primary) 6%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--dsw-alias-label-primary) 10%, transparent);
+  --xonecode-relieve-secundario-sombra-hover:
+    inset 0 1px 0 color-mix(in srgb, var(--dsw-alias-label-primary) 8%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--xonecode-cian) 35%, transparent);
+  --xonecode-relieve-velo-neutro: linear-gradient(160deg, color-mix(in srgb, var(--xonecode-cian-oscuro) 18%, transparent), transparent 65%);
+  --xonecode-relieve-pestana: linear-gradient(90deg, var(--xonecode-cian-oscuro), var(--xonecode-cian));
+}

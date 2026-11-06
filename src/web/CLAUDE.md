@@ -231,6 +231,10 @@ Ante una discrepancia con el código, **el código manda**.
   literales y alias EXISTENTES en `estilosDelCliente.test.ts`. Derivados REDECLARADOS en el puente.
   **La BARRA tiene tokens propios** (`--xonecode-barra*`; `--xonecode-barra-placa` no se puentea);
   una superficie de marca no se pinta con `--xonecode-azul`. **Límite**: OpenUI solo recibe claro/oscuro.
+- **El relieve (AC3 de su lienzo)**: los tokens en `estilos/relieve.css`, declarados en `body` para que se recalculen con
+  el tema; la tarjeta COMPONE `Superficie.module.css` (sombra teñida, borde de luz por `::after` con máscara) sin
+  redeclarar fondo, borde ni sombra en esa regla; botones con `--radio-boton`. En oscuro el primario sale del cian
+  hundido en el fondo: en «Azul noche» azul y cian son el mismo acento.
 - **Enviar, AZUL de marca** (en un tema, su acento); PARAR, ROJO.
 - **El compositor en TRES BANDAS**: en REPOSO la de arriba se DESMONTA por `:focus-within` en CSS,
   nunca `onBlur`; `data-con-texto` la mantiene. **Trampa**: un `color-mix` con alias del TEMA no

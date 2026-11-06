@@ -38,9 +38,15 @@
    siendo blanco, así que no cambia nada ahí — el borde es quien hace el trabajo en claro. */
 .secundario {
   padding: var(--espacio-6) var(--espacio-10);
-  border: 0.5px solid var(--dsw-alias-border-l4);
-  border-radius: var(--radio-control);
+  /* El relieve AC3 (`estilos/relieve.css`): un anillo fino y una sombra corta en vez del borde plano. El
+     contorno es `box-shadow` y no `border`: un borde no puede llevar el anillo teñido ni el degradado del primario. */
+  border: 0;
+  border-radius: var(--radio-boton);
   background: var(--dsw-alias-button-elevated-fill);
+  box-shadow: var(--xonecode-relieve-secundario-sombra);
+  transition:
+    box-shadow 0.15s ease,
+    background-color 0.15s ease;
   color: var(--dsw-alias-label-primary);
   font: inherit;
   font-size: var(--tipo-control);
@@ -49,7 +55,7 @@
 }
 
 .secundario:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
+  box-shadow: var(--xonecode-relieve-secundario-sombra-hover);
 }
 
 .secundario:disabled {
@@ -66,10 +72,15 @@
    lee las MISMAS variables. */
 .primario {
   padding: var(--espacio-6) var(--espacio-10);
-  border: 0.5px solid var(--xonecode-azul);
-  border-radius: var(--radio-control);
-  background: var(--xonecode-azul);
-  color: var(--xonecode-sobre-azul);
+  /* El relieve AC3: degradado azul de marca → cian, sombra de COLOR y un filo de luz arriba. Sin borde visible. */
+  border: 0;
+  border-radius: var(--radio-boton);
+  background: var(--xonecode-relieve-primario);
+  box-shadow: var(--xonecode-relieve-primario-sombra);
+  transition:
+    box-shadow 0.15s ease,
+    filter 0.15s ease;
+  color: var(--xonecode-relieve-primario-texto);
   font: inherit;
   font-size: var(--tipo-control);
   font-weight: var(--peso-fuerte);
@@ -77,8 +88,12 @@
 }
 
 .primario:hover {
-  background: var(--xonecode-cian);
-  border-color: var(--xonecode-cian);
+  box-shadow: var(--xonecode-relieve-primario-sombra-hover);
+  filter: brightness(1.08) saturate(1.08);
+}
+
+.primario:active {
+  filter: brightness(0.95);
 }
 
 .primario:disabled {
@@ -94,7 +109,7 @@
 .peligro {
   padding: var(--espacio-6) var(--espacio-10);
   border: 0.5px solid var(--xonecode-rojo);
-  border-radius: var(--radio-control);
+  border-radius: var(--radio-boton);
   background: var(--xonecode-rojo-fondo);
   color: var(--xonecode-rojo);
   font: inherit;
@@ -118,7 +133,7 @@
 .exito {
   padding: var(--espacio-6) var(--espacio-10);
   border: 0.5px solid var(--xonecode-verde);
-  border-radius: var(--radio-control);
+  border-radius: var(--radio-boton);
   background: var(--xonecode-verde-fondo);
   color: var(--xonecode-verde);
   font: inherit;
@@ -166,4 +181,21 @@
 .icono:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+/* El FOCO de teclado, igual en los cinco roles: un anillo cian separado del botón, que se ve sobre cualquier fondo. */
+.secundario:focus-visible,
+.primario:focus-visible,
+.peligro:focus-visible,
+.exito:focus-visible,
+.icono:focus-visible {
+  outline: 2px solid var(--xonecode-cian);
+  outline-offset: 2px;
+}
+
+/* Apagado no brilla: sin sombra de color ni filtro, solo la opacidad de siempre. */
+.primario:disabled,
+.secundario:disabled {
+  box-shadow: none;
+  filter: none;
 }

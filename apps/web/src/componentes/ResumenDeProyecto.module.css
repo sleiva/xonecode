@@ -148,7 +148,9 @@
    La cifra es la MISMA que la banda de Revisión. El estado se dice con palabras y con el filo
    de arriba. */
 .tira.tira {
-  border-top-width: 3px;
+  /* El filo de arriba ENTERO y no solo su grosor: la superficie (`Superficie.module.css`) va sin borde, así que aquí
+     se declara el estilo también. En otra regla que la que compone la superficie, como manda su cabecera. */
+  border-top: 3px solid var(--dsw-alias-border-l2);
   color: var(--dsw-alias-label-secondary);
   font-size: var(--tipo-control);
 }

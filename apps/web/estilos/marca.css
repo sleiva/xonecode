@@ -136,6 +136,10 @@
    * sitio, y un componente solo consume alias—, y porque `transparent` y los porcentajes de
    * color solo se escriben aquí.
    */
+  /* El canal ALFA de una máscara (el borde de luz de `Superficie.module.css` recorta con
+     `mask-composite`): no se pinta, solo tapa. Opaco y sin tema, por eso vive aquí y no en el puente. */
+  --xonecode-mascara: #000;
+
   --xonecode-sombra-caja:
     0 1px 2px color-mix(in srgb, var(--xonecode-azul-hondo) 8%, transparent),
     0 8px 24px -8px color-mix(in srgb, var(--xonecode-azul-hondo) 14%, transparent);

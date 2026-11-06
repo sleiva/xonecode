@@ -1,0 +1,66 @@
+/*
+ * El PAPEL de tarjeta de xonecode, en UN sitio: el relieve «AC3» del lienzo de diseño (06-11-2026). Una tarjeta
+ * se separa del fondo por una sombra teñida de la marca y lleva un BORDE DE LUZ en degradado; al pasar, la sombra
+ * crece, el borde se enciende y (si el sistema no pide menos movimiento) sube un píxel.
+ *
+ * Mismo trato que `Boton.module.css`: un componente COMPONE este papel (`composes: superficie from
+ * "./Superficie.module.css";`) y NO redeclara en esa misma regla `background`, `border`, `border-radius` ni
+ * `box-shadow` — `composes` no fusiona, y cuál gana lo decidiría el orden del bundle. Lo que un componente
+ * añade encima (un velo de color en una cifra) va en OTRA regla, más específica.
+ *
+ * El borde de luz es un `::after`: una capa de 1px recortada con `mask-composite` para que solo quede el filo.
+ * Así el degradado sigue la curva del radio, cosa que `border-image` no hace. Quien componga esto no puede usar
+ * su propio `::after` en el mismo elemento.
+ */
+.superficie {
+  position: relative;
+  isolation: isolate;
+  border: 0;
+  border-radius: var(--radio-tarjeta);
+  background: var(--xonecode-relieve-superficie);
+  box-shadow: var(--xonecode-relieve-sombra);
+  transition:
+    box-shadow 0.2s ease,
+    background-color 0.2s ease;
+}
+
+.superficie::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  padding: var(--espacio-1);
+  border-radius: inherit;
+  background: var(--xonecode-relieve-borde);
+  pointer-events: none;
+  -webkit-mask:
+    linear-gradient(var(--xonecode-mascara) 0 0) content-box,
+    linear-gradient(var(--xonecode-mascara) 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(var(--xonecode-mascara) 0 0) content-box exclude,
+    linear-gradient(var(--xonecode-mascara) 0 0);
+}
+
+.superficie:hover {
+  background-color: var(--xonecode-relieve-superficie-hover);
+  box-shadow: var(--xonecode-relieve-sombra-hover);
+}
+
+.superficie:hover::after {
+  background: var(--xonecode-relieve-borde-hover);
+}
+
+/* Subir un píxel al pasar es movimiento: solo si el sistema no ha pedido menos. */
+@media (prefers-reduced-motion: no-preference) {
+  .superficie {
+    transition:
+      box-shadow 0.2s ease,
+      background-color 0.2s ease,
+      transform 0.2s ease;
+  }
+
+  .superficie:hover {
+    transform: translateY(-1px);
+  }
+}

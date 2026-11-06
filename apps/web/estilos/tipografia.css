@@ -38,9 +38,7 @@
    Seis tamaños, nombrados por su USO más común, y tres pesos — sin 700 ni 800.
    Van con prefijo propio y no `--xonecode-*` porque no dependen del tema: el puente de
    `temas.css` no tiene que redeclararlos.
-   El espaciado y el radio están DECLARADOS pero sin migrar: la escala del lienzo deja fuera
-   el 10px de los rellenos de botón y el 8px de radio que hoy dominan, y cambiarlos mueve la
-   altura de los controles en toda la consola. Se decide aparte, a la vista. */
+   El espaciado y el radio, más abajo, ya están migrados. */
 :root {
   --tipo-display: 24px; /* título de página, cifra grande */
   --tipo-titulo: 16px; /* título de tarjeta, de diálogo, de sección */
@@ -57,6 +55,7 @@
      (4…32): MEDIDO, el 6 y el 10 son casi 300 de los rellenos y huecos de la consola, y
      quitarlos cambiaba la densidad de cada fila y cada botón. Se migró 1:1 lo que ya estaba
      en la escala; solo la cola suelta (1, 3, 5, 7, 9, 14, 18, 20, 28…) fue al paso más cercano. */
+  --espacio-1: 1px; /* SOLO el filo: el grosor del borde de luz de `Superficie.module.css`, no un hueco */
   --espacio-2: 2px;
   --espacio-4: 4px;
   --espacio-6: 6px;
@@ -70,9 +69,10 @@
   /* El radio, por PAPEL y no por valor (el de la B del lienzo, más dos pasos que no
      enseñaba): un 8 podía ser un botón o una tarjeta, y por eso no se migró por valor. */
   --radio-mini: 4px; /* insignia de código, barra, marca pequeña */
-  --radio-control: 6px; /* botón, campo, lo que se pulsa o se escribe */
-  --radio-tarjeta: 10px; /* tarjeta, panel, caja de contenido */
-  --radio-dialogo: 12px; /* diálogo, ventana sobre la consola */
+  --radio-control: 6px; /* campo, fila de lista, lo que se escribe o se elige */
+  --radio-boton: 10px; /* botón: el relieve AC3 (`estilos/relieve.css`) los quiere más redondos que una fila */
+  --radio-tarjeta: 14px; /* tarjeta, panel, caja de contenido (AC3; era 10) */
+  --radio-dialogo: 16px; /* diálogo, ventana sobre la consola: siempre un paso más que la tarjeta */
   --radio-pastilla: 999px;
 }
 

@@ -70,6 +70,9 @@
   min-height: 0;
   overflow-y: auto;
   padding: var(--espacio-16) var(--espacio-24) var(--espacio-32);
+  /* Los halos de luz de la marca (relieve AC3), los mismos que el Escritorio: el marco no cambia al entrar. */
+  background-image: var(--xonecode-relieve-halo);
+  background-attachment: local;
 }
 
 .seccion {

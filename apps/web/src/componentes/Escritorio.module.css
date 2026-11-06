@@ -8,6 +8,9 @@
   flex: 1 1 auto;
   overflow-y: auto;
   padding: var(--espacio-24);
+  /* Los dos halos de luz de la marca (relieve AC3, `estilos/relieve.css`), sobre el fondo de siempre. */
+  background-image: var(--xonecode-relieve-halo);
+  background-attachment: local;
 }
 
 /* A TODO el ancho, con los mismos 24 de margen que el panel del proyecto (`PanelDelProyecto.module.css#cuerpo`):
@@ -119,13 +122,31 @@
 }
 
 .cifra {
+  composes: superficie from "./Superficie.module.css";
+}
+
+.cifra.cifra {
   display: flex;
   min-width: 0;
   flex-direction: column;
   padding: var(--espacio-12) var(--espacio-16);
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: var(--radio-tarjeta);
-  background: var(--dsw-alias-bg-layer-2);
+}
+
+/* El velo de color de la cifra (AC3), en OTRA regla que la que compone la superficie: solo cuando no es cero. */
+.cifra.cifra[data-tono="marcha"] {
+  background-image: var(--xonecode-relieve-velo-marcha);
+}
+
+.cifra.cifra[data-tono="espera"] {
+  background-image: var(--xonecode-relieve-velo-espera);
+}
+
+.cifra.cifra[data-tono="subir"] {
+  background-image: var(--xonecode-relieve-velo-neutro);
+}
+
+.cifra.cifra[data-tono="listos"] {
+  background-image: var(--xonecode-relieve-velo-listo);
 }
 
 .cifra dt {
@@ -263,11 +284,12 @@
 }
 
 .listaDeEspera {
+  composes: superficie from "./Superficie.module.css";
+}
+
+.listaDeEspera.listaDeEspera {
   margin: 0;
   padding: 0;
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: var(--radio-tarjeta);
-  background: var(--dsw-alias-bg-layer-2);
   list-style: none;
 }
 
@@ -332,11 +354,12 @@
 }
 
 .listaDeProyectos {
+  composes: superficie from "./Superficie.module.css";
+}
+
+.listaDeProyectos.listaDeProyectos {
   margin: 0;
   padding: 0;
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: var(--radio-tarjeta);
-  background: var(--dsw-alias-bg-layer-2);
   list-style: none;
 }
 
@@ -466,8 +489,8 @@
 
 /* Lo que queda por subir: el cian del acento, no el ámbar de lo que bloquea. */
 .filaDeEspera[data-clase="subir"] .iconoDeEspera {
-  background: var(--dsw-alias-bg-layer-1);
-  color: var(--xonecode-cian);
+  background: var(--xonecode-relieve-icono);
+  color: var(--xonecode-sobre-azul);
 }
 
 /* La clave de la incidencia (IXCODE-81): dato que se copia y se teclea, en monoespaciada. */

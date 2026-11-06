@@ -35,6 +35,9 @@ import "../estilos/markdown.css";
 // `markdown.css` porque redefine sus variables con la misma especificidad y gana por orden;
 // solo actúa con `data-tema` en el `body`, que XOneCode no pone nunca.
 import "../estilos/temas.css";
+// NUESTRA: el relieve (tarjetas, botones, halo). En `body` y DESPUÉS del puente, para que sus derivados se calculen con
+// los colores del tema puesto (ver su cabecera).
+import "../estilos/relieve.css";
 // NUESTRA, y la ÚLTIMA a propósito: aplica al documento los tokens de tipografía que las
 // hojas copiadas solo declaran. Sin ella la interfaz entera sale en serif — medido.
 import "../estilos/tipografia.css";

@@ -60,7 +60,8 @@
 }
 
 .tira [role="tab"][aria-selected="true"]::after {
-  background: var(--xonecode-cian);
+  /* El relieve AC3: el subrayado de la elegida en degradado azul → cian. */
+  background: var(--xonecode-relieve-pestana);
 }
 
 /* La salida. Lleva fondo al pasar por encima y no solo un cambio de color porque es la

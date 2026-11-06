@@ -10728,3 +10728,30 @@ sobre el icono. El radio, en cambio, sí se veía desigual (controles a 8 y a 6,
 migrar por valor: un 8 era un botón o una tarjeta. Se clasificó por PAPEL —mini 4, control 6 (también chips, estados y
 filtros de ese tamaño), tarjeta 10, diálogo 12, pastilla 999— y se cambian a la vista los botones de 8 a 6, las
 tarjetas de 8/12 a 10 y los diálogos de 16 a 12. Fuera, la caja del chat (20px) y la placa del logotipo.
+
+## El relieve de la consola: tarjetas y botones «AC3» (06-11-2026)
+
+Elegido en el lienzo de diseño tras cuatro estilos (elevación, contorno, cristal, acento), tres versiones de la elevación
+y tres mezclas con el cristal: la **AC3**. La tarjeta se separa del fondo por una sombra en dos capas TEÑIDA del azul de
+la marca y lleva un borde de luz en degradado cian → azul; el fondo del Escritorio y del panel lleva dos halos de luz; el
+primario es un degradado azul → cian con sombra de color; el secundario, un anillo fino; las cifras con dato, un velo de
+su color. Radio de tarjeta 14 (era 10), de diálogo 16 (un paso por encima, como antes), de botón 10 (`--radio-boton`
+nuevo: el de control se queda en 6 porque lo usan las filas de la barra lateral que se eligieron así).
+
+Tres cosas que no se ven en el diseño y deciden la implementación:
+
+- **Los tokens viven en `estilos/relieve.css`, declarados en `body` y no en `:root`.** El oscuro por omisión («Azul
+  noche») es un TEMA y pasa por el puente, que redefine azul, cian y capas en el `body`; declarados en `:root`, estos
+  derivados se quedaban con los colores de XOneCode dentro de cualquier tema. En `body` se recalculan con los del tema
+  puesto, y por eso el puente no los repite (excepción `relieve-` en su test).
+- **En oscuro el primario sale del cian HUNDIDO en el fondo**, no de mezclar azul con cian: en «Azul noche» los dos son el
+  mismo acento y el degradado quedaba plano, en cian claro y con el texto oscuro del tema. MEDIDO en captura. El texto,
+  el claro del tema.
+- **El borde de luz es un `::after` recortado con `mask-composite`**, no `border-image` (que no sigue el radio). Va en
+  `Superficie.module.css`, un PAPEL que se compone como los de `Boton.module.css` y con su misma regla: quien lo compone
+  no redeclara fondo, borde ni sombra en esa regla. La franja de «Sin subir» del Resumen era un BORDE y desapareció con la
+  superficie sin borde: se rehízo con el estilo entero (`border-top: 3px solid …`). Subir un píxel al pasar, solo con
+  `prefers-reduced-motion: no-preference`.
+
+Primera pasada: botones (todos, por su papel), Escritorio, Tu equipo y las tarjetas del Resumen del proyecto, pestañas
+del panel. Lo demás que tiene caja de contenido (Ajustes, Tareas, Conectores…) va en una segunda, a la vista.
