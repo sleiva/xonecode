@@ -4,8 +4,8 @@ import { IconoCompartido } from "./IconosDeProyecto.js";
 import estilos from "./Escritorio.module.css";
 import { Equipo } from "./Equipo.js";
 import { Kanban } from "./Kanban.js";
-import type { Acto, InformeDeDispositivos, TareaDelCable } from "../tipos.js";
-import { useState } from "react";
+import type { Acto, EstadoDeSync, FotoDelResumen, InformeDeDispositivos, TareaDelCable } from "../tipos.js";
+import { useEffect, useState } from "react";
 import { EnMarcha } from "./TareasDelProyecto.js";
 
 /**
@@ -66,6 +66,8 @@ export function Escritorio({
   mirandoTarea,
   mirada,
   tableroAbierto,
+  alPedirResumen,
+  alAbrirProyecto,
 }: {
   /** El saludo (`agent/persona.ts`). Ausente = se saluda igual, sin inventarse un nombre. */
   nombre?: string;
@@ -170,6 +172,11 @@ export function Escritorio({
   mirada?: { tarea: string; actos: readonly Acto[] };
   /** Cómo NACE el tablero de tareas: plegado en cifras por omisión (su lienzo); `true` lo abre de entrada. */
   tableroAbierto?: boolean;
+  /** La FOTO del resumen de un proyecto (`accion: "resumen"`), la MISMA que pinta su pestaña Resumen: de ella sale lo
+   *  que queda por subir. Ausente = no se pide, y «sin subir» no se pinta. */
+  alPedirResumen?: (proyecto: string) => Promise<FotoDelResumen | undefined>;
+  /** Abrir el panel de un proyecto, como pulsarlo en la barra. Ausente = la fila de «sin subir» no ofrece ir. */
+  alAbrirProyecto?: (proyecto: string) => void;
 }) {
   const apagado = conectado === false;
   /** El tablero de tareas, plegado en cifras por omisión (su lienzo): se despliega para actuar sobre una. */
@@ -182,6 +189,7 @@ export function Escritorio({
     visibles === undefined ? proyectos.slice(0, PROYECTOS_POR_OMISION) : proyectos.filter((p) => visibles.includes(p.id));
   const destacados = [...fijadosALaVista, ...elegidos.filter((p) => !fijadosALaVista.includes(p))];
   const otros = proyectos.filter((p) => !destacados.includes(p));
+  const sinSubir = useSinSubir(destacados, alPedirResumen);
   return (
     <div className={estilos.escritorio}>
       <div className={estilos.contenido}>
@@ -199,7 +207,11 @@ export function Escritorio({
           )}
         </header>
 
-        <Cifras {...(tareas === undefined ? {} : { tareas: tareas.lista })} {...(dispositivos === undefined ? {} : { dispositivos })} />
+        <Cifras
+          {...(tareas === undefined ? {} : { tareas: tareas.lista })}
+          {...(dispositivos === undefined ? {} : { dispositivos })}
+          {...(sinSubir === undefined ? {} : { sinSubir })}
+        />
 
         {/* Dos columnas, la del trabajo y una lateral de 300 con Tu equipo (lienzo, «C · Centro de control»; los proyectos van en la principal, en filas, porque con sus dos botones cada uno alargaban la lateral el doble que la principal). Con el tablero
             abierto, la del trabajo ocupa la fila entera y la lateral baja: el kanban son cuatro columnas. */}
@@ -221,6 +233,9 @@ export function Escritorio({
             ) : !verTablero ? (
               <LoQueTeEspera
                 tareas={tareas.lista}
+                subir={porSubir(sinSubir, proyectos)}
+                apagado={apagado}
+                {...(alAbrirProyecto === undefined ? {} : { alAbrirProyecto })}
                 proyectos={proyectos}
                 alVerTablero={() => setVerTablero(true)}
                 {...(alAbrirRevisionDeTarea === undefined ? {} : { alRevisar: alAbrirRevisionDeTarea })}
@@ -371,6 +386,64 @@ function TrabajandoAhora({
   );
 }
 
+/**
+ * **Lo que queda por subir de cada proyecto a la vista**, con la MISMA foto que su pestaña Resumen (`accion: "resumen"`,
+ * `lecturaDeSync` en el servidor): dos pantallas midiendo lo mismo de dos formas acabarían diciendo dos cifras.
+ *
+ * Solo se piden los que tienen copia local: sin copia no hay nada que subir, y el servidor tampoco lo mide. Se vuelve
+ * a pedir al montar el Escritorio —volver a él es volver a mirar— y cuando cambia QUÉ proyectos se enseñan. Devuelve
+ * `undefined` mientras no haya ni una medida: «sin subir» no se pinta hasta que algo conste.
+ */
+function useSinSubir(
+  destacados: readonly { id: string; local?: boolean }[],
+  alPedirResumen?: (proyecto: string) => Promise<FotoDelResumen | undefined>,
+): Readonly<Record<string, EstadoDeSync>> | undefined {
+  const [medidas, setMedidas] = useState<Record<string, EstadoDeSync>>({});
+  const conCopia = destacados.filter((p) => p.local === true).map((p) => p.id);
+  const clave = conCopia.join("\u0000");
+  useEffect(() => {
+    if (alPedirResumen === undefined || conCopia.length === 0) return;
+    let vivo = true;
+    void Promise.all(conCopia.map(async (id) => [id, (await alPedirResumen(id))?.sync] as const)).then((pares) => {
+      if (!vivo) return;
+      const nuevas: Record<string, EstadoDeSync> = {};
+      for (const [id, sync] of pares) if (sync !== undefined) nuevas[id] = sync;
+      setMedidas(nuevas);
+    });
+    return () => {
+      vivo = false;
+    };
+    // `clave` resume `conCopia`; el manejador cambia de identidad en cada render de App y no es motivo para volver a medir.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clave]);
+  const medidosAhora = Object.fromEntries(Object.entries(medidas).filter(([id]) => conCopia.includes(id)));
+  return Object.values(medidosAhora).some((m) => typeof m.pendientes === "number") ? medidosAhora : undefined;
+}
+
+/** Una fila de «por subir»: un proyecto con ficheros pendientes, de mayor a menor. Un error o un «no consta» no entra. */
+export interface PorSubir {
+  proyecto: string;
+  nombre: string;
+  pendientes: number;
+  rama?: string;
+}
+
+export function porSubir(
+  sinSubir: Readonly<Record<string, EstadoDeSync>> | undefined,
+  proyectos: readonly { id: string; nombre: string }[],
+): PorSubir[] {
+  if (sinSubir === undefined) return [];
+  return Object.entries(sinSubir)
+    .filter(([, m]) => m.error === undefined && typeof m.pendientes === "number" && m.pendientes > 0)
+    .map(([id, m]) => ({
+      proyecto: id,
+      nombre: proyectos.find((p) => p.id === id)?.nombre ?? id,
+      pendientes: m.pendientes!,
+      ...(m.rama === undefined ? {} : { rama: m.rama }),
+    }))
+    .sort((a, b) => b.pendientes - a.pendientes);
+}
+
 /** Una fila de «Lo que te espera»: QUÉ tarea, de qué clase y la frase que lo explica. */
 export interface Espera {
   tarea: TareaDelCable;
@@ -423,10 +496,20 @@ export function loQueTeEspera(tareas: readonly TareaDelCable[], ahora: number): 
  * **Las cifras de arriba**, y solo las que tienen dato detrás: sin cola no hay cifras de tareas, sin foto de la máquina
  * no hay de aparatos. Lo que el lienzo ponía y aún no viaja (sin subir, gasto) no se pinta — ni a cero.
  */
-function Cifras({ tareas, dispositivos }: { tareas?: readonly TareaDelCable[]; dispositivos?: InformeDeDispositivos }) {
-  if (tareas === undefined && dispositivos === undefined) return null;
+function Cifras({
+  tareas,
+  dispositivos,
+  sinSubir,
+}: {
+  tareas?: readonly TareaDelCable[];
+  dispositivos?: InformeDeDispositivos;
+  sinSubir?: Readonly<Record<string, EstadoDeSync>>;
+}) {
+  if (tareas === undefined && dispositivos === undefined && sinSubir === undefined) return null;
   const de = (e: TareaDelCable["estado"]) => (tareas ?? []).filter((t) => t.estado === e).length;
   const espera = tareas === undefined ? [] : loQueTeEspera(tareas, Date.now());
+  // Los proyectos con algo por subir también te esperan: son filas de la misma bandeja.
+  const porSubirN = sinSubir === undefined ? 0 : porSubir(sinSubir, []).length;
   const pausas = espera.filter((e) => e.clase !== "avisos").length;
   const avisos = espera.length - pausas;
   const listos = dispositivos?.dispositivos.filter((d) => d.estado === "conectado" || d.estado === "arrancado").length ?? 0;
@@ -437,12 +520,29 @@ function Cifras({ tareas, dispositivos }: { tareas?: readonly TareaDelCable[]; d
       { rotulo: "En marcha", valor: de("en-proceso"), nota: cola === 0 ? "nada en cola" : `${cola} en cola`, tono: "marcha" },
       {
         rotulo: "Te esperan",
-        valor: espera.length,
-        nota: espera.length === 0 ? "nada pendiente" : [pausas > 0 ? `${pausas} paradas` : "", avisos > 0 ? `${avisos} con avisos` : ""].filter(Boolean).join(" · "),
+        valor: espera.length + porSubirN,
+        nota:
+          espera.length + porSubirN === 0
+            ? "nada pendiente"
+            : [pausas > 0 ? `${pausas} paradas` : "", avisos > 0 ? `${avisos} con avisos` : "", porSubirN > 0 ? `${porSubirN} por subir` : ""]
+                .filter(Boolean)
+                .join(" · "),
         tono: "espera",
       },
       { rotulo: "Terminadas", valor: de("terminada"), nota: "en la cola" },
     );
+  }
+  if (sinSubir !== undefined) {
+    // Solo lo MEDIDO: un proyecto cuya foto trae error o no sabe su cifra no suma, ni como cero.
+    const medidos = Object.values(sinSubir).filter((m) => m.error === undefined && typeof m.pendientes === "number");
+    const total = medidos.reduce((n, m) => n + m.pendientes!, 0);
+    const con = medidos.filter((m) => m.pendientes! > 0).length;
+    cifras.push({
+      rotulo: "Sin subir",
+      valor: total,
+      nota: total === 0 ? "todo subido" : con === 1 ? "en 1 proyecto" : `en ${con} proyectos`,
+      tono: "subir",
+    });
   }
   if (dispositivos !== undefined) {
     cifras.push({ rotulo: "Aparatos listos", valor: listos, nota: "encendidos", tono: "listos" });
@@ -467,11 +567,18 @@ function Cifras({ tareas, dispositivos }: { tareas?: readonly TareaDelCable[]; d
  */
 function LoQueTeEspera({
   tareas,
+  subir,
+  apagado,
+  alAbrirProyecto,
   proyectos,
   alVerTablero,
   alRevisar,
 }: {
   tareas: readonly TareaDelCable[];
+  /** Los proyectos con ficheros por subir (`porSubir`), después de las tareas: avisan, no bloquean. */
+  subir: readonly PorSubir[];
+  apagado: boolean;
+  alAbrirProyecto?: (proyecto: string) => void;
   proyectos: readonly { id: string; nombre: string }[];
   alVerTablero: () => void;
   alRevisar?: (proyecto: string, sesion: string) => void;
@@ -485,7 +592,7 @@ function LoQueTeEspera({
           Ver el tablero
         </button>
       </div>
-      {filas.length === 0 ? (
+      {filas.length === 0 && subir.length === 0 ? (
         <p className={estilos.vacio}>Nada pendiente de ti.</p>
       ) : (
         <ul className={estilos.listaDeEspera}>
@@ -512,6 +619,25 @@ function LoQueTeEspera({
               </li>
             );
           })}
+          {subir.map((s) => (
+            <li key={`subir-${s.proyecto}`} className={estilos.filaDeEspera} data-clase="subir">
+              <span className={estilos.iconoDeEspera} aria-hidden="true">
+                ↑
+              </span>
+              <span className={estilos.textoDeEspera}>
+                <span className={estilos.tituloDeEspera}>
+                  {s.pendientes === 1 ? "1 fichero sin subir a CloudStudio" : `${s.pendientes} ficheros sin subir a CloudStudio`}
+                </span>
+                <span className={estilos.detalleDeEspera}>{s.rama === undefined ? s.nombre : `${s.nombre} · a «${s.rama}»`}</span>
+              </span>
+              {/* Subir se hace desde SU panel (Resumen o Sincronización), con su diff delante: aquí solo se va allí. */}
+              {alAbrirProyecto === undefined ? null : (
+                <button type="button" className={estilos.empezarTarea} disabled={apagado} onClick={() => alAbrirProyecto(s.proyecto)}>
+                  Abrir el proyecto
+                </button>
+              )}
+            </li>
+          ))}
         </ul>
       )}
     </section>

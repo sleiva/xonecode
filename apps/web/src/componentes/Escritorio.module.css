@@ -463,3 +463,9 @@
 .principal.principal > * {
   margin-top: 0;
 }
+
+/* Lo que queda por subir: el cian del acento, no el ámbar de lo que bloquea. */
+.filaDeEspera[data-clase="subir"] .iconoDeEspera {
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--xonecode-cian);
+}

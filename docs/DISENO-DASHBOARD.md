@@ -94,6 +94,9 @@ control): la **C**, por fases. La fase 1 es solo cliente y pinta lo que ya viaja
   NO entra: ningún campo dice que alguien la tenga pendiente.
 - Los proyectos, en filas en la columna principal; Tu equipo, en la lateral.
 
-Lo que la C enseñaba y aún no viaja al Escritorio, y por eso no se pinta (ni a cero): ficheros sin subir de
-todos los proyectos, gasto de la semana en euros, preguntas pendientes en sesiones, incidencias del gestor
+**Fase 2, lo que queda por subir**: el Escritorio pide la MISMA foto que la pestaña Resumen (`accion: "resumen"`,
+`lecturaDeSync`) a cada proyecto a la vista CON copia, al montarse. Suma solo lo medido (un error no cuenta, ni a cero)
+y cada proyecto con pendientes es una fila de la bandeja que lleva a su panel, donde se sube con el diff delante.
+
+Lo que la C enseñaba y aún no viaja al Escritorio, y por eso no se pinta (ni a cero): gasto de la semana en euros, preguntas pendientes en sesiones, incidencias del gestor
 asignadas, lo aprendido nuevo y los aparatos de la granja. Cada uno es una fase con su reunión en el servidor.

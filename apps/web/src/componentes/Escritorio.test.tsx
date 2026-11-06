@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { Escritorio } from "./Escritorio.js";
-import type { TareaDelCable } from "../tipos.js";
+import type { FotoDelResumen, TareaDelCable } from "../tipos.js";
 
 const MANEJADORES = {
   alNuevaSesion: () => {},
@@ -601,6 +601,61 @@ describe("Escritorio: tareas en cifras", () => {
     expect(alRevisar).toHaveBeenCalledWith("p1", "s1");
     fireEvent.click(within(bandeja).getByRole("button", { name: "Atender" }));
     expect(screen.getByRole("region", { name: "Tareas en background" })).toBeTruthy();
+  });
+
+  it("sin subir: se pide la foto de cada proyecto CON copia, se suma lo medido y cada uno con pendientes es una fila", async () => {
+    const pedidos: string[] = [];
+    const alAbrirProyecto = vi.fn();
+    const fotos: Record<string, FotoDelResumen> = {
+      a: { tareas: [], sync: { proyecto: "x", rama: "master", pendientes: 7 } },
+      b: { tareas: [], sync: { proyecto: "y", pendientes: 0 } },
+      c: { tareas: [], sync: { error: "git no responde" } },
+    };
+    render(
+      <Escritorio
+        alNuevaSesion={() => {}}
+        alAbrirAjustes={() => {}}
+        proyectos={[
+          { id: "a", nombre: "Maset", local: true },
+          { id: "b", nombre: "Tienda", local: true },
+          { id: "c", nombre: "Roto", local: true },
+          { id: "d", nombre: "Lejano", local: false },
+        ]}
+        visibles={["a", "b", "c", "d"]}
+        tareas={cola([])}
+        alPedirResumen={async (id) => {
+          pedidos.push(id);
+          return fotos[id];
+        }}
+        alAbrirProyecto={alAbrirProyecto}
+      />
+    );
+    const cifra = await screen.findByText("Sin subir");
+    expect(pedidos.sort()).toEqual(["a", "b", "c"]);
+    expect(cifra.closest("div")!.textContent).toContain("7");
+    expect(cifra.closest("div")!.textContent).toContain("en 1 proyecto");
+    const bandeja = screen.getByRole("region", { name: "Lo que te espera" });
+    const filas = within(bandeja).getAllByRole("listitem");
+    expect(filas).toHaveLength(1);
+    expect(filas[0]!.textContent).toContain("7 ficheros sin subir a CloudStudio");
+    expect(filas[0]!.textContent).toContain("Maset · a «master»");
+    fireEvent.click(within(bandeja).getByRole("button", { name: "Abrir el proyecto" }));
+    expect(alAbrirProyecto).toHaveBeenCalledWith("a");
+    expect(screen.getByText("Te esperan").closest("div")!.textContent).toContain("1 por subir");
+  });
+
+  it("sin ninguna medida, «Sin subir» no se pinta: ni a cero", async () => {
+    render(
+      <Escritorio
+        alNuevaSesion={() => {}}
+        alAbrirAjustes={() => {}}
+        proyectos={[{ id: "a", nombre: "Maset", local: true }]}
+        tareas={cola([])}
+        alPedirResumen={async () => ({ tareas: [], sync: { error: "sin git" } })}
+      />
+    );
+    await new Promise((r) => setTimeout(r, 0));
+    expect(screen.queryByText("Sin subir")).toBeNull();
   });
 
   it("los aparatos se cuentan solo con la foto de la máquina: arrancados o conectados", () => {

@@ -2213,6 +2213,26 @@ export function App({
     setEnPanel(true);
   };
 
+  /** La foto del resumen de un proyecto: la pide su panel y la pide el Escritorio, con la MISMA lectura. */
+  const pedirResumen = async (id: string): Promise<FotoDelResumen | undefined> => {
+    const r = (await enviar({ clase: "copiaLocal", accion: "resumen", proyecto: id })) as Response | undefined;
+    if (r === undefined || !r.ok) return undefined;
+    try {
+      const cuerpo = (await r.json()) as { tareas?: unknown; sync?: unknown; modoDeEscritura?: unknown };
+      if (!Array.isArray(cuerpo.tareas) || !cuerpo.tareas.every((t) => typeof t === "string")) return undefined;
+      const modo = modoDelProyectoDe(cuerpo.modoDeEscritura);
+      return {
+        tareas: cuerpo.tareas as string[],
+        ...(typeof cuerpo.sync === "object" && cuerpo.sync !== null
+          ? { sync: cuerpo.sync as NonNullable<FotoDelResumen["sync"]> }
+          : {}),
+        ...(modo === undefined ? {} : { modoDeEscritura: modo }),
+      };
+    } catch {
+      return undefined;
+    }
+  };
+
   /**
    * Lo de la COPIA para la pestaña Resumen del panel (`ResumenDeProyecto.tsx`): la fila del
    * proyecto en el alta y los cuatro manejadores que hablan con el servidor. Las negativas
@@ -2255,24 +2275,7 @@ export function App({
     },
     // El global, para que el desplegable diga «Como el global (…)» con el valor de verdad.
     ...(estado.modoPorDefecto === undefined ? {} : { modoGlobal: estado.modoPorDefecto }),
-    alPedirResumen: async (id) => {
-      const r = (await enviar({ clase: "copiaLocal", accion: "resumen", proyecto: id })) as Response | undefined;
-      if (r === undefined || !r.ok) return undefined;
-      try {
-        const cuerpo = (await r.json()) as { tareas?: unknown; sync?: unknown; modoDeEscritura?: unknown };
-        if (!Array.isArray(cuerpo.tareas) || !cuerpo.tareas.every((t) => typeof t === "string")) return undefined;
-        const modo = modoDelProyectoDe(cuerpo.modoDeEscritura);
-        return {
-          tareas: cuerpo.tareas as string[],
-          ...(typeof cuerpo.sync === "object" && cuerpo.sync !== null
-            ? { sync: cuerpo.sync as NonNullable<FotoDelResumen["sync"]> }
-            : {}),
-          ...(modo === undefined ? {} : { modoDeEscritura: modo }),
-        };
-      } catch {
-        return undefined;
-      }
-    },
+    alPedirResumen: pedirResumen,
   });
   /**
    * El listado de la pestaña Soporte: chats y tareas con su análisis previo, en la PROPIA
@@ -3795,6 +3798,8 @@ export function App({
             <AvisoDeConexion conectado={estado.conectado} />
             <Escritorio
             conectado={estado.conectado}
+            alPedirResumen={pedirResumen}
+            alAbrirProyecto={(proyecto) => abrirProyecto(proyecto)}
             // La misma elección que la barra: los destacados primero, el resto debajo.
             {...(estado.alta?.registrados.find((e) => e.id === entornoActivo)?.proyectos === undefined
               ? {}
