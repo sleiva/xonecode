@@ -104,4 +104,10 @@ o con uno que no admite `mias`, vuelve vacío —no «ninguna»—; un fallo vue
 que ya son una tarea de la cola (`ticket`) y cada fila lleva a la pestaña Tareas de su proyecto: empezar escribe en el
 gestor, con su tarjeta, y eso no se hace desde un resumen.
 
-Lo que la C enseñaba y aún no viaja al Escritorio, y por eso no se pinta (ni a cero): gasto de la semana en euros, preguntas pendientes en sesiones, lo aprendido nuevo y los aparatos de la granja. Cada uno es una fase con su reunión en el servidor.
+Lo que la C enseñaba y aún no viaja al Escritorio, y por eso no se pinta (ni a cero): preguntas pendientes en sesiones, lo aprendido nuevo y los aparatos de la granja. Cada uno es una fase con su reunión en el servidor.
+
+**Fase 4, el gasto de la semana**: en TOKENS y no en euros (no hay tabla de precios; decisión suya). `accion:
+"gastoDeLaSemana"` reparte por día los `fin.consumo` de las conversaciones guardadas del proyecto que tocaron la ventana
+(`web/servidor/gastoDeLaSemana.ts`): la hora de un `fin` es la del último `usuario`/`asistente` con `cuando` que lo
+precede, y un turno sin hora se CUENTA aparte en vez de repartirse. El Escritorio junta los proyectos
+(`apps/web/src/gastoDeLaSemana.ts`) con las reglas del gasto del proyecto: las dos cuentas no se suman y la caché va aparte.

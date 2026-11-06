@@ -502,3 +502,66 @@
   font-size: var(--tipo-pequeno);
   white-space: nowrap;
 }
+
+/* El gasto de la semana, en la lateral: la misma superficie que Tu equipo, una cifra y siete barras. */
+.gasto {
+  composes: superficie from "./Superficie.module.css";
+  padding: var(--espacio-12) var(--espacio-16);
+}
+
+.cifraDeGasto {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: var(--tipo-pequeno);
+}
+
+.cifraDeGasto strong {
+  color: var(--dsw-alias-label-primary);
+  font-size: var(--tipo-display);
+  font-weight: var(--peso-fuerte);
+  font-variant-numeric: tabular-nums;
+}
+
+.externoDeGasto {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.barrasDeGasto {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: var(--espacio-6);
+  height: 72px;
+  margin: var(--espacio-12) 0 var(--espacio-8);
+  padding: 0;
+  list-style: none;
+}
+
+.barrasDeGasto > li {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: stretch;
+  gap: var(--espacio-4);
+  min-width: 0;
+}
+
+.barraDeGasto {
+  border-radius: var(--radio-mini);
+  background: color-mix(in srgb, var(--xonecode-gasto-modelo) 35%, var(--dsw-alias-bg-layer-2));
+}
+
+.barrasDeGasto > li[data-hoy] .barraDeGasto {
+  background: var(--xonecode-gasto-modelo);
+}
+
+.diaDeGasto {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: var(--tipo-mini);
+  text-align: center;
+}
+
+.notaDeGasto {
+  margin: 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: var(--tipo-pequeno);
+}

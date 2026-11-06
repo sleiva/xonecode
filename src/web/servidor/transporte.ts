@@ -1620,6 +1620,9 @@ export type MensajeDelCliente =
   /** Las tareas de su gestor ASIGNADAS a la persona, para el Escritorio. 200 con `AsignadasDelProyecto` en la propia
    *  respuesta, o 409 con `{ motivo }` si el id no es del entorno activo. Mismo trato que `resumen`: el ID, nunca una ruta. */
   | { clase: "copiaLocal"; accion: "asignadas"; proyecto: string }
+  /** El gasto de los últimos siete días de un proyecto, día a día, en tokens: 200 con `GastoDeLaSemana` en la propia
+   *  respuesta (`{}` sin copia), o 409 con `{ motivo }` si el id no es del entorno activo. */
+  | { clase: "copiaLocal"; accion: "gastoDeLaSemana"; proyecto: string }
   /** Fijar —o quitar, sin `modo`— el modo con que nacen las sesiones nuevas de este proyecto
    *  (IXCODE-31). 200 con `{ proyecto? }`, 409 con `{ motivo }` sin copia o con un id ajeno, y
    *  400 con un modo que no existe. Mismo trato que `resumen`: el ID, nunca una ruta. */

@@ -710,6 +710,28 @@ describe("Escritorio: tareas en cifras", () => {
     expect(screen.queryByRole("region", { name: "Del gestor" })).toBeNull();
   });
 
+  it("el gasto de la semana: cifra y tarjeta con lo medido; sin días, ni cifra ni tarjeta", async () => {
+    const dia = (d: string, entrada: number) => ({ dia: d, modelo: { entrada, salida: 0, cache: 0 }, externo: { entrada: 0, salida: 0, cache: 0 }, turnos: 1 });
+    const { unmount } = render(
+      <Escritorio
+        alNuevaSesion={() => {}}
+        alAbrirAjustes={() => {}}
+        proyectos={[{ id: "a", nombre: "Maset", local: true }]}
+        alPedirGastoDeLaSemana={async () => ({ dias: [dia("2026-11-05", 1500), dia("2026-11-06", 500)], sinHora: 2 })}
+      />
+    );
+    const tarjeta = await screen.findByRole("region", { name: "Gasto de la semana" });
+    expect(tarjeta.textContent).toContain("2k");
+    expect(tarjeta.textContent).toContain("Maset 100 %");
+    expect(tarjeta.textContent).toContain("2 turnos sin hora");
+    expect(screen.getByText("Gasto · 7 días").closest("div")!.textContent).toContain("hoy 500");
+    unmount();
+    render(<Escritorio alNuevaSesion={() => {}} alAbrirAjustes={() => {}} proyectos={[{ id: "a", nombre: "Maset", local: true }]} alPedirGastoDeLaSemana={async () => ({})} />);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(screen.queryByRole("region", { name: "Gasto de la semana" })).toBeNull();
+    expect(screen.queryByText("Gasto · 7 días")).toBeNull();
+  });
+
   it("los aparatos se cuentan solo con la foto de la máquina: arrancados o conectados", () => {
     render(
       <Escritorio

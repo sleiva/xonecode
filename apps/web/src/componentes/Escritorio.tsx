@@ -4,7 +4,9 @@ import { IconoCompartido } from "./IconosDeProyecto.js";
 import estilos from "./Escritorio.module.css";
 import { Equipo } from "./Equipo.js";
 import { Kanban } from "./Kanban.js";
-import type { Acto, AsignadasDelProyecto, EstadoDeSync, FotoDelResumen, InformeDeDispositivos, TareaDelCable } from "../tipos.js";
+import type { Acto, AsignadasDelProyecto, EstadoDeSync, FotoDelResumen, GastoDeLaSemana, InformeDeDispositivos, TareaDelCable } from "../tipos.js";
+import { juntarGastoDeLaSemana, type GastoJunto } from "../gastoDeLaSemana.js";
+import { abreviar } from "../cifras.js";
 import { useEffect, useState } from "react";
 import { EnMarcha } from "./TareasDelProyecto.js";
 
@@ -69,6 +71,7 @@ export function Escritorio({
   alPedirResumen,
   alAbrirProyecto,
   alPedirAsignadas,
+  alPedirGastoDeLaSemana,
 }: {
   /** El saludo (`agent/persona.ts`). Ausente = se saluda igual, sin inventarse un nombre. */
   nombre?: string;
@@ -180,6 +183,8 @@ export function Escritorio({
   alAbrirProyecto?: (proyecto: string, pestana?: "tareas") => void;
   /** Lo asignado a la persona en el gestor de un proyecto (`accion: "asignadas"`). Ausente = no se pide ni se pinta. */
   alPedirAsignadas?: (proyecto: string) => Promise<AsignadasDelProyecto | undefined>;
+  /** El gasto de los últimos siete días de un proyecto, en tokens (`accion: "gastoDeLaSemana"`). Ausente = no se pinta. */
+  alPedirGastoDeLaSemana?: (proyecto: string) => Promise<Partial<GastoDeLaSemana> | undefined>;
 }) {
   const apagado = conectado === false;
   /** El tablero de tareas, plegado en cifras por omisión (su lienzo): se despliega para actuar sobre una. */
@@ -194,6 +199,8 @@ export function Escritorio({
   const otros = proyectos.filter((p) => !destacados.includes(p));
   const sinSubir = useSinSubir(destacados, alPedirResumen);
   const asignadas = usePorProyecto(destacados, alPedirAsignadas);
+  const gastosPorProyecto = usePorProyecto(destacados, alPedirGastoDeLaSemana);
+  const gasto = gastosPorProyecto === undefined ? undefined : juntarGastoDeLaSemana(gastosPorProyecto);
   return (
     <div className={estilos.escritorio}>
       <div className={estilos.contenido}>
@@ -215,6 +222,7 @@ export function Escritorio({
           {...(tareas === undefined ? {} : { tareas: tareas.lista })}
           {...(dispositivos === undefined ? {} : { dispositivos })}
           {...(sinSubir === undefined ? {} : { sinSubir })}
+          {...(gasto === undefined ? {} : { gasto })}
         />
 
         {/* Dos columnas, la del trabajo y una lateral de 300 con Tu equipo (lienzo, «C · Centro de control»; los proyectos van en la principal, en filas, porque con sus dos botones cada uno alargaban la lateral el doble que la principal). Con el tablero
@@ -346,6 +354,7 @@ export function Escritorio({
           </div>
 
           <aside className={estilos.lateral}>
+            {gasto === undefined ? null : <GastoDeLaSemanaTarjeta gasto={gasto} proyectos={proyectos} />}
             <Equipo
               {...(dispositivos === undefined ? {} : { informe: dispositivos })}
               conectado={!apagado}
@@ -530,12 +539,14 @@ function Cifras({
   tareas,
   dispositivos,
   sinSubir,
+  gasto,
 }: {
   tareas?: readonly TareaDelCable[];
   dispositivos?: InformeDeDispositivos;
   sinSubir?: Readonly<Record<string, EstadoDeSync>>;
+  gasto?: GastoJunto;
 }) {
-  if (tareas === undefined && dispositivos === undefined && sinSubir === undefined) return null;
+  if (tareas === undefined && dispositivos === undefined && sinSubir === undefined && gasto === undefined) return null;
   const de = (e: TareaDelCable["estado"]) => (tareas ?? []).filter((t) => t.estado === e).length;
   const espera = tareas === undefined ? [] : loQueTeEspera(tareas, Date.now());
   // Los proyectos con algo por subir también te esperan: son filas de la misma bandeja.
@@ -543,7 +554,7 @@ function Cifras({
   const pausas = espera.filter((e) => e.clase !== "avisos").length;
   const avisos = espera.length - pausas;
   const listos = dispositivos?.dispositivos.filter((d) => d.estado === "conectado" || d.estado === "arrancado").length ?? 0;
-  const cifras: { rotulo: string; valor: number; nota: string; tono?: string }[] = [];
+  const cifras: { rotulo: string; valor: number; texto?: string; nota: string; tono?: string }[] = [];
   if (tareas !== undefined) {
     const cola = de("nuevo");
     cifras.push(
@@ -574,6 +585,15 @@ function Cifras({
       tono: "subir",
     });
   }
+  if (gasto !== undefined) {
+    // El grafo; lo de los agentes externos va en la nota y no se suma: cada cuenta cuenta la caché a su manera.
+    cifras.push({
+      rotulo: "Gasto · 7 días",
+      valor: gasto.total.modelo,
+      texto: abreviar(gasto.total.modelo),
+      nota: gasto.total.externo > 0 ? `hoy ${abreviar(gasto.hoy.modelo)} · externos ${abreviar(gasto.total.externo)}` : `hoy ${abreviar(gasto.hoy.modelo)} tokens`,
+    });
+  }
   if (dispositivos !== undefined) {
     cifras.push({ rotulo: "Aparatos listos", valor: listos, nota: "encendidos", tono: "listos" });
   }
@@ -582,7 +602,7 @@ function Cifras({
       {cifras.map((c) => (
         <div key={c.rotulo} className={estilos.cifra} data-tono={c.valor > 0 ? c.tono : undefined}>
           <dt>{c.rotulo}</dt>
-          <dd>{c.valor}</dd>
+          <dd>{c.texto ?? c.valor}</dd>
           <dd className={estilos.notaDeCifra}>{c.nota}</dd>
         </div>
       ))}
@@ -741,6 +761,51 @@ function DelGestor({
             </li>
           ))}
         </ul>
+      )}
+    </section>
+  );
+}
+
+/**
+ * **El gasto de la semana** (lienzo C): una barra por día, hoy resaltado, y el reparto por proyecto. En tokens del grafo;
+ * lo de agentes externos, si hay, en una línea aparte (las dos cuentas no se suman). Los turnos que no se pudieron
+ * repartir por día se DICEN: el total no es el de la semana entera si faltan.
+ */
+function GastoDeLaSemanaTarjeta({ gasto, proyectos }: { gasto: GastoJunto; proyectos: readonly { id: string; nombre: string }[] }) {
+  const maximo = Math.max(1, ...gasto.dias.map((d) => d.modelo + d.externo));
+  const total = gasto.total.modelo + gasto.total.externo;
+  const nombre = (id: string) => proyectos.find((p) => p.id === id)?.nombre ?? id;
+  const diaCorto = (dia: string) => ["D", "L", "M", "X", "J", "V", "S"][new Date(`${dia}T12:00:00`).getDay()]!;
+  return (
+    <section className={estilos.gasto} aria-label="Gasto de la semana">
+      <div className={estilos.cabeceraDeBloque}>
+        <h2 className={estilos.tituloDeBloque}>Gasto</h2>
+        <span className={estilos.resto}>últimos 7 días</span>
+      </div>
+      <p className={estilos.cifraDeGasto}>
+        <strong>{abreviar(gasto.total.modelo)}</strong> tokens
+        {gasto.total.externo > 0 ? <span className={estilos.externoDeGasto}>{` · ${abreviar(gasto.total.externo)} de agentes externos`}</span> : null}
+      </p>
+      <ol className={estilos.barrasDeGasto}>
+        {gasto.dias.map((d, i) => (
+          <li key={d.dia} data-hoy={i === gasto.dias.length - 1 ? "" : undefined} title={`${d.dia}: ${abreviar(d.modelo)} tokens${d.externo > 0 ? ` · ${abreviar(d.externo)} externos` : ""}`}>
+            <span className={estilos.barraDeGasto} style={{ height: `${Math.max(2, Math.round(((d.modelo + d.externo) / maximo) * 100))}%` }} />
+            <span className={estilos.diaDeGasto}>{diaCorto(d.dia)}</span>
+          </li>
+        ))}
+      </ol>
+      {total === 0 ? (
+        <p className={estilos.notaDeGasto}>Ningún turno en estos siete días.</p>
+      ) : (
+        <p className={estilos.notaDeGasto}>
+          {gasto.porProyecto
+            .slice(0, 3)
+            .map((p) => `${nombre(p.proyecto)} ${Math.round(((p.modelo + p.externo) / total) * 100)} %`)
+            .join(" · ")}
+        </p>
+      )}
+      {gasto.sinHora === 0 ? null : (
+        <p className={estilos.notaDeGasto}>{`${gasto.sinHora === 1 ? "1 turno" : `${gasto.sinHora} turnos`} sin hora no están en el gráfico.`}</p>
       )}
     </section>
   );

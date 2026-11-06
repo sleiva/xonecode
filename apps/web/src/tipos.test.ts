@@ -199,6 +199,12 @@ describe("tipos del cliente", () => {
    * sin síntoma es la MEDIDA: un `pendientes` que no llegue se pinta como «no consta», que
    * se lee como «no lo he mirado» y no como «el store se lo comió».
    */
+  it("los campos de GastoDeLaSemana y GastoDelDia del cliente y del host no divergen", () => {
+    const ruta = join(aqui, "..", "..", "..", "src", "web", "servidor", "gastoDeLaSemana.ts");
+    expect(camposDeInterfaz(RUTA_TIPOS, "GastoDeLaSemana")).toEqual(camposDeInterfaz(ruta, "GastoDeLaSemana"));
+    expect(camposDeInterfaz(RUTA_TIPOS, "GastoDelDia")).toEqual(camposDeInterfaz(ruta, "GastoDelDia"));
+  });
+
   it("los campos de AsignadasDelProyecto del cliente y del host no divergen", () => {
     expect(camposDeInterfaz(RUTA_TIPOS, "AsignadasDelProyecto")).toEqual(
       camposDeInterfaz(RUTA_TRANSPORTE, "AsignadasDelProyecto")

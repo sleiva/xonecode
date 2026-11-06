@@ -5,7 +5,7 @@ import { Planes } from "./componentes/Planes.js";
 import { Colecciones } from "./componentes/Colecciones.js";
 import type { crearStoreDelCliente } from "./store.js";
 import type { PeticionDeAprendido, RespuestaDeAprendido } from "./componentes/LoAprendido.js";
-import type { Acto, AprendizajeDelCable, EstadoDelGestor, FicheroDelProyecto, MapeoDeEstados, TareaDelCable, ActoDeSincronizacion, AsignadasDelProyecto, EleccionDeFramework, FotoDelResumen, TareaDelGestor, ListadoDeSoporte, MensajeDelCliente, ModoDeEscritura } from "./tipos.js";
+import type { Acto, AprendizajeDelCable, EstadoDelGestor, FicheroDelProyecto, MapeoDeEstados, TareaDelCable, ActoDeSincronizacion, AsignadasDelProyecto, EleccionDeFramework, FotoDelResumen, GastoDeLaSemana, TareaDelGestor, ListadoDeSoporte, MensajeDelCliente, ModoDeEscritura } from "./tipos.js";
 import type { Conexion } from "./conexion.js";
 import { ANCHO_BARRA_POR_OMISION, Maqueta } from "./componentes/Maqueta.js";
 import { Barra } from "./componentes/Barra.js";
@@ -2219,6 +2219,20 @@ export function App({
     setEnPanel(true);
   };
 
+  /** El gasto de la semana de un proyecto, para el Escritorio. Lo que no se entiende es «no consta». */
+  const pedirGastoDeLaSemana = async (id: string): Promise<Partial<GastoDeLaSemana> | undefined> => {
+    const r = (await enviar({ clase: "copiaLocal", accion: "gastoDeLaSemana", proyecto: id })) as Response | undefined;
+    if (r === undefined || !r.ok) return undefined;
+    try {
+      const c = (await r.json()) as { dias?: unknown; sinHora?: unknown };
+      return {
+        ...(Array.isArray(c.dias) ? { dias: c.dias as GastoDeLaSemana["dias"] } : {}),
+        ...(typeof c.sinHora === "number" ? { sinHora: c.sinHora } : {}),
+      };
+    } catch {
+      return undefined;
+    }
+  };
   /** Lo asignado a la persona en el gestor de un proyecto, para el Escritorio. Lo que no se entiende es «no consta». */
   const pedirAsignadas = async (id: string): Promise<AsignadasDelProyecto | undefined> => {
     const r = (await enviar({ clase: "copiaLocal", accion: "asignadas", proyecto: id })) as Response | undefined;
@@ -3822,6 +3836,7 @@ export function App({
             alPedirResumen={pedirResumen}
             alAbrirProyecto={(proyecto, pestana) => abrirProyecto(proyecto, pestana)}
             alPedirAsignadas={pedirAsignadas}
+            alPedirGastoDeLaSemana={pedirGastoDeLaSemana}
             // La misma elección que la barra: los destacados primero, el resto debajo.
             {...(estado.alta?.registrados.find((e) => e.id === entornoActivo)?.proyectos === undefined
               ? {}

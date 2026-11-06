@@ -110,7 +110,8 @@ Ante una discrepancia con el código, **el código manda**.
   «Trabajando ahora» (`EnMarcha`), «Lo que te espera» (`loQueTeEspera`: `esperaPorTi`, en pausa, terminadas recientes
   con el juez en contra o críticos; una verde NO; y lo SIN SUBIR de cada proyecto con copia, con la MISMA foto que su
   Resumen, `useSinSubir`), «Del gestor» (lo asignado SIN tarea, `accion: "asignadas"`, solo lectura; la fila lleva a la
-  pestaña Tareas del proyecto), los proyectos en filas y Tu equipo en la lateral. «Ver el tablero»
+  pestaña Tareas del proyecto), el GASTO de 7 días en tokens (`accion: "gastoDeLaSemana"`, por día desde los `fin`
+  guardados; un turno sin hora se cuenta aparte), los proyectos en filas y Tu equipo en la lateral. «Ver el tablero»
   monta el `Kanban` de siempre (`tableroAbierto`) a todo el ancho. Lo que aún no viaja no se pinta (`docs/DISENO-DASHBOARD.md`).
 - **El chat**: la persona en burbuja a la derecha CON su icono, el agente a la izquierda con el de XOneCode (petición
   suya); «Trabajo del agente» es una pastilla (`.tramo`) que nace SIEMPRE plegada. **Un pie por mensaje** (opción F

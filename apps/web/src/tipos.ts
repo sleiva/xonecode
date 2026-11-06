@@ -1265,6 +1265,21 @@ export interface BaseDelFichero {
  * proyecto, decididos por el servidor por su raíz; `sync` es la medida de la banda de
  * CloudStudio, AUSENTE sin copia bajada.
  */
+/** Redeclarado de `web/servidor/gastoDeLaSemana.ts`: un día de la ventana, con las dos cuentas por separado. */
+export interface GastoDelDia {
+  dia: string;
+  modelo: { entrada: number; salida: number; cache: number };
+  externo: { entrada: number; salida: number; cache: number };
+  turnos: number;
+}
+
+/** Redeclarado de `web/servidor/gastoDeLaSemana.ts`: siete días de la más antigua a hoy; `sinHora` = turnos que no se
+ *  pudieron repartir. */
+export interface GastoDeLaSemana {
+  dias: GastoDelDia[];
+  sinHora: number;
+}
+
 /** Redeclarado de `transporte.ts#AsignadasDelProyecto`: sin `lista` ni `error`, ese proyecto no sabe decir «asignadas a mí». */
 export interface AsignadasDelProyecto {
   conector?: string;
@@ -1571,6 +1586,8 @@ export type MensajeDelCliente =
   | { clase: "copiaLocal"; accion: "resumen"; proyecto: string }
   /** Lo asignado a la persona en el gestor del proyecto: 200 con `AsignadasDelProyecto`, o 409 con `{ motivo }`. */
   | { clase: "copiaLocal"; accion: "asignadas"; proyecto: string }
+  /** El gasto de los últimos siete días de un proyecto: 200 con `GastoDeLaSemana` (`{}` sin copia), o 409. */
+  | { clase: "copiaLocal"; accion: "gastoDeLaSemana"; proyecto: string }
   /** Fijar —o quitar, sin `modo`— el modo de las sesiones nuevas del proyecto (IXCODE-31): 200
    *  con `{ proyecto? }`, 409 con `{ motivo }`. */
   | { clase: "copiaLocal"; accion: "modoDeEscritura"; proyecto: string; modo?: ModoDeEscritura }

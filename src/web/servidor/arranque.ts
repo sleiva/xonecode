@@ -241,6 +241,7 @@ import {
   trabajoSinCommitear,
 } from "../../agent/sesiones/gitSync.js";
 import { listarSesiones, marcarTareaDeSesion, reabrirSesion, sembrarConsumosPendientes, type DispositivoElegido } from "./sesiones.js";
+import { DIAS_DEL_GASTO, gastoDeLaSemana } from "./gastoDeLaSemana.js";
 import { RUTA_ARTEFACTOS, carpetaDeArtefactosDeSesion, esRutaDeArtefacto, rutaRelativaDeArtefacto } from "../../core/artefactos.js";
 import type { PantallaElegida } from "../../core/tareas.js";
 import { MIMES_DE_ARTEFACTO_AL_MOVIL, TOPE_DE_ARTEFACTO_AL_MOVIL, trozosDeArtefacto } from "../../core/remoto.js";
@@ -7814,6 +7815,40 @@ export function montarRutas(
       };
       respuesta.writeHead(200, { "content-type": "application/json" });
       respuesta.end(JSON.stringify(foto));
+      return;
+    }
+    if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "copiaLocal" && mensaje.accion === "gastoDeLaSemana") {
+      // El gasto de los últimos siete días de un proyecto, día a día, para el Escritorio (`gastoDeLaSemana.ts`). Solo
+      // LECTURA del disco: el índice para saber qué conversaciones tocaron la ventana y sus `.jsonl` para repartir los
+      // `fin`. Del cable llega el ID; la raíz la pone el servidor, como en `resumen`. Sin copia vuelve vacío: no hay
+      // conversaciones que mirar, que no es «no gastó».
+      const identidad = proyectos.find((p) => p.id === mensaje.proyecto);
+      if (entornoElegido === undefined || identidad === undefined) {
+        respuesta.writeHead(409, { "content-type": "application/json" });
+        respuesta.end(JSON.stringify({ motivo: "ese proyecto no está en el listado del entorno activo" }));
+        return;
+      }
+      const raiz = vestibulo.raizDeProyecto(entornoElegido, identidad.nombre);
+      respuesta.writeHead(200, { "content-type": "application/json" });
+      if (!esProyectoEnDisco(raiz)) {
+        respuesta.end("{}");
+        return;
+      }
+      try {
+        const ahora = new Date();
+        const inicio = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate() - (DIAS_DEL_GASTO - 1)).getTime();
+        // Una conversación cuyo último turno es anterior a la ventana no puede tener nada dentro: no se abre. Una sin
+        // fecha legible, sí: no consta que quede fuera.
+        const enLaVentana = listarSesiones(raiz).filter((e) => {
+          const t = Date.parse(e.ultimoTurno);
+          return Number.isNaN(t) || t >= inicio;
+        });
+        const gasto = gastoDeLaSemana(enLaVentana.map((e) => reabrirSesion(raiz, e.id).actos), ahora);
+        respuesta.end(JSON.stringify(gasto));
+      } catch (error) {
+        informar(`no se pudo leer el gasto de la semana (${codigoDe(error)})`);
+        respuesta.end("{}");
+      }
       return;
     }
     if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "copiaLocal" && mensaje.accion === "asignadas") {

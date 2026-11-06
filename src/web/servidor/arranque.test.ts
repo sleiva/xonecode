@@ -12375,6 +12375,25 @@ describe("el cable: la copia local y los fijados", () => {
     rmSync(base, { recursive: true, force: true });
   });
 
+  it("«gastoDeLaSemana»: reparte los turnos guardados por día; sin copia, vacío; un id ajeno, 409", async () => {
+    const { base, raiz } = workspaceConTienda();
+    const vestibulo = vestibuloDePrueba({ baseDeWorkspace: () => base });
+    const raizDelVestibulo = vestibulo.raizDeProyecto("webstudio", "Tienda");
+    const ahora = new Date().toISOString();
+    anotarActo(raizDelVestibulo, "s1", { tipo: "usuario", texto: "hola", cuando: ahora });
+    anotarActo(raizDelVestibulo, "s1", { tipo: "fin", ms: 1, consumo: { modelo: { entrada: 120, salida: 30, cache: 20 }, externo: { entrada: 0, salida: 0, cache: 0 } } });
+    const { accion } = await conectado(vestibulo);
+    const r = await accion({ clase: "copiaLocal", accion: "gastoDeLaSemana", proyecto: "p1" });
+    expect(r.estado).toBe(200);
+    const g = JSON.parse(r.cuerpo) as { dias: { turnos: number; modelo: { entrada: number } }[]; sinHora: number };
+    expect(g.dias).toHaveLength(7);
+    expect(g.dias.at(-1)).toMatchObject({ turnos: 1, modelo: { entrada: 120 } });
+    expect(g.sinHora).toBe(0);
+    expect(r.cuerpo).not.toContain(raiz);
+    expect((await accion({ clase: "copiaLocal", accion: "gastoDeLaSemana", proyecto: "no-existe" })).estado).toBe(409);
+    rmSync(base, { recursive: true, force: true });
+  });
+
   /** IXCODE-31: el modo con que nacen las sesiones nuevas, global y por proyecto. */
   it("el modo GLOBAL viaja en la bienvenida y se cambia por el cable", async () => {
     let enDisco: "supervisado" | "autonomo" = "supervisado";
