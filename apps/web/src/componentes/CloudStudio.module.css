@@ -76,24 +76,14 @@
    descuido: la clase nombra la ACCIÓN del protocolo (`alPedir("bajar")`), que no ha cambiado,
    y la etiqueta nombra lo que se le enseña a quien pulsa. Igualarlas sería reescribir el
    cable para arreglar dos palabras de la pantalla. */
-.subir,
-.bajar {
-  padding: var(--espacio-6) var(--espacio-12);
-  border: none;
-  border-radius: var(--radio-control);
-  background: var(--xonecode-azul);
-  color: var(--xonecode-sobre-azul);
-  font: inherit;
-  font-size: var(--tipo-control);
-  font-weight: var(--peso-fuerte);
-  transition: background 120ms ease;
-  cursor: pointer;
+.subir {
+  composes: primario from "./Boton.module.css";
 }
 
-.subir:hover,
-.bajar:hover {
-  background: var(--xonecode-cian);
+.bajar {
+  composes: primario from "./Boton.module.css";
 }
+
 
 /* La nota de lo que hace cada dirección. En `bg-layer-2` con el texto secundario: es
    contexto de los botones que HAY, no una alarma — y aquí sí importa que se lea, porque la

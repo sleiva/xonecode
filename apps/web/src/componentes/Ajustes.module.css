@@ -830,25 +830,8 @@
 /* El mismo botón secundario de Revisión, Ficheros y CloudStudio, y a propósito: «volver a
    mirar» es la MISMA acción en todas las pestañas y no hay motivo para que se vea distinta. */
 .recargar {
+  composes: secundario from "./Boton.module.css";
   margin-left: auto;
-  padding: var(--espacio-4) var(--espacio-10);
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: var(--radio-control);
-  background: var(--dsw-alias-bg-layer-1);
-  color: var(--dsw-alias-label-secondary);
-  font: inherit;
-  font-size: var(--tipo-control);
-  cursor: pointer;
-}
-
-.recargar:hover:enabled {
-  background: var(--dsw-alias-interactive-bg-hover);
-  color: var(--dsw-alias-label-primary);
-}
-
-.recargar:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
 }
 
 .columnasDeProyectos {
@@ -1003,20 +986,9 @@
    papelera — mismo criterio que `.destructiva` (`AccionDeSesion.module.css`,
    `AccionesDeTarea.module.css`). El rojo de marca, no el genérico de la paleta copiada. */
 .quitarLleno {
-  padding: var(--espacio-4) var(--espacio-10);
-  border: 0.5px solid var(--xonecode-rojo);
-  border-radius: var(--radio-control);
-  background: var(--xonecode-rojo);
-  color: var(--dsw-alias-label-primary-inverted);
-  font: inherit;
-  font-size: var(--tipo-control);
-  cursor: pointer;
+  composes: peligro from "./Boton.module.css";
 }
 
-.quitarLleno:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
 
 /* La confirmación es un AVISO DE SEGURIDAD —quita credenciales—, y se pinta como tal: los
    alias de advertencia del tema, los mismos que el aviso de trabajo sin commitear. */

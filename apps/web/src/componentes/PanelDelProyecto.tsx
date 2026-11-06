@@ -430,7 +430,7 @@ export function PanelDelProyecto({
         ) : pestana === "sincronizacion" && sincronizacion !== undefined ? (
           <div className={estilos.sincronizacion}>{sincronizacion}</div>
         ) : pestana === "ejecutar" && ejecutar !== undefined ? (
-          <div className={estilos.sincronizacion}>{ejecutar}</div>
+          <div className={estilos.ejecutar}>{ejecutar}</div>
         ) : pestana === "tareas" ? (
           <>
             {/* Primero las tareas en BACKGROUND del proyecto —las que el agente hace solo, que
@@ -533,7 +533,7 @@ function Resumen({ planes: todos }: { planes?: PlanDelCable[] }) {
               const conProgreso = tareas.length > 0 && tareas.every((t) => t.progreso !== undefined);
               const de = (estado: string) => tareas.filter((t) => t.progreso === estado).length;
               return (
-                <li key={p.nombre} className={estilos.plan} data-abierto={abierto === p.nombre ? "" : undefined}>
+                <li key={p.nombre} className={clsx(estilos.plan, estilos.tarjetaDePlan)} data-abierto={abierto === p.nombre ? "" : undefined}>
                   <button
                     type="button"
                     className={estilos.nombreDePlan}

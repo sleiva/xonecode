@@ -4,11 +4,9 @@
    de `estilos/marca.css`. Ningún color literal. */
 
 .kanban {
+  composes: superficie fija from "./Superficie.module.css";
   margin: 24px 0 0;
   padding: var(--espacio-12);
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: var(--radio-tarjeta);
-  background: var(--dsw-alias-bg-layer-2);
   /* Lo que decide si caben las cuatro columnas lado a lado es el ancho de ESTA caja, no el
      de la ventana: la misma razón que `Revision.module.css` documenta. */
   container-type: inline-size;

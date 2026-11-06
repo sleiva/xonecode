@@ -18,13 +18,12 @@
 }
 
 .columna {
+  composes: superficie fija from "./Superficie.module.css";
   display: flex;
   flex-direction: column;
   gap: var(--espacio-12);
   min-width: 0;
   padding: var(--espacio-16) var(--espacio-16);
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: var(--radio-tarjeta);
 }
 
 .tituloDeColumna {
@@ -187,21 +186,9 @@
    sostener texto blanco, el mismo de «Subir» en la banda de CloudStudio—, y el cian se queda
    para el hover: acento, sin nada que sostener. */
 .ejecutar {
-  padding: var(--espacio-6) var(--espacio-12);
-  border: none;
-  border-radius: var(--radio-control);
-  background: var(--xonecode-azul);
-  color: var(--xonecode-sobre-azul);
-  font: inherit;
-  font-size: var(--tipo-control);
-  font-weight: var(--peso-fuerte);
-  transition: background 120ms ease;
-  cursor: pointer;
+  composes: primario from "./Boton.module.css";
 }
 
-.ejecutar:hover {
-  background: var(--xonecode-cian);
-}
 
 /* Los dos «Copiar…» son secundarios: el verbo principal sigue siendo Ejecutar. */
 .copiar {

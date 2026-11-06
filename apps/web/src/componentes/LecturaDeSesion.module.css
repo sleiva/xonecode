@@ -29,26 +29,13 @@
   gap: var(--espacio-6);
 }
 
-.boton,
-.principal {
-  padding: var(--espacio-4) var(--espacio-10);
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: var(--radio-control);
-  background: var(--dsw-alias-bg-layer-1);
-  color: var(--dsw-alias-label-primary);
-  font: inherit;
-  font-size: var(--tipo-control);
-  cursor: pointer;
-}
-
-.boton:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
+/* Los papeles de siempre (`Boton.module.css`): «Volver» secundario y la acción principal, primaria. */
+.boton {
+  composes: secundario from "./Boton.module.css";
 }
 
 .principal {
-  border-color: var(--xonecode-azul);
-  background: var(--xonecode-azul);
-  color: var(--xonecode-sobre-azul);
+  composes: primario from "./Boton.module.css";
 }
 
 .cargando,

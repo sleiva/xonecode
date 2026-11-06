@@ -164,19 +164,22 @@
    `composes` solo se admite sobre un selector de una única clase local. */
 .accionDeFila.accionDeFila {
   flex: none;
-  padding: var(--espacio-4) var(--espacio-10);
-  border: 0.5px solid var(--dsw-alias-border-l4);
-  border-radius: var(--radio-control);
-  background: var(--dsw-alias-button-elevated-fill);
-  color: var(--dsw-alias-label-primary);
+  /* Los mismos valores que `Boton.module.css#secundario` («B1»: tinte sin borde, letra a 12), copiados y no compuestos
+     por el motivo de arriba. Si cambian allí, cambian aquí. */
+  padding: var(--espacio-6) var(--espacio-12);
+  border: 0;
+  border-radius: var(--radio-boton);
+  background: var(--xonecode-relieve-secundario);
+  color: var(--xonecode-relieve-secundario-texto);
   font: inherit;
-  font-size: var(--tipo-control);
+  font-size: var(--tipo-pequeno);
+  font-weight: var(--peso-medio);
   white-space: nowrap;
   cursor: pointer;
 }
 
 .accionDeFila.accionDeFila:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
+  background: var(--xonecode-relieve-secundario-hover);
 }
 
 /* «Probar»: comprueba, no avanza (`.principal`) ni destruye (el rojo). El verde de marca,
@@ -184,7 +187,6 @@
    el que ninguno de los dos compone `Boton.module.css#exito`: el selector doblado le gana
    en especificidad al `variant="outline"` del paquete, que `composes` no admite. */
 .accionDeFila.accionDeFila.exito {
-  border-color: var(--xonecode-verde);
   background: var(--xonecode-verde-fondo);
   color: var(--xonecode-verde);
 }

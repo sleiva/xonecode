@@ -1,11 +1,9 @@
 /* Alias comprobados contra `estilos/design-platform.css`: bg-layer-1/2, border-l2,
    label-primary/secondary/tertiary. */
 .receta {
+  composes: superficie fija from "./Superficie.module.css";
   margin: 12px 0 4px;
   padding: var(--espacio-12) var(--espacio-12);
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: var(--radio-tarjeta);
-  background: var(--dsw-alias-bg-layer-1);
 }
 
 .titulo {

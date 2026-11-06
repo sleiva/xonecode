@@ -27,24 +27,10 @@
 }
 
 .boton {
-  padding: var(--espacio-4) var(--espacio-8);
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: var(--radio-control);
-  background: var(--dsw-alias-bg-layer-2);
-  color: var(--dsw-alias-label-primary);
-  font: inherit;
-  font-size: var(--tipo-mini);
-  cursor: pointer;
+  composes: secundario from "./Boton.module.css";
 }
 
-.boton:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
-}
 
-.boton:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
 
 /* El botón que confirma descartar, dentro del modal (`ConfirmarDescarte`, coraza de
    `NuevaSesion.module.css`). MISMA regla que `AccionDeSesion.module.css#destructiva`, y el
@@ -87,25 +73,11 @@
 }
 
 .botonFeedback {
+  composes: secundario from "./Boton.module.css";
   align-self: flex-start;
-  padding: var(--espacio-4) var(--espacio-8);
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: var(--radio-control);
-  background: var(--dsw-alias-bg-layer-2);
-  color: var(--dsw-alias-label-primary);
-  font: inherit;
-  font-size: var(--tipo-mini);
-  cursor: pointer;
 }
 
-.botonFeedback:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
-}
 
-.botonFeedback:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
 
 .pista {
   flex-basis: 100%;

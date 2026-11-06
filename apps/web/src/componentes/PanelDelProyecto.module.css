@@ -419,11 +419,10 @@
 /* La tabla de servicios de la pestaña Conectores (opción B del lienzo): una fila por servicio, sus
    usos en columnas. La rejilla la comparten la cabecera y cada fila; con Diseño tiene una columna más. */
 .servicios {
+  composes: superficie fija from "./Superficie.module.css";
   --columnas-de-servicio: minmax(180px, 2fr) repeat(2, minmax(80px, 1fr)) minmax(0, 2fr);
   display: flex;
   flex-direction: column;
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: var(--radio-tarjeta);
   padding: 0 var(--espacio-12);
 }
 
@@ -658,14 +657,23 @@
    pila y el árbol): aquí ocupa el alto del cuerpo en vez de crecer con su contenido, o el
    scroll del cuerpo se comería el suyo y la banda dejaría de estar acotada. */
 .sincronizacion {
+  composes: superficie fija from "./Superficie.module.css";
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
   height: 100%;
   min-height: 420px;
   overflow: hidden;
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: var(--radio-tarjeta);
+}
+
+/* Ejecutar: la misma caja de altura que Sincronización, pero SIN relieve propio — sus dos columnas ya son tarjetas
+   (`Ejecutar.module.css#columna`), y una tarjeta dentro de otra se leía como dos niveles que no hay. */
+.ejecutar {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  height: 100%;
+  min-height: 420px;
 }
 
 /* «· 1 en curso» en la pestaña Tareas: una tarea de fondo trabajando. El acento como en las marcas de actividad de la
@@ -687,12 +695,16 @@
   list-style: none;
 }
 
+/* La tarjeta de un plan en el Resumen: el papel de `Superficie` (por la clase `.tarjetaDePlan`, que el selector compuesto
+   de abajo no puede componer). Aquí solo el hueco, y `border: 0` para quitar el filo de abajo que `.plan` lleva en la lista. */
+.tarjetaDePlan {
+  composes: superficie from "./Superficie.module.css";
+}
+
 .tarjetasDePlanes > .plan {
   gap: var(--espacio-10);
   padding: var(--espacio-12) var(--espacio-16);
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: var(--radio-tarjeta);
-  background: var(--dsw-alias-bg-layer-2);
+  border: 0;
   min-width: 0;
 }
 

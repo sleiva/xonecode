@@ -64,3 +64,17 @@
     transform: translateY(-1px);
   }
 }
+
+/* El papel QUIETO, para contenedores grandes (el recuadro de Sincronización, las columnas de Ejecutar, la tabla de
+   Conectores): el mismo relieve, pero sin reaccionar al pasar — una caja que ocupa media pantalla y sube al rozarla
+   con el ratón no es una tarjeta que se pueda pulsar, y se leía como tal. Se compone DESPUÉS de `superficie`
+   (`composes: superficie fija from …`) y, por vivir en este mismo fichero, gana siempre. */
+.fija:hover {
+  background-color: var(--xonecode-relieve-superficie);
+  box-shadow: var(--xonecode-relieve-sombra);
+  transform: none;
+}
+
+.fija:hover::after {
+  background: var(--xonecode-relieve-borde);
+}

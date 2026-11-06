@@ -195,13 +195,11 @@
 }
 
 .formulario {
+  composes: superficie fija from "./Superficie.module.css";
   display: flex;
   flex-direction: column;
   gap: var(--espacio-12);
   padding: var(--espacio-12);
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: var(--radio-tarjeta);
-  background: var(--dsw-alias-bg-layer-2);
 }
 
 .campo {
@@ -346,17 +344,19 @@
  */
 .accionDeFila.accionDeFila {
   flex: none;
-  padding: var(--espacio-4) var(--espacio-10);
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: var(--radio-control);
-  background: var(--dsw-alias-bg-layer-1);
-  color: var(--dsw-alias-label-primary);
+  /* Los valores de `Boton.module.css#secundario` («B1»), copiados por el motivo de arriba. */
+  padding: var(--espacio-6) var(--espacio-12);
+  border: 0;
+  border-radius: var(--radio-boton);
+  background: var(--xonecode-relieve-secundario);
+  color: var(--xonecode-relieve-secundario-texto);
   font-size: var(--tipo-pequeno);
+  font-weight: var(--peso-medio);
   white-space: nowrap;
 }
 
 .accionDeFila.accionDeFila:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
+  background: var(--xonecode-relieve-secundario-hover);
 }
 
 /*
