@@ -1433,7 +1433,7 @@ describe("la bola de mensajes nuevos en «Ir al final»", () => {
 });
 
 describe("quién habla (rediseño del chat, tablero D)", () => {
-  it("el bloque del agente lleva su cabecera UNA vez por turno, con los pasos y la duración del turno", () => {
+  it("cada turno del agente es UNA tarjeta: cabecera con quién responde y pie con lo que tardó (diseño «B»)", () => {
     const { container } = render(
       <Chat
         actos={[
@@ -1446,9 +1446,14 @@ describe("quién habla (rediseño del chat, tablero D)", () => {
         ]}
       />
     );
-    const autores = [...container.querySelectorAll("p")].map((p) => p.textContent ?? "").filter((t) => t.startsWith("XOneCode"));
-    // El primero cerró: sus cifras. El segundo sigue abierto: solo el nombre.
-    expect(autores).toEqual(["XOneCode · 2 pasos · 29,6 s", "XOneCode"]);
+    const tarjetas = screen.getAllByRole("region", { name: "Respuesta de XOneCode" });
+    expect(tarjetas).toHaveLength(2);
+    // La cabecera dice QUIÉN, una vez por turno; los pasos van en el trabajo y la duración en el pie.
+    expect(tarjetas.map((t) => t.querySelector("header")?.textContent)).toEqual(["XOneCode", "XOneCode"]);
+    expect(within(tarjetas[0]!).getByText("hecho")).toBeTruthy();
+    // El primero cerró: su duración en el pie. El segundo sigue abierto: ninguna cifra que afirmar.
+    expect(tarjetas[0]!.querySelector("footer")?.textContent).toContain("29,6 s");
+    expect(tarjetas[1]!.querySelector("footer")?.textContent ?? "").not.toContain(" s");
   });
 
   it("lo de antes del primer mensaje no es de ningún turno: sin cabecera", () => {

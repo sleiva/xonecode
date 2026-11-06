@@ -8,7 +8,7 @@ import { useCronometro } from "../cronometro.js";
 import { protegerDolares } from "../protegerDolares.js";
 import { ETIQUETAS_DE_CODIGO } from "../etiquetasDeCodigo.js";
 import { BotonDeCopiar } from "./BotonDeCopiar.js";
-import { fechaCompleta, horaDelMensaje } from "../selloDeFecha.js";
+import { fechaCompleta, fechaYHora } from "../selloDeFecha.js";
 import { CierreDelTurno } from "./CierreDelTurno.js";
 import { abreviar } from "../cifras.js";
 import { useUrlDeArtefacto } from "./Artefactos.js";
@@ -1141,28 +1141,54 @@ export function Chat({
    */
   const turnos = turnosDeLaSesion(actos);
   const turnoQueEmpiezaEn = new Map(turnos.map((t) => [t.desde, t]));
-  let turnoDelBloque: TurnoDeLaSesion | undefined;
-  let cabeceraPendiente = false;
-  const conAutor = (numero: number, pieza: (typeof piezas)[number], pintado: React.ReactNode): React.ReactNode => {
-    if (pieza.tipo === "acto" && pieza.acto.tipo === "usuario") {
-      turnoDelBloque = turnoQueEmpiezaEn.get(pieza.indice);
-      cabeceraPendiente = turnoDelBloque !== undefined;
-      return pintado;
+  /**
+   * **Cada respuesta, una TARJETA** (diseño «B» de su lienzo, 06-11-2026): todo lo que el agente pinta en un turno —el
+   * trabajo, los mensajes, los artefactos— va en UN recinto con el relieve de la consola, con su cabecera (la marca,
+   * «XOneCode» y el modelo) y su PIE siempre a la vista: la fecha y la hora, cuánto tardó y lo que gastó, y «Copiar»
+   * con su texto. Se agrupa DESPUÉS de pintar cada pieza como siempre, en el orden del render: lo único que se añade
+   * es el envoltorio. Lo de antes del primer mensaje (la bienvenida, un acuse) no es de ningún turno y va suelto.
+   */
+  const modeloDelTurno = (t: TurnoDeLaSesion): string | undefined => {
+    for (let i = t.desde + 1; i < actos.length; i++) {
+      const a = actos[i]!;
+      if (a.tipo === "usuario") return undefined;
+      if (a.tipo === "fin") return a.modelo;
     }
-    if (turnoDelBloque === undefined || pintado === null || pintado === undefined || pintado === false) return pintado;
-    const conCabecera = cabeceraPendiente;
-    cabeceraPendiente = false;
-    return (
-      <div key={`agente-${numero}`} className={estilos.delAgente}>
-        <span className={estilos.columnaDelAvatar} aria-hidden="true">
-          {conCabecera ? <img className={estilos.avatarDelAgente} src="/iconos/xonecode.png" alt="" width={28} height={28} /> : null}
-        </span>
-        <div className={estilos.cuerpoDelAgente}>
-          {conCabecera ? <p className={estilos.autor}>{cabeceraDelTurno(turnoDelBloque)}</p> : null}
-          {pintado}
-        </div>
-      </div>
-    );
+    return undefined;
+  };
+  const enUnTurno = (indice: number): boolean => turnos.some((t) => t.desde < indice);
+  const agruparPorTurno = (nodos: readonly { pieza: (typeof piezas)[number]; numero: number; nodo: React.ReactNode }[]): React.ReactNode[] => {
+    const salida: React.ReactNode[] = [];
+    let grupo: { turno: TurnoDeLaSesion; hijos: React.ReactNode[]; textos: string[] } | undefined;
+    const cerrar = () => {
+      if (grupo !== undefined && grupo.hijos.length > 0) {
+        const { turno, hijos, textos } = grupo;
+        salida.push(
+          <TurnoDelAgente key={`turno-${turno.desde}`} turno={turno} modelo={modeloDelTurno(turno)} textos={textos}>
+            {hijos}
+          </TurnoDelAgente>
+        );
+      }
+      grupo = undefined;
+    };
+    for (const { pieza, numero, nodo } of nodos) {
+      const vacio = nodo === null || nodo === undefined || nodo === false;
+      if (pieza.tipo === "acto" && pieza.acto.tipo === "usuario") {
+        cerrar();
+        if (!vacio) salida.push(<Fragment key={`p-${numero}`}>{nodo}</Fragment>);
+        const turno = turnoQueEmpiezaEn.get(pieza.indice);
+        grupo = turno === undefined ? undefined : { turno, hijos: [], textos: [] };
+        continue;
+      }
+      if (grupo === undefined) {
+        if (!vacio) salida.push(<Fragment key={`p-${numero}`}>{nodo}</Fragment>);
+        continue;
+      }
+      if (pieza.tipo === "acto" && pieza.acto.tipo === "asistente" && pieza.acto.texto !== "") grupo.textos.push(pieza.acto.texto);
+      if (!vacio) grupo.hijos.push(<Fragment key={`p-${numero}`}>{nodo}</Fragment>);
+    }
+    cerrar();
+    return salida;
   };
   // El scroller sigue lo que llega, salvo que hayas subido a leer. Sin esto el texto crecía
   // fuera de la vista: el modelo escribía y la pantalla se quedaba donde estaba.
@@ -1269,7 +1295,7 @@ export function Chat({
               nuevo sobre este proyecto, con esta conversación a la vista pero no en su memoria.
             </p>
           ) : null}
-          {piezas.map((pieza, numero) => conAutor(numero, pieza, (() => {
+          {agruparPorTurno(piezas.map((pieza, numero) => ({ pieza, numero, nodo: (() => {
             if (pieza.tipo === "cierre") {
               // Justo detrás de una respuesta PINTADA, sus cifras ya van en el pie de esa respuesta (`cierreDeLaRespuesta`).
               if (cierresEnElPie.has(numero)) return null;
@@ -1514,18 +1540,27 @@ export function Chat({
                   */}
                   {/* UN pie (petición suya: los copiar y las cifras no estaban alineados): a la izquierda la hora
                       (IXCODE-24) y, si el turno acabó aquí sin trabajo, su duración y sus tokens; a la derecha, copiar. */}
-                  <div className={estilos.acciones}>
-                    <span className={estilos.datosDelPie} data-pie="">
-                      {(() => {
-                        const cierre = cierreDeLaRespuesta(piezas, numero);
-                        if (cierre === undefined) return null;
-                        cierresEnElPie.add(numero + 1);
-                        return <CifrasDelPie ms={cierre.ms} consumo={cierre.consumo} />;
-                      })()}
-                      <HoraDelMensaje cuando={acto.cuando} clase={estilos.hora} />
-                    </span>
-                    <BotonDeCopiar texto={acto.texto} etiqueta="Copiar la respuesta" forma="pie" />
-                  </div>
+                  {/* Dentro de un turno, el pie es el de su TARJETA (`TurnoDelAgente`): uno por turno, no uno por mensaje.
+                      Las cifras de un turno sin trabajo también van allí, así que su cierre suelto no se pinta. */}
+                  {enUnTurno(indice) ? (
+                    (() => {
+                      if (cierreDeLaRespuesta(piezas, numero) !== undefined) cierresEnElPie.add(numero + 1);
+                      return null;
+                    })()
+                  ) : (
+                    <div className={estilos.acciones}>
+                      <span className={estilos.datosDelPie} data-pie="">
+                        {(() => {
+                          const cierre = cierreDeLaRespuesta(piezas, numero);
+                          if (cierre === undefined) return null;
+                          cierresEnElPie.add(numero + 1);
+                          return <CifrasDelPie ms={cierre.ms} consumo={cierre.consumo} />;
+                        })()}
+                        <HoraDelMensaje cuando={acto.cuando} clase={estilos.hora} />
+                      </span>
+                      <BotonDeCopiar texto={acto.texto} etiqueta="Copiar la respuesta" forma="pie" />
+                    </div>
+                  )}
                 </div>
               );
             }
@@ -1557,7 +1592,7 @@ export function Chat({
               );
             }
             return null;
-          })()))}
+          })() })))}
         </div>
       </div>
       {/* Flota al pie de la conversación, justo encima de la caja de escribir, y solo cuando
@@ -1590,7 +1625,7 @@ export function Chat({
  */
 function HoraDelMensaje({ cuando, clase }: { cuando: string | undefined; clase: string | undefined }) {
   if (cuando === undefined) return null;
-  const texto = horaDelMensaje(cuando);
+  const texto = fechaYHora(cuando);
   if (texto === undefined) return null;
   const titulo = fechaCompleta(cuando);
   return (
@@ -1642,5 +1677,52 @@ function CifrasDelPie({ ms, consumo }: { ms: number; consumo: ConsumoDeTurno }) 
         </span>
       ) : null}
     </>
+  );
+}
+
+/**
+ * La TARJETA de un turno del agente (diseño «B»): cabecera con la marca, el nombre y el modelo; dentro, lo que el agente
+ * hizo y dijo; y un pie SIEMPRE a la vista con la fecha y la hora de su última respuesta, cuánto tardó y lo que gastó
+ * (solo si el turno cerró: un turno en marcha no tiene cifras que afirmar) y «Copiar» con su texto, que copia las
+ * respuestas del turno enteras. Sin respuesta con texto no hay nada que copiar, y el botón no sale.
+ */
+function TurnoDelAgente({
+  turno,
+  modelo,
+  textos,
+  children,
+}: {
+  turno: TurnoDeLaSesion;
+  modelo: string | undefined;
+  textos: readonly string[];
+  children: React.ReactNode;
+}) {
+  const hayPie = turno.acabo !== undefined || textos.length > 0 || (!turno.abierto && turno.ms !== undefined);
+  return (
+    <section className={`${estilos.turnoDelAgente}`} aria-label="Respuesta de XOneCode">
+      <header className={estilos.cabeceraDelTurno}>
+        <img className={estilos.avatarDelAgente} src="/iconos/xonecode.png" alt="" aria-hidden="true" width={24} height={24} />
+        <p className={estilos.autor}>
+          <span className={estilos.nombreDelAutor}>XOneCode</span>
+          {modelo === undefined ? null : <span className={estilos.modeloDelAutor}>{modelo}</span>}
+        </p>
+      </header>
+      <div className={estilos.cuerpoDelTurno}>{children}</div>
+      {hayPie ? (
+        <footer className={estilos.pieDelTurno}>
+          <span className={estilos.datosDelPie} data-pie="">
+            <HoraDelMensaje cuando={turno.acabo} clase={estilos.fechaDelTurno} />
+            {!turno.abierto && turno.ms !== undefined && turno.consumo !== undefined ? (
+              <CifrasDelPie ms={turno.ms} consumo={turno.consumo} />
+            ) : !turno.abierto && turno.ms !== undefined ? (
+              <span className={estilos.cifraDelPie}>{`respondió en ${(Math.round(turno.ms / 100) / 10).toLocaleString("es-ES")} s`}</span>
+            ) : null}
+          </span>
+          {textos.length === 0 ? null : (
+            <BotonDeCopiar texto={textos.join("\n\n")} etiqueta="Copiar la respuesta" forma="caja-texto" />
+          )}
+        </footer>
+      ) : null}
+    </section>
   );
 }

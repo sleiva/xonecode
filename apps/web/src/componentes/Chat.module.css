@@ -1107,17 +1107,6 @@
   font-size: var(--tipo-pequeno);
 }
 
-/* El pie de la persona: la hora y copiar al PASAR (o con el foco dentro), como en su lienzo. */
-.usuario > .pieDeLaPersona {
-  opacity: 0;
-  transition: opacity 0.15s;
-}
-
-.usuario:hover > .pieDeLaPersona,
-.usuario:focus-within > .pieDeLaPersona {
-  opacity: 1;
-}
-
 .usuario > .pieDeLaPersona {
   grid-column: 1;
   grid-row: 2;
@@ -1125,4 +1114,111 @@
   align-items: center;
   gap: var(--espacio-10);
   margin-top: 4px;
+}
+
+
+/* ── El chat «B» de su lienzo (06-11-2026): cada respuesta, una TARJETA ─────────────────────────────────────────────
+   Todo lo que el agente hace y dice en un turno va en un recinto con el relieve de la consola (`Superficie`, quieto:
+   una tarjeta de chat no se pulsa), con su cabecera y un PIE siempre a la vista con la fecha, las cifras y «Copiar». */
+.turnoDelAgente {
+  composes: superficie fija from "./Superficie.module.css";
+  align-self: stretch;
+  margin-top: var(--dsh-chat-flow-gap, 10px);
+}
+
+.cabeceraDelTurno {
+  display: flex;
+  align-items: center;
+  gap: var(--espacio-8);
+  padding: var(--espacio-12) var(--espacio-16) 0;
+}
+
+.cabeceraDelTurno .avatarDelAgente.avatarDelAgente {
+  width: 24px;
+  height: 24px;
+  margin-top: 0;
+  border-radius: var(--radio-control);
+}
+
+.cabeceraDelTurno .autor.autor {
+  gap: var(--espacio-8);
+  margin: 0;
+}
+
+.modeloDelAutor {
+  color: var(--dsw-alias-label-tertiary);
+  font-family: var(--ds-font-family-code);
+  font-size: var(--tipo-pequeno);
+}
+
+/* El cuerpo: las piezas de siempre, con el relleno de la tarjeta y sin la sangría que traían sueltas. */
+.cuerpoDelTurno {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 0 var(--espacio-16) var(--espacio-12);
+}
+
+.cuerpoDelTurno .globo {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+/* El pie: una franja con su filete arriba y un fondo apenas más hundido; la fecha y las cifras a la izquierda, «Copiar»
+   a la derecha. Siempre a la vista (petición suya: que salgan la fecha, la hora y copiar). */
+.pieDelTurno {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--espacio-12);
+  padding: var(--espacio-8) var(--espacio-16);
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 0 0 var(--radio-tarjeta) var(--radio-tarjeta);
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.fechaDelTurno {
+  color: var(--dsw-alias-label-secondary);
+  font-weight: var(--peso-medio);
+}
+
+/* La persona, en la burbuja AZUL de la marca (el mismo degradado que el botón primario), con su texto al tamaño del
+   cuerpo, y debajo su fecha y su «Copiar», siempre a la vista. */
+.usuario > .cuerpoDeLaPersona.cuerpoDeLaPersona {
+  border: 0;
+  border-radius: var(--radio-tarjeta) var(--radio-mini) var(--radio-tarjeta) var(--radio-tarjeta);
+  background: var(--xonecode-relieve-primario);
+  box-shadow: var(--xonecode-relieve-primario-sombra);
+  color: var(--xonecode-relieve-primario-texto);
+}
+
+.usuario .textoDeLaPersona {
+  font-size: var(--tipo-cuerpo);
+}
+
+.usuario .adjuntoDelMensaje {
+  color: var(--xonecode-relieve-primario-texto);
+}
+
+.usuario > .pieDeLaPersona .hora {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: var(--tipo-pequeno);
+}
+
+/* Los títulos de una respuesta, en la escala de la consola y no en la de un documento (diseño «B»): a 20 px pesaban
+   más que la propia tarjeta. Solo en el chat: el mismo markdown en la pestaña Ficheros es un documento y conserva los
+   suyos. */
+.cuerpoDelTurno :global(h1),
+.cuerpoDelTurno :global(h2) {
+  margin: var(--espacio-16) 0 var(--espacio-6);
+  font-size: var(--tipo-titulo);
+  font-weight: var(--peso-fuerte);
+  line-height: 1.4;
+}
+
+.cuerpoDelTurno :global(h3),
+.cuerpoDelTurno :global(h4) {
+  margin: var(--espacio-12) 0 var(--espacio-4);
+  font-size: var(--tipo-cuerpo);
+  font-weight: var(--peso-fuerte);
 }

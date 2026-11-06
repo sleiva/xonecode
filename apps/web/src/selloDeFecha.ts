@@ -53,3 +53,23 @@ export function fechaCompleta(iso: string): string | undefined {
   if (Number.isNaN(fecha.getTime())) return undefined;
   return new Intl.DateTimeFormat("es", { dateStyle: "long", timeStyle: "medium" }).format(fecha);
 }
+
+/**
+ * La fecha y la hora de un mensaje en la TARJETA del chat (diseño «B» de su lienzo, 06-11-2026): el día de la semana, el
+ * día y el mes, y la hora — «jue 6 nov · 08:25» —, siempre a la vista. Con el día de la semana porque en una
+ * conversación larga es lo que se reconoce («lo del martes»); el año solo si no es el actual, la regla de `selloDeFecha`.
+ */
+export function fechaYHora(iso: string, ahora: Date = new Date()): string | undefined {
+  const fecha = new Date(iso);
+  if (Number.isNaN(fecha.getTime())) return undefined;
+  const semana = new Intl.DateTimeFormat("es", { weekday: "short" }).format(fecha).replace(/\.$/, "");
+  const dia = new Intl.DateTimeFormat("es", {
+    day: "numeric",
+    month: "short",
+    ...(fecha.getFullYear() === ahora.getFullYear() ? {} : { year: "numeric" }),
+  })
+    .format(fecha)
+    .replace(/\./g, "");
+  const hora = new Intl.DateTimeFormat("es", { hour: "2-digit", minute: "2-digit", hour12: false }).format(fecha);
+  return `${semana} ${dia} · ${hora}`;
+}

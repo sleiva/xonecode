@@ -113,7 +113,10 @@ Ante una discrepancia con el código, **el código manda**.
   pestaña Tareas del proyecto), el GASTO de 7 días en tokens (`accion: "gastoDeLaSemana"`, por día desde los `fin`
   guardados; un turno sin hora se cuenta aparte), los proyectos en filas y Tu equipo en la lateral. «Ver el tablero»
   monta el `Kanban` de siempre (`tableroAbierto`) a todo el ancho. Lo que aún no viaja no se pinta (`docs/DISENO-DASHBOARD.md`).
-- **El chat**: la persona en burbuja a la derecha CON su icono, el agente a la izquierda con el de XOneCode (petición
+- **El chat** (diseño «B» de su lienzo): cada turno del agente es UNA tarjeta (`TurnoDelAgente`, compone `Superficie`
+  fija) con cabecera (marca, nombre, modelo) y PIE siempre a la vista: fecha y hora (`fechaYHora`), duración y tokens y
+  «Copiar» con texto, que copia las respuestas del turno. La persona en burbuja AZUL de marca con su fecha y copiar debajo.
+  Antes: la persona en burbuja a la derecha CON su icono, el agente a la izquierda con el de XOneCode (petición
   suya); «Trabajo del agente» es una pastilla (`.tramo`) que nace SIEMPRE plegada. **Un pie por mensaje** (opción F
   de su lienzo): barra fina con duración y tokens en UN número (desglose en el `title`, `CifrasDelPie`) y la hora, y
   «Copiar» sin caja (`BotonDeCopiar forma="pie"`); el cierre de un turno sin trabajo va en el pie de su respuesta

@@ -63,3 +63,12 @@
 .botonDelPie[data-estado="fallo"] {
   color: var(--dsw-alias-state-error-primary);
 }
+
+/* En el pie de la tarjeta de un turno (diseño «B» del chat): el botón secundario de la consola, con el icono y la
+   palabra, siempre a la vista. */
+.botonConTexto {
+  composes: secundario from "./Boton.module.css";
+  display: inline-flex;
+  align-items: center;
+  gap: var(--espacio-6);
+}

@@ -27,8 +27,9 @@ export function BotonDeCopiar({
 }: {
   texto: string;
   etiqueta?: string;
-  /** `caja`: el icono con borde de siempre. `pie`: sin caja y con la palabra, en el pie de un mensaje (su lienzo, opción F). */
-  forma?: "caja" | "pie";
+  /** `caja`: el icono con borde de siempre. `pie`: sin caja y con la palabra, en el pie de un mensaje (su lienzo, opción F).
+   *  `caja-texto`: un botón secundario con el icono y la palabra, en el pie de la tarjeta de un turno (diseño «B»). */
+  forma?: "caja" | "pie" | "caja-texto";
 }) {
   const [estado, setEstado] = useState<"quieto" | "copiado" | "fallo">("quieto");
   const temporizador = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -50,14 +51,14 @@ export function BotonDeCopiar({
   return (
     <button
       type="button"
-      className={forma === "pie" ? estilos.botonDelPie : estilos.boton}
+      className={forma === "pie" ? estilos.botonDelPie : forma === "caja-texto" ? estilos.botonConTexto : estilos.boton}
       data-estado={estado}
       title={titulo}
       aria-label={titulo}
       onClick={() => void copiar()}
     >
       {estado === "copiado" ? <IconCheckOutline16 size={14} /> : <IconCopyOutline16 size={14} />}
-      {forma === "pie" ? <span>{estado === "copiado" ? "Copiado" : estado === "fallo" ? "No se pudo" : "Copiar"}</span> : null}
+      {forma !== "caja" ? <span>{estado === "copiado" ? "Copiado" : estado === "fallo" ? "No se pudo" : "Copiar"}</span> : null}
     </button>
   );
 }
