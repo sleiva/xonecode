@@ -7,14 +7,14 @@
 .escritorio {
   flex: 1 1 auto;
   overflow-y: auto;
-  padding: 40px var(--espacio-24);
+  padding: var(--espacio-24);
 }
 
-/* La misma columna acotada y centrada que usa el transcript: la pantalla no cambia de eje
-   al abrir una sesión, solo de contenido. */
+/* A TODO el ancho, con los mismos 24 de margen que el panel del proyecto (`PanelDelProyecto.module.css#cuerpo`):
+   pasar del Escritorio a un proyecto no cambia el marco, solo el contenido. Con una columna acotada a 1080 y centrada,
+   en una pantalla ancha quedaba un tercio vacío a cada lado (captura suya, 06-11-2026). */
 .contenido {
-  width: min(1080px, 100%);
-  margin: 0 auto;
+  width: 100%;
 }
 
 .portada {
