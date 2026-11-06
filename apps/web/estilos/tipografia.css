@@ -70,7 +70,7 @@
      enseñaba): un 8 podía ser un botón o una tarjeta, y por eso no se migró por valor. */
   --radio-mini: 4px; /* insignia de código, barra, marca pequeña */
   --radio-control: 6px; /* campo, fila de lista, lo que se escribe o se elige */
-  --radio-boton: 10px; /* botón: el relieve AC3 (`estilos/relieve.css`) los quiere más redondos que una fila */
+  --radio-boton: 8px; /* botón «B1» del lienzo: un paso más redondo que una fila de control */
   --radio-tarjeta: 14px; /* tarjeta, panel, caja de contenido (AC3; era 10) */
   --radio-dialogo: 16px; /* diálogo, ventana sobre la consola: siempre un paso más que la tarjeta */
   --radio-pastilla: 999px;

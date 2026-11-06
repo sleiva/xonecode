@@ -37,25 +37,23 @@
    ahora): en oscuro es un gris bastante más claro que capa-1 Y que la fila; en claro sigue
    siendo blanco, así que no cambia nada ahí — el borde es quien hace el trabajo en claro. */
 .secundario {
-  padding: var(--espacio-6) var(--espacio-10);
-  /* El relieve AC3 (`estilos/relieve.css`): un anillo fino y una sombra corta en vez del borde plano. El
-     contorno es `box-shadow` y no `border`: un borde no puede llevar el anillo teñido ni el degradado del primario. */
+  padding: var(--espacio-6) var(--espacio-12);
+  /* Los botones «B1» (`estilos/relieve.css`): sin borde ni sombra, un fondo tintado del azul que se oscurece al pasar.
+     Letra a 12 y no a 13: a 13 con este relleno se veían toscos (petición suya, 06-11-2026). */
   border: 0;
   border-radius: var(--radio-boton);
-  background: var(--dsw-alias-button-elevated-fill);
-  box-shadow: var(--xonecode-relieve-secundario-sombra);
-  transition:
-    box-shadow 0.15s ease,
-    background-color 0.15s ease;
-  color: var(--dsw-alias-label-primary);
+  background: var(--xonecode-relieve-secundario);
+  color: var(--xonecode-relieve-secundario-texto);
   font: inherit;
-  font-size: var(--tipo-control);
+  font-size: var(--tipo-pequeno);
+  font-weight: var(--peso-medio);
   white-space: nowrap;
   cursor: pointer;
+  transition: background-color 0.15s ease;
 }
 
 .secundario:hover {
-  box-shadow: var(--xonecode-relieve-secundario-sombra-hover);
+  background: var(--xonecode-relieve-secundario-hover);
 }
 
 .secundario:disabled {
@@ -71,29 +69,29 @@
    clase porque es redondo y de tamaño fijo —una forma distinta, no un color distinto—, pero
    lee las MISMAS variables. */
 .primario {
-  padding: var(--espacio-6) var(--espacio-10);
-  /* El relieve AC3: degradado azul de marca → cian, sombra de COLOR y un filo de luz arriba. Sin borde visible. */
+  padding: var(--espacio-6) var(--espacio-12);
+  /* «B1»: azul de marca sólido con un degradado leve y sombra corta de su color. Peso medio, no fuerte: a 600 pesaba más
+     que todo lo que tenía alrededor. */
   border: 0;
   border-radius: var(--radio-boton);
   background: var(--xonecode-relieve-primario);
   box-shadow: var(--xonecode-relieve-primario-sombra);
-  transition:
-    box-shadow 0.15s ease,
-    filter 0.15s ease;
   color: var(--xonecode-relieve-primario-texto);
   font: inherit;
-  font-size: var(--tipo-control);
-  font-weight: var(--peso-fuerte);
+  font-size: var(--tipo-pequeno);
+  font-weight: var(--peso-medio);
+  white-space: nowrap;
   cursor: pointer;
+  transition: box-shadow 0.15s ease;
 }
 
 .primario:hover {
+  background: var(--xonecode-relieve-primario-hover);
   box-shadow: var(--xonecode-relieve-primario-sombra-hover);
-  filter: brightness(1.08) saturate(1.08);
 }
 
 .primario:active {
-  filter: brightness(0.95);
+  box-shadow: inset 0 1px 3px var(--xonecode-relieve-primario-pulsado);
 }
 
 .primario:disabled {
@@ -107,14 +105,18 @@
    relleno: el manual pinta el botón destructivo con un tinte de fondo al 12% de su rojo, no
    solo contorno — el tinte se deriva en `marca.css` con `color-mix`, no aquí. */
 .peligro {
-  padding: var(--espacio-6) var(--espacio-10);
-  border: 0.5px solid var(--xonecode-rojo);
+  padding: var(--espacio-6) var(--espacio-12);
+  /* «B1»: el tinte de su color, sin borde. */
+  border: 0;
   border-radius: var(--radio-boton);
   background: var(--xonecode-rojo-fondo);
   color: var(--xonecode-rojo);
   font: inherit;
-  font-size: var(--tipo-control);
+  font-size: var(--tipo-pequeno);
+  font-weight: var(--peso-medio);
+  white-space: nowrap;
   cursor: pointer;
+  transition: background-color 0.15s ease;
 }
 
 .peligro:hover {
@@ -131,14 +133,18 @@
    una acción que COMPRUEBA algo, no que avanza (ese es `.primario`) ni que lo destruye
    (`.peligro`) — mismo contorno + tinte que `.peligro`, en verde. */
 .exito {
-  padding: var(--espacio-6) var(--espacio-10);
-  border: 0.5px solid var(--xonecode-verde);
+  padding: var(--espacio-6) var(--espacio-12);
+  /* «B1»: el tinte de su color, sin borde. */
+  border: 0;
   border-radius: var(--radio-boton);
   background: var(--xonecode-verde-fondo);
   color: var(--xonecode-verde);
   font: inherit;
-  font-size: var(--tipo-control);
+  font-size: var(--tipo-pequeno);
+  font-weight: var(--peso-medio);
+  white-space: nowrap;
   cursor: pointer;
+  transition: background-color 0.15s ease;
 }
 
 .exito:hover {
@@ -155,6 +161,7 @@
    propósito — ver la nota de especificidad arriba. */
 .grande {
   padding: var(--espacio-8) var(--espacio-16);
+  font-size: var(--tipo-control);
 }
 
 /* El QUINTO rol: un botón SUELTO de icono o glifo —la «×» de un aviso que se descarta—, sin
@@ -194,8 +201,6 @@
 }
 
 /* Apagado no brilla: sin sombra de color ni filtro, solo la opacidad de siempre. */
-.primario:disabled,
-.secundario:disabled {
+.primario:disabled {
   box-shadow: none;
-  filter: none;
 }
