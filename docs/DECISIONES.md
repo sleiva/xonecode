@@ -10759,3 +10759,21 @@ locales, diagnóstico, desglose de tokens, recorrido de Ejecutar, Lo aprendido, 
 tarjetas de Jira, de alta, de consulta y de aprobación, la ficha de una tarea y las del kanban). NO llevan relieve, a
 propósito: el chat (burbujas, capturas, artefactos), campos, filtros, tooltips y bandas — serían ruido, y una fila de la
 pestaña Tareas que ya usa su propio `::after` (la tarea en marcha).
+
+## «Copiar todos» lleva la base de datos (IXCODE-78, 06-11-2026)
+
+Lo pidió Rafa: al ejecutar a mano en un móvil, «Copiar todos los ficheros» no copiaba `bd/gestion.db`, y en un aparato
+donde la app nunca tuvo base no arranca («Base de datos no encontrada»).
+
+- **La regla de antes** —«`bd/` no viaja, se despliega código y no datos»— suponía que la app que se prueba ya tiene su
+  base en el aparato. Un aparato nuevo no la tiene, y la granja ya lo había medido: con la base dentro del ZIP la app
+  llega a su colección; sin ella, el diálogo de error. Lo de SQLCipher («un `.db` en claro acaba en *malformed*») no se
+  cumplió ahí: la base en claro del proyecto abre.
+- **Opción elegida (A, decisión suya)**: «Ejecutar» / «Copiar todos» empaquetan SIEMPRE con `conBase`. Se descartaron
+  «solo si al aparato le falta» (B) y un botón aparte (C). Copiar todo es partir del proyecto, datos incluidos: los datos
+  de prueba del aparato se PISAN a propósito.
+- **«Copiar solo los modificados» sigue sin la base**: es código, y comparar `bd/` con el aparato pisaría datos por un
+  CRC distinto que nadie pidió copiar.
+- **Límite declarado, sin medir**: el ZIP añade y sobrescribe sin borrar, así que los `-wal`/`-shm` de la base vieja del
+  aparato se quedan al lado de la nueva. Si eso da una base rota al arrancar, el remedio es borrar esos dos ficheros
+  antes de subir; no se ha medido en un aparato con base previa.

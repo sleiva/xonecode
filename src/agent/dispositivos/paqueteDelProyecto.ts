@@ -28,6 +28,12 @@
  *   despliega es el código, no los datos. Por eso el tope por NOMBRE —`*.db` y sus
  *   auxiliares, `db.key`— vale en cualquier carpeta y no solo dentro de `bd/`: una base
  *   suelta en `files/` es la misma base.
+ *
+ *   **Esa es la regla por OMISIÓN, y dos caminos la invierten con `conBase`**: la granja (la copia
+ *   empieza vacía) y «Ejecutar» / «Copiar todos los ficheros» (IXCODE-78, decisión suya: en un
+ *   aparato donde la app nunca tuvo base no arranca, y copiar TODO es partir del proyecto, datos
+ *   incluidos). «Copiar solo los modificados» sigue sin ella. Lo de los `-wal`/`-shm` viejos sigue
+ *   siendo verdad con `conBase`: es el límite de esa decisión.
  */
 import { lstatSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";

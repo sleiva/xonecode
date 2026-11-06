@@ -453,7 +453,10 @@ export function lanzarEnDispositivo(
     // ---- 2. empaquetando ----------------------------------------------------------------
     let paquete: PaqueteDelProyecto;
     try {
-      paquete = solo === undefined ? empaquetar(peticion.raiz) : empaquetar(peticion.raiz, undefined, { solo });
+      // «Ejecutar» / «Copiar todos» lleva la BASE (IXCODE-78, decisión suya): en un aparato donde la app nunca tuvo
+      // `bd/gestion.db` no arranca («Base de datos no encontrada»), lo mismo medido en la granja. Pisa la del aparato, y
+      // es a propósito: copiar TODO es partir del proyecto. «Modificados» sigue sin ella: es código, no datos.
+      paquete = solo === undefined ? empaquetar(peticion.raiz, undefined, { conBase: true }) : empaquetar(peticion.raiz, undefined, { solo });
     } catch (error) {
       return acabar("empaquetando", { estado: "fallo", motivo: unaLineaDeLaSubida(error) });
     }

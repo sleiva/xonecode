@@ -27,6 +27,7 @@ import {
   type PeticionDeSubida,
   type RespuestaDeSubida,
 } from "./lanzamientoEnMaquina.js";
+import type { OpcionesDePaquete } from "./paqueteDelProyecto.js";
 
 /** El paquete que devolvió la medida: el flavor standalone. El otro tiene otro nombre. */
 const DEL_FRAMEWORK = "com.xone.android.framework";
@@ -535,6 +536,43 @@ describe("lanzarEnDispositivo", () => {
     soltar({ codigo: 200 });
     await expect(r.trabajo.terminado).resolves.toMatchObject({ estado: "cancelada", fase: "subiendo" });
     expect(JSON.stringify(r.l.llamadas)).not.toContain("force-stop");
+  });
+});
+
+describe("la base de datos viaja con «Copiar todos» (IXCODE-78)", () => {
+  it("«Ejecutar» / «Copiar todos los ficheros» empaqueta CON `bd/`: sin ella un aparato nuevo no arranca", async () => {
+    const opcionesVistas: (OpcionesDePaquete | undefined)[] = [];
+    const r = recorrido(
+      {
+        empaquetarProyecto: (_raiz, _tope, opciones) => {
+          opcionesVistas.push(opciones);
+          return PAQUETE;
+        },
+      },
+      lanzador()
+    );
+    await atender(r.l, 3);
+    await r.trabajo.terminado;
+    expect(opcionesVistas).toEqual([{ conBase: true }]);
+  });
+
+  it("«Copiar solo los modificados» NO la lleva: es código, y no pisa los datos del aparato", async () => {
+    const opcionesVistas: (OpcionesDePaquete | undefined)[] = [];
+    const r = recorrido(
+      {
+        compararConAparato: async () => ({ estado: "ok", comparados: 2, distintos: ["Main.xne"], nuevos: 0 }),
+        empaquetarProyecto: (_raiz, _tope, opciones) => {
+          opcionesVistas.push(opciones);
+          return PAQUETE;
+        },
+      },
+      lanzador(),
+      { ...PETICION, modo: "modificados" }
+    );
+    await atender(r.l, 3);
+    await r.trabajo.terminado;
+    expect(opcionesVistas).toHaveLength(1);
+    expect(opcionesVistas[0]?.conBase).toBeUndefined();
   });
 });
 
