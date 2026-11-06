@@ -211,11 +211,9 @@
 /* El recorrido. La misma tarjeta que una operación del registro de `/sync`: es lo que es —
    algo que pasó, con su hora y sus líneas— y no un mensaje de la conversación. */
 .recorrido {
+  composes: superficie from "./Superficie.module.css";
   display: flex;
   flex-direction: column;
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: var(--radio-tarjeta);
-  background: var(--dsw-alias-bg-layer-1);
   overflow: hidden;
 }
 

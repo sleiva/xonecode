@@ -10754,4 +10754,8 @@ Tres cosas que no se ven en el diseño y deciden la implementación:
   `prefers-reduced-motion: no-preference`.
 
 Primera pasada: botones (todos, por su papel), Escritorio, Tu equipo y las tarjetas del Resumen del proyecto, pestañas
-del panel. Lo demás que tiene caja de contenido (Ajustes, Tareas, Conectores…) va en una segunda, a la vista.
+del panel. Segunda: las 18 cajas de contenido que quedaban (filas de Ajustes, Subagentes, Skills y Conectores, motores
+locales, diagnóstico, desglose de tokens, recorrido de Ejecutar, Lo aprendido, Soporte, el gestor sin vincular, las
+tarjetas de Jira, de alta, de consulta y de aprobación, la ficha de una tarea y las del kanban). NO llevan relieve, a
+propósito: el chat (burbujas, capturas, artefactos), campos, filtros, tooltips y bandas — serían ruido, y una fila de la
+pestaña Tareas que ya usa su propio `::after` (la tarea en marcha).

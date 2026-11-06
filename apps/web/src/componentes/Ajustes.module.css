@@ -171,13 +171,11 @@
 /* La fila es una tarjeta: es lo que hace que el editor de una clave se lea DENTRO de su
    proveedor y no como un formulario suelto al final de la lista. */
 .fila {
+  composes: superficie from "./Superficie.module.css";
   display: flex;
   align-items: center;
   gap: var(--espacio-10);
   padding: var(--espacio-12) var(--espacio-12);
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: var(--radio-tarjeta);
-  background: var(--dsw-alias-bg-layer-2);
 }
 
 .fila[data-columna] {

@@ -96,13 +96,11 @@
 }
 
 .entrada {
+  composes: superficie from "./Superficie.module.css";
   display: flex;
   flex-direction: column;
   gap: var(--espacio-10);
   padding: var(--espacio-12) var(--espacio-16);
-  border-radius: var(--radio-tarjeta);
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  background: var(--dsw-alias-bg-layer-2);
 }
 
 .cabecera {

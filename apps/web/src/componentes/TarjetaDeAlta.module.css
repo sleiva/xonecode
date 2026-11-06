@@ -5,13 +5,11 @@
    motivo por el que `Bienvenida` y `Wizard` ya lo hacían antes de fundirse en esta única
    caja. */
 .tarjeta {
+  composes: superficie from "./Superficie.module.css";
   display: flex;
   flex-direction: column;
   gap: var(--espacio-16);
   width: min(480px, 100%);
   margin: 0 auto;
   padding: var(--espacio-24);
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: var(--radio-tarjeta);
-  background: var(--dsw-alias-bg-layer-1);
 }

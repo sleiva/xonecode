@@ -65,10 +65,8 @@
 }
 
 .fila {
+  composes: superficie from "./Superficie.module.css";
   padding: var(--espacio-10) var(--espacio-12);
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: var(--radio-tarjeta);
-  background: var(--dsw-alias-bg-layer-2);
 }
 
 .cabeceraDeFila {

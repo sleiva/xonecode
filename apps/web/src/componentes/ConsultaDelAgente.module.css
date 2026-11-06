@@ -3,6 +3,7 @@
    importados tal cual: es el mismo «Responder», no uno que se le parece. La forma, la del modo
    de pregunta del `ToolFallback` de assistant-ui, con nuestros alias. */
 .tarjeta {
+  composes: superficie from "./Superficie.module.css";
   /* Los alias que había aquí (`border-primary` y `bg-secondary`) no existen en ninguna paleta y resolvían a nada; estos son los que se querían. */
   align-self: flex-start;
   display: flex;
@@ -12,9 +13,6 @@
   width: 100%;
   max-width: 70ch;
   padding: var(--espacio-12);
-  border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: var(--radio-tarjeta);
-  background: var(--dsw-alias-bg-layer-2);
 }
 
 /* El registro de una pregunta contestada: las opciones como lista, sin controles, y la elegida

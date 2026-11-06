@@ -1,10 +1,8 @@
 /* Las tareas que dispara el gestor, junto al vínculo. Sin colores literales: alias del tema y de marca. */
 .caja {
+  composes: superficie from "./Superficie.module.css";
   margin-top: 8px;
   padding: var(--espacio-8) var(--espacio-10);
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: var(--radio-tarjeta);
-  background: var(--dsw-alias-bg-layer-1);
 }
 
 .cabecera {

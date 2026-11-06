@@ -769,14 +769,12 @@
 }
 
 .gestorSinVincular {
+  composes: superficie from "./Superficie.module.css";
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: var(--espacio-8);
   padding: var(--espacio-16);
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: var(--radio-tarjeta);
-  background: var(--dsw-alias-bg-layer-1);
 }
 
 .tituloDeGestor {

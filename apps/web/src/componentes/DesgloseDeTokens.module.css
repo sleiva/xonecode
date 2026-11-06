@@ -4,6 +4,7 @@
    (`ContadorDeTokens.module.css`, `state-business-*`): el diálogo es el detalle de esa
    pastilla y se viste igual. Las cifras en mono (`estilos/tipografia.css`). */
 .tarjeta {
+  composes: superficie from "./Superficie.module.css";
   display: flex;
   flex-direction: column;
   gap: var(--espacio-12);
@@ -11,9 +12,6 @@
   width: min(580px, 100%);
   margin: 0 auto;
   padding: var(--espacio-16) var(--espacio-16) var(--espacio-16);
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: var(--radio-tarjeta);
-  background: var(--dsw-alias-bg-layer-2);
 }
 
 .cabecera {
