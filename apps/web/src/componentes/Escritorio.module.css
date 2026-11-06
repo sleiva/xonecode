@@ -469,3 +469,13 @@
   background: var(--dsw-alias-bg-layer-1);
   color: var(--xonecode-cian);
 }
+
+/* La clave de la incidencia (IXCODE-81): dato que se copia y se teclea, en monoespaciada. */
+.claveDelGestor {
+  flex: none;
+  min-width: 72px;
+  color: var(--dsw-alias-label-tertiary);
+  font-family: var(--ds-font-family-code);
+  font-size: var(--tipo-pequeno);
+  white-space: nowrap;
+}

@@ -5,7 +5,7 @@ import { Planes } from "./componentes/Planes.js";
 import { Colecciones } from "./componentes/Colecciones.js";
 import type { crearStoreDelCliente } from "./store.js";
 import type { PeticionDeAprendido, RespuestaDeAprendido } from "./componentes/LoAprendido.js";
-import type { Acto, AprendizajeDelCable, EstadoDelGestor, FicheroDelProyecto, MapeoDeEstados, TareaDelCable, ActoDeSincronizacion, EleccionDeFramework, FotoDelResumen, ListadoDeSoporte, MensajeDelCliente, ModoDeEscritura } from "./tipos.js";
+import type { Acto, AprendizajeDelCable, EstadoDelGestor, FicheroDelProyecto, MapeoDeEstados, TareaDelCable, ActoDeSincronizacion, AsignadasDelProyecto, EleccionDeFramework, FotoDelResumen, TareaDelGestor, ListadoDeSoporte, MensajeDelCliente, ModoDeEscritura } from "./tipos.js";
 import type { Conexion } from "./conexion.js";
 import { ANCHO_BARRA_POR_OMISION, Maqueta } from "./componentes/Maqueta.js";
 import { Barra } from "./componentes/Barra.js";
@@ -457,6 +457,11 @@ export function App({
    * de «Nueva sesión con esta tarea», que abre el servidor y no pasa por `abrirSesion`.
    */
   const [enPanel, setEnPanel] = useState(false);
+  /** La pestaña con la que abrir el panel cuando se llega desde el Escritorio («Abrir en Tareas»); se olvida al dejar el panel. */
+  const [pestanaAlAbrir, setPestanaAlAbrir] = useState<"tareas" | undefined>(undefined);
+  useEffect(() => {
+    if (!enPanel) setPestanaAlAbrir(undefined);
+  }, [enPanel]);
 
   /**
    * El proyecto SIN copia local cuyo panel se mira (decisión 5 de la fusión con el resumen de
@@ -2196,7 +2201,8 @@ export function App({
    * nueva y vacía, justo lo que «no crear una nueva sesión» pide evitar—. Sin copia local sigue
    * el camino de siempre, la ventana que descarga: no hay panel de algo que no está en el equipo.
    */
-  const abrirProyecto = (proyecto: string): void => {
+  const abrirProyecto = (proyecto: string, pestana?: "tareas"): void => {
+    setPestanaAlAbrir(pestana);
     // Explícito y no solo por el efecto: con su panel ya delante, `setEnPanel(true)` no cambia nada.
     cerrarLectura();
     const identidad = estado.alta?.proyectos.find((p) => p.id === proyecto);
@@ -2213,6 +2219,21 @@ export function App({
     setEnPanel(true);
   };
 
+  /** Lo asignado a la persona en el gestor de un proyecto, para el Escritorio. Lo que no se entiende es «no consta». */
+  const pedirAsignadas = async (id: string): Promise<AsignadasDelProyecto | undefined> => {
+    const r = (await enviar({ clase: "copiaLocal", accion: "asignadas", proyecto: id })) as Response | undefined;
+    if (r === undefined || !r.ok) return undefined;
+    try {
+      const c = (await r.json()) as { conector?: unknown; lista?: unknown; error?: unknown };
+      return {
+        ...(typeof c.conector === "string" ? { conector: c.conector } : {}),
+        ...(Array.isArray(c.lista) ? { lista: c.lista as TareaDelGestor[] } : {}),
+        ...(typeof c.error === "string" ? { error: c.error } : {}),
+      };
+    } catch {
+      return undefined;
+    }
+  };
   /** La foto del resumen de un proyecto: la pide su panel y la pide el Escritorio, con la MISMA lectura. */
   const pedirResumen = async (id: string): Promise<FotoDelResumen | undefined> => {
     const r = (await enviar({ clase: "copiaLocal", accion: "resumen", proyecto: id })) as Response | undefined;
@@ -3752,7 +3773,7 @@ export function App({
                     },
                   })}
               tareasEnFondo={tareasEnFondo}
-              {...(volverATareas === undefined ? {} : { pestanaInicial: "tareas" as const })}
+              {...(volverATareas === undefined && pestanaAlAbrir !== "tareas" ? {} : { pestanaInicial: "tareas" as const })}
               // La puerta 2: el mapeo de estados y el disparo del vínculo, junto a él en Conectores. Contestado en la
               // propia respuesta (los estados vienen de la red, y solo al abrir el editor).
               tareasDesdeElGestor={{
@@ -3799,7 +3820,8 @@ export function App({
             <Escritorio
             conectado={estado.conectado}
             alPedirResumen={pedirResumen}
-            alAbrirProyecto={(proyecto) => abrirProyecto(proyecto)}
+            alAbrirProyecto={(proyecto, pestana) => abrirProyecto(proyecto, pestana)}
+            alPedirAsignadas={pedirAsignadas}
             // La misma elección que la barra: los destacados primero, el resto debajo.
             {...(estado.alta?.registrados.find((e) => e.id === entornoActivo)?.proyectos === undefined
               ? {}

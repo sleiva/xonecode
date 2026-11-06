@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { Escritorio } from "./Escritorio.js";
-import type { FotoDelResumen, TareaDelCable } from "../tipos.js";
+import type { AsignadasDelProyecto, FotoDelResumen, TareaDelCable } from "../tipos.js";
 
 const MANEJADORES = {
   alNuevaSesion: () => {},
@@ -656,6 +656,58 @@ describe("Escritorio: tareas en cifras", () => {
     );
     await new Promise((r) => setTimeout(r, 0));
     expect(screen.queryByText("Sin subir")).toBeNull();
+  });
+
+  it("del gestor: lo asignado, sin lo que ya es tarea; un fallo se dice; sin gestor, el bloque no sale", async () => {
+    const alAbrirProyecto = vi.fn();
+    const fila = (clave: string, titulo: string) => ({ clave, titulo, estado: "Por hacer", categoria: "por-hacer" as const });
+    const respuestas: Record<string, AsignadasDelProyecto> = {
+      a: { conector: "Jira", lista: [fila("IXCODE-81", "Exportar no responde"), fila("IXCODE-84", "Ya en marcha")] },
+      b: { conector: "Jira", error: "EACCES" },
+      c: {},
+    };
+    render(
+      <Escritorio
+        alNuevaSesion={() => {}}
+        alAbrirAjustes={() => {}}
+        proyectos={[
+          { id: "a", nombre: "Maset", local: true },
+          { id: "b", nombre: "Tienda", local: true },
+          { id: "c", nombre: "Sin gestor", local: true },
+        ]}
+        visibles={["a", "b", "c"]}
+        tareas={cola([tarea({ id: "t", proyecto: "a", ticket: { clave: "IXCODE-84", conector: "jira" } })])}
+        alPedirAsignadas={async (id) => respuestas[id]}
+        alAbrirProyecto={alAbrirProyecto}
+      />
+    );
+    const bloque = await screen.findByRole("region", { name: "Del gestor" });
+    expect(bloque.textContent).toContain("IXCODE-81");
+    expect(bloque.textContent).toContain("Exportar no responde");
+    expect(bloque.textContent).not.toContain("IXCODE-84");
+    expect(within(bloque).getByRole("alert").textContent).toBe("Jira de Tienda: no se pudo leer (EACCES).");
+    expect(bloque.textContent).not.toContain("Sin gestor");
+    fireEvent.click(within(bloque).getByRole("button", { name: "Abrir en Tareas" }));
+    expect(alAbrirProyecto).toHaveBeenCalledWith("a", "tareas");
+  });
+
+  it("sin ningún proyecto con gestor, «Del gestor» no se pinta", async () => {
+    let contestadas = 0;
+    render(
+      <Escritorio
+        alNuevaSesion={() => {}}
+        alAbrirAjustes={() => {}}
+        proyectos={[{ id: "a", nombre: "Maset", local: true }]}
+        tareas={cola([])}
+        alPedirAsignadas={async () => {
+          contestadas++;
+          return {};
+        }}
+      />
+    );
+    await new Promise((r) => setTimeout(r, 0));
+    expect(contestadas).toBe(1);
+    expect(screen.queryByRole("region", { name: "Del gestor" })).toBeNull();
   });
 
   it("los aparatos se cuentan solo con la foto de la máquina: arrancados o conectados", () => {

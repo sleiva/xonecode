@@ -98,5 +98,10 @@ control): la **C**, por fases. La fase 1 es solo cliente y pinta lo que ya viaja
 `lecturaDeSync`) a cada proyecto a la vista CON copia, al montarse. Suma solo lo medido (un error no cuenta, ni a cero)
 y cada proyecto con pendientes es una fila de la bandeja que lleva a su panel, donde se sube con el diff delante.
 
-Lo que la C enseñaba y aún no viaja al Escritorio, y por eso no se pinta (ni a cero): gasto de la semana en euros, preguntas pendientes en sesiones, incidencias del gestor
-asignadas, lo aprendido nuevo y los aparatos de la granja. Cada uno es una fase con su reunión en el servidor.
+**Fase 3, del gestor**: `accion: "asignadas"` (nueva, en la respuesta del POST, como `resumen`) hace la MISMA lectura
+que «Asignadas a mí» del panel (`pendientes` con `mias`) para un proyecto que no tiene por qué estar abierto. Sin vínculo,
+o con uno que no admite `mias`, vuelve vacío —no «ninguna»—; un fallo vuelve con su motivo. El Escritorio quita las
+que ya son una tarea de la cola (`ticket`) y cada fila lleva a la pestaña Tareas de su proyecto: empezar escribe en el
+gestor, con su tarjeta, y eso no se hace desde un resumen.
+
+Lo que la C enseñaba y aún no viaja al Escritorio, y por eso no se pinta (ni a cero): gasto de la semana en euros, preguntas pendientes en sesiones, lo aprendido nuevo y los aparatos de la granja. Cada uno es una fase con su reunión en el servidor.

@@ -348,6 +348,7 @@ import type {
   EstadoDelLanzamiento,
   EstadoDeSync,
   FotoDelResumen,
+  AsignadasDelProyecto,
   BaseDelFichero,
 } from "./transporte.js";
 // Valor y no tipo: la traducción de una `Tarea` a lo que viaja vive JUNTO al tipo que
@@ -7814,6 +7815,40 @@ export function montarRutas(
       respuesta.writeHead(200, { "content-type": "application/json" });
       respuesta.end(JSON.stringify(foto));
       return;
+    }
+    if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "copiaLocal" && mensaje.accion === "asignadas") {
+      // Lo ASIGNADO a la persona en el gestor de un proyecto, para el Escritorio: la MISMA lectura que «Asignadas a mí»
+      // del panel (`pendientes` con `mias`), pero de un proyecto que no tiene por qué estar abierto. Solo LECTURA. Del
+      // cable llega el ID; la raíz la pone el servidor, como en `resumen`. Contesta en la propia respuesta.
+      const identidad = proyectos.find((p) => p.id === mensaje.proyecto);
+      if (entornoElegido === undefined || identidad === undefined) {
+        respuesta.writeHead(409, { "content-type": "application/json" });
+        respuesta.end(JSON.stringify({ motivo: "ese proyecto no está en el listado del entorno activo" }));
+        return;
+      }
+      const raiz = vestibulo.raizDeProyecto(entornoElegido, identidad.nombre);
+      const contestar = (cuerpo: AsignadasDelProyecto): void => {
+        respuesta.writeHead(200, { "content-type": "application/json" });
+        respuesta.end(JSON.stringify(cuerpo));
+      };
+      // Sin copia no hay `config.json` con vínculo; sin vínculo, o con uno que no sabe filtrar por persona, no hay
+      // «asignadas a mí» que preguntar: vuelve VACÍO, que no es «ninguna».
+      let vinculo: Vinculo | undefined;
+      try {
+        vinculo = esProyectoEnDisco(raiz) ? cargar(raiz).config.proyecto?.gestorDeTareas : undefined;
+      } catch {
+        vinculo = undefined;
+      }
+      const g = vinculo === undefined || !admiteMiasDelVinculo(vinculo) ? undefined : gestorDe(vinculo.conector);
+      if (vinculo === undefined || g === undefined) return contestar({});
+      const conector = nombreDelConector(vinculo.conector);
+      try {
+        await asegurarSitios(g);
+        const lista = await g.pendientes(vinculo, undefined, { mias: true });
+        return contestar({ conector, lista });
+      } catch (error) {
+        return contestar({ conector, error: motivoDeGestorParaElCable(error) });
+      }
     }
     if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "copiaLocal" && mensaje.accion === "modoDeEscritura") {
       // IXCODE-31. Del cable llega el ID y, opcional, el modo; la raíz la pone el servidor,

@@ -12317,6 +12317,64 @@ describe("el cable: la copia local y los fijados", () => {
     rmSync(base, { recursive: true, force: true });
   });
 
+  /**
+   * Lo asignado a la persona en el gestor de un proyecto, para el Escritorio: la MISMA lectura que «Asignadas a mí»
+   * del panel, de un proyecto que no tiene por qué estar abierto. Sin vínculo vuelve VACÍO —no «ninguna»—, un fallo
+   * vuelve con su motivo y sin la ruta, y un id ajeno es 409.
+   */
+  it("«asignadas»: con vínculo pregunta con `mias`; sin él, vacío; un fallo, su motivo; un id ajeno, 409", async () => {
+    const { base, raiz } = workspaceConTienda();
+    const ficha = { clave: "IXCODE-12", titulo: "El panel", estado: "Por hacer", categoria: "por-hacer" as const, descripcion: "", asignado: "Sergio" };
+    const ajena = { ...ficha, clave: "IXCODE-13", asignado: "Otra persona" };
+    const opciones: unknown[] = [];
+    let falla: Error | undefined;
+    class Gestor extends GestorDeTareasEnMemoria {
+      override async pendientes(...a: Parameters<GestorDeTareasEnMemoria["pendientes"]>) {
+        opciones.push(a[2]);
+        if (falla !== undefined) throw falla;
+        return super.pendientes(...a);
+      }
+    }
+    const gestor = new Gestor({ sitios: [{ id: "c1", nombre: "xone", url: "https://x" }], proyectos: { c1: [{ clave: "IXCODE", nombre: "X" }] }, tareas: [ficha, ajena], yo: "Sergio" });
+    const { accion } = await conectado(vestibuloDePrueba({ baseDeWorkspace: () => base }), {
+      gestorDeTareas: (c) => (c === "jira" ? gestor : undefined),
+    });
+    // Sin vínculo: vacío, y sin preguntar a nadie.
+    let r = await accion({ clase: "copiaLocal", accion: "asignadas", proyecto: "p1" });
+    expect(r.estado).toBe(200);
+    expect(JSON.parse(r.cuerpo)).toEqual({});
+    expect(opciones).toEqual([]);
+
+    writeFileSync(
+      join(raiz, ".xonecode", "config.json"),
+      JSON.stringify({ gestorDeTareas: { conector: "jira", sitio: "c1", proyecto: "IXCODE", admiteMias: true } })
+    );
+    r = await accion({ clase: "copiaLocal", accion: "asignadas", proyecto: "p1" });
+    const cuerpo = JSON.parse(r.cuerpo) as { conector?: string; lista?: { clave: string }[] };
+    expect(cuerpo.conector).toBe("Jira");
+    expect(cuerpo.lista?.map((t) => t.clave)).toEqual(["IXCODE-12"]);
+    expect(opciones.at(-1)).toEqual({ mias: true });
+
+    falla = Object.assign(new Error(`EACCES: open '${raiz}/x'`), { code: "EACCES" });
+    r = await accion({ clase: "copiaLocal", accion: "asignadas", proyecto: "p1" });
+    expect(JSON.parse(r.cuerpo)).toEqual({ conector: "Jira", error: "EACCES" });
+    expect(r.cuerpo).not.toContain(raiz);
+
+    // Un vínculo que no sabe filtrar por persona: vacío, como sin vínculo.
+    writeFileSync(
+      join(raiz, ".xonecode", "config.json"),
+      JSON.stringify({ gestorDeTareas: { conector: "jira", sitio: "c1", proyecto: "IXCODE", admiteMias: false } })
+    );
+    falla = undefined;
+    const antes = opciones.length;
+    r = await accion({ clase: "copiaLocal", accion: "asignadas", proyecto: "p1" });
+    expect(JSON.parse(r.cuerpo)).toEqual({});
+    expect(opciones.length).toBe(antes);
+
+    expect((await accion({ clase: "copiaLocal", accion: "asignadas", proyecto: "no-existe" })).estado).toBe(409);
+    rmSync(base, { recursive: true, force: true });
+  });
+
   /** IXCODE-31: el modo con que nacen las sesiones nuevas, global y por proyecto. */
   it("el modo GLOBAL viaja en la bienvenida y se cambia por el cable", async () => {
     let enDisco: "supervisado" | "autonomo" = "supervisado";

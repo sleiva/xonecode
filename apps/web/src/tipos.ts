@@ -1265,6 +1265,13 @@ export interface BaseDelFichero {
  * proyecto, decididos por el servidor por su raíz; `sync` es la medida de la banda de
  * CloudStudio, AUSENTE sin copia bajada.
  */
+/** Redeclarado de `transporte.ts#AsignadasDelProyecto`: sin `lista` ni `error`, ese proyecto no sabe decir «asignadas a mí». */
+export interface AsignadasDelProyecto {
+  conector?: string;
+  lista?: TareaDelGestor[];
+  error?: string;
+}
+
 export interface FotoDelResumen {
   tareas: string[];
   sync?: EstadoDeSync;
@@ -1562,6 +1569,8 @@ export type MensajeDelCliente =
   | { clase: "copiaLocal"; accion: "abrirCarpeta"; proyecto: string }
   /** Pedir la FOTO del resumen del proyecto: 200 con `FotoDelResumen`, o 409 con `{ motivo }`. */
   | { clase: "copiaLocal"; accion: "resumen"; proyecto: string }
+  /** Lo asignado a la persona en el gestor del proyecto: 200 con `AsignadasDelProyecto`, o 409 con `{ motivo }`. */
+  | { clase: "copiaLocal"; accion: "asignadas"; proyecto: string }
   /** Fijar —o quitar, sin `modo`— el modo de las sesiones nuevas del proyecto (IXCODE-31): 200
    *  con `{ proyecto? }`, 409 con `{ motivo }`. */
   | { clase: "copiaLocal"; accion: "modoDeEscritura"; proyecto: string; modo?: ModoDeEscritura }

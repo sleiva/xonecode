@@ -1272,6 +1272,19 @@ export interface BaseDelFichero {
  * `sync` es la MISMA medida que la banda de CloudStudio (`lecturaDeSync`), y AUSENTE cuando no
  * hay copia bajada — que no es lo mismo que «nada por subir».
  */
+/**
+ * Lo asignado a la persona en el gestor de un proyecto, como vuelve de `accion: "asignadas"` (el Escritorio).
+ *
+ * TRES casos y no dos: sin `lista` ni `error` el proyecto no tiene gestor que sepa decir «asignadas a mí» (sin copia,
+ * sin vínculo, o un vínculo que no lo admite) — que no es «no tienes ninguna». `error` = se preguntó y falló, con el
+ * motivo ya limpio para el cable (`motivoDeGestorParaElCable`). `conector` es el NOMBRE del gestor, para el rótulo.
+ */
+export interface AsignadasDelProyecto {
+  conector?: string;
+  lista?: TareaDelGestor[];
+  error?: string;
+}
+
 export interface FotoDelResumen {
   tareas: string[];
   sync?: EstadoDeSync;
@@ -1604,6 +1617,9 @@ export type MensajeDelCliente =
   /** Pedir la FOTO del resumen del proyecto. Contesta 200 con un `FotoDelResumen` en la propia
    *  respuesta, o 409 con `{ motivo }`. Mismo trato que `borrar`: el ID, nunca una ruta. */
   | { clase: "copiaLocal"; accion: "resumen"; proyecto: string }
+  /** Las tareas de su gestor ASIGNADAS a la persona, para el Escritorio. 200 con `AsignadasDelProyecto` en la propia
+   *  respuesta, o 409 con `{ motivo }` si el id no es del entorno activo. Mismo trato que `resumen`: el ID, nunca una ruta. */
+  | { clase: "copiaLocal"; accion: "asignadas"; proyecto: string }
   /** Fijar —o quitar, sin `modo`— el modo con que nacen las sesiones nuevas de este proyecto
    *  (IXCODE-31). 200 con `{ proyecto? }`, 409 con `{ motivo }` sin copia o con un id ajeno, y
    *  400 con un modo que no existe. Mismo trato que `resumen`: el ID, nunca una ruta. */

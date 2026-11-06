@@ -4,7 +4,7 @@ import { IconoCompartido } from "./IconosDeProyecto.js";
 import estilos from "./Escritorio.module.css";
 import { Equipo } from "./Equipo.js";
 import { Kanban } from "./Kanban.js";
-import type { Acto, EstadoDeSync, FotoDelResumen, InformeDeDispositivos, TareaDelCable } from "../tipos.js";
+import type { Acto, AsignadasDelProyecto, EstadoDeSync, FotoDelResumen, InformeDeDispositivos, TareaDelCable } from "../tipos.js";
 import { useEffect, useState } from "react";
 import { EnMarcha } from "./TareasDelProyecto.js";
 
@@ -68,6 +68,7 @@ export function Escritorio({
   tableroAbierto,
   alPedirResumen,
   alAbrirProyecto,
+  alPedirAsignadas,
 }: {
   /** El saludo (`agent/persona.ts`). Ausente = se saluda igual, sin inventarse un nombre. */
   nombre?: string;
@@ -175,8 +176,10 @@ export function Escritorio({
   /** La FOTO del resumen de un proyecto (`accion: "resumen"`), la MISMA que pinta su pestaña Resumen: de ella sale lo
    *  que queda por subir. Ausente = no se pide, y «sin subir» no se pinta. */
   alPedirResumen?: (proyecto: string) => Promise<FotoDelResumen | undefined>;
-  /** Abrir el panel de un proyecto, como pulsarlo en la barra. Ausente = la fila de «sin subir» no ofrece ir. */
-  alAbrirProyecto?: (proyecto: string) => void;
+  /** Abrir el panel de un proyecto, como pulsarlo en la barra; con `"tareas"`, en esa pestaña. Ausente = no se ofrece ir. */
+  alAbrirProyecto?: (proyecto: string, pestana?: "tareas") => void;
+  /** Lo asignado a la persona en el gestor de un proyecto (`accion: "asignadas"`). Ausente = no se pide ni se pinta. */
+  alPedirAsignadas?: (proyecto: string) => Promise<AsignadasDelProyecto | undefined>;
 }) {
   const apagado = conectado === false;
   /** El tablero de tareas, plegado en cifras por omisión (su lienzo): se despliega para actuar sobre una. */
@@ -190,6 +193,7 @@ export function Escritorio({
   const destacados = [...fijadosALaVista, ...elegidos.filter((p) => !fijadosALaVista.includes(p))];
   const otros = proyectos.filter((p) => !destacados.includes(p));
   const sinSubir = useSinSubir(destacados, alPedirResumen);
+  const asignadas = usePorProyecto(destacados, alPedirAsignadas);
   return (
     <div className={estilos.escritorio}>
       <div className={estilos.contenido}>
@@ -258,6 +262,16 @@ export function Escritorio({
                 {...(mirada === undefined ? {} : { mirada })}
                 conectado={conectado}
                 alPlegar={() => setVerTablero(false)}
+              />
+            )}
+
+            {asignadas === undefined || verTablero ? null : (
+              <DelGestor
+                asignadas={asignadas}
+                proyectos={proyectos}
+                conTarea={new Set((tareas?.lista ?? []).flatMap((t) => (t.ticket === undefined ? [] : [t.ticket.clave])))}
+                apagado={apagado}
+                {...(alAbrirProyecto === undefined ? {} : { alAbrirEnTareas: (id: string) => alAbrirProyecto(id, "tareas") })}
               />
             )}
 
@@ -398,26 +412,42 @@ function useSinSubir(
   destacados: readonly { id: string; local?: boolean }[],
   alPedirResumen?: (proyecto: string) => Promise<FotoDelResumen | undefined>,
 ): Readonly<Record<string, EstadoDeSync>> | undefined {
-  const [medidas, setMedidas] = useState<Record<string, EstadoDeSync>>({});
+  const fotos = usePorProyecto(destacados, alPedirResumen);
+  if (fotos === undefined) return undefined;
+  const medidas = Object.fromEntries(Object.entries(fotos).flatMap(([id, f]) => (f.sync === undefined ? [] : [[id, f.sync] as const])));
+  return Object.values(medidas).some((m) => typeof m.pendientes === "number") ? medidas : undefined;
+}
+
+/**
+ * Pedir algo a CADA proyecto a la vista con copia local, y guardar lo que conteste. Se vuelve a pedir al montar el
+ * Escritorio —volver a él es volver a mirar— y cuando cambia QUÉ proyectos se enseñan; lo que llega de un montaje ya
+ * desmontado se tira. `undefined` mientras no haya contestado ninguno (o sin manejador): lo que no consta no se pinta.
+ */
+function usePorProyecto<T>(
+  destacados: readonly { id: string; local?: boolean }[],
+  pedir?: (proyecto: string) => Promise<T | undefined>,
+): Readonly<Record<string, T>> | undefined {
+  const [respuestas, setRespuestas] = useState<Record<string, T> | undefined>(undefined);
   const conCopia = destacados.filter((p) => p.local === true).map((p) => p.id);
   const clave = conCopia.join("\u0000");
   useEffect(() => {
-    if (alPedirResumen === undefined || conCopia.length === 0) return;
+    if (pedir === undefined || conCopia.length === 0) return;
     let vivo = true;
-    void Promise.all(conCopia.map(async (id) => [id, (await alPedirResumen(id))?.sync] as const)).then((pares) => {
+    void Promise.all(conCopia.map(async (id) => [id, await pedir(id)] as const)).then((pares) => {
       if (!vivo) return;
-      const nuevas: Record<string, EstadoDeSync> = {};
-      for (const [id, sync] of pares) if (sync !== undefined) nuevas[id] = sync;
-      setMedidas(nuevas);
+      const nuevas: Record<string, T> = {};
+      for (const [id, r] of pares) if (r !== undefined) nuevas[id] = r;
+      setRespuestas(nuevas);
     });
     return () => {
       vivo = false;
     };
-    // `clave` resume `conCopia`; el manejador cambia de identidad en cada render de App y no es motivo para volver a medir.
+    // `clave` resume `conCopia`; el manejador cambia de identidad en cada render de App y no es motivo para volver a pedir.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clave]);
-  const medidosAhora = Object.fromEntries(Object.entries(medidas).filter(([id]) => conCopia.includes(id)));
-  return Object.values(medidosAhora).some((m) => typeof m.pendientes === "number") ? medidosAhora : undefined;
+  if (respuestas === undefined) return undefined;
+  const deAhora = Object.fromEntries(Object.entries(respuestas).filter(([id]) => conCopia.includes(id)));
+  return Object.keys(deAhora).length === 0 ? undefined : deAhora;
 }
 
 /** Una fila de «por subir»: un proyecto con ficheros pendientes, de mayor a menor. Un error o un «no consta» no entra. */
@@ -636,6 +666,78 @@ function LoQueTeEspera({
                   Abrir el proyecto
                 </button>
               )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+/** Cuántas filas del gestor se enseñan antes de contar el resto: el Escritorio resume, la pestaña Tareas lista. */
+export const TOPE_DEL_GESTOR = 6;
+
+/**
+ * **Del gestor** (lienzo C): lo ASIGNADO a la persona en el gestor de cada proyecto a la vista, sin las que ya son una
+ * tarea de la cola (`TareaDelCable.ticket`). Cada fila lleva a la pestaña Tareas de su proyecto, donde está «Nueva
+ * sesión con esta tarea» con su tarjeta: empezar escribe en el gestor, y eso no se hace desde un resumen.
+ *
+ * Un proyecto sin gestor que sepa decir «asignadas a mí» no aparece; uno que falló lo DICE con su motivo. Sin ningún
+ * proyecto con gestor, el bloque no se pinta.
+ */
+function DelGestor({
+  asignadas,
+  proyectos,
+  conTarea,
+  apagado,
+  alAbrirEnTareas,
+}: {
+  asignadas: Readonly<Record<string, AsignadasDelProyecto>>;
+  proyectos: readonly { id: string; nombre: string }[];
+  conTarea: ReadonlySet<string>;
+  apagado: boolean;
+  alAbrirEnTareas?: (proyecto: string) => void;
+}) {
+  const conGestor = Object.entries(asignadas).filter(([, a]) => a.lista !== undefined || a.error !== undefined);
+  if (conGestor.length === 0) return null;
+  const nombre = (id: string) => proyectos.find((p) => p.id === id)?.nombre ?? id;
+  const filas = conGestor.flatMap(([id, a]) =>
+    (a.lista ?? []).filter((t) => !conTarea.has(t.clave)).map((t) => ({ proyecto: id, conector: a.conector, tarea: t })),
+  );
+  const fallos = conGestor.filter(([, a]) => a.error !== undefined);
+  const conectores = [...new Set(conGestor.flatMap(([, a]) => (a.conector === undefined ? [] : [a.conector])))];
+  return (
+    <section className={estilos.bandeja} aria-label="Del gestor">
+      <div className={estilos.cabeceraDeBloque}>
+        <h2 className={estilos.tituloDeBloque}>Del gestor</h2>
+        <span className={estilos.resto}>{`${conectores.join(" y ")} · asignadas a ti, sin tarea`}</span>
+      </div>
+      {filas.length === 0 && fallos.length === 0 ? (
+        <p className={estilos.vacio}>Nada asignado a ti que no sea ya una tarea.</p>
+      ) : (
+        <ul className={estilos.listaDeEspera}>
+          {filas.slice(0, TOPE_DEL_GESTOR).map(({ proyecto, tarea: t }) => (
+            <li key={`${proyecto}-${t.clave}`} className={estilos.filaDeEspera} data-clase="gestor">
+              <span className={estilos.claveDelGestor}>{t.etiqueta ?? t.clave}</span>
+              <span className={estilos.textoDeEspera}>
+                <span className={estilos.tituloDeEspera}>{t.titulo}</span>
+                <span className={estilos.detalleDeEspera}>{`${nombre(proyecto)} · ${t.estado}`}</span>
+              </span>
+              {alAbrirEnTareas === undefined ? null : (
+                <button type="button" className={estilos.empezarTarea} disabled={apagado} onClick={() => alAbrirEnTareas(proyecto)}>
+                  Abrir en Tareas
+                </button>
+              )}
+            </li>
+          ))}
+          {filas.length > TOPE_DEL_GESTOR ? (
+            <li className={estilos.filaDeEspera} data-clase="resto">
+              <span className={estilos.detalleDeEspera}>{`Y ${filas.length - TOPE_DEL_GESTOR} más en la pestaña Tareas de cada proyecto.`}</span>
+            </li>
+          ) : null}
+          {fallos.map(([id, a]) => (
+            <li key={`fallo-${id}`} className={estilos.filaDeEspera} data-clase="fallo">
+              <span className={estilos.detalleDeEspera} role="alert">{`${a.conector ?? "El gestor"} de ${nombre(id)}: no se pudo leer (${a.error}).`}</span>
             </li>
           ))}
         </ul>
