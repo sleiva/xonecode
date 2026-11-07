@@ -520,3 +520,46 @@
   font-size: var(--tipo-mini);
   line-height: 18px;
 }
+
+/* ── Estilo Neo brutalist (`estilos/estilosVisuales.css`) ────────────────────────────────────────────────────────────
+   La barra por dentro, como en su lienzo: cada proyecto es una caja con filo de tinta; el ABIERTO, un bloque ámbar con
+   sombra dura; la sesión abierta, recuadrada (el filo de cian sobra: lo dice el recuadro); los rótulos de sección en
+   monoespaciada; y «Tarea», una etiqueta naranja con filo. Solo existe con `body[data-estilo="neo"]`. */
+
+:global(body[data-estilo="neo"]) .filaDeProyecto.filaDeProyecto {
+  margin-bottom: var(--espacio-6);
+  border: 2px solid var(--xonecode-relieve-tinta);
+  border-radius: var(--radio-control);
+  background: var(--dsw-alias-bg-layer-2);
+}
+
+:global(body[data-estilo="neo"]) .filaAbierta.filaAbierta.filaAbierta {
+  background: var(--xonecode-relieve-ambar);
+  box-shadow: 3px 3px 0 var(--xonecode-relieve-tinta);
+}
+
+:global(body[data-estilo="neo"]) .filaAbierta .tituloActivo,
+:global(body[data-estilo="neo"]) .filaAbierta .nombreDeProyecto.nombreDeProyecto {
+  color: var(--xonecode-relieve-sobre-color);
+}
+
+:global(body[data-estilo="neo"]) .sesionAbierta.sesionAbierta.sesionAbierta {
+  border: 2px solid var(--xonecode-relieve-tinta);
+  border-radius: var(--radio-control);
+}
+
+:global(body[data-estilo="neo"]) .sesionAbierta::before {
+  content: none;
+}
+
+:global(body[data-estilo="neo"]) .rotulo.rotulo {
+  color: var(--xonecode-relieve-tinta);
+  font-family: var(--ds-font-family-code);
+}
+
+:global(body[data-estilo="neo"]) .marcaDeTarea {
+  border: 1.5px solid var(--xonecode-relieve-tinta);
+  background: var(--xonecode-naranja);
+  color: var(--xonecode-relieve-sobre-color);
+  font-weight: var(--peso-fuerte);
+}

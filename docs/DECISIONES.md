@@ -10798,3 +10798,21 @@ donde la app nunca tuvo base no arranca («Base de datos no encontrada»).
   clic en Ajustes pone `data-estilo` y lo guarda. **Límites**: el cristal solo luce donde hay halo detrás (Escritorio y
   panel del proyecto); no se han probado con Glass los menús flotantes dentro de una tarjeta (`backdrop-filter` crea
   bloque contenedor de los `fixed`); «Consola dev» es aún solo su forma, sin la disposición de IDE.
+
+## Neo brutalist, la pantalla entera y no solo las tarjetas (07-11-2026)
+
+- **El primer pase (0.98.0) se quedó corto**: el estilo solo cambiaba radios, filos y sombras de tarjetas y botones, y el
+  usuario no reconoció el diseño del lienzo («no ha cambiado el estilo y layout»). Lo que hace un estilo es lo que más se
+  VE: fondo, bloques de color, barra lateral, pestañas, letra.
+- **Cómo se pinta lo que no es un token**: en el `.module.css` de cada componente, bajo `:global(body[data-estilo="neo"])`
+  (Escritorio, Barra, Pestañas, Chat, Compositor, Kanban, SidebarRoot). Sin estilo esas reglas no existen; los colores
+  salen de la marca y del tema (`--xonecode-relieve-tinta`, `-sobre-color`, `-ambar`), sin literales.
+- **El fondo cálido sin un color nuevo**: el blanco de la capa con un 8 % del naranja de marca, solo en claro, y con
+  `:not([data-ds-dark-theme])` para pesar más que el puente de un tema. Las cifras llevan `data-color` (fijo) además de
+  `data-tono` (solo con valor > 0): en el diseño el color es de la cifra, no de que haya algo que contar.
+- **Medido en oscuro**: el texto sobre los bloques no se leía en «Azul noche», cuyo azul hondo es claro; en oscuro el
+  texto sobre color es el fondo del tema y el ámbar se aclara hacia el texto.
+- **Space Grotesk, empaquetada** (`@fontsource-variable`, OFL) como Inter y JetBrains Mono, no de Google Fonts: la
+  consola tiene modo sin red. Entra como TERCER token de familia, `--xonecode-fuente-titulo` (en el clásico, la de la
+  interfaz); el test de familias lo admite.
+- **Límites**: el chat se vio sin turnos reales; los iconos pequeños sobre el proyecto abierto en oscuro quedan flojos.

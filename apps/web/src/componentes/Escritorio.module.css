@@ -10,6 +10,7 @@
   padding: var(--espacio-24);
   /* Los dos halos de luz de la marca (relieve AC3, `estilos/relieve.css`), sobre el fondo de siempre. */
   background-image: var(--xonecode-relieve-halo);
+  background-size: var(--xonecode-relieve-halo-tamano);
   background-attachment: local;
 }
 
@@ -564,4 +565,109 @@
   margin: 0;
   color: var(--dsw-alias-label-tertiary);
   font-size: var(--tipo-pequeno);
+}
+
+/* ── Estilo Neo brutalist (`estilos/estilosVisuales.css`) ────────────────────────────────────────────────────────────
+   Lo que en este estilo deja de ser tarjeta neutra y pasa a BLOQUE de color de marca con filo de tinta y sombra dura:
+   la portada (cian), las cifras con su color FIJO aunque valgan cero (`data-color`, no `data-tono`: cian, naranja,
+   ámbar, verde), «Trabajando ahora» (azul) y los
+   iconos de la bandeja. Solo se activa con `body[data-estilo="neo"]`; en otro estilo estas reglas no existen. El texto
+   sobre el color es `--xonecode-relieve-sobre-color`, que se lee en los dos modos. */
+
+:global(body[data-estilo="neo"]) .portada {
+  padding: var(--espacio-24);
+  border: 2px solid var(--xonecode-relieve-tinta);
+  border-radius: var(--radio-tarjeta);
+  background: var(--xonecode-cian);
+  box-shadow: var(--xonecode-relieve-sombra);
+}
+
+:global(body[data-estilo="neo"]) .portada .saludo {
+  color: var(--xonecode-relieve-sobre-color);
+  letter-spacing: -0.035em;
+}
+
+:global(body[data-estilo="neo"]) .portada .entorno,
+:global(body[data-estilo="neo"]) .portada .entornoNombre,
+:global(body[data-estilo="neo"]) .portada .entornoUrl {
+  color: var(--xonecode-relieve-sobre-color);
+}
+
+:global(body[data-estilo="neo"]) .portada .entornoNombre::after {
+  background: var(--xonecode-relieve-sobre-color);
+}
+
+:global(body[data-estilo="neo"]) .cifra.cifra[data-color="marcha"] {
+  background: var(--xonecode-cian);
+}
+
+:global(body[data-estilo="neo"]) .cifra.cifra[data-color="espera"] {
+  background: var(--xonecode-naranja);
+}
+
+:global(body[data-estilo="neo"]) .cifra.cifra[data-color="subir"] {
+  background: var(--xonecode-relieve-ambar);
+}
+
+:global(body[data-estilo="neo"]) .cifra.cifra[data-color="listos"] {
+  background: var(--xonecode-verde);
+}
+
+:global(body[data-estilo="neo"]) .cifra.cifra[data-color] dt,
+:global(body[data-estilo="neo"]) .cifra.cifra[data-color] dd {
+  color: var(--xonecode-relieve-sobre-color);
+}
+
+:global(body[data-estilo="neo"]) .cifra dd:not(.notaDeCifra) {
+  font-family: var(--xonecode-fuente-titulo);
+  letter-spacing: -0.03em;
+}
+
+:global(body[data-estilo="neo"]) .trabajando {
+  border: 2px solid var(--xonecode-relieve-tinta);
+  background: var(--xonecode-azul);
+  box-shadow: var(--xonecode-relieve-sombra);
+}
+
+:global(body[data-estilo="neo"]) .trabajando .rotuloDeTrabajando,
+:global(body[data-estilo="neo"]) .trabajando .colaDeTrabajando {
+  color: var(--xonecode-sobre-azul-suave);
+}
+
+:global(body[data-estilo="neo"]) .trabajando .tituloDeTrabajando {
+  color: var(--xonecode-sobre-azul);
+}
+
+:global(body[data-estilo="neo"]) .filaDeEspera + .filaDeEspera,
+:global(body[data-estilo="neo"]) .proyecto + .proyecto {
+  border-top: 2px solid color-mix(in srgb, var(--xonecode-relieve-tinta) 18%, var(--dsw-alias-bg-layer-2));
+}
+
+:global(body[data-estilo="neo"]) .iconoDeEspera {
+  border: 2px solid var(--xonecode-relieve-tinta);
+  border-radius: var(--radio-control);
+  background: var(--xonecode-cian);
+  color: var(--xonecode-relieve-sobre-color);
+  box-shadow: 2px 2px 0 var(--xonecode-relieve-tinta);
+}
+
+:global(body[data-estilo="neo"]) .filaDeEspera[data-clase="pausa"] .iconoDeEspera {
+  background: var(--xonecode-naranja);
+}
+
+:global(body[data-estilo="neo"]) .filaDeEspera[data-clase="avisos"] .iconoDeEspera {
+  background: var(--xonecode-rojo);
+  color: var(--xonecode-relieve-sobre-color);
+}
+
+:global(body[data-estilo="neo"]) .filaDeEspera[data-clase="subir"] .iconoDeEspera {
+  background: var(--xonecode-relieve-ambar);
+}
+
+:global(body[data-estilo="neo"]) .bandeja > .vacio {
+  border: 2px dashed var(--xonecode-relieve-tinta);
+}
+
+:global(body[data-estilo="neo"]) .tituloDeBloque {
+  letter-spacing: -0.02em;
 }

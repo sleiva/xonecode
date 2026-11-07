@@ -1222,3 +1222,18 @@
   font-size: var(--tipo-cuerpo);
   font-weight: var(--peso-fuerte);
 }
+
+/* ── Estilo Neo brutalist (`estilos/estilosVisuales.css`) ────────────────────────────────────────────────────────────
+   El mensaje de la persona, con el filo de tinta y la sombra dura (las tarjetas del agente ya lo traen de `Superficie`);
+   su avatar, un bloque ámbar recuadrado. Solo existe con `body[data-estilo="neo"]`. */
+
+:global(body[data-estilo="neo"]) .usuario {
+  border: 2px solid var(--xonecode-relieve-tinta);
+  box-shadow: var(--xonecode-relieve-sombra);
+}
+
+:global(body[data-estilo="neo"]) .avatarDeLaPersona {
+  border: 2px solid var(--xonecode-relieve-tinta);
+  background: var(--xonecode-relieve-ambar);
+  color: var(--xonecode-relieve-sobre-color);
+}

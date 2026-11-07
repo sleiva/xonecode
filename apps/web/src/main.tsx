@@ -8,6 +8,9 @@ import { createRoot } from "react-dom/client";
 // y no pintan nada: quien las aplica es `tipografia.css`, la última de la lista.
 import "@fontsource-variable/inter";
 import "@fontsource-variable/jetbrains-mono";
+// La de los TÍTULOS del estilo Neo brutalist (`--xonecode-fuente-titulo`): solo declara su `@font-face`, y el
+// navegador no la descarga hasta que una regla la usa.
+import "@fontsource-variable/space-grotesk";
 import "../estilos/base.css";
 import "../estilos/design-platform.css";
 import "../estilos/corner-shape.css";

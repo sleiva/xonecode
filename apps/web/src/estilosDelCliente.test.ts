@@ -67,8 +67,10 @@ describe("los alias que usa el cliente existen", () => {
  * porque solo mira `--dsw-alias-*` SIN fallback.
  */
 describe("la tipografía sale de sus dos tokens", () => {
-  it("cada font-family de una hoja del cliente lee --dsw-font-family o --ds-font-family-code", () => {
-    const permitidas = /^(var\(--dsw-font-family\)|var\(--ds-font-family-code\)|inherit)$/;
+  it("cada font-family de una hoja del cliente lee --dsw-font-family, --ds-font-family-code o la de títulos", () => {
+    // `--xonecode-fuente-titulo` es la tercera, declarada en el mismo sitio: en el clásico vale `--dsw-font-family`
+    // y un estilo la cambia (Neo brutalist, Space Grotesk).
+    const permitidas = /^(var\(--dsw-font-family\)|var\(--ds-font-family-code\)|var\(--xonecode-fuente-titulo\)|inherit)$/;
     const sueltas: string[] = [];
     for (const ruta of hojasDelCliente().filter((r) => r.endsWith(".module.css"))) {
       const css = sinComentarios(readFileSync(ruta, "utf8"));
@@ -299,6 +301,7 @@ describe("el puente de temas", () => {
       "icono-": "colores de tipo de fichero (y la máscara de `icono-copiar`): son de la marca, no del tema; validados en claro y oscuro",
       "relieve-": "derivados declarados en `estilos/relieve.css` sobre `body`: se recalculan con los colores del tema, sin puente propio",
       mascara: "el canal alfa de una máscara (`Superficie.module.css`): no se pinta, solo recorta",
+      "fuente-titulo": "una familia tipográfica (`tipografia.css`), no un color: el tema no la toca",
     };
     const excepcion = (n: string): boolean =>
       Object.keys(EXCEPCIONES).some((k) => (k.endsWith("-") ? n.startsWith(k) : n === k));

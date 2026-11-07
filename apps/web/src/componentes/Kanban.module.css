@@ -208,3 +208,37 @@
   text-decoration: underline;
   cursor: pointer;
 }
+
+/* ── Estilo Neo brutalist (`estilos/estilosVisuales.css`) ────────────────────────────────────────────────────────────
+   El encabezado de cada columna, una etiqueta de color con filo de tinta: el mismo código que las cifras del Escritorio
+   (cian en proceso, naranja esperando, verde terminada). Solo existe con `body[data-estilo="neo"]`. */
+
+:global(body[data-estilo="neo"]) .encabezado {
+  margin-bottom: var(--espacio-4);
+  padding: var(--espacio-6) var(--espacio-10);
+  border: 2px solid var(--xonecode-relieve-tinta);
+  border-radius: var(--radio-control);
+  background: var(--dsw-alias-bg-layer-2);
+  box-shadow: 2px 2px 0 var(--xonecode-relieve-tinta);
+  color: var(--xonecode-relieve-tinta);
+  font-family: var(--xonecode-fuente-titulo);
+}
+
+:global(body[data-estilo="neo"]) .columna[data-estado="en-proceso"] .encabezado {
+  background: var(--xonecode-cian);
+  color: var(--xonecode-relieve-sobre-color);
+}
+
+:global(body[data-estilo="neo"]) .columna[data-estado="requiere-atencion"] .encabezado {
+  background: var(--xonecode-naranja);
+  color: var(--xonecode-relieve-sobre-color);
+}
+
+:global(body[data-estilo="neo"]) .columna[data-estado="terminada"] .encabezado {
+  background: var(--xonecode-verde);
+  color: var(--xonecode-relieve-sobre-color);
+}
+
+:global(body[data-estilo="neo"]) .columna[data-estado] .encabezado .cuenta {
+  color: inherit;
+}

@@ -90,3 +90,32 @@
   background: var(--xonecode-fila-hover);
   color: var(--dsw-alias-label-primary);
 }
+
+/* ── Estilo Neo brutalist (`estilos/estilosVisuales.css`) ────────────────────────────────────────────────────────────
+   La banda sin fondo propio (se ve el fondo con trama) y cerrada por el filo de tinta; la pestaña elegida, una solapa
+   cian con filo y sin el subrayado. Solo existe con `body[data-estilo="neo"]`. */
+
+:global(body[data-estilo="neo"]) .cabecera {
+  border-bottom: 2px solid var(--xonecode-relieve-tinta);
+  background: var(--dsw-alias-bg-base);
+}
+
+:global(body[data-estilo="neo"]) .tira [role="tab"] {
+  /* Relleno propio en TODAS (no solo la elegida): la solapa necesita aire alrededor del texto, y si solo lo llevara la
+     elegida, elegir otra movería la fila entera. */
+  padding: var(--espacio-8) var(--espacio-12);
+  font-family: var(--xonecode-fuente-titulo);
+  font-weight: var(--peso-fuerte);
+}
+
+:global(body[data-estilo="neo"]) .tira [role="tab"][aria-selected="true"] {
+  border: 2px solid var(--xonecode-relieve-tinta);
+  border-bottom: 0;
+  border-radius: var(--radio-control) var(--radio-control) 0 0;
+  background: var(--xonecode-cian);
+  color: var(--xonecode-relieve-sobre-color);
+}
+
+:global(body[data-estilo="neo"]) .tira [role="tab"][aria-selected="true"]::after {
+  content: none;
+}

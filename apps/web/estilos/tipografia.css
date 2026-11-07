@@ -31,6 +31,9 @@
     "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
   --ds-font-family-code: "JetBrains Mono Variable", "JetBrains Mono", "SF Mono", "Fira Code",
     Consolas, monospace;
+  /* La de los TÍTULOS y las cifras grandes. En el clásico es la misma de la interfaz; un estilo la cambia
+     (`estilosVisuales.css`: Neo brutalist pone Space Grotesk, empaquetada como las otras dos). */
+  --xonecode-fuente-titulo: var(--dsw-font-family);
 }
 
 /* LA ESCALA (elegida en el lienzo de diseño, variante B «estándar»). Un `.module.css` de

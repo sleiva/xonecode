@@ -82,7 +82,19 @@ body[data-estilo="neo"] {
 
   /* La tinta: el texto del tema tirando al azul de marca (en XOneCode, navy en vez de negro). */
   --xonecode-relieve-tinta: color-mix(in srgb, var(--dsw-alias-label-primary) 55%, var(--xonecode-azul));
-  --xonecode-relieve-halo: none;
+  /* El fondo: una trama de puntos de tinta, repetida (`--xonecode-relieve-halo-tamano`). */
+  --xonecode-relieve-halo: radial-gradient(
+    color-mix(in srgb, var(--xonecode-relieve-tinta) 16%, transparent) 1.2px,
+    transparent 1.6px
+  );
+  --xonecode-relieve-halo-tamano: 22px 22px;
+  /* El texto SOBRE un bloque de color de marca (portada, cifras, iconos): el azul más hondo, que se lee sobre cian,
+     naranja y verde en los dos modos. */
+  --xonecode-relieve-sobre-color: var(--xonecode-azul-hondo);
+  /* Los títulos y las cifras, en Space Grotesk (empaquetada: `main.tsx`); el texto corrido sigue en Inter. */
+  --xonecode-fuente-titulo: "Space Grotesk Variable", var(--dsw-font-family);
+  /* El ámbar de «sin subir»: el naranja aclarado hacia la capa. */
+  --xonecode-relieve-ambar: color-mix(in srgb, var(--xonecode-naranja) 45%, var(--dsw-alias-bg-layer-2));
   /* El grosor del borde de luz de la tarjeta: `--espacio-1` solo mide eso (`tipografia.css`). */
   --espacio-1: 2px;
   --xonecode-relieve-superficie: var(--dsw-alias-bg-layer-2);
@@ -101,7 +113,14 @@ body[data-estilo="neo"] {
    no se vería. */
 body[data-estilo="neo"][data-ds-dark-theme] {
   --xonecode-relieve-tinta: var(--dsw-alias-label-primary);
-  --xonecode-relieve-halo: none;
+  /* Sobre un bloque de color, en oscuro, el FONDO del tema: el azul hondo de un tema oscuro puede ser claro (en «Azul
+     noche» lo es) y sobre cian no se leía. El ámbar se aclara hacia el texto, no hacia la capa oscura. */
+  --xonecode-relieve-sobre-color: var(--dsw-alias-bg-base);
+  --xonecode-relieve-ambar: color-mix(in srgb, var(--xonecode-naranja) 55%, var(--dsw-alias-label-primary));
+  --xonecode-relieve-halo: radial-gradient(
+    color-mix(in srgb, var(--xonecode-relieve-tinta) 12%, transparent) 1.2px,
+    transparent 1.6px
+  );
   --xonecode-relieve-superficie: var(--dsw-alias-bg-layer-2);
   --xonecode-relieve-superficie-hover: var(--dsw-alias-bg-layer-2);
   --xonecode-relieve-borde: linear-gradient(var(--xonecode-relieve-tinta), var(--xonecode-relieve-tinta));
@@ -160,4 +179,28 @@ body[data-estilo="consola"][data-ds-dark-theme] {
   );
   --xonecode-relieve-primario-sombra: none;
   --xonecode-relieve-primario-sombra-hover: none;
+}
+
+/* Neo brutalist, en claro: el fondo de la consola pasa a un blanco roto cálido (el blanco de la capa, con una pizca del
+   naranja de marca). `:not([data-ds-dark-theme])` para pesar más que el puente de un tema (`body[data-tema]`) y no
+   depender del orden; en oscuro el fondo se queda el del tema. */
+body[data-estilo="neo"]:not([data-ds-dark-theme]) {
+  --dsw-alias-bg-base: color-mix(in srgb, var(--dsw-alias-bg-layer-2) 92%, var(--xonecode-naranja));
+}
+
+/* Lo que no es una tarjeta pero se ve con el estilo: los diálogos (filo grueso y sombra dura). */
+body[data-estilo="neo"] [role="dialog"] {
+  border: 2px solid var(--xonecode-relieve-tinta);
+  box-shadow: 6px 6px 0 var(--xonecode-relieve-tinta);
+}
+
+body[data-estilo="neo"][data-ds-dark-theme] [role="dialog"] {
+  box-shadow: 6px 6px 0 var(--xonecode-cian);
+}
+
+/* Los títulos de cualquier pantalla, en la letra de títulos del estilo y más apretados. Sin estilo (o en uno que no la
+   cambia) `--xonecode-fuente-titulo` es la de la interfaz y esto no se pinta: la regla solo existe en Neo. */
+body[data-estilo="neo"] :is(h1, h2, h3) {
+  font-family: var(--xonecode-fuente-titulo);
+  letter-spacing: -0.02em;
 }

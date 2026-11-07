@@ -600,7 +600,7 @@ function Cifras({
   return (
     <dl className={estilos.cifras} aria-label="Resumen">
       {cifras.map((c) => (
-        <div key={c.rotulo} className={estilos.cifra} data-tono={c.valor > 0 ? c.tono : undefined}>
+        <div key={c.rotulo} className={estilos.cifra} data-tono={c.valor > 0 ? c.tono : undefined} data-color={c.tono}>
           <dt>{c.rotulo}</dt>
           <dd>{c.texto ?? c.valor}</dd>
           <dd className={estilos.notaDeCifra}>{c.nota}</dd>

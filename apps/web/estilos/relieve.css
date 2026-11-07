@@ -19,6 +19,9 @@ body {
   --xonecode-relieve-filtro: none;
   --xonecode-relieve-boton-borde: 0;
   --xonecode-relieve-secundario-sombra: none;
+  /* El tamaño de la tesela del halo: `auto` es un solo dibujo a toda la caja (los dos halos de aquí); un estilo con trama
+     (Neo brutalist, puntos) la repite. */
+  --xonecode-relieve-halo-tamano: auto;
 
   /* El fondo: dos halos de luz de la marca, cian arriba a la izquierda y azul abajo a la derecha. */
   --xonecode-relieve-halo:

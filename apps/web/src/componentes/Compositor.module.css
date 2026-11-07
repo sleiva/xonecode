@@ -569,3 +569,18 @@
 .quitarFicha:hover {
   color: var(--dsw-alias-label-primary);
 }
+
+/* ── Estilo Neo brutalist (`estilos/estilosVisuales.css`) ────────────────────────────────────────────────────────────
+   La caja donde se escribe, con el filo de tinta y la sombra dura del estilo; enviar, con su filo y su sombra corta.
+   Más específico que las variantes por tema de arriba (`[data-tema]`, `[data-ds-dark-theme]`). */
+
+:global(body[data-estilo="neo"]) .compositor {
+  border: 2px solid var(--xonecode-relieve-tinta);
+  border-radius: var(--radio-tarjeta);
+  box-shadow: var(--xonecode-relieve-sombra);
+}
+
+:global(body[data-estilo="neo"]) .enviar {
+  border: 2px solid var(--xonecode-relieve-tinta);
+  box-shadow: 2px 2px 0 var(--xonecode-relieve-tinta);
+}

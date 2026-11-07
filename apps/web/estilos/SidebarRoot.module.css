@@ -368,3 +368,8 @@
     animation: none;
   }
 }
+
+/* NUESTRO, no de deepseek: en el estilo Neo brutalist la barra lateral se separa del contenido con el filo de tinta. */
+:global(body[data-estilo="neo"]) .root {
+  border-right: 2px solid var(--xonecode-relieve-tinta);
+}

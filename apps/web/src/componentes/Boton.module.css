@@ -206,3 +206,11 @@
 .primario:disabled {
   box-shadow: none;
 }
+
+/* Estilo Neo brutalist: los botones con la letra de títulos (Space Grotesk) y en negrita, como en su lienzo. Va en una
+   regla APARTE, no en la del rol (`composes` no fusiona; ver la cabecera). */
+:global(body[data-estilo="neo"]) .secundario,
+:global(body[data-estilo="neo"]) .primario {
+  font-family: var(--xonecode-fuente-titulo);
+  font-weight: var(--peso-fuerte);
+}

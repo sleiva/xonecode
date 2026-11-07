@@ -166,7 +166,7 @@ export function Kanban({
         {COLUMNAS.map((c) => {
           const suyas = cola.lista.filter((t) => t.estado === c.estado);
           return (
-            <div key={c.estado} className={estilos.columna}>
+            <div key={c.estado} className={estilos.columna} data-estado={c.estado}>
               <h3 className={estilos.encabezado}>
                 {c.etiqueta} <span className={estilos.cuenta}>{suyas.length}</span>
               </h3>
