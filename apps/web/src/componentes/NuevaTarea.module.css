@@ -239,3 +239,18 @@
 .pestana {
   composes: pestana from "./Ajustes.module.css";
 }
+
+/* ── Los estilos (`estilos/estilosVisuales.css`) sobre la VENTANA: la raíz con `role="dialog"` es la capa que cubre la
+   pantalla, así que el estilo va aquí y no a ese rol. Neo: filo de tinta y sombra dura; Glass: cristal, más opaco que
+   una tarjeta porque encima se lee mucho texto. */
+:global(body[data-estilo="neo"]) .ventana {
+  border: 2px solid var(--xonecode-relieve-tinta);
+  box-shadow: var(--xonecode-relieve-sombra-ventana);
+}
+
+:global(body[data-estilo="glass"]) .ventana {
+  border: 1px solid var(--xonecode-relieve-filo-cristal);
+  background: var(--xonecode-relieve-velo-dialogo);
+  -webkit-backdrop-filter: blur(28px) saturate(160%);
+  backdrop-filter: blur(28px) saturate(160%);
+}

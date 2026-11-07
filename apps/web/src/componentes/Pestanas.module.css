@@ -119,3 +119,11 @@
 :global(body[data-estilo="neo"]) .tira [role="tab"][aria-selected="true"]::after {
   content: none;
 }
+
+/* ── Estilo Glass: la banda de pestañas, una franja de cristal sobre el color de detrás. ─────────────────────────── */
+:global(body[data-estilo="glass"]) .cabecera {
+  border-bottom: 1px solid var(--xonecode-relieve-filo-cristal);
+  background: var(--xonecode-relieve-velo-banda);
+  -webkit-backdrop-filter: var(--xonecode-relieve-filtro);
+  backdrop-filter: var(--xonecode-relieve-filtro);
+}

@@ -584,3 +584,12 @@
   border: 2px solid var(--xonecode-relieve-tinta);
   box-shadow: 2px 2px 0 var(--xonecode-relieve-tinta);
 }
+
+/* ── Estilo Glass: la caja donde se escribe, de cristal y con el radio grande del estilo. ───────────────────────── */
+:global(body[data-estilo="glass"]) .compositor {
+  border: 1px solid var(--xonecode-relieve-filo-cristal);
+  border-radius: var(--radio-dialogo);
+  background: var(--xonecode-relieve-velo-caja);
+  -webkit-backdrop-filter: var(--xonecode-relieve-filtro);
+  backdrop-filter: var(--xonecode-relieve-filtro);
+}

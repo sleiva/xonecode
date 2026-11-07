@@ -1237,3 +1237,11 @@
   background: var(--xonecode-relieve-ambar);
   color: var(--xonecode-relieve-sobre-color);
 }
+
+/* ── Estilo Glass: el mensaje de la persona, de cristal como las tarjetas del agente. ────────────────────────────── */
+:global(body[data-estilo="glass"]) .usuario {
+  border: 1px solid var(--xonecode-relieve-filo-cristal);
+  background: var(--xonecode-relieve-velo-caja);
+  -webkit-backdrop-filter: var(--xonecode-relieve-filtro);
+  backdrop-filter: var(--xonecode-relieve-filtro);
+}

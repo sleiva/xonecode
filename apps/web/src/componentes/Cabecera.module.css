@@ -229,3 +229,10 @@
   background: var(--xonecode-barra-placa);
   vertical-align: middle;
 }
+
+/* Estilo Glass: la barra superior sigue siendo la de la marca, pero de cristal (el azul translúcido, desenfocando). */
+:global(body[data-estilo="glass"]) .barraSuperior.barraSuperior {
+  background: var(--xonecode-relieve-velo-barra);
+  -webkit-backdrop-filter: var(--xonecode-relieve-filtro);
+  backdrop-filter: var(--xonecode-relieve-filtro);
+}

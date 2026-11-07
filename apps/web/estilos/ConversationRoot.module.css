@@ -273,3 +273,8 @@
   flex: 1 0 auto;
   min-height: auto;
 }
+
+/* NUESTRO, no de deepseek: en el estilo Glass la columna central no pinta fondo: se ve el color del `body`. */
+:global(body[data-estilo="glass"]) .root {
+  background: var(--xonecode-relieve-vacio);
+}

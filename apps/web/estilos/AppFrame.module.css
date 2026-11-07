@@ -131,3 +131,16 @@
 .overlayLayer > * {
   pointer-events: auto;
 }
+
+/* NUESTRO, no de deepseek: en el estilo Glass el marco no pinta fondo (el color está en el `body`, detrás) y la barra
+   lateral es cristal: translúcida, desenfocando lo de detrás, con un filo de luz. */
+:global(body[data-estilo="glass"]) .frame {
+  background: var(--xonecode-relieve-vacio);
+}
+
+:global(body[data-estilo="glass"]) .sidebarCol {
+  border-right: 1px solid var(--xonecode-relieve-filo-cristal);
+  background: var(--xonecode-relieve-velo-lateral);
+  -webkit-backdrop-filter: var(--xonecode-relieve-filtro);
+  backdrop-filter: var(--xonecode-relieve-filtro);
+}

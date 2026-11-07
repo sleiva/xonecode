@@ -157,3 +157,9 @@
   color: var(--dsw-alias-label-tertiary);
   font-size: 13px;
 }
+
+/* NUESTRO, no de deepseek: en el estilo Glass la barra es cristal y el desvanecido hacia su relleno opaco se veía como
+   una banda clara al pie. Sin relleno detrás, no hay hacia dónde desvanecer. */
+:global(body[data-estilo="glass"]) .fade {
+  background: none;
+}

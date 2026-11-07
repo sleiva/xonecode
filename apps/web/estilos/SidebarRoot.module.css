@@ -373,3 +373,8 @@
 :global(body[data-estilo="neo"]) .root {
   border-right: 2px solid var(--xonecode-relieve-tinta);
 }
+
+/* NUESTRO: en Glass el fondo lo pone la columna (cristal); la raíz no lo tapa. */
+:global(body[data-estilo="glass"]) .root {
+  background: var(--xonecode-relieve-vacio);
+}

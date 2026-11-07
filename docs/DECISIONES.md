@@ -10816,3 +10816,18 @@ donde la app nunca tuvo base no arranca («Base de datos no encontrada»).
   consola tiene modo sin red. Entra como TERCER token de familia, `--xonecode-fuente-titulo` (en el clásico, la de la
   interfaz); el test de familias lo admite.
 - **Límites**: el chat se vio sin turnos reales; los iconos pequeños sobre el proyecto abierto en oscuro quedan flojos.
+
+## Glass, la pantalla entera; y el estilo de un diálogo va en su VENTANA (07-11-2026)
+
+- **El color detrás del cristal es de la ventana, no de una pantalla**: se pinta fijo en el `body`
+  (`--xonecode-relieve-lienzo`) y el marco, la barra lateral, la superior, la banda de pestañas, la caja del chat y el
+  mensaje se vuelven translúcidos con desenfoque. El halo propio del Escritorio se apaga en Glass: sería un segundo halo.
+  Primero salió pálido contra el lienzo; se subió la intensidad y la base se tiñó de azul, porque cristal blanco sobre
+  blanco no se separa de nada.
+- **Trampa medida en el navegador**: el `role="dialog"` de las ventanas es la CAPA que cubre la pantalla, no la ventana.
+  Una regla global sobre ese rol pintó un filo en el borde de la pantalla y veló el fondo entero (también en Neo, en
+  0.99.0, sin verse porque no se abrió ningún diálogo). El estilo va en `.ventana` de Ajustes, sesión nueva y tarea
+  nueva; los demás diálogos ya son tarjetas de `Superficie`.
+- **El desvanecido del pie de la barra** iba hacia su relleno opaco y en Glass se veía como una banda: sin relleno, sin
+  desvanecido (`background: none`).
+- **Límites**: «Trabajando ahora» con su degradado no se pudo ver (sin tarea en marcha), ni un chat con turnos reales.
