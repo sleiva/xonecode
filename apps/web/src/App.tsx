@@ -56,6 +56,7 @@ import {
 import { etiquetaDeClave } from "./etiquetaDeClave.js";
 import { TarjetaDeCerrar, AvisoDelGestor, BotonDeCerrarEnJira } from "./componentes/TarjetaDeJira.js";
 import { Ejecutar } from "./componentes/Ejecutar.js";
+import { BarraDeActividad, BarraDeEstadoDelIde, MarcoDelIde } from "./componentes/MarcoDelIde.js";
 import {
   aplicarApariencia,
   aplicarEstilo,
@@ -3317,8 +3318,40 @@ export function App({
     ...(estado.diseno === undefined ? {} : { diseno: estado.diseno }),
     pedirPantallas: (proyecto: string) => void enviar({ clase: "diseno", accion: "pantallas", proyecto }),
   };
+  /**
+   * El marco de IDE del estilo «Consola dev» (`MarcoDelIde.tsx`). Las acciones de su barra de actividad son las MISMAS
+   * de la cabecera de cada vista (ir al escritorio cerrando lo que la cabecera cerraría, la barra, el panel —solo con
+   * sesión, como su botón—, Ajustes); la barra de estado, lo que consta. Sin el estilo, `MarcoDelIde` no añade nada.
+   */
+  const enElEscritorio = !enLectura && !(enProyecto || enProyectoSinCopia) && !enSesion;
+  const irAlEscritorio = (): void => {
+    if (enLectura) cerrarLectura();
+    setPanelSinCopia(undefined);
+    setEnEscritorio(true);
+  };
+  const actividadDelIde = (
+    <BarraDeActividad
+      enEscritorio={enElEscritorio}
+      alIrAlEscritorio={irAlEscritorio}
+      barraVisible={reparto.barra !== "plegada"}
+      alAlternarBarra={alternarBarra}
+      {...(enSesion && !enLectura ? { panelAbierto: vistaDelPanel !== undefined, alAlternarPanel: alternarPanel } : {})}
+      alAbrirAjustes={() => abrirAjustes()}
+    />
+  );
+  const estadoDelIde = (
+    <BarraDeEstadoDelIde
+      conectado={estado.conectado}
+      {...(entornoDelEscritorio === undefined ? {} : { entorno: entornoDelEscritorio.nombre })}
+      {...(enElEscritorio || nombreDelProyectoActivo === undefined ? {} : { proyecto: nombreDelProyectoActivo })}
+      {...(estado.alta?.modo === undefined ? {} : { modo: estado.alta.modo })}
+      {...(estado.modelos?.actual === undefined ? {} : { modelo: estado.modelos.actual })}
+      {...(estado.alta?.version === undefined ? {} : { version: estado.alta.version })}
+    />
+  );
   return (
     <DisenoDeTareasContexto.Provider value={contextoDeDiseno}>
+    <MarcoDelIde activo={estilo === "consola"} actividad={actividadDelIde} estado={estadoDelIde}>
     <Maqueta
       // El EFECTIVO, no la preferencia: `repartoDeColumnas` la puede plegar para hacerle
       // sitio al panel, y eso no se guarda en ningún sitio.
@@ -4002,6 +4035,7 @@ export function App({
         />
       }
     />
+    </MarcoDelIde>
     {ventanaDeAjustes}
     {ventanaDeSesion}
     {ventanaDeTarea}

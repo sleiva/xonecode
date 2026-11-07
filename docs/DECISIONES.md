@@ -10831,3 +10831,15 @@ donde la app nunca tuvo base no arranca («Base de datos no encontrada»).
 - **El desvanecido del pie de la barra** iba hacia su relleno opaco y en Glass se veía como una banda: sin relleno, sin
   desvanecido (`background: none`).
 - **Límites**: «Trabajando ahora» con su degradado no se pudo ver (sin tarea en marcha), ni un chat con turnos reales.
+
+## Consola dev: la disposición de IDE, sin controles sin dato detrás (07-11-2026)
+
+- **Lo único de un estilo que no es CSS**: `MarcoDelIde.tsx` envuelve la `Maqueta` con una barra de ACTIVIDAD
+  (Escritorio, Explorador, Panel, Ajustes) y una barra de ESTADO (conexión y entorno, proyecto, modelo, modo,
+  versión). Sin el estilo devuelve al hijo tal cual: ningún otro estilo paga un nodo.
+- **Cada botón es un manejador que la cabecera ya tenía**; el del Panel solo con sesión, como el suyo. La barra de
+  estado pinta lo que consta (en el Escritorio, entorno y versión; en un proyecto, además proyecto, modelo y modo).
+- **La maqueta deja de medir la ventana** dentro del marco (`height: 100%` con el estilo): el marco ya resta la barra de
+  estado. El explorador es la barra de siempre, recta y en monoespaciada, por CSS.
+- **Fuera, a propósito**: el panel de salida y las pestañas de editor propias del lienzo son funcionalidad nueva, no
+  forma; quedan para plantearse aparte. Visto en oscuro en el Escritorio y el panel del proyecto.

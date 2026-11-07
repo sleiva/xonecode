@@ -93,3 +93,9 @@
   grid-row: 2;
   grid-column: 1 / -1;
 }
+
+/* Estilo «Consola dev»: la maqueta vive DENTRO del marco de IDE (`MarcoDelIde.tsx`), que ya mide la ventana y le resta
+   la barra de estado; aquí llena lo que le dan en vez de medir la ventana otra vez. */
+:global(body[data-estilo="consola"]) .alto {
+  height: 100%;
+}

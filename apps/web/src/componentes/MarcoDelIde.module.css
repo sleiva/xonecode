@@ -1,0 +1,97 @@
+/* El marco de IDE del estilo «Consola dev» (`MarcoDelIde.tsx`): barra de actividad a la izquierda, la consola en
+   medio y la barra de estado abajo. Alias comprobados contra `estilos/design-platform.css`; la barra de estado lleva el
+   color de la BARRA superior (`--xonecode-barra*`), que es la superficie de marca y ya viene ajustada por tema. */
+
+.ide {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+}
+
+.fila {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.centro {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+.actividad {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: center;
+  width: 48px;
+  padding: var(--espacio-6) 0;
+  border-right: 1px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-specific-sidebar-fill);
+}
+
+.boton {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+}
+
+.boton:hover {
+  color: var(--dsw-alias-label-primary);
+  background: var(--xonecode-fila-hover);
+}
+
+/* Lo puesto (la vista en la que estás, el panel abierto): el filo de acento a la izquierda, como un IDE. */
+.boton[aria-current="page"],
+.boton[aria-pressed="true"] {
+  color: var(--dsw-alias-label-primary);
+  box-shadow: inset 2px 0 0 var(--xonecode-cian);
+}
+
+.boton:focus-visible {
+  outline: 1px solid var(--xonecode-cian);
+  outline-offset: -2px;
+}
+
+.hueco {
+  flex: 1 1 auto;
+}
+
+.estado {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--espacio-16);
+  min-height: 24px;
+  padding: 0 var(--espacio-12);
+  background: var(--xonecode-barra);
+  color: var(--xonecode-barra-texto);
+  font-family: var(--ds-font-family-code);
+  font-size: var(--tipo-mini);
+}
+
+.pieza {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--espacio-6);
+  white-space: nowrap;
+}
+
+.punto {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--dsw-alias-state-error-primary);
+}
+
+.pieza[data-conectado] .punto {
+  background: var(--dsw-alias-state-success-primary);
+}

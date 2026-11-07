@@ -633,6 +633,22 @@ describe("App: el estilo", () => {
     montar();
     expect(document.body.getAttribute("data-estilo")).toBe("glass");
   });
+
+  it("«Consola dev» monta el marco de IDE (actividad y estado) y el Clásico lo quita", () => {
+    // La DISPOSICIÓN es lo único de un estilo que no es CSS: si `MarcoDelIde` no recibiera el estilo, elegir «Consola
+    // dev» solo cambiaría la forma y nadie lo notaría en un test de hoja.
+    montar();
+    expect(screen.queryByRole("navigation", { name: "Actividad" })).toBeNull();
+    fireEvent.click(screen.getAllByRole("button", { name: "Ajustes" })[0]!);
+    fireEvent.click(screen.getByRole("tab", { name: "Apariencia" }));
+    const grupo = screen.getByRole("group", { name: "Estilo" });
+    fireEvent.click(within(grupo).getByRole("button", { name: "Consola dev" }));
+    const actividad = screen.getByRole("navigation", { name: "Actividad" });
+    expect(within(actividad).getByRole("button", { name: "Explorador" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("contentinfo", { name: "Estado" })).toBeTruthy();
+    fireEvent.click(within(grupo).getByRole("button", { name: "Clásico" }));
+    expect(screen.queryByRole("navigation", { name: "Actividad" })).toBeNull();
+  });
 });
 
 describe("App: el tema del modo en vigor", () => {

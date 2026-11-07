@@ -563,3 +563,33 @@
   color: var(--xonecode-relieve-sobre-color);
   font-weight: var(--peso-fuerte);
 }
+
+/* ── Estilo «Consola dev» (`estilos/estilosVisuales.css`) ────────────────────────────────────────────────────────────
+   La barra como el EXPLORADOR de un IDE: filas bajas y rectas, nombres en monoespaciada, la sesión abierta con el filo
+   de acento a toda la altura y sin recuadro redondeado. Solo existe con `body[data-estilo="consola"]`. */
+
+:global(body[data-estilo="consola"]) .filaDeProyecto.filaDeProyecto {
+  height: 26px;
+  border-radius: 0;
+}
+
+:global(body[data-estilo="consola"]) .nombreDeProyecto.nombreDeProyecto,
+:global(body[data-estilo="consola"]) .rotulo.rotulo {
+  font-family: var(--ds-font-family-code);
+}
+
+:global(body[data-estilo="consola"]) .filaAbierta.filaAbierta.filaAbierta,
+:global(body[data-estilo="consola"]) .sesionAbierta.sesionAbierta.sesionAbierta,
+:global(body[data-estilo="consola"]) .filaConAccion.filaConAccion:hover:not(.filaAbierta):not(.sesionAbierta) {
+  border-radius: 0;
+}
+
+:global(body[data-estilo="consola"]) .sesionAbierta::before {
+  top: 0;
+  bottom: 0;
+  border-radius: 0;
+}
+
+:global(body[data-estilo="consola"]) .marcaDeTarea {
+  border-radius: 0;
+}
