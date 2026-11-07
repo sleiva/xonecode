@@ -651,6 +651,74 @@ describe("App: el estilo", () => {
   });
 });
 
+describe("App: Consola dev — pestañas de editor y panel de salida", () => {
+  const limpiar = (): void => {
+    document.body.removeAttribute("data-estilo");
+    window.localStorage.removeItem("xonecode.estilo");
+  };
+  beforeEach(limpiar);
+  afterEach(limpiar);
+
+  const alta = (sesionActiva: string) => ({
+    clase: "alta" as const,
+    pasos: [],
+    proveedores: [],
+    entornos: [],
+    proyectos: [{ id: "p1", nombre: "Tienda", local: true, sesiones: [{ id: "s1", titulo: "Vieja" }, { id: "s2", titulo: "Otra" }] }],
+    ramas: [],
+    proyectoAbierto: true,
+    proyectoActivo: "p1",
+    sesionActiva,
+  });
+
+  it("cada sesión abierta es una pestaña; pulsarla abre por el MISMO camino que su fila; cerrar la puesta lleva al Escritorio", () => {
+    window.localStorage.setItem("xonecode.estilo", "consola");
+    const { store, enviar } = montar();
+    act(() => store.aplicar(alta("s1")));
+    act(() => store.aplicar(alta("s2")));
+    const tira = screen.getByRole("tablist", { name: "Pestañas abiertas" });
+    expect(within(tira).getAllByRole("tab").map((t) => t.textContent)).toEqual(["Escritorio", "TiendaVieja", "TiendaOtra"]);
+    expect(within(tira).getByRole("tab", { name: /Otra/ }).getAttribute("aria-selected")).toBe("true");
+    enviar.mockClear();
+    fireEvent.click(within(tira).getByRole("tab", { name: /Vieja/ }));
+    // El mismo mensaje que manda la fila de la barra para esa sesión: no hay un segundo camino para abrir.
+    expect(enviar).toHaveBeenCalledWith({ clase: "sesion", proyecto: "p1", sesion: "s1" });
+    fireEvent.click(within(tira).getByRole("button", { name: "Cerrar la pestaña Otra" }));
+    expect(within(screen.getByRole("tablist", { name: "Pestañas abiertas" })).getByRole("tab", { name: "Escritorio" }).getAttribute("aria-selected")).toBe("true");
+  });
+
+  it("el panel de salida cuenta los actos de la sesión y Problemas la última verificación", () => {
+    window.localStorage.setItem("xonecode.estilo", "consola");
+    const { store } = montar();
+    act(() => store.aplicar(alta("s1")));
+    const panel = screen.getByRole("region", { name: "Panel de salida" });
+    expect(within(panel).getByText("Esta sesión todavía no tiene turnos.")).toBeTruthy();
+    // Sin verificación no hay cuenta: no es «cero problemas».
+    expect(within(panel).getByRole("tab", { name: "Problemas" }).textContent).toBe("Problemas");
+    act(() => store.aplicar({ clase: "acto", acto: { tipo: "usuario", texto: "arregla la lista" } }));
+    act(() =>
+      store.aplicar({
+        clase: "acto",
+        acto: {
+          tipo: "verificacion",
+          verde: false,
+          errores: 1,
+          avisos: 0,
+          hallazgos: [{ code: "XML_PARSE", severidad: "error", mensaje: "etiqueta sin cerrar", fichero: "Lista.xne", linea: 4 }],
+        },
+      })
+    );
+    expect(within(panel).getByText("arregla la lista")).toBeTruthy();
+    fireEvent.click(within(panel).getByRole("tab", { name: /Problemas/ }));
+    expect(within(panel).getByText(/Lista\.xne:4 — etiqueta sin cerrar/)).toBeTruthy();
+    // Cerrado se desmonta, y el botón de la actividad lo vuelve a abrir.
+    fireEvent.click(within(panel).getByRole("button", { name: "Cerrar el panel de salida" }));
+    expect(screen.queryByRole("region", { name: "Panel de salida" })).toBeNull();
+    fireEvent.click(within(screen.getByRole("navigation", { name: "Actividad" })).getByRole("button", { name: "Salida" }));
+    expect(screen.getByRole("region", { name: "Panel de salida" })).toBeTruthy();
+  });
+});
+
 describe("App: el tema del modo en vigor", () => {
   const CLAVES = ["xonecode.apariencia", "xonecode.tema.claro", "xonecode.tema.oscuro"];
   const limpiar = (): void => {

@@ -10843,3 +10843,16 @@ donde la app nunca tuvo base no arranca («Base de datos no encontrada»).
   estado. El explorador es la barra de siempre, recta y en monoespaciada, por CSS.
 - **Fuera, a propósito**: el panel de salida y las pestañas de editor propias del lienzo son funcionalidad nueva, no
   forma; quedan para plantearse aparte. Visto en oscuro en el Escritorio y el panel del proyecto.
+
+## Consola dev: pestañas de editor y panel de salida (07-11-2026)
+
+- **Pestañas**: el Escritorio fijo y una por sesión abierta, apuntadas por un efecto sobre la sesión ACTIVA (se abra
+  desde la barra, el tablero o una sesión nueva) y con el estado DENTRO de `PestanasDelIde`: `App` retorna antes de
+  tiempo durante el alta, y un hook nuevo tras ese retorno rompería el orden de los hooks. Pulsar abre por `abrirSesion`
+  (el test compara el mensaje con el de la fila de la barra); cerrar no borra; la «nueva» se sustituye en su sitio al
+  recibir id; se podan la borrada y la de otro entorno; tope de ocho; en memoria, a propósito.
+- **Panel de salida**: Salida, Problemas y Ejecutar sobre los actos de la sesión (o de la lectura), `lanzamiento` del
+  proyecto abierto y la última recarga. Sin verificación, Problemas no dice «0». Cerrado se desmonta. Alto
+  `min(200px, 28vh)`: a 1024×640 el chat y su caja seguían cabiendo.
+- **Visto** en oscuro con una sesión nueva en blanco (1440×900 y 1024×640); las listas con datos, solo en tests: no había
+  una conversación con turnos que abrir sin enviar.

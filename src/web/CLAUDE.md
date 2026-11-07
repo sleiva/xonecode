@@ -248,8 +248,10 @@ Ante una discrepancia con el código, **el código manda**.
   tokens (bloques de color de Neo) va en el `.module.css` de su componente bajo `:global(body[data-estilo="…"])`; la letra
   de títulos es el tercer token, `--xonecode-fuente-titulo` (Space Grotesk empaquetada en Neo). **«Consola dev» además cambia la DISPOSICIÓN**:
   `MarcoDelIde.tsx` envuelve la `Maqueta` con barra de actividad y barra de estado, solo con acciones que la cabecera
-  ya tenía y datos que constan; sin el estilo devuelve al hijo tal cual. **Límite**: sin panel de salida ni pestañas de
-  editor propias.
+  ya tenía y datos que constan; sin el estilo devuelve al hijo tal cual. Encima del centro, las PESTAÑAS de
+  editor (`PestanasDelIde.tsx`, en memoria, abren por `abrirSesion` como la fila de la barra, cerrar no borra); debajo, el
+  PANEL DE SALIDA (`PanelDeSalida.tsx`) sobre los actos que ya hay, sin cero donde no consta. `Maqueta` los recibe en
+  `antesDelCentro`/`despuesDelCentro`; sin ellos su DOM no cambia.
 - **Enviar, AZUL de marca** (en un tema, su acento); PARAR, ROJO.
 - **El compositor en TRES BANDAS**: en REPOSO la de arriba se DESMONTA por `:focus-within` en CSS,
   nunca `onBlur`; `data-con-texto` la mantiene. **Trampa**: un `color-mix` con alias del TEMA no

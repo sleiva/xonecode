@@ -57,6 +57,8 @@ import { etiquetaDeClave } from "./etiquetaDeClave.js";
 import { TarjetaDeCerrar, AvisoDelGestor, BotonDeCerrarEnJira } from "./componentes/TarjetaDeJira.js";
 import { Ejecutar } from "./componentes/Ejecutar.js";
 import { BarraDeActividad, BarraDeEstadoDelIde, MarcoDelIde } from "./componentes/MarcoDelIde.js";
+import { PanelDeSalida } from "./componentes/PanelDeSalida.js";
+import { PestanasDelIde, type PestanaDeSesion } from "./componentes/PestanasDelIde.js";
 import {
   aplicarApariencia,
   aplicarEstilo,
@@ -1727,6 +1729,8 @@ export function App({
   };
   /** El ESTILO (la forma), de este navegador como el tema; no depende del modo y se aplica aparte. */
   const [estilo, setEstilo] = useState<EstiloVisual>(() => leerEstilo());
+  /** El panel de salida del estilo «Consola dev»: abierto de entrada, en memoria. Cerrado se DESMONTA. */
+  const [salidaAbierta, setSalidaAbierta] = useState(true);
   useEffect(() => {
     aplicarEstilo(estilo);
   }, [estilo]);
@@ -3329,6 +3333,43 @@ export function App({
     setPanelSinCopia(undefined);
     setEnEscritorio(true);
   };
+  const consola = estilo === "consola";
+  /** La sesión que el marco de IDE tiene delante: la abierta para trabajar (no una lectura). */
+  const activaDelIde: PestanaDeSesion | undefined =
+    enSesion && !enLectura && estado.alta?.proyectoActivo !== undefined
+      ? { proyecto: estado.alta.proyectoActivo, ...(estado.alta.sesionActiva === undefined ? {} : { sesion: estado.alta.sesionActiva }) }
+      : undefined;
+  /** Los actos que cuenta la salida: los de la sesión, o los de la conversación que se está leyendo, cuando han llegado. */
+  const actosDeSalida = enLectura ? lectura?.actos : enSesion ? estado.actos : undefined;
+  const lanzamientoDeSalida =
+    estado.lanzamiento !== undefined && estado.lanzamiento.proyecto !== undefined && estado.lanzamiento.proyecto === estado.alta?.proyectoActivo
+      ? estado.lanzamiento
+      : undefined;
+  const pestanasDelIde = consola ? (
+    <PestanasDelIde
+      enEscritorio={enElEscritorio}
+      activa={activaDelIde}
+      proyectos={estado.alta?.proyectos ?? []}
+      rotuloDe={(p) => {
+        const proyecto = estado.alta?.proyectos.find((x) => x.id === p.proyecto);
+        const deLaLista = p.sesion === undefined ? undefined : proyecto?.sesiones?.find((x) => x.id === p.sesion)?.titulo;
+        const esLaActiva = activaDelIde !== undefined && activaDelIde.proyecto === p.proyecto && activaDelIde.sesion === p.sesion;
+        const titulo = (deLaLista !== undefined && deLaLista !== "" ? deLaLista : esLaActiva ? tituloDeLaSesion : undefined) ?? "Sesión nueva";
+        return { proyecto: proyecto?.nombre ?? p.proyecto, titulo };
+      }}
+      alIrAlEscritorio={irAlEscritorio}
+      alAbrir={(p) => abrirSesion(p.proyecto, p.sesion)}
+    />
+  ) : undefined;
+  const salidaDelIde =
+    consola && salidaAbierta && actosDeSalida !== undefined ? (
+      <PanelDeSalida
+        actos={actosDeSalida}
+        {...(lanzamientoDeSalida === undefined ? {} : { lanzamiento: lanzamientoDeSalida })}
+        {...(enSesion && estado.ultimaRecarga !== undefined ? { recarga: estado.ultimaRecarga } : {})}
+        alCerrar={() => setSalidaAbierta(false)}
+      />
+    ) : undefined;
   const actividadDelIde = (
     <BarraDeActividad
       enEscritorio={enElEscritorio}
@@ -3336,6 +3377,7 @@ export function App({
       barraVisible={reparto.barra !== "plegada"}
       alAlternarBarra={alternarBarra}
       {...(enSesion && !enLectura ? { panelAbierto: vistaDelPanel !== undefined, alAlternarPanel: alternarPanel } : {})}
+      {...(actosDeSalida === undefined ? {} : { salidaAbierta, alAlternarSalida: () => setSalidaAbierta((antes) => !antes) })}
       alAbrirAjustes={() => abrirAjustes()}
     />
   );
@@ -3351,8 +3393,10 @@ export function App({
   );
   return (
     <DisenoDeTareasContexto.Provider value={contextoDeDiseno}>
-    <MarcoDelIde activo={estilo === "consola"} actividad={actividadDelIde} estado={estadoDelIde}>
+    <MarcoDelIde activo={consola} actividad={actividadDelIde} estado={estadoDelIde}>
     <Maqueta
+      {...(pestanasDelIde === undefined ? {} : { antesDelCentro: pestanasDelIde })}
+      {...(salidaDelIde === undefined ? {} : { despuesDelCentro: salidaDelIde })}
       // El EFECTIVO, no la preferencia: `repartoDeColumnas` la puede plegar para hacerle
       // sitio al panel, y eso no se guarda en ningún sitio.
       barraContraida={reparto.barra === "plegada"}

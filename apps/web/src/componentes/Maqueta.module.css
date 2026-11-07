@@ -99,3 +99,13 @@
 :global(body[data-estilo="consola"]) .alto {
   height: 100%;
 }
+
+/* El centro cuando lleva algo encima o debajo (`antesDelCentro`/`despuesDelCentro`): se lleva el alto que sobra y sigue
+   siendo la columna flexible que su contenido espera. Sin ellos este nodo no existe. */
+.cuerpoDelCentro {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}

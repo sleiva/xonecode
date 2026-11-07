@@ -119,8 +119,17 @@ export function Maqueta({
   anchoPanel,
   alRedimensionarBarra,
   alRedimensionarPanel,
+  antesDelCentro,
+  despuesDelCentro,
 }: {
   centro: ReactNode;
+  /**
+   * Lo que va ENCIMA y DEBAJO del centro dentro de su columna (las pestañas de editor y el panel de salida del estilo
+   * «Consola dev»). Sin los dos, el centro va suelto como siempre y el DOM no cambia; con alguno, el centro se mete en
+   * un cuerpo que se lleva el alto que sobra.
+   */
+  antesDelCentro?: ReactNode;
+  despuesDelCentro?: ReactNode;
   barra: ReactNode;
   /**
    * El panel de vistas, a la DERECHA del centro. **Ausente = la columna no está**: su pista
@@ -262,7 +271,15 @@ export function Maqueta({
             : ({ "--dsh-conversation-column-width": `${anchoDeColumna}px` } as React.CSSProperties)
         }
       >
-        {centro}
+        {antesDelCentro === undefined && despuesDelCentro === undefined ? (
+          centro
+        ) : (
+          <>
+            {antesDelCentro}
+            <div className={estilos.cuerpoDelCentro}>{centro}</div>
+            {despuesDelCentro}
+          </>
+        )}
       </div>
       {/*
         La columna del panel va DESPUÉS del centro en el DOM, y su tirador después de ella:

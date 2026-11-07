@@ -1,0 +1,83 @@
+/* Las pestañas de editor del estilo «Consola dev» (`PestanasDelIde.tsx`): una tira baja encima de la columna central,
+   la puesta con el filo de acento ARRIBA y el fondo de la columna, como la de un IDE. Alias comprobados contra
+   `estilos/design-platform.css`. */
+
+.tira {
+  display: flex;
+  flex: none;
+  min-width: 0;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-layer-1);
+  scrollbar-width: none;
+}
+
+.tira::-webkit-scrollbar {
+  display: none;
+}
+
+.pestana {
+  display: flex;
+  flex: none;
+  align-items: center;
+  max-width: 260px;
+  border: 0;
+  border-right: 1px solid var(--dsw-alias-border-l2);
+  background: none;
+  color: var(--dsw-alias-label-tertiary);
+  font: inherit;
+  font-family: var(--ds-font-family-code);
+  font-size: var(--tipo-mini);
+}
+
+/* El Escritorio es un botón entero; una sesión, un botón para abrir y otro para cerrar dentro de la misma pestaña. */
+button.pestana,
+.abrir {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--espacio-6);
+  min-width: 0;
+  padding: var(--espacio-8) var(--espacio-12);
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.pestana[aria-selected="true"],
+.pestana[data-puesta] {
+  background: var(--dsw-alias-bg-base);
+  color: var(--dsw-alias-label-primary);
+  box-shadow: inset 0 2px 0 var(--xonecode-cian);
+}
+
+.proyecto {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.titulo {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cerrar {
+  flex: none;
+  margin-right: var(--espacio-4);
+  padding: 0 var(--espacio-4);
+  border: 0;
+  border-radius: var(--radio-mini);
+  background: none;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: var(--tipo-control);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.cerrar:hover {
+  background: var(--xonecode-fila-hover);
+  color: var(--dsw-alias-label-primary);
+}

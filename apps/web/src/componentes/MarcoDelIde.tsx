@@ -29,6 +29,7 @@ const ICONOS = {
   escritorio: "M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z",
   explorador: "M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z",
   panel: "M4 4h16v16H4zM15 4v16",
+  salida: "M4 4h16v16H4zM4 15h16M7 18h4",
   ajustes:
     "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1",
 } as const;
@@ -49,6 +50,8 @@ export function BarraDeActividad({
   alAlternarBarra,
   panelAbierto,
   alAlternarPanel,
+  salidaAbierta,
+  alAlternarSalida,
   alAbrirAjustes,
 }: {
   enEscritorio: boolean;
@@ -58,6 +61,9 @@ export function BarraDeActividad({
   /** Ausente = no hay panel que abrir (sin sesión): el botón no sale. */
   panelAbierto?: boolean;
   alAlternarPanel?: () => void;
+  /** El panel de salida de abajo. Ausente = no hay salida que enseñar (sin sesión): el botón no sale. */
+  salidaAbierta?: boolean;
+  alAlternarSalida?: () => void;
   alAbrirAjustes: () => void;
 }) {
   return (
@@ -80,6 +86,11 @@ export function BarraDeActividad({
       {panelAbierto === undefined || alAlternarPanel === undefined ? null : (
         <button type="button" className={estilos.boton} aria-label="Panel" title="Panel" aria-pressed={panelAbierto} onClick={alAlternarPanel}>
           <Icono d={ICONOS.panel} />
+        </button>
+      )}
+      {salidaAbierta === undefined || alAlternarSalida === undefined ? null : (
+        <button type="button" className={estilos.boton} aria-label="Salida" title="Panel de salida" aria-pressed={salidaAbierta} onClick={alAlternarSalida}>
+          <Icono d={ICONOS.salida} />
         </button>
       )}
       <span className={estilos.hueco} />
