@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import { crc32 } from "node:zlib";
 import { describe, expect, it } from "vitest";
 import { MOTIVO_DEMASIADOS_NUEVOS, TOPE_DE_NUEVOS } from "../../core/comparacionConAparato.js";
-import { compararConAparato } from "./comparacionEnAparato.js";
+import { appEnElAparato, compararConAparato } from "./comparacionEnAparato.js";
 import type { RespuestaHotswap } from "./hotswap.js";
 
 function proyecto(ficheros: Record<string, string>): string {
@@ -72,5 +72,31 @@ describe("compararConAparato", () => {
       },
     });
     expect(caido).toEqual({ estado: "fallo", motivo: "no se pudo comparar con el aparato: el canal se cerró" });
+  });
+});
+
+describe("appEnElAparato (IXCODE-78: «Ejecutar» lleva la base solo si la app no está)", () => {
+  it("con `app.xml` en el aparato, la app ESTÁ, y pregunta solo por él con el nombre en minúsculas", async () => {
+    const a = aparato({ "app.xml": "<app/>" });
+    expect(await appEnElAparato("MiApp", a)).toEqual({ estado: "esta" });
+    expect(a.pedidos).toEqual([{ appName: "miapp", files: ["app.xml"], checksumType: "crc32" }]);
+  });
+
+  it("sin `app.xml` (el ENOENT del framework), NO está", async () => {
+    expect(await appEnElAparato("MiApp", aparato({}))).toEqual({ estado: "no-esta" });
+  });
+
+  it("otro fallo no se toma por «no está»: no se sabe, con el motivo", async () => {
+    const raro = { comando: async (): Promise<RespuestaHotswap> => ({ result: false, status: "Unknown command" }) };
+    expect(await appEnElAparato("MiApp", raro)).toEqual({ estado: "no-se", motivo: "Unknown command" });
+  });
+
+  it("un canal que se cae tampoco lanza", async () => {
+    const caido = {
+      comando: async (): Promise<RespuestaHotswap> => {
+        throw Object.assign(new Error("connect ECONNREFUSED 127.0.0.1:8443"), { code: "ECONNREFUSED" });
+      },
+    };
+    expect(await appEnElAparato("MiApp", caido)).toEqual({ estado: "no-se", motivo: "ECONNREFUSED" });
   });
 });

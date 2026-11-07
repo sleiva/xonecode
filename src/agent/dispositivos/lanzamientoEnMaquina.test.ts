@@ -189,6 +189,8 @@ function recorrido(
       detalle: `framework instalado: ${DEL_FRAMEWORK}`,
     }),
     empaquetarProyecto: () => PAQUETE,
+    // Por omisión el aparato YA tiene la app: «Ejecutar» no lleva la base (IXCODE-78).
+    appEnElAparato: async () => ({ estado: "esta" }),
     subir: async (peticion) => {
       subidas.push(peticion);
       return { codigo: 200 };
@@ -232,7 +234,10 @@ describe("lanzarEnDispositivo", () => {
       "túnel aplicado: 127.0.0.1:8443 es el aparato emulator-5554",
       `framework instalado: ${DEL_FRAMEWORK}`,
     ]);
-    expect(r.deFase("empaquetando")).toEqual(["el paquete son 2,0 MB en 2 ficheros"]);
+    expect(r.deFase("empaquetando")).toEqual([
+      "la app ya está en el aparato: su base de datos se conserva",
+      "el paquete son 2,0 MB en 2 ficheros",
+    ]);
     expect(r.deFase("reiniciando")).toEqual([
       `parando ${DEL_FRAMEWORK}`,
       "arrancando la pantalla del servidor de hotswap, que levanta el canal",
@@ -539,27 +544,17 @@ describe("lanzarEnDispositivo", () => {
   });
 });
 
-describe("la base de datos viaja con «Copiar todos» (IXCODE-78)", () => {
-  it("«Ejecutar» / «Copiar todos los ficheros» empaqueta CON `bd/`: sin ella un aparato nuevo no arranca", async () => {
+describe("la base de datos en el aparato (IXCODE-78)", () => {
+  /** Lo que se pidió al empaquetar, y a quién se preguntó por la app. */
+  function conBaseSegun(appEnElAparato: DependenciasDeLanzamiento["appEnElAparato"], peticion: PeticionDeLanzamiento = PETICION) {
     const opcionesVistas: (OpcionesDePaquete | undefined)[] = [];
+    const preguntas: { app: string; canal: string }[] = [];
     const r = recorrido(
       {
-        empaquetarProyecto: (_raiz, _tope, opciones) => {
-          opcionesVistas.push(opciones);
-          return PAQUETE;
+        appEnElAparato: async (app, canal) => {
+          preguntas.push({ app, canal });
+          return appEnElAparato!(app, canal);
         },
-      },
-      lanzador()
-    );
-    await atender(r.l, 3);
-    await r.trabajo.terminado;
-    expect(opcionesVistas).toEqual([{ conBase: true }]);
-  });
-
-  it("«Copiar solo los modificados» NO la lleva: es código, y no pisa los datos del aparato", async () => {
-    const opcionesVistas: (OpcionesDePaquete | undefined)[] = [];
-    const r = recorrido(
-      {
         compararConAparato: async () => ({ estado: "ok", comparados: 2, distintos: ["Main.xne"], nuevos: 0 }),
         empaquetarProyecto: (_raiz, _tope, opciones) => {
           opcionesVistas.push(opciones);
@@ -567,12 +562,53 @@ describe("la base de datos viaja con «Copiar todos» (IXCODE-78)", () => {
         },
       },
       lanzador(),
-      { ...PETICION, modo: "modificados" }
+      peticion
     );
+    return { r, opcionesVistas, preguntas };
+  }
+
+  it("«Copiar todos los ficheros» la lleva SIEMPRE, sin preguntar al aparato", async () => {
+    const { r, opcionesVistas, preguntas } = conBaseSegun(async () => ({ estado: "esta" }), { ...PETICION, modo: "todo" });
+    await atender(r.l, 3);
+    await r.trabajo.terminado;
+    expect(opcionesVistas).toEqual([{ conBase: true }]);
+    expect(preguntas).toEqual([]);
+    expect(r.deFase("empaquetando")[0]).toBe("«Copiar todos»: la base de datos del proyecto sustituye a la del aparato");
+  });
+
+  it("«Ejecutar» con la app YA en el aparato no la lleva: conserva sus datos", async () => {
+    const { r, opcionesVistas, preguntas } = conBaseSegun(async () => ({ estado: "esta" }));
+    await atender(r.l, 3);
+    await r.trabajo.terminado;
+    expect(opcionesVistas).toEqual([{}]);
+    expect(preguntas).toEqual([{ app: "MiApp", canal: "wss://127.0.0.1:8443/hotswap" }]);
+  });
+
+  it("«Ejecutar» SIN la app en el aparato la lleva: sin `bd/gestion.db` no arranca", async () => {
+    const { r, opcionesVistas } = conBaseSegun(async () => ({ estado: "no-esta" }));
+    await atender(r.l, 3);
+    await r.trabajo.terminado;
+    expect(opcionesVistas).toEqual([{ conBase: true }]);
+    expect(r.deFase("empaquetando")[0]).toBe("la app no está en el aparato: se copia también la base de datos");
+  });
+
+  it("«Ejecutar» sin poder saberlo NO la lleva (no pisa datos a ciegas) y lo dice", async () => {
+    const { r, opcionesVistas } = conBaseSegun(async () => ({ estado: "no-se", motivo: "Unknown command" }));
+    await atender(r.l, 3);
+    await r.trabajo.terminado;
+    expect(opcionesVistas).toEqual([{}]);
+    expect(r.deFase("empaquetando")[0]).toBe(
+      "no se pudo saber si la app está en el aparato (Unknown command): la base de datos no se copia; si no arranca, usa «Copiar todos los ficheros»"
+    );
+  });
+
+  it("«Copiar solo los modificados» NO la lleva y no pregunta: es código", async () => {
+    const { r, opcionesVistas, preguntas } = conBaseSegun(async () => ({ estado: "no-esta" }), { ...PETICION, modo: "modificados" });
     await atender(r.l, 3);
     await r.trabajo.terminado;
     expect(opcionesVistas).toHaveLength(1);
     expect(opcionesVistas[0]?.conBase).toBeUndefined();
+    expect(preguntas).toEqual([]);
   });
 });
 

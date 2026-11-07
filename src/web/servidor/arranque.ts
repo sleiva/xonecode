@@ -4738,7 +4738,8 @@ export function montarRutas(
    */
   const atenderLanzarApp = async (
     alAcabar?: (estado: "ok" | "fallo" | "ocupado", motivo?: string) => void,
-    modo: ModoDeCopia = "todo",
+    /** Ausente es «Ejecutar» (la base solo si el aparato no tiene la app); `todo`, «Copiar todos» (IXCODE-78). */
+    modo?: ModoDeCopia,
     /** `true` desde la pestaña Ejecutar (solo este equipo); `false` desde el «Probar» del editor (el de la sesión). */
     paraEjecutar = true,
   ): Promise<void> => {
@@ -4857,7 +4858,7 @@ export function montarRutas(
       // En la GRANJA, su lanzador: la copia de ESTA sesión (la del turno, o una nueva que se libera al acabar el siguiente).
       const enCurso: LanzamientoEnCurso = enGranja
         ? opciones.lanzarEnGranja!(
-            { sesion: medida.abierto.idDeHilo, raiz: raizDelPaquete, app: medida.app, ...(modo === "todo" ? {} : { modo }) },
+            { sesion: medida.abierto.idDeHilo, raiz: raizDelPaquete, app: medida.app, ...(modo === undefined || modo === "todo" ? {} : { modo }) },
             { alFase },
           )
         : lanzar!(
@@ -4865,8 +4866,8 @@ export function montarRutas(
           dispositivo: medida.dispositivo!,
           raiz: raizDelPaquete,
           app: medida.app,
-          // «Ejecutar» y «Copiar todos» no lo mandan: el lanzador sin modo sube el proyecto entero.
-          ...(modo === "todo" ? {} : { modo }),
+          // «Ejecutar» no lo manda: el lanzador decide la base preguntando al aparato; «Copiar todos» la lleva siempre.
+          ...(modo === undefined ? {} : { modo }),
           // El puerto LOCAL del túnel es el de SU aparato: con dos aparatos y el mismo puerto,
           // el `adb forward` del segundo le quita el túnel al primero sin error. Un físico
           // tiene el suyo por su serie (IXCODE-32): antes iba al 8443 del primer AVD.
@@ -5665,7 +5666,7 @@ export function montarRutas(
             else if (estado === "ocupado") emitirRecarga(ruta, { estado: "ocupado" });
             else emitirRecarga(ruta, { estado: "fallo", motivo: `el despliegue no acabó bien: ${motivo ?? "sin motivo"}` });
           },
-          "todo",
+          undefined,
           false,
         ).catch(contar);
         return;
@@ -9394,14 +9395,14 @@ export function montarRutas(
     if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "lanzarApp") {
       // Suelto: revalida (otro adb), y el lanzamiento entero tarda minutos. La respuesta va
       // por el SSE, en forma de `lanzamiento`, y no se espera aquí ni de lejos.
-      // `modo` es de los botones «Copiar…»: ausente es `todo`, y uno desconocido no lanza nada.
+      // `modo` es de los botones «Copiar…»: ausente es «Ejecutar», y uno desconocido no lanza nada.
       const modo = (mensaje as { modo?: unknown }).modo;
       if (modo !== undefined && modo !== "todo" && modo !== "modificados") {
         respuesta.writeHead(400);
         respuesta.end();
         return;
       }
-      void atenderLanzarApp(undefined, modo ?? "todo").catch(contar);
+      void atenderLanzarApp(undefined, modo).catch(contar);
       respuesta.writeHead(204);
       respuesta.end();
       return;

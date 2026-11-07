@@ -49,9 +49,11 @@ discrepancia, **el código manda**.
     copia local puede cambiar; byXOne no sabe qué persona descarga.
 - **Ejecutar tiene dos «Copiar…» al lado, y son el MISMO lanzamiento con otro `modo`**
   (`PeticionDeLanzamiento.modo`, `{clase:"lanzarApp", modo}`; un `modo` desconocido es 400): copian y
-  RELANZAN. «Copiar todos» es el recorrido de Ejecutar y **lleva la BASE** (`bd/` y los `*.db`, `conBase`; IXCODE-78):
-  sin ella un aparato donde la app nunca tuvo base no arranca, y pisar la del aparato es lo que se pide al copiar todo
-  (límite: el ZIP no borra los `-wal`/`-shm` viejos). «Modificados» NO la lleva. **«Modificados» se mide contra el APARATO, no
+  RELANZAN. **La BASE (`bd/` y los `*.db`, `conBase`; IXCODE-78) depende del botón**, y por eso «Ejecutar» va SIN `modo` y
+  «Copiar todos» con `todo` hasta el lanzador: «Copiar todos» la lleva SIEMPRE (pisa la del aparato, a propósito);
+  «Ejecutar» solo si el aparato NO tiene la app (`appEnElAparato`, `getFileChecksum` de `app.xml`; sin saberlo, no la
+  lleva y lo dice); «Modificados», nunca. Sin base, un aparato donde la app nunca la tuvo no arranca. Límite: el ZIP no
+  borra los `-wal`/`-shm` viejos. **«Modificados» se mide contra el APARATO, no
   contra git** (`core/comparacionConAparato.ts`, `agent/dispositivos/comparacionEnAparato.ts`, fase
   `comparando`): CRC32 por `getFileChecksum`, como `xone-recargar-android`, sobre lo que `viaja` en el
   paquete, y el ZIP lleva solo lo distinto (`empaquetarProyecto` con `solo`, que recorta y nunca amplía).

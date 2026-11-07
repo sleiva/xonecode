@@ -2183,8 +2183,9 @@ export type MensajeDelCliente =
   | {
       clase: "lanzarApp";
       /**
-       * Qué se copia antes de relanzar. Ausente es `todo` («Ejecutar», «Copiar todos los
-       * ficheros»); `modificados` compara antes con el aparato. Otro valor se rechaza con 400.
+       * Qué se copia antes de relanzar. Ausente es «Ejecutar» (la base de datos solo si el aparato no tiene la app);
+       * `todo`, «Copiar todos los ficheros» (con la base, siempre); `modificados` compara antes con el aparato (sin la
+       * base). Otro valor se rechaza con 400 (IXCODE-78).
        */
       modo?: "todo" | "modificados";
     }

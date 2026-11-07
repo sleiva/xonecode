@@ -11076,7 +11076,7 @@ describe("el recorrido por el cable — el veredicto, la intención y las fases"
   });
 
   /** «Copiar…»: el MISMO lanzamiento, con el `modo` del botón. */
-  it("el `modo` de «Copiar solo los modificados» llega al lanzador; `todo` no se manda", async () => {
+  it("los tres botones llegan DISTINTOS al lanzador: «Ejecutar» sin `modo`, «Copiar todos» con `todo` (IXCODE-78)", async () => {
     const pedidos: PeticionDeLanzamiento[] = [];
     const m = await montar({
       xml: APP_XML,
@@ -11092,10 +11092,15 @@ describe("el recorrido por el cable — el veredicto, la intención y las fases"
     await enviarMensaje(m.accion, { clase: "lanzarApp", modo: "modificados" });
     await esperarA(() => pedidos.length === 1 && dichos(m.cliente, "lanzamiento").at(-1)?.estado === "ok");
     await enviarMensaje(m.accion, { clase: "lanzarApp", modo: "todo" });
-    await esperarA(() => pedidos.length === 2);
+    await esperarA(() => pedidos.length === 2 && dichos(m.cliente, "lanzamiento").at(-1)?.estado === "ok");
+    await enviarMensaje(m.accion, { clase: "lanzarApp" });
+    await esperarA(() => pedidos.length === 3);
 
     expect(pedidos[0]).toEqual({ dispositivo: PIXEL, raiz: m.raiz, app: "AppDemo", modo: "modificados", puerto: 8443 });
-    expect(pedidos[1]).toEqual({ dispositivo: PIXEL, raiz: m.raiz, app: "AppDemo", puerto: 8443 });
+    // «Copiar todos» lleva la base SIEMPRE: el lanzador tiene que poder distinguirlo de «Ejecutar».
+    expect(pedidos[1]).toEqual({ dispositivo: PIXEL, raiz: m.raiz, app: "AppDemo", modo: "todo", puerto: 8443 });
+    // «Ejecutar»: sin modo, y el lanzador pregunta al aparato si tiene la app.
+    expect(pedidos[2]).toEqual({ dispositivo: PIXEL, raiz: m.raiz, app: "AppDemo", puerto: 8443 });
     await m.cerrar();
   });
 

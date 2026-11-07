@@ -62,7 +62,7 @@ import {
 } from "./dispositivosEnMaquina.js";
 import { PUERTO_DEL_HOTSWAP } from "../../core/puertosDeAvd.js";
 import { abrirHotswap, esperarAlServidor, lanzarYComprobar, type AbrirSocketHotswap } from "./hotswap.js";
-import { compararConAparato, type ResultadoDeComparacion } from "./comparacionEnAparato.js";
+import { appEnElAparato, compararConAparato, type AppEnElAparato, type ResultadoDeComparacion } from "./comparacionEnAparato.js";
 import {
   crearEjecutor,
   TOPE_DE_TRABAJO_MS,
@@ -143,9 +143,10 @@ export interface PeticionDeLanzamiento {
    */
   puerto?: number;
   /**
-   * Qué se copia. `todo` (la omisión, la de «Ejecutar» y «Copiar todos los ficheros») sube el
-   * proyecto entero; `modificados` pregunta antes al aparato (fase `comparando`) y sube solo lo
-   * que tiene distinto o le falta. Con nada distinto acaba bien SIN subir ni relanzar.
+   * Qué se copia. Ausente es «Ejecutar»: el proyecto entero, y la BASE solo si el aparato no tiene la app
+   * (`appEnElAparato`, IXCODE-78). `todo` es «Copiar todos los ficheros»: el proyecto entero CON la base, siempre.
+   * `modificados` pregunta antes al aparato (fase `comparando`) y sube solo lo que tiene distinto o le falta, sin
+   * base. Con nada distinto acaba bien SIN subir ni relanzar.
    */
   modo?: ModoDeCopia;
 }
@@ -214,6 +215,11 @@ export interface DependenciasDeLanzamiento {
    * `/hotswap` y pregunta con `getFileChecksum` (`comparacionEnAparato.ts`).
    */
   compararConAparato?: (raiz: string, app: string, canal: string) => Promise<ResultadoDeComparacion>;
+  /**
+   * Si el aparato tiene la app, para que «Ejecutar» decida si lleva la base. Sin ella, la real: abre el canal y
+   * pregunta por `app.xml` con `getFileChecksum` (`comparacionEnAparato.ts#appEnElAparato`).
+   */
+  appEnElAparato?: (app: string, canal: string) => Promise<AppEnElAparato>;
   /** Cada línea que merezca contarse, con la fase a la que pertenece. */
   alFase?: (fase: FaseDeLanzamiento, linea: string) => void;
   ahora?: () => number;
@@ -451,12 +457,42 @@ export function lanzarEnDispositivo(
     }
 
     // ---- 2. empaquetando ----------------------------------------------------------------
+    // La BASE (IXCODE-78, decisión suya): en un aparato donde la app nunca tuvo `bd/gestion.db` no arranca («Base de
+    // datos no encontrada», lo mismo medido en la granja). «Copiar todos» la lleva SIEMPRE —partir del proyecto, datos
+    // incluidos—; «Ejecutar», solo si el aparato NO tiene la app, y sin saberlo no pisa datos a ciegas; «Modificados»,
+    // nunca: es código.
+    let conBase = false;
+    if (peticion.modo === "todo") {
+      conBase = true;
+      decir("empaquetando", "«Copiar todos»: la base de datos del proyecto sustituye a la del aparato");
+    } else if (peticion.modo === undefined) {
+      const preguntar =
+        deps.appEnElAparato ??
+        (async (app: string, destino: string) => {
+          const cliente = abrirHotswap(destino, delSocket);
+          try {
+            return await appEnElAparato(app, cliente);
+          } finally {
+            cliente.cerrar();
+          }
+        });
+      const enAparato = await Promise.race([preguntar(peticion.app, canal), cancelacion.then(() => "cancelada" as const)]);
+      if (enAparato === "cancelada" || cancelado) return acabar("empaquetando", { estado: "cancelada" });
+      if (enAparato.estado === "no-esta") {
+        conBase = true;
+        decir("empaquetando", "la app no está en el aparato: se copia también la base de datos");
+      } else if (enAparato.estado === "esta") {
+        decir("empaquetando", "la app ya está en el aparato: su base de datos se conserva");
+      } else {
+        decir(
+          "empaquetando",
+          `no se pudo saber si la app está en el aparato (${enAparato.motivo}): la base de datos no se copia; si no arranca, usa «Copiar todos los ficheros»`
+        );
+      }
+    }
     let paquete: PaqueteDelProyecto;
     try {
-      // «Ejecutar» / «Copiar todos» lleva la BASE (IXCODE-78, decisión suya): en un aparato donde la app nunca tuvo
-      // `bd/gestion.db` no arranca («Base de datos no encontrada»), lo mismo medido en la granja. Pisa la del aparato, y
-      // es a propósito: copiar TODO es partir del proyecto. «Modificados» sigue sin ella: es código, no datos.
-      paquete = solo === undefined ? empaquetar(peticion.raiz, undefined, { conBase: true }) : empaquetar(peticion.raiz, undefined, { solo });
+      paquete = empaquetar(peticion.raiz, undefined, solo === undefined ? (conBase ? { conBase: true } : {}) : { solo });
     } catch (error) {
       return acabar("empaquetando", { estado: "fallo", motivo: unaLineaDeLaSubida(error) });
     }

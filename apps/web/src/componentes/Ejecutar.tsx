@@ -80,7 +80,7 @@ export function Ejecutar({
   /** El único verbo que puede apagar el botón: ausente = no hay botón. */
   alLanzar?: () => void;
   /**
-   * «Copiar todos los ficheros»: sube el proyecto entero y relanza la app. Ausente = no hay botón.
+   * «Copiar todos los ficheros»: sube el proyecto entero CON la base de datos (IXCODE-78) y relanza la app. Ausente = no hay botón.
    */
   alCopiarTodo?: () => void;
   /**
@@ -331,7 +331,7 @@ export function Ejecutar({
             <button
               type="button"
               className={estilos.copiar}
-              title="Sube todos los ficheros del proyecto al dispositivo y relanza la app"
+              title="Sube todos los ficheros del proyecto al dispositivo, también la base de datos (sustituye la del dispositivo), y relanza la app"
               onClick={alCopiarTodo}
             >
               Copiar todos los ficheros

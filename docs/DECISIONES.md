@@ -10760,7 +10760,7 @@ tarjetas de Jira, de alta, de consulta y de aprobación, la ficha de una tarea y
 propósito: el chat (burbujas, capturas, artefactos), campos, filtros, tooltips y bandas — serían ruido, y una fila de la
 pestaña Tareas que ya usa su propio `::after` (la tarea en marcha).
 
-## «Copiar todos» lleva la base de datos (IXCODE-78, 06-11-2026)
+## La base de datos al aparato: «Copiar todos» siempre, «Ejecutar» si falta la app (IXCODE-78, 06-11-2026)
 
 Lo pidió Rafa: al ejecutar a mano en un móvil, «Copiar todos los ficheros» no copiaba `bd/gestion.db`, y en un aparato
 donde la app nunca tuvo base no arranca («Base de datos no encontrada»).
@@ -10769,11 +10769,14 @@ donde la app nunca tuvo base no arranca («Base de datos no encontrada»).
   base en el aparato. Un aparato nuevo no la tiene, y la granja ya lo había medido: con la base dentro del ZIP la app
   llega a su colección; sin ella, el diálogo de error. Lo de SQLCipher («un `.db` en claro acaba en *malformed*») no se
   cumplió ahí: la base en claro del proyecto abre.
-- **Opción elegida (A, decisión suya)**: «Ejecutar» / «Copiar todos» empaquetan SIEMPRE con `conBase`. Se descartaron
-  «solo si al aparato le falta» (B) y un botón aparte (C). Copiar todo es partir del proyecto, datos incluidos: los datos
-  de prueba del aparato se PISAN a propósito.
-- **«Copiar solo los modificados» sigue sin la base**: es código, y comparar `bd/` con el aparato pisaría datos por un
-  CRC distinto que nadie pidió copiar.
-- **Límite declarado, sin medir**: el ZIP añade y sobrescribe sin borrar, así que los `-wal`/`-shm` de la base vieja del
-  aparato se quedan al lado de la nueva. Si eso da una base rota al arrancar, el remedio es borrar esos dos ficheros
-  antes de subir; no se ha medido en un aparato con base previa.
+- **Decisión suya, por botón**: «Copiar todos» la lleva SIEMPRE (partir del proyecto, datos incluidos: los del aparato se
+  PISAN a propósito). «Ejecutar» la lleva solo si el aparato NO tiene la app: se pregunta por `app.xml` con el mismo
+  `getFileChecksum` de «Modificados» (`appEnElAparato`), y su ENOENT es «no está». Sin poder saberlo NO la lleva —no se
+  pisan datos a ciegas— y la línea lo dice con el remedio («Copiar todos»). «Copiar solo los modificados», nunca: es
+  código, y comparar `bd/` pisaría datos por un CRC distinto que nadie pidió copiar.
+- **Por eso los dos botones llegan DISTINTOS al lanzador**: el cliente ya mandaba «Ejecutar» sin `modo` y «Copiar todos»
+  con `todo`, pero el servidor los fundía en `todo`. Ahora «Ejecutar» viaja sin `modo` hasta `lanzamientoEnMaquina.ts`,
+  y el test del servidor comprueba los tres. El «Probar» del editor, cuando el aparato no tiene la app, va como «Ejecutar».
+- **Límite declarado, sin medir**: el ZIP añade y sobrescribe sin borrar, así que con «Copiar todos» los `-wal`/`-shm` de
+  la base vieja del aparato se quedan al lado de la nueva. Si eso da una base rota al arrancar, el remedio es borrar esos
+  dos ficheros antes de subir; no se ha medido en un aparato con base previa.

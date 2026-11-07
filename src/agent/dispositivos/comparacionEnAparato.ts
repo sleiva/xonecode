@@ -71,3 +71,30 @@ export async function compararConAparato(
     return { estado: "fallo", motivo: `no se pudo comparar con el aparato: ${texto}` };
   }
 }
+
+/** Lo que el aparato dice de la app: la tiene, no la tiene, o no se supo (y entonces no se adivina). */
+export type AppEnElAparato = { estado: "esta" } | { estado: "no-esta" } | { estado: "no-se"; motivo: string };
+
+/**
+ * ¿Tiene el aparato la app desplegada? Para «Ejecutar» (IXCODE-78): la base de datos solo viaja si NO la tiene —un
+ * aparato nuevo no arranca sin `bd/gestion.db`, y uno que ya la tiene conserva sus datos—. Se pregunta por `app.xml`
+ * con el mismo `getFileChecksum` de «Copiar solo los modificados»: sin él no hay app. **Nunca lanza.**
+ */
+export async function appEnElAparato(app: string, cliente: Pick<ClienteHotswap, "comando">): Promise<AppEnElAparato> {
+  try {
+    const respuesta = await cliente.comando("getFileChecksum", {
+      appName: app.toLowerCase(),
+      files: ["app.xml"],
+      checksumType: "crc32",
+    });
+    if (respuesta.result !== false && typeof respuesta.result === "object" && respuesta.result !== null) return { estado: "esta" };
+    const mensaje = String(respuesta["exceptionMessage"] ?? respuesta.status ?? "");
+    if (ficheroQueFaltaEnElAparato(mensaje) === "app.xml") return { estado: "no-esta" };
+    return { estado: "no-se", motivo: mensaje || "sin motivo" };
+  } catch (error) {
+    const codigo = (error as { code?: unknown } | null)?.code;
+    const texto =
+      typeof codigo === "string" ? codigo : (error instanceof Error ? error.message : String(error)).split(/\r?\n/)[0];
+    return { estado: "no-se", motivo: texto ?? "sin motivo" };
+  }
+}
