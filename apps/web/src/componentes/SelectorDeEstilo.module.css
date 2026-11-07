@@ -1,4 +1,5 @@
-/* Las muestras de los estilos: los colores del tema PUESTO (alias y `--xonecode-*`) con la forma de cada estilo escrita
+/* Las muestras de los estilos: sobre `bg-layer-1`, que ningún estilo redefine (Neo cambia `bg-base`, y entonces las cuatro
+   salían con su crema). Los colores del tema PUESTO (alias y `--xonecode-*`) con la forma de cada estilo escrita
    aquí, a escala. No leen los tokens de `estilosVisuales.css`, que solo valen con ese estilo puesto: la muestra tiene que
    enseñar los cuatro a la vez. */
 
@@ -36,7 +37,7 @@
   height: 64px;
   padding: var(--espacio-10);
   border-radius: var(--radio-control);
-  background: var(--dsw-alias-bg-base);
+  background: var(--dsw-alias-bg-layer-1);
   box-sizing: border-box;
   overflow: hidden;
 }
@@ -50,7 +51,7 @@
   border: 1px solid var(--dsw-alias-border-l2);
   border-radius: var(--radio-control);
   background: var(--dsw-alias-bg-layer-2);
-  box-shadow: 0 4px 10px color-mix(in srgb, var(--xonecode-azul) 12%, var(--dsw-alias-bg-base));
+  box-shadow: 0 4px 10px color-mix(in srgb, var(--xonecode-azul) 12%, var(--dsw-alias-bg-layer-1));
 }
 
 .linea {
@@ -70,9 +71,9 @@
 /* Glass: halo de color detrás de una tarjeta teñida de él y muy redonda. */
 .muestra[data-muestra="glass"] {
   background:
-    radial-gradient(70px 60px at 0% 0%, color-mix(in srgb, var(--xonecode-cian) 55%, var(--dsw-alias-bg-base)), var(--dsw-alias-bg-base) 75%),
-    radial-gradient(70px 60px at 100% 100%, color-mix(in srgb, var(--xonecode-naranja) 40%, var(--dsw-alias-bg-base)), var(--dsw-alias-bg-base) 75%),
-    var(--dsw-alias-bg-base);
+    radial-gradient(70px 60px at 0% 0%, color-mix(in srgb, var(--xonecode-cian) 55%, var(--dsw-alias-bg-layer-1)), var(--dsw-alias-bg-layer-1) 75%),
+    radial-gradient(70px 60px at 100% 100%, color-mix(in srgb, var(--xonecode-naranja) 40%, var(--dsw-alias-bg-layer-1)), var(--dsw-alias-bg-layer-1) 75%),
+    var(--dsw-alias-bg-layer-1);
 }
 
 .muestra[data-muestra="glass"] .tarjeta {

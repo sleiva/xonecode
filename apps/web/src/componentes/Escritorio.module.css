@@ -653,6 +653,7 @@
 
 :global(body[data-estilo="neo"]) .filaDeEspera[data-clase="pausa"] .iconoDeEspera {
   background: var(--xonecode-naranja);
+  color: var(--xonecode-relieve-sobre-color);
 }
 
 :global(body[data-estilo="neo"]) .filaDeEspera[data-clase="avisos"] .iconoDeEspera {
@@ -662,6 +663,8 @@
 
 :global(body[data-estilo="neo"]) .filaDeEspera[data-clase="subir"] .iconoDeEspera {
   background: var(--xonecode-relieve-ambar);
+  /* La regla de siempre pinta este icono con el texto sobre AZUL (blanco), y sobre el ámbar no se veía la flecha. */
+  color: var(--xonecode-relieve-sobre-color);
 }
 
 :global(body[data-estilo="neo"]) .bandeja > .vacio {

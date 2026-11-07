@@ -110,9 +110,10 @@ body[data-estilo="neo"] {
     transparent 1.6px
   );
   --xonecode-relieve-halo-tamano: 22px 22px;
-  /* El texto SOBRE un bloque de color de marca (portada, cifras, iconos): el azul más hondo, que se lee sobre cian,
-     naranja y verde en los dos modos. */
-  --xonecode-relieve-sobre-color: var(--xonecode-azul-hondo);
+  /* El texto SOBRE un bloque de color de marca (portada, cifras, iconos, el proyecto abierto): el texto del tema teñido
+     del azul hondo. No el azul hondo solo: en un tema el puente lo saca del ACENTO del tema, y en uno claro sale claro
+     (medido con Solarized: el nombre del proyecto abierto, azul claro sobre ámbar, no se leía). */
+  --xonecode-relieve-sobre-color: color-mix(in srgb, var(--dsw-alias-label-primary) 70%, var(--xonecode-azul-hondo));
   /* Los títulos y las cifras, en Space Grotesk (empaquetada: `main.tsx`); el texto corrido sigue en Inter. */
   --xonecode-fuente-titulo: "Space Grotesk Variable", var(--dsw-font-family);
   /* El ámbar de «sin subir»: el naranja aclarado hacia la capa. */
