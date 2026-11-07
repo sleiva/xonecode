@@ -10856,3 +10856,16 @@ donde la app nunca tuvo base no arranca («Base de datos no encontrada»).
   `min(200px, 28vh)`: a 1024×640 el chat y su caja seguían cabiendo.
 - **Visto** en oscuro con una sesión nueva en blanco (1440×900 y 1024×640); las listas con datos, solo en tests: no había
   una conversación con turnos que abrir sin enviar.
+
+## Glass, como su lienzo: paneles flotantes (07-11-2026)
+
+- **El usuario prefería el Glass del lienzo** al de 0.100.0. Lo que faltaba: paneles que FLOTAN con hueco sobre el color,
+  cabecera de cristal claro, fondo más vivo, saludo en tarjeta, franja de color en las cifras, «Trabajando ahora» en
+  degradado y las filas como tarjetas.
+- **Flotar sin romper los tiradores**: márgenes DENTRO de cada pista de la rejilla, no `gap`/`padding` en ella; las
+  pistas miden lo mismo y el tirador cae en el hueco. Las columnas se ESTIRAN (`align-self: stretch; height: auto`): el
+  `height: 100%` de `ConversationRoot` sumaba el margen (medido: 830 px contra 806).
+- **El desenfoque de una columna va en su `::before`**, no en la columna: un `backdrop-filter` la haría bloque contenedor
+  de los `position: fixed` de dentro (una pregunta, la tarjeta de Jira). No visto con una de ellas abierta.
+- **La cabecera redefine en sí misma los tokens `--xonecode-barra*`**: todo lo de dentro los lee y pasa a texto del tema
+  sobre cristal claro sin tocar una regla más.

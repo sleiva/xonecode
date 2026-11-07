@@ -230,9 +230,18 @@
   vertical-align: middle;
 }
 
-/* Estilo Glass: la barra superior sigue siendo la de la marca, pero de cristal (el azul translúcido, desenfocando). */
+/* Estilo Glass, como su lienzo: la barra superior es una tarjeta de cristal CLARO flotando sobre el color, con el texto
+   del tema. Se redefinen aquí los tokens de la barra (todo lo de dentro los lee: migas, pastillas, estado), y la placa
+   del logotipo sigue siendo la suya. */
 :global(body[data-estilo="glass"]) .barraSuperior.barraSuperior {
-  background: var(--xonecode-relieve-velo-barra);
+  --xonecode-barra: var(--xonecode-relieve-velo-fuerte);
+  --xonecode-barra-borde: var(--xonecode-relieve-filo-cristal);
+  --xonecode-barra-texto: var(--dsw-alias-label-primary);
+  --xonecode-barra-texto-suave: var(--dsw-alias-label-secondary);
+  border: 1px solid var(--xonecode-relieve-filo-cristal);
+  border-radius: var(--radio-dialogo);
+  background: var(--xonecode-relieve-velo-fuerte);
+  box-shadow: var(--xonecode-relieve-sombra);
   -webkit-backdrop-filter: var(--xonecode-relieve-filtro);
   backdrop-filter: var(--xonecode-relieve-filtro);
 }

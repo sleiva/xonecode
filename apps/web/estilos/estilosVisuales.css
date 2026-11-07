@@ -27,15 +27,19 @@ body[data-estilo="glass"] {
      Escritorio y del panel sobra (sería un segundo halo encima del primero). */
   --xonecode-relieve-halo: none;
   --xonecode-relieve-lienzo:
-    radial-gradient(900px 700px at 0% 0%, color-mix(in srgb, var(--xonecode-cian) 48%, transparent), transparent 70%),
-    radial-gradient(760px 640px at 100% 25%, color-mix(in srgb, var(--xonecode-naranja) 34%, transparent), transparent 70%),
-    radial-gradient(1000px 640px at 45% 110%, color-mix(in srgb, var(--xonecode-azul) 30%, transparent), transparent 70%);
+    radial-gradient(760px 640px at 0% 0%, color-mix(in srgb, var(--xonecode-cian) 58%, transparent), transparent 68%),
+    radial-gradient(680px 620px at 100% 22%, color-mix(in srgb, var(--xonecode-naranja) 42%, transparent), transparent 68%),
+    radial-gradient(900px 620px at 40% 112%, color-mix(in srgb, var(--xonecode-azul) 38%, transparent), transparent 68%);
   --xonecode-relieve-vacio: transparent;
   --xonecode-relieve-velo-lateral: color-mix(in srgb, var(--dsw-specific-sidebar-fill) 50%, transparent);
   --xonecode-relieve-velo-barra: color-mix(in srgb, var(--xonecode-barra) 78%, transparent);
   --xonecode-relieve-velo-banda: color-mix(in srgb, var(--dsw-alias-bg-layer-1) 45%, transparent);
   --xonecode-relieve-velo-caja: color-mix(in srgb, var(--dsw-alias-bg-layer-1) 62%, transparent);
   --xonecode-relieve-velo-dialogo: color-mix(in srgb, var(--dsw-alias-bg-layer-1) 80%, transparent);
+  /* El cristal REFORZADO de una fila dentro de un panel de cristal (su lienzo: `glass-fuerte`). */
+  --xonecode-relieve-velo-fuerte: color-mix(in srgb, var(--dsw-alias-bg-layer-2) 72%, transparent);
+  /* El hueco entre los paneles flotantes y con el borde de la ventana. */
+  --xonecode-relieve-hueco: var(--espacio-12);
   --xonecode-relieve-filo-cristal: color-mix(in srgb, var(--dsw-alias-bg-layer-2) 85%, transparent);
   /* La base, el fondo del tema teñido de azul: sobre un blanco puro el cristal blanco no se separa de nada. */
   background-color: color-mix(in srgb, var(--dsw-alias-bg-base) 90%, var(--xonecode-cian-oscuro));
@@ -64,9 +68,9 @@ body[data-estilo="glass"] {
 body[data-estilo="glass"][data-ds-dark-theme] {
   --xonecode-relieve-halo: none;
   --xonecode-relieve-lienzo:
-    radial-gradient(900px 700px at 0% 0%, color-mix(in srgb, var(--xonecode-cian) 32%, transparent), transparent 70%),
-    radial-gradient(760px 640px at 100% 25%, color-mix(in srgb, var(--xonecode-naranja) 18%, transparent), transparent 70%),
-    radial-gradient(1000px 640px at 45% 110%, color-mix(in srgb, var(--xonecode-cian-oscuro) 24%, transparent), transparent 70%);
+    radial-gradient(760px 640px at 0% 0%, color-mix(in srgb, var(--xonecode-cian) 40%, transparent), transparent 68%),
+    radial-gradient(680px 620px at 100% 22%, color-mix(in srgb, var(--xonecode-naranja) 26%, transparent), transparent 68%),
+    radial-gradient(900px 620px at 40% 112%, color-mix(in srgb, var(--xonecode-cian-oscuro) 34%, transparent), transparent 68%);
   /* En oscuro el filo de luz del cristal es el texto claro, muy bajo: el blanco de la capa no existe aquí. */
   --xonecode-relieve-filo-cristal: color-mix(in srgb, var(--dsw-alias-label-primary) 14%, transparent);
   --xonecode-relieve-superficie: color-mix(in srgb, var(--dsw-alias-bg-layer-2) 50%, transparent);

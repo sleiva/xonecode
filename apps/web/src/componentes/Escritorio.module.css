@@ -671,3 +671,86 @@
 :global(body[data-estilo="neo"]) .tituloDeBloque {
   letter-spacing: -0.02em;
 }
+
+/* ── Estilo Glass (`estilos/estilosVisuales.css`), como su lienzo ──────────────────────────────────────────────────
+   El saludo en una tarjeta de cristal; cada cifra con su FRANJA de color arriba (el mismo código que Neo, `data-color`);
+   «Trabajando ahora», el bloque vivo de la pantalla, en degradado azul → cian; y las filas de las bandejas, cada una su
+   tarjeta de cristal reforzado en vez de renglones dentro de una caja. Solo existe con `body[data-estilo="glass"]`. */
+
+:global(body[data-estilo="glass"]) .portada {
+  padding: var(--espacio-24);
+  border: 1px solid var(--xonecode-relieve-filo-cristal);
+  border-radius: var(--radio-tarjeta);
+  background: var(--xonecode-relieve-velo-fuerte);
+  box-shadow: var(--xonecode-relieve-sombra);
+  -webkit-backdrop-filter: var(--xonecode-relieve-filtro);
+  backdrop-filter: var(--xonecode-relieve-filtro);
+}
+
+:global(body[data-estilo="glass"]) .cifra.cifra[data-color] {
+  background-repeat: no-repeat;
+  background-position: var(--espacio-16) 0;
+  background-size: calc(100% - 2 * var(--espacio-16)) 3px;
+}
+
+:global(body[data-estilo="glass"]) .cifra.cifra[data-color="marcha"] {
+  background-image: linear-gradient(var(--xonecode-cian), var(--xonecode-cian));
+}
+
+:global(body[data-estilo="glass"]) .cifra.cifra[data-color="espera"] {
+  background-image: linear-gradient(var(--xonecode-naranja), var(--xonecode-naranja));
+}
+
+:global(body[data-estilo="glass"]) .cifra.cifra[data-color="subir"] {
+  background-image: linear-gradient(var(--xonecode-azul), var(--xonecode-azul));
+}
+
+:global(body[data-estilo="glass"]) .cifra.cifra[data-color="listos"] {
+  background-image: linear-gradient(var(--xonecode-verde), var(--xonecode-verde));
+}
+
+:global(body[data-estilo="glass"]) .trabajando {
+  border: 1px solid var(--xonecode-relieve-filo-cristal);
+  background: linear-gradient(135deg, var(--xonecode-azul), var(--xonecode-cian-oscuro));
+  box-shadow: var(--xonecode-relieve-sombra);
+}
+
+:global(body[data-estilo="glass"]) .trabajando .rotuloDeTrabajando,
+:global(body[data-estilo="glass"]) .trabajando .colaDeTrabajando {
+  color: var(--xonecode-sobre-azul-suave);
+}
+
+:global(body[data-estilo="glass"]) .trabajando .tituloDeTrabajando {
+  color: var(--xonecode-sobre-azul);
+}
+
+:global(body[data-estilo="glass"]) .listaDeEspera.listaDeEspera,
+:global(body[data-estilo="glass"]) .listaDeProyectos.listaDeProyectos {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-8);
+  background: none;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+:global(body[data-estilo="glass"]) .listaDeEspera.listaDeEspera::after,
+:global(body[data-estilo="glass"]) .listaDeProyectos.listaDeProyectos::after {
+  content: none;
+}
+
+:global(body[data-estilo="glass"]) .filaDeEspera,
+:global(body[data-estilo="glass"]) .proyecto {
+  border: 1px solid var(--xonecode-relieve-filo-cristal);
+  border-radius: var(--radio-tarjeta);
+  background: var(--xonecode-relieve-velo-fuerte);
+  box-shadow: var(--xonecode-relieve-sombra);
+  -webkit-backdrop-filter: var(--xonecode-relieve-filtro);
+  backdrop-filter: var(--xonecode-relieve-filtro);
+}
+
+:global(body[data-estilo="glass"]) .filaDeEspera + .filaDeEspera,
+:global(body[data-estilo="glass"]) .proyecto + .proyecto {
+  border-top: 1px solid var(--xonecode-relieve-filo-cristal);
+}

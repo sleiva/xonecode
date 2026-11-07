@@ -132,15 +132,66 @@
   pointer-events: auto;
 }
 
-/* NUESTRO, no de deepseek: en el estilo Glass el marco no pinta fondo (el color está en el `body`, detrás) y la barra
-   lateral es cristal: translúcida, desenfocando lo de detrás, con un filo de luz. */
+/* NUESTRO, no de deepseek. Estilo Glass, como su lienzo: el marco no pinta fondo (el color está en el `body`) y la barra
+   lateral, el centro y el panel son TARJETAS de cristal que flotan sobre el color, con hueco entre ellas y con el borde.
+
+   - Con MÁRGENES dentro de su pista y no con `gap`/`padding` en la rejilla: las pistas miden lo mismo y los tiradores
+     (que se colocan por el ancho de la pista) siguen cayendo en el hueco.
+   - El desenfoque va en un `::before` DETRÁS y no en la columna: un `backdrop-filter` en la columna la haría bloque
+     contenedor de cualquier `position: fixed` de dentro (una pregunta, la tarjeta de Jira) y la ventana quedaría
+     encerrada en la columna. Un pseudo-elemento hermano no tiene ese efecto. */
 :global(body[data-estilo="glass"]) .frame {
   background: var(--xonecode-relieve-vacio);
 }
 
-:global(body[data-estilo="glass"]) .sidebarCol {
-  border-right: 1px solid var(--xonecode-relieve-filo-cristal);
-  background: var(--xonecode-relieve-velo-lateral);
+:global(body[data-estilo="glass"]) .sidebarCol,
+:global(body[data-estilo="glass"]) .centerCol,
+:global(body[data-estilo="glass"]) .detailsCol {
+  position: relative;
+  isolation: isolate;
+  /* Estirada por la rejilla y no al 100 %: el `height: 100%` de `ConversationRoot` sumaba el margen y la tarjeta del
+     centro se salía por abajo (medido: 830 px contra los 806 de la lateral). */
+  align-self: stretch;
+  height: auto;
+  overflow: hidden;
+  border: 1px solid var(--xonecode-relieve-filo-cristal);
+  border-radius: var(--radio-dialogo);
+  background: var(--xonecode-relieve-vacio);
+  box-shadow: var(--xonecode-relieve-sombra);
+}
+
+:global(body[data-estilo="glass"]) .sidebarCol::before,
+:global(body[data-estilo="glass"]) .centerCol::before,
+:global(body[data-estilo="glass"]) .detailsCol::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: var(--xonecode-relieve-velo-banda);
   -webkit-backdrop-filter: var(--xonecode-relieve-filtro);
   backdrop-filter: var(--xonecode-relieve-filtro);
+  pointer-events: none;
+}
+
+:global(body[data-estilo="glass"]) .sidebarCol::before {
+  background: var(--xonecode-relieve-velo-lateral);
+}
+
+:global(body[data-estilo="glass"]) .sidebarCol {
+  margin: var(--xonecode-relieve-hueco) calc(var(--xonecode-relieve-hueco) / 2) var(--xonecode-relieve-hueco) var(--xonecode-relieve-hueco);
+}
+
+:global(body[data-estilo="glass"]) .centerCol {
+  margin: var(--xonecode-relieve-hueco) var(--xonecode-relieve-hueco) var(--xonecode-relieve-hueco) calc(var(--xonecode-relieve-hueco) / 2);
+}
+
+:global(body[data-estilo="glass"]) .detailsCol {
+  margin: var(--xonecode-relieve-hueco) var(--xonecode-relieve-hueco) var(--xonecode-relieve-hueco) 0;
+}
+
+:global(body[data-estilo="glass"]) .frame[data-details-collapsed] .detailsCol {
+  margin: 0;
+  border: 0;
+  box-shadow: none;
 }
