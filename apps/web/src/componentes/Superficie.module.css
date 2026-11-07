@@ -19,6 +19,10 @@
   border-radius: var(--radio-tarjeta);
   background: var(--xonecode-relieve-superficie);
   box-shadow: var(--xonecode-relieve-sombra);
+  /* `none` salvo en el estilo Glass: un filtro distinto de `none` hace a la tarjeta el bloque contenedor de sus
+     descendientes `position: fixed` (como `transform`), así que solo se enciende donde se ha pedido cristal. */
+  -webkit-backdrop-filter: var(--xonecode-relieve-filtro);
+  backdrop-filter: var(--xonecode-relieve-filtro);
   transition:
     box-shadow 0.2s ease,
     background-color 0.2s ease;

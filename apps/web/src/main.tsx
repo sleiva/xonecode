@@ -41,6 +41,10 @@ import "../estilos/relieve.css";
 // NUESTRA, y la ÚLTIMA a propósito: aplica al documento los tokens de tipografía que las
 // hojas copiadas solo declaran. Sin ella la interfaz entera sale en serif — medido.
 import "../estilos/tipografia.css";
+// NUESTRA: los ESTILOS (Glass, Neo brutalist, Consola dev) redefinen tokens de forma de `relieve.css` y
+// `tipografia.css`. Va detrás, pero no depende del orden: sus selectores (`body[data-estilo]`, y con
+// `[data-ds-dark-theme]` en oscuro) son más específicos que los que redefinen.
+import "../estilos/estilosVisuales.css";
 import { crearStoreDelCliente } from "./store.js";
 import { crearConexion } from "./conexion.js";
 import { App } from "./App.js";

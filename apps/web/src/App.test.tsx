@@ -605,6 +605,36 @@ describe("App: el secreto y el selector, que también colgaban", () => {
   });
 });
 
+describe("App: el estilo", () => {
+  const limpiar = (): void => {
+    document.body.removeAttribute("data-estilo");
+    window.localStorage.removeItem("xonecode.estilo");
+  };
+  beforeEach(limpiar);
+  afterEach(limpiar);
+
+  it("elegir Neo brutalist en Ajustes lo pone en el body y lo recuerda; el Clásico lo quita", () => {
+    // El CABLEADO: `App` guarda el estilo, lo mete en el estado y el efecto lo aplica. Sin él, el selector
+    // marcaría la opción y la consola no cambiaría.
+    montar();
+    fireEvent.click(screen.getAllByRole("button", { name: "Ajustes" })[0]!);
+    fireEvent.click(screen.getByRole("tab", { name: "Apariencia" }));
+    const grupo = screen.getByRole("group", { name: "Estilo" });
+    expect(within(grupo).getByRole("button", { name: "Clásico" }).getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(within(grupo).getByRole("button", { name: "Neo brutalist" }));
+    expect(document.body.getAttribute("data-estilo")).toBe("neo");
+    expect(window.localStorage.getItem("xonecode.estilo")).toBe("neo");
+    fireEvent.click(within(grupo).getByRole("button", { name: "Clásico" }));
+    expect(document.body.hasAttribute("data-estilo")).toBe(false);
+  });
+
+  it("lo guardado se aplica al arrancar", () => {
+    window.localStorage.setItem("xonecode.estilo", "glass");
+    montar();
+    expect(document.body.getAttribute("data-estilo")).toBe("glass");
+  });
+});
+
 describe("App: el tema del modo en vigor", () => {
   const CLAVES = ["xonecode.apariencia", "xonecode.tema.claro", "xonecode.tema.oscuro"];
   const limpiar = (): void => {

@@ -346,3 +346,46 @@ describe("el texto del tema llega a todo", () => {
     expect(body).toMatch(/(^|\s|;)color:\s*var\(--dsw-alias-label-primary\)/);
   });
 });
+
+/**
+ * Los ESTILOS (`estilos/estilosVisuales.css`): la forma, no el color. Dos trampas que se ven tarde: un color literal
+ * (se queda igual dentro de cualquier tema) y un token que el oscuro de `relieve.css` también define y el oscuro del
+ * estilo no repite — con la MISMA especificidad, ganaría el que se cargue después, y eso se rompe en silencio el día
+ * que alguien reordene los `import`.
+ */
+describe("los estilos de la consola", () => {
+  const hoja = (n: string): string => sinComentarios(readFileSync(join(ESTILOS, n), "utf8"));
+  const bloque = (css: string, selector: string): Set<string> => {
+    const escapado = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const m = new RegExp(`${escapado}\\s*\\{([^}]*)\\}`).exec(css);
+    return new Set([...(m?.[1] ?? "").matchAll(/(--[a-z0-9-]+)\s*:/g)].map((x) => x[1]!));
+  };
+
+  it("no lleva colores literales: solo alias, `--xonecode-*`, color-mix y transparent", () => {
+    const css = hoja("estilosVisuales.css");
+    expect(css).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+    expect(css).not.toMatch(/\b(rgb|rgba|hsl|hsla)\s*\(/);
+    const palabras = css.replace(/--[\w-]+/g, "").replace(/"[^"]*"/g, "").match(/\b[a-z]+\b/g) ?? [];
+    expect(palabras.filter((p) => ["white", "black", "red", "green", "blue", "gray", "grey"].includes(p))).toEqual([]);
+  });
+
+  it("cada estilo repite en su oscuro lo que el oscuro de relieve.css también redefine", () => {
+    const oscuroDelRelieve = bloque(hoja("relieve.css"), "body[data-ds-dark-theme]");
+    const css = hoja("estilosVisuales.css");
+    const faltan: string[] = [];
+    for (const id of ["glass", "neo", "consola"]) {
+      const claro = bloque(css, `body[data-estilo="${id}"]`);
+      const oscuro = bloque(css, `body[data-estilo="${id}"][data-ds-dark-theme]`);
+      expect(claro.size, id).toBeGreaterThan(0);
+      for (const t of claro) if (oscuroDelRelieve.has(t) && !oscuro.has(t)) faltan.push(`${id}: ${t}`);
+    }
+    expect(faltan).toEqual([]);
+  });
+
+  it("los tokens de forma que leen los papeles tienen su valor del clásico en relieve.css", () => {
+    const base = bloque(hoja("relieve.css"), "body");
+    for (const t of ["--xonecode-relieve-filtro", "--xonecode-relieve-boton-borde", "--xonecode-relieve-secundario-sombra"]) {
+      expect(base.has(t), t).toBe(true);
+    }
+  });
+});

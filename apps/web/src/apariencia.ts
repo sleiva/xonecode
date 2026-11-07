@@ -108,3 +108,52 @@ export function aplicarApariencia(
   for (const n of NOMBRES_DE_SEMILLA) cuerpo.style.setProperty(`--tema-${n}`, tema.semillas[n]);
   cuerpo.setAttribute("data-tema", tema.id);
 }
+
+/**
+ * El ESTILO de la consola: la FORMA (radios, filo, sombra, desenfoque, fondo), no el color. Se combina con cualquier
+ * tema de cualquier modo. Mismo trato que XOneCode con `data-tema`: el CLÁSICO no tiene valores, aplicarlo es QUITAR
+ * `data-estilo` del `body`, así que «se ve exactamente como antes» es verdad por construcción. Los demás redefinen
+ * los tokens de forma en `estilos/estilosVisuales.css`, sin tocar un componente.
+ *
+ * «Consola dev» es, por ahora, su forma (plana, filos de 1 px, radios pequeños, sin sombras ni halo); la disposición
+ * de IDE (barra de actividad, árbol, pestañas, panel de salida) es otro trabajo.
+ */
+export type EstiloVisual = "clasico" | "glass" | "neo" | "consola";
+
+export const ESTILOS: readonly { id: EstiloVisual; nombre: string; detalle: string }[] = [
+  { id: "clasico", nombre: "Clásico", detalle: "El de siempre" },
+  { id: "glass", nombre: "Glass", detalle: "Cristal esmerilado sobre color" },
+  { id: "neo", nombre: "Neo brutalist", detalle: "Filos gruesos y sombra dura" },
+  { id: "consola", nombre: "Consola dev", detalle: "Plana, filos finos, sin sombras" },
+];
+
+export const ESTILO_POR_OMISION: EstiloVisual = "clasico";
+
+const CLAVE_DE_ESTILO = "xonecode.estilo";
+
+/** Un id que no está en el catálogo (o nada) es el clásico: nunca un hueco a medias. */
+export function estiloPorId(id: string | null | undefined): EstiloVisual {
+  return ESTILOS.find((e) => e.id === id)?.id ?? ESTILO_POR_OMISION;
+}
+
+export function leerEstilo(): EstiloVisual {
+  try {
+    return estiloPorId(window.localStorage.getItem(CLAVE_DE_ESTILO));
+  } catch {
+    return ESTILO_POR_OMISION;
+  }
+}
+
+export function guardarEstilo(estilo: EstiloVisual): void {
+  try {
+    window.localStorage.setItem(CLAVE_DE_ESTILO, estilo);
+  } catch {
+    // Como el tema: sin sitio donde recordarlo, se aplica igual y dura lo que la pestaña.
+  }
+}
+
+/** El clásico QUITA el atributo; otro lo pone. Nada más: los valores viven en la hoja, no en el `style`. */
+export function aplicarEstilo(estilo: EstiloVisual, cuerpo: HTMLElement = document.body): void {
+  if (estilo === ESTILO_POR_OMISION) cuerpo.removeAttribute("data-estilo");
+  else cuerpo.setAttribute("data-estilo", estilo);
+}

@@ -1,5 +1,15 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { aplicarApariencia, guardarApariencia, guardarTema, leerApariencia, leerTemas } from "./apariencia.js";
+import {
+  aplicarApariencia,
+  aplicarEstilo,
+  ESTILOS,
+  guardarApariencia,
+  guardarEstilo,
+  guardarTema,
+  leerApariencia,
+  leerEstilo,
+  leerTemas,
+} from "./apariencia.js";
 import { NOMBRES_DE_SEMILLA, temaPorId } from "./temas.js";
 
 afterEach(() => {
@@ -7,6 +17,7 @@ afterEach(() => {
   window.localStorage.clear();
   document.body.removeAttribute("data-ds-dark-theme");
   document.body.removeAttribute("data-tema");
+  document.body.removeAttribute("data-estilo");
   document.body.removeAttribute("style");
 });
 
@@ -125,5 +136,50 @@ describe("temas por modo", () => {
     aplicarApariencia("oscuro");
     expect(document.body.hasAttribute("data-ds-dark-theme")).toBe(true);
     expect(document.body.getAttribute("data-tema")).toBe("azul-noche");
+  });
+});
+
+describe("el estilo (la forma)", () => {
+  it("sin nada guardado, el clásico; lo guardado se lee y un id desconocido cae en el clásico", () => {
+    expect(leerEstilo()).toBe("clasico");
+    guardarEstilo("neo");
+    expect(leerEstilo()).toBe("neo");
+    window.localStorage.setItem("xonecode.estilo", "retirado");
+    expect(leerEstilo()).toBe("clasico");
+  });
+
+  it("un `localStorage` que lanza no rompe nada", () => {
+    vi.stubGlobal("localStorage", {
+      getItem: () => {
+        throw new Error("bloqueado");
+      },
+      setItem: () => {
+        throw new Error("bloqueado");
+      },
+    });
+    expect(leerEstilo()).toBe("clasico");
+    expect(() => guardarEstilo("glass")).not.toThrow();
+  });
+
+  it("el clásico QUITA el atributo y no deja nada en el `style`: la consola queda exactamente como antes", () => {
+    aplicarEstilo("glass");
+    expect(document.body.getAttribute("data-estilo")).toBe("glass");
+    aplicarEstilo("clasico");
+    expect(document.body.hasAttribute("data-estilo")).toBe(false);
+    expect(document.body.getAttribute("style") ?? "").toBe("");
+  });
+
+  it("el estilo no toca el tema ni el modo, y el tema no toca el estilo", () => {
+    aplicarEstilo("neo");
+    aplicarApariencia("oscuro", { claro: "xonecode-claro", oscuro: "dracula" });
+    expect(document.body.getAttribute("data-estilo")).toBe("neo");
+    expect(document.body.getAttribute("data-tema")).toBe("dracula");
+    aplicarEstilo("consola");
+    expect(document.body.getAttribute("data-tema")).toBe("dracula");
+    expect(document.body.hasAttribute("data-ds-dark-theme")).toBe(true);
+  });
+
+  it("son cuatro, con el clásico el primero", () => {
+    expect(ESTILOS.map((e) => e.id)).toEqual(["clasico", "glass", "neo", "consola"]);
   });
 });

@@ -239,6 +239,13 @@ Ante una discrepancia con el código, **el código manda**.
   el tema; la tarjeta COMPONE `Superficie.module.css` (sombra teñida, borde de luz por `::after` con máscara) sin
   redeclarar fondo, borde ni sombra en esa regla; botones con `--radio-boton`. En oscuro el primario sale del cian
   hundido en el fondo: en «Azul noche» azul y cian son el mismo acento.
+- **El ESTILO es la FORMA, el tema el COLOR** (`apariencia.ts#ESTILOS`, `estilos/estilosVisuales.css`): Clásico, Glass,
+  Neo brutalist y Consola dev, por navegador (`xonecode.estilo`), combinable con cualquier tema. **El Clásico no tiene
+  valores**: QUITA `data-estilo`, como XOneCode con `data-tema`. Los demás redefinen en `body[data-estilo]` los radios
+  por papel y los tokens del relieve, nunca un componente; su oscuro va en `[data-estilo][data-ds-dark-theme]` y repite
+  todo lo que el oscuro de `relieve.css` también define (`estilosDelCliente.test.ts`): gana por especificidad, no por
+  orden. `backdrop-filter` solo en Glass (crea bloque contenedor de los `fixed`). **Límite**: «Consola dev» es aún solo
+  su forma; la disposición de IDE está por hacer.
 - **Enviar, AZUL de marca** (en un tema, su acento); PARAR, ROJO.
 - **El compositor en TRES BANDAS**: en REPOSO la de arriba se DESMONTA por `:focus-within` en CSS,
   nunca `onBlur`; `data-con-texto` la mantiene. **Trampa**: un `color-mix` con alias del TEMA no

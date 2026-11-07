@@ -58,11 +58,15 @@ import { TarjetaDeCerrar, AvisoDelGestor, BotonDeCerrarEnJira } from "./componen
 import { Ejecutar } from "./componentes/Ejecutar.js";
 import {
   aplicarApariencia,
+  aplicarEstilo,
   guardarApariencia,
+  guardarEstilo,
   guardarTema,
   leerApariencia,
+  leerEstilo,
   leerTemas,
   type Apariencia,
+  type EstiloVisual,
   type TemasElegidos,
 } from "./apariencia.js";
 import type { ModoDeTema } from "./temas.js";
@@ -1720,6 +1724,15 @@ export function App({
     guardarTema(modo, id);
     if (modo !== modoEnVigor) alCambiarApariencia(modo);
   };
+  /** El ESTILO (la forma), de este navegador como el tema; no depende del modo y se aplica aparte. */
+  const [estilo, setEstilo] = useState<EstiloVisual>(() => leerEstilo());
+  useEffect(() => {
+    aplicarEstilo(estilo);
+  }, [estilo]);
+  const alCambiarEstilo = (nuevo: EstiloVisual): void => {
+    setEstilo(nuevo);
+    guardarEstilo(nuevo);
+  };
 
   /**
    * El proyecto para el que se está abriendo la ventana de sesión nueva.
@@ -2590,6 +2603,8 @@ export function App({
       temas={temas}
       modoEnVigor={modoEnVigor}
       alCambiarTema={alCambiarTema}
+      estilo={estilo}
+      alCambiarEstilo={alCambiarEstilo}
       {...(seccionDeAjustes === undefined ? {} : { seccionInicial: seccionDeAjustes })}
       {...(estado.modelos === undefined ? {} : { proveedores: estado.modelos.proveedores })}
       entornos={estado.alta?.registrados ?? []}

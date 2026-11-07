@@ -10780,3 +10780,21 @@ donde la app nunca tuvo base no arranca («Base de datos no encontrada»).
 - **Límite declarado, sin medir**: el ZIP añade y sobrescribe sin borrar, así que con «Copiar todos» los `-wal`/`-shm` de
   la base vieja del aparato se quedan al lado de la nueva. Si eso da una base rota al arrancar, el remedio es borrar esos
   dos ficheros antes de subir; no se ha medido en un aparato con base previa.
+
+## Los estilos de la consola: Clásico, Glass, Neo brutalist y Consola dev (07-11-2026)
+
+- **El estilo es la FORMA y el tema el COLOR**, dos ajustes que se combinan. Diseñados primero en el lienzo «xonecode ·
+  Escritorio glass» (tres direcciones, cada una en claro y oscuro); el usuario eligió tenerlos los cuatro elegibles en
+  vivo, con el actual como omisión.
+- **El Clásico no tiene valores**: aplicarlo es QUITAR `data-estilo`, como XOneCode con `data-tema`. Que «se ve como
+  antes» es cierto por construcción y lo vigila un test (ni atributo ni `style` en el `body`).
+- **Barato porque la base ya estaba en tokens**: los radios por papel (`tipografia.css`) y el relieve AC3 (`relieve.css`)
+  cubrían casi todo; solo se añadieron tres tokens con su valor del clásico (desenfoque, borde y sombra de los botones) y
+  el grosor del filo, que ya era `--espacio-1` y solo lo lee la tarjeta.
+- **Trampa de especificidad**: el oscuro de `relieve.css` (`body[data-ds-dark-theme]`) pesa lo mismo que
+  `body[data-estilo]`. Cada estilo repite en `[data-estilo][data-ds-dark-theme]` todo lo que ese oscuro redefine, y un
+  test lo comprueba: si dependiera del orden de los `import`, se rompería en silencio al reordenarlos.
+- **Visto en el navegador** sobre el Escritorio real: Glass y Neo brutalist en claro y oscuro, Consola dev en oscuro; el
+  clic en Ajustes pone `data-estilo` y lo guarda. **Límites**: el cristal solo luce donde hay halo detrás (Escritorio y
+  panel del proyecto); no se han probado con Glass los menús flotantes dentro de una tarjeta (`backdrop-filter` crea
+  bloque contenedor de los `fixed`); «Consola dev» es aún solo su forma, sin la disposición de IDE.

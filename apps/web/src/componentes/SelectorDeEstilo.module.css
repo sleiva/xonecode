@@ -1,0 +1,120 @@
+/* Las muestras de los estilos: los colores del tema PUESTO (alias y `--xonecode-*`) con la forma de cada estilo escrita
+   aquí, a escala. No leen los tokens de `estilosVisuales.css`, que solo valen con ese estilo puesto: la muestra tiene que
+   enseñar los cuatro a la vez. */
+
+.opciones {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: var(--espacio-10);
+}
+
+.opcion {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--espacio-4);
+  padding: var(--espacio-6);
+  border: 2px solid var(--dsw-alias-border-l2);
+  border-radius: var(--radio-tarjeta);
+  background: var(--dsw-alias-bg-layer-1);
+  text-align: left;
+  cursor: pointer;
+}
+
+.opcion[aria-pressed="true"] {
+  border-color: var(--xonecode-cian);
+}
+
+.opcion:focus-visible {
+  outline: 2px solid var(--xonecode-cian);
+  outline-offset: 2px;
+}
+
+.muestra {
+  display: flex;
+  width: 100%;
+  height: 64px;
+  padding: var(--espacio-10);
+  border-radius: var(--radio-control);
+  background: var(--dsw-alias-bg-base);
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.tarjeta {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: var(--espacio-6);
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: var(--radio-control);
+  background: var(--dsw-alias-bg-layer-2);
+  box-shadow: 0 4px 10px color-mix(in srgb, var(--xonecode-azul) 12%, var(--dsw-alias-bg-base));
+}
+
+.linea {
+  width: 60%;
+  height: 5px;
+  border-radius: var(--radio-mini);
+  background: var(--dsw-alias-label-secondary);
+}
+
+.boton {
+  width: 40%;
+  height: 9px;
+  border-radius: var(--radio-mini);
+  background: var(--xonecode-azul);
+}
+
+/* Glass: halo de color detrás de una tarjeta teñida de él y muy redonda. */
+.muestra[data-muestra="glass"] {
+  background:
+    radial-gradient(70px 60px at 0% 0%, color-mix(in srgb, var(--xonecode-cian) 55%, var(--dsw-alias-bg-base)), var(--dsw-alias-bg-base) 75%),
+    radial-gradient(70px 60px at 100% 100%, color-mix(in srgb, var(--xonecode-naranja) 40%, var(--dsw-alias-bg-base)), var(--dsw-alias-bg-base) 75%),
+    var(--dsw-alias-bg-base);
+}
+
+.muestra[data-muestra="glass"] .tarjeta {
+  border-color: var(--dsw-alias-bg-layer-2);
+  border-radius: var(--radio-dialogo);
+  background: color-mix(in srgb, var(--dsw-alias-bg-layer-2) 70%, var(--xonecode-cian));
+}
+
+.muestra[data-muestra="glass"] .boton {
+  border-radius: var(--radio-pastilla);
+}
+
+/* Neo brutalist: filo grueso de tinta y sombra dura. */
+.muestra[data-muestra="neo"] .tarjeta {
+  border: 2px solid var(--dsw-alias-label-primary);
+  border-radius: var(--radio-mini);
+  box-shadow: 3px 3px 0 var(--dsw-alias-label-primary);
+}
+
+.muestra[data-muestra="neo"] .boton {
+  border: 1.5px solid var(--dsw-alias-label-primary);
+  border-radius: var(--radio-mini);
+  background: var(--xonecode-naranja);
+}
+
+/* Consola dev: plana, filo de 1 px y casi sin radio. */
+.muestra[data-muestra="consola"] .tarjeta {
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.muestra[data-muestra="consola"] .boton {
+  border-radius: 0;
+}
+
+.nombre {
+  font-size: var(--tipo-pequeno);
+  font-weight: var(--peso-fuerte);
+  color: var(--dsw-alias-label-primary);
+}
+
+.detalle {
+  font-size: var(--tipo-pequeno);
+  color: var(--dsw-alias-label-tertiary);
+}

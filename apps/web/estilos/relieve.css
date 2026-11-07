@@ -13,6 +13,13 @@
  * un `color-mix` — la misma regla que el puente. */
 
 body {
+  /* La FORMA que cambia con el estilo (`estilos/estilosVisuales.css`). Aquí, la del clásico —que es no poner
+     `data-estilo`—: sin desenfoque detrás de la tarjeta y los botones sin borde ni sombra. El grosor del borde de luz
+     es `--espacio-1`, que solo lee eso. */
+  --xonecode-relieve-filtro: none;
+  --xonecode-relieve-boton-borde: 0;
+  --xonecode-relieve-secundario-sombra: none;
+
   /* El fondo: dos halos de luz de la marca, cian arriba a la izquierda y azul abajo a la derecha. */
   --xonecode-relieve-halo:
     radial-gradient(900px 520px at 0% 0%, color-mix(in srgb, var(--xonecode-cian) 18%, transparent), transparent 62%),

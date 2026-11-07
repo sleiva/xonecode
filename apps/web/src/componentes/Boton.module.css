@@ -40,9 +40,11 @@
   padding: var(--espacio-6) var(--espacio-12);
   /* Los botones «B1» (`estilos/relieve.css`): sin borde ni sombra, un fondo tintado del azul que se oscurece al pasar.
      Letra a 12 y no a 13: a 13 con este relleno se veían toscos (petición suya, 06-11-2026). */
-  border: 0;
+  /* Sin borde ni sombra en el clásico; el estilo los pone por token (`estilos/estilosVisuales.css`). */
+  border: var(--xonecode-relieve-boton-borde);
   border-radius: var(--radio-boton);
   background: var(--xonecode-relieve-secundario);
+  box-shadow: var(--xonecode-relieve-secundario-sombra);
   color: var(--xonecode-relieve-secundario-texto);
   font: inherit;
   font-size: var(--tipo-pequeno);
@@ -72,7 +74,7 @@
   padding: var(--espacio-6) var(--espacio-12);
   /* «B1»: azul de marca sólido con un degradado leve y sombra corta de su color. Peso medio, no fuerte: a 600 pesaba más
      que todo lo que tenía alrededor. */
-  border: 0;
+  border: var(--xonecode-relieve-boton-borde);
   border-radius: var(--radio-boton);
   background: var(--xonecode-relieve-primario);
   box-shadow: var(--xonecode-relieve-primario-sombra);

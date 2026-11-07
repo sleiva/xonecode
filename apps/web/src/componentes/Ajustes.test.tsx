@@ -587,6 +587,51 @@ describe("Ajustes", () => {
     });
   });
 
+  describe("el estilo (la forma)", () => {
+    it("con su dato, enseña los cuatro con el elegido marcado y avisa al cambiar", () => {
+      const vistos: string[] = [];
+      render(
+        <Ajustes
+          {...MANEJADORES}
+          proveedores={PROVEEDORES}
+          conectado
+          seccionInicial="general"
+          temas={{ claro: "xonecode-claro", oscuro: "azul-noche" }}
+          modoEnVigor="claro"
+          estilo="glass"
+          alCambiarEstilo={(e) => void vistos.push(e)}
+        />
+      );
+      fireEvent.click(screen.getByRole("tab", { name: /^Apariencia/ }));
+      const grupo = screen.getByRole("group", { name: "Estilo" });
+      expect(within(grupo).getAllByRole("button").map((b) => b.getAttribute("aria-label"))).toEqual([
+        "Clásico",
+        "Glass",
+        "Neo brutalist",
+        "Consola dev",
+      ]);
+      expect(within(grupo).getByRole("button", { name: "Glass" }).getAttribute("aria-pressed")).toBe("true");
+      fireEvent.click(within(grupo).getByRole("button", { name: "Glass" }));
+      fireEvent.click(within(grupo).getByRole("button", { name: "Consola dev" }));
+      expect(vistos).toEqual(["consola"]);
+    });
+
+    it("sin su dato NO se pinta (un control sin dato detrás)", () => {
+      render(
+        <Ajustes
+          {...MANEJADORES}
+          proveedores={PROVEEDORES}
+          conectado
+          seccionInicial="general"
+          temas={{ claro: "xonecode-claro", oscuro: "azul-noche" }}
+          modoEnVigor="claro"
+        />
+      );
+      fireEvent.click(screen.getByRole("tab", { name: /^Apariencia/ }));
+      expect(screen.queryByRole("group", { name: "Estilo" })).toBeNull();
+    });
+  });
+
   describe("el aparato de las conversaciones nuevas (IXCODE-51)", () => {
     const MOVIL = { id: "R58M123", nombre: "Galaxy", plataforma: "android" as const, clase: "fisico" as const, estado: "conectado" as const };
     const EMU = { id: "emulator-5554", nombre: "Pixel 8", plataforma: "android" as const, clase: "emulador" as const, estado: "apagado" as const };

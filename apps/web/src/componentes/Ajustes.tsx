@@ -39,7 +39,8 @@ import { PLATAFORMAS_DE_DISPOSITIVO, seMira, type ModoDeEscritura } from "../tip
 import { SelectorDeModo } from "./SelectorDeModo.js";
 import { DispositivoPorDefecto } from "./DispositivoPorDefecto.js";
 import { SelectorDeTema } from "./SelectorDeTema.js";
-import type { TemasElegidos } from "../apariencia.js";
+import { SelectorDeEstilo } from "./SelectorDeEstilo.js";
+import type { EstiloVisual, TemasElegidos } from "../apariencia.js";
 import type { DiagnosticoDeNode as DiagnosticoDeNodeDelCable } from "../tipos.js";
 import { DiagnosticoDeNode } from "./DiagnosticoDeNode.js";
 import type { ModoDeTema } from "../temas.js";
@@ -524,6 +525,8 @@ export function Ajustes({
   temas,
   modoEnVigor,
   alCambiarTema,
+  estilo,
+  alCambiarEstilo,
   alCambiarModoPorDefecto,
   dispositivoPorDefecto,
   alCambiarDispositivoPorDefecto,
@@ -809,6 +812,12 @@ export function Ajustes({
   /** Qué modo pinta la consola AHORA: decide en qué fila sale «elegirlo pone la consola en…». */
   modoEnVigor?: ModoDeTema;
   alCambiarTema?: (modo: ModoDeTema, id: string) => void;
+  /**
+   * El ESTILO (la forma: radios, filo, sombra, desenfoque) de ESTE navegador, como el tema (`apariencia.ts`).
+   * Ausente = no se pinta su bloque.
+   */
+  estilo?: EstiloVisual;
+  alCambiarEstilo?: (estilo: EstiloVisual) => void;
   /** Cambia el modo por defecto. Ausente = se enseña sin poder cambiarlo. */
   alCambiarModoPorDefecto?: (modo: ModoDeEscritura) => void;
   /**
@@ -2292,6 +2301,16 @@ export function Ajustes({
               */}
               {generalAbierta !== "apariencia" || temas === undefined ? null : (
                 <div role="tabpanel" aria-label="Apariencia">
+                  {estilo === undefined || alCambiarEstilo === undefined ? null : (
+                    <>
+                      <h3 className={estilos.subencabezado}>Estilo</h3>
+                      <p className={estilos.nota}>
+                        La forma de la consola: radios, bordes, sombras y fondo. Se combina con cualquier tema y cambia
+                        al momento. Se recuerda en este navegador.
+                      </p>
+                      <SelectorDeEstilo elegido={estilo} alElegir={alCambiarEstilo} />
+                    </>
+                  )}
                   <h3 className={estilos.subencabezado}>Temas</h3>
                   <p className={estilos.nota}>
                     Un tema para el modo claro y otro para el oscuro. Elegir uno del otro modo pone la consola en
